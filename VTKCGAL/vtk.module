@@ -1,0 +1,9 @@
+NAME
+  VTK::CGAL
+LIBRARY_NAME
+  VTKCGAL
+GROUPS
+  StandAlone
+DEPENDS
+  VTK::FiltersCore
+  CGAL::Polygon_mesh_processing
