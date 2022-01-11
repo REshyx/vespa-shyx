@@ -9,10 +9,11 @@
 #define vtkCGALisotropicRemesh_h
 
 #include "vtkDataSetAlgorithm.h"
-#include "vtkVTKCGALCoreModule.h" // For export macro
 
-class VTKFILTERSCORE_EXPORT vtkElevationFilter : public vtkDataSetAlgorithm
+#include "VTKCGALModule.h" // For export macro
+
+class VTKCGAL_EXPORT vtkCGALRemeshing : public vtkDataSetAlgorithm
 {
-}
+};
 
 #endif

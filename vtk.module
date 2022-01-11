@@ -1,9 +1,8 @@
 NAME
-  VTK::CGAL
+  VTK::VTKCGAL
 LIBRARY_NAME
   VTKCGAL
 GROUPS
   StandAlone
 DEPENDS
   VTK::FiltersCore
-  CGAL::Polygon_mesh_processing

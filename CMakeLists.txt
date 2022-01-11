@@ -5,5 +5,15 @@ project (VTKCGAL)
 # Code can be added here to support standalone builds.
 #
 # find_package(VTK 9.1 REQUIRED)
-#
-# add_subdirectory(VTKCGAL/)
+
+message(STATUS "VTKCGAL: Building as a Remote VTK module")
+
+set(VTKCGAL_CLASSES
+ PolygonMeshProcessing/vtkCGALisotropicRemesh
+)
+vtk_module_add_module(VTK::VTKCGAL
+  CLASSES ${VTKCGAL_CLASSES}
+)
+
+vtk_module_find_package(PACKAGE CGAL)
+
