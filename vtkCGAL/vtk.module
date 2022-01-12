@@ -1,0 +1,16 @@
+NAME
+  VTK::vtkCGAL
+LIBRARY_NAME
+  vtkCGAL
+GROUPS
+  StandAlone
+DESCRIPTION
+  "This module contains filters for meshing operations using CGAL."
+DEPENDS
+  VTK::CommonCore
+  VTK::CommonDataModel
+  VTK::CommonExecutionModel
+  VTK::FiltersCore
+  CGAL::CGAL
+TEST_DEPENDS
+  VTK::TestingCore

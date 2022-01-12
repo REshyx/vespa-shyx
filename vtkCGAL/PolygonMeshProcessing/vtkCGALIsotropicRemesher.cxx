@@ -1,27 +1,20 @@
-#include "vtkCGALisotropicRemesh.h"
+#include "vtkCGALIsotropicRemesher.h"
 
 #include "vtkCellData.h"
 #include "vtkDataSet.h"
 #include "vtkObjectFactory.h"
 #include "vtkPointData.h"
 
-vtkStandardNewMacro(vtkCGALisotropicRemesh);
+vtkStandardNewMacro(vtkCGALIsotropicRemesher);
 
 //------------------------------------------------------------------------------
-// Begin the class proper
-vtkCGALisotropicRemesh::vtkCGALisotropicRemesh() = default;
-
-//------------------------------------------------------------------------------
-vtkCGALisotropicRemesh::~vtkCGALisotropicRemesh() = default;
-
-//------------------------------------------------------------------------------
-void vtkCGALisotropicRemesh::PrintSelf(ostream& os, vtkIndent indent)
+void vtkCGALIsotropicRemesher::PrintSelf(ostream& os, vtkIndent indent)
 {
   this->Superclass::PrintSelf(os, indent);
 }
 
 //------------------------------------------------------------------------------
-int vtkCGALisotropicRemesh::RequestData(
+int vtkCGALIsotropicRemesher::RequestData(
   vtkInformation*, vtkInformationVector** inputVector, vtkInformationVector* outputVector)
 {
   // Get the input and output data objects.
@@ -29,6 +22,7 @@ int vtkCGALisotropicRemesh::RequestData(
   vtkDataSet* output = vtkDataSet::GetData(outputVector);
 
   // TODO add CGAL stuff here
+  std::cout << "CGAL stuff created" << std::endl;
 
   // Copy all the input geometry and data to the output.
   output->CopyStructure(input);

@@ -1,8 +1,0 @@
-NAME
-  VTK::VTKCGAL
-LIBRARY_NAME
-  VTKCGAL
-DEPENDS
-  VTK::FiltersCore
-DESCRIPTION
-  "This module contains filters for meshing operations using CGAL."
