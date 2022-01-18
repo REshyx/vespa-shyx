@@ -1,11 +1,7 @@
 NAME
-  VTK::vtkCGAL
-LIBRARY_NAME
-  vtkCGAL
-GROUPS
-  StandAlone
+  vtkCGALPMP
 DESCRIPTION
-  "This module contains filters for meshing operations using CGAL."
+  "This module contains filters related to the PolygonMeshProcessing module of CGAL."
 DEPENDS
   VTK::CommonCore
   VTK::CommonDataModel

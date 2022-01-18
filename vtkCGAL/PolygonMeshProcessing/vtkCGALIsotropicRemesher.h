@@ -10,9 +10,9 @@
 
 #include "vtkDataSetAlgorithm.h"
 
-#include "vtkCGALModule.h" // For export macro
+#include "vtkCGALPMPModule.h" // For export macro
 
-class VTKCGAL_EXPORT vtkCGALIsotropicRemesher : public vtkDataSetAlgorithm
+class VTKCGALPMP_EXPORT vtkCGALIsotropicRemesher : public vtkDataSetAlgorithm
 {
 public:
   static vtkCGALIsotropicRemesher* New();
