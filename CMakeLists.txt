@@ -1,16 +1,21 @@
 cmake_minimum_required(VERSION 3.8)
 project (vtkCGAL)
 
+## Config
+
+include(GNUInstallDirs)
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/${CMAKE_INSTALL_BINDIR}")
+set(CMAKE_LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/${CMAKE_INSTALL_LIBDIR}")
+set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/${CMAKE_INSTALL_LIBDIR}")
+
+option(BUILD_SHARED_LIBS "Build shared library" ON)
+
+include(CTest)
+
 ## Deps
 
 find_package(VTK REQUIRED)
 find_package(CGAL REQUIRED)
-
-include(GNUInstallDirs)
-
-## Config
-
-option(BUILD_SHARED_LIBS "Build shared library" ON)
 
 ## VTK Module
 
@@ -25,6 +30,8 @@ vtk_module_scan(
   PROVIDES_MODULES
     VTKCGAL_PROVIDED_MODULES
   WANT_BY_DEFAULT
+    ON
+  ENABLE_TESTS
     ON
 )
 
@@ -71,13 +78,6 @@ option(BUILD_PYTHON_WRAPPERS "Build python wrapping" ON)
 
 if(BUILD_PYTHON_WRAPPERS)
 
-  # find_package(Python3 COMPONENTS Development)
-  # include_directories(SYSTEM ${Python3_INCLUDE_DIRS})
-  # link_libraries(${Python3_LIBRARIES})
-
-  # message(STATUS "libs : ${Python3_LIBRARIES}")
-  # message(STATUS "modules : ${VTKCGAL_PROVIDED_MODULES}")
-
   vtk_module_python_default_destination(python_destination)
 
   if(NOT DEFINED VTKCGAL_PYTHON_MODULE_DIR)
@@ -121,44 +121,41 @@ if(BUILD_PYTHON_WRAPPERS)
       OFF
     )
 
-  message(STATUS "modules wrap : ${VTKCGAL_WRAPPED_MODULES}")
-
   # Generate __init__.py
-  # set(InitContent "from __future__ import absolute_import\n")
-  # foreach(MODULE ${VTKCGAL_PROVIDED_MODULES})
-  #   message(STATUS "Wrap: ${MODULE}")
-  #   string(APPEND InitContent "from .${MODULE} import *\n")
-  # endforeach()
-  # file(GENERATE
-  #   OUTPUT
-  #     "${CMAKE_BINARY_DIR}/${VTKCGAL_PYTHON_MODULE_DIR}/vtkCGAL/__init__.py"
-  #   CONTENT
-  #     "${InitContent}"
-  #   )
-  # install(
-  #   FILES
-  #     "${CMAKE_BINARY_DIR}/${VTKCGAL_PYTHON_MODULE_DIR}/vtkCGAL/__init__.py"
-  #   DESTINATION
-  #     "${VTKCGAL_PYTHON_MODULE_DIR}/vtkCGAL/"
-  #   )
-  # # Install VTKCGALPython
-  # export(
-  #   EXPORT
-  #     VTKCGALPython
-  #   NAMESPACE
-  #     VTKCGAL::
-  #   FILE
-  #     "${CMAKE_BINARY_DIR}/${CMAKE_INSTALL_LIBDIR}/vtkCGAL/python/VTKCGALPython-targets.cmake"
-  #   )
-  # install(
-  #   EXPORT
-  #     VTKCGALPython
-  #   NAMESPACE
-  #     VTKCGAL::
-  #   FILE
-  #     VTKCGALPython-targets.cmake
-  #   DESTINATION
-  #     "${CMAKE_INSTALL_LIBDIR}/cmake/vtkCGALPython"
-  #   )
+  set(InitContent "from __future__ import absolute_import\n")
+  foreach(MODULE ${VTKCGAL_PROVIDED_MODULES})
+    string(APPEND InitContent "from .${MODULE} import *\n")
+  endforeach()
+  file(GENERATE
+    OUTPUT
+      "${CMAKE_BINARY_DIR}/${VTKCGAL_PYTHON_MODULE_DIR}/vtkCGAL/__init__.py"
+    CONTENT
+      "${InitContent}"
+    )
+  install(
+    FILES
+      "${CMAKE_BINARY_DIR}/${VTKCGAL_PYTHON_MODULE_DIR}/vtkCGAL/__init__.py"
+    DESTINATION
+      "${VTKCGAL_PYTHON_MODULE_DIR}/vtkCGAL/"
+    )
+  # Install VTKCGALPython
+  export(
+    EXPORT
+      VTKCGALPython
+    NAMESPACE
+      VTKCGAL::
+    FILE
+      "${CMAKE_BINARY_DIR}/${CMAKE_INSTALL_LIBDIR}/vtkCGAL/python/VTKCGALPython-targets.cmake"
+    )
+  install(
+    EXPORT
+      VTKCGALPython
+    NAMESPACE
+      VTKCGAL::
+    FILE
+      VTKCGALPython-targets.cmake
+    DESTINATION
+      "${CMAKE_INSTALL_LIBDIR}/cmake/vtkCGALPython"
+    )
 endif()
 
