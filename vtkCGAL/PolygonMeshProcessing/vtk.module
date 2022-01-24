@@ -8,5 +8,6 @@ DEPENDS
   VTK::CommonExecutionModel
   VTK::FiltersCore
   CGAL::CGAL
+  Python3::Python
 TEST_DEPENDS
   VTK::TestingCore
