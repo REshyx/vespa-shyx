@@ -87,30 +87,13 @@ option(BUILD_PYTHON_WRAPPERS "Build python wrapping" ON)
 
 if(BUILD_PYTHON_WRAPPERS)
 
-  if(NOT DEFINED VTKCGAL_PYTHON_MODULE_DIR)
-    if (IS_ABSOLUTE ${VTK_PYTHONPATH})
-      file(RELATIVE_PATH PYTHON_SITE_PACKAGES_SUFFIX
-          ${VTK_PREFIX_PATH}
-          ${VTK_PYTHONPATH}
-      )
-    else()
-      set(PYTHON_SITE_PACKAGES_SUFFIX
-          ${VTK_PYTHONPATH}
-      )
-    endif()
-    set(VTKCGAL_PYTHON_MODULE_DIR
-          ${PYTHON_SITE_PACKAGES_SUFFIX}
-        CACHE
-        PATH
-          "Where the VTKCGAL python module in installed"
-    )
-  endif()
-
   vtk_module_wrap_python(
     MODULES
       ${VTKCGAL_PROVIDED_MODULES}
     WRAPPED_MODULES
       VTKCGAL_WRAPPED_MODULES
+    TARGET
+      VTKCGAL::Python
     INSTALL_EXPORT
       VTKCGALPython
     PYTHON_PACKAGE
@@ -123,8 +106,6 @@ if(BUILD_PYTHON_WRAPPERS)
       "${CMAKE_INSTALL_LIBDIR}"
     INSTALL_HEADERS
       ON
-    TARGET
-      VTKCGAL::Python
     BUILD_STATIC
       OFF
   )
@@ -136,15 +117,15 @@ if(BUILD_PYTHON_WRAPPERS)
   endforeach()
   file(GENERATE
     OUTPUT
-      "${CMAKE_BINARY_DIR}/${VTKCGAL_PYTHON_MODULE_DIR}/vtkCGAL/__init__.py"
+      "${CMAKE_BINARY_DIR}/${python_destination}/vtkCGAL/__init__.py"
     CONTENT
       "${InitContent}"
   )
   install(
     FILES
-      "${CMAKE_BINARY_DIR}/${VTKCGAL_PYTHON_MODULE_DIR}/vtkCGAL/__init__.py"
+      "${CMAKE_BINARY_DIR}/${python_destination}/vtkCGAL/__init__.py"
     DESTINATION
-      "${VTKCGAL_PYTHON_MODULE_DIR}/vtkCGAL/"
+      "${python_destination}/vtkCGAL/"
   )
 
   # Install VTKCGALPython
