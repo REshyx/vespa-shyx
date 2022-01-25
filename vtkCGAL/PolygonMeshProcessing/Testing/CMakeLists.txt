@@ -1,4 +1,5 @@
 if (TARGET VTK::vtkpython)
+  # import
   add_test(NAME "import_vtkCGALPMP"
     COMMAND
       "$<TARGET_FILE:VTK::vtkpython>"
@@ -10,6 +11,22 @@ if (TARGET VTK::vtkpython)
     set(test_path "$ENV{PATH};${CMAKE_BINARY_DIR}/${CMAKE_INSTALL_BINDIR}")
     string(REPLACE ";" "\;" test_path "${test_path}")
     set_property(TEST "import_vtkCGALPMP" APPEND
+      PROPERTY
+        ENVIRONMENT "PATH=${test_path}")
+  endif ()
+
+  # execute
+  add_test(NAME "execute_IsotropicRemesher"
+    COMMAND
+      "$<TARGET_FILE:VTK::vtkpython>"
+      "${CMAKE_CURRENT_LIST_DIR}/execute_IsotropicRemesher.py")
+  set_property(TEST "execute_IsotropicRemesher" APPEND
+    PROPERTY
+      ENVIRONMENT "PYTHONPATH=${CMAKE_BINARY_DIR}/${python_destination}")
+  if (WIN32)
+    set(test_path "$ENV{PATH};${CMAKE_BINARY_DIR}/${CMAKE_INSTALL_BINDIR}")
+    string(REPLACE ";" "\;" test_path "${test_path}")
+    set_property(TEST "execute_IsotropicRemesher" APPEND
       PROPERTY
         ENVIRONMENT "PATH=${test_path}")
   endif ()

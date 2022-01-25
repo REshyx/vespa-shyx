@@ -1,4 +1,6 @@
+# Global import
 import vtkCGAL
-from vtkCGAL import vtkCGALPMP
 
-pmp = vtkCGAL.vtkCGALPMP
+# Specific import
+from vtkCGAL import vtkCGALPMP
+rm = vtkCGALPMP.vtkCGALIsotropicRemesher()
