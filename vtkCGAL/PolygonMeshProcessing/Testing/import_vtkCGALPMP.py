@@ -1,3 +1,4 @@
+import vtkCGAL
 from vtkCGAL import vtkCGALPMP
 
-pmp = vtkCGAL.vtkCGALMPM()
+pmp = vtkCGAL.vtkCGALPMP

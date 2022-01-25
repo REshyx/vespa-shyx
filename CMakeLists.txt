@@ -14,7 +14,14 @@ include(CTest)
 
 ## Deps
 
-find_package(VTK REQUIRED)
+find_package(VTK
+  COMPONENTS
+    CommonCore
+    CommonDataModel
+    CommonExecutionModel
+    FiltersCore
+    Python
+)
 find_package(CGAL REQUIRED)
 
 ## VTK Module
@@ -34,6 +41,8 @@ vtk_module_scan(
   ENABLE_TESTS
     ON
 )
+
+vtk_module_python_default_destination(python_destination)
 
 vtk_module_build(
   MODULES
@@ -78,8 +87,6 @@ option(BUILD_PYTHON_WRAPPERS "Build python wrapping" ON)
 
 if(BUILD_PYTHON_WRAPPERS)
 
-  vtk_module_python_default_destination(python_destination)
-
   if(NOT DEFINED VTKCGAL_PYTHON_MODULE_DIR)
     if (IS_ABSOLUTE ${VTK_PYTHONPATH})
       file(RELATIVE_PATH PYTHON_SITE_PACKAGES_SUFFIX
@@ -96,8 +103,9 @@ if(BUILD_PYTHON_WRAPPERS)
         CACHE
         PATH
           "Where the VTKCGAL python module in installed"
-      )
+    )
   endif()
+
   vtk_module_wrap_python(
     MODULES
       ${VTKCGAL_PROVIDED_MODULES}
@@ -119,7 +127,7 @@ if(BUILD_PYTHON_WRAPPERS)
       VTKCGAL::Python
     BUILD_STATIC
       OFF
-    )
+  )
 
   # Generate __init__.py
   set(InitContent "from __future__ import absolute_import\n")
@@ -131,13 +139,14 @@ if(BUILD_PYTHON_WRAPPERS)
       "${CMAKE_BINARY_DIR}/${VTKCGAL_PYTHON_MODULE_DIR}/vtkCGAL/__init__.py"
     CONTENT
       "${InitContent}"
-    )
+  )
   install(
     FILES
       "${CMAKE_BINARY_DIR}/${VTKCGAL_PYTHON_MODULE_DIR}/vtkCGAL/__init__.py"
     DESTINATION
       "${VTKCGAL_PYTHON_MODULE_DIR}/vtkCGAL/"
-    )
+  )
+
   # Install VTKCGALPython
   export(
     EXPORT
@@ -146,7 +155,7 @@ if(BUILD_PYTHON_WRAPPERS)
       VTKCGAL::
     FILE
       "${CMAKE_BINARY_DIR}/${CMAKE_INSTALL_LIBDIR}/vtkCGAL/python/VTKCGALPython-targets.cmake"
-    )
+  )
   install(
     EXPORT
       VTKCGALPython
@@ -156,6 +165,6 @@ if(BUILD_PYTHON_WRAPPERS)
       VTKCGALPython-targets.cmake
     DESTINATION
       "${CMAKE_INSTALL_LIBDIR}/cmake/vtkCGALPython"
-    )
+  )
 endif()
 

@@ -14,3 +14,9 @@ if (TARGET VTK::vtkpython)
         ENVIRONMENT "PATH=${test_path}")
   endif ()
 endif ()
+
+vtk_add_test_cxx(vtkCGALCxxTests no_data_tests
+  NO_DATA NO_VALID NO_OUTPUT
+  TestPMPInstance.cxx
+)
+vtk_test_cxx_executable(vtkCGALCxxTests no_data_tests)

@@ -2,6 +2,8 @@ NAME
   vtkCGALPMP
 DESCRIPTION
   "This module contains filters related to the PolygonMeshProcessing module of CGAL."
+GROUPS
+  Meshing
 DEPENDS
   VTK::CommonCore
   VTK::CommonDataModel
@@ -9,4 +11,6 @@ DEPENDS
   VTK::FiltersCore
   CGAL::CGAL
 TEST_DEPENDS
+  VTK::CommonSystem
   VTK::TestingCore
+
