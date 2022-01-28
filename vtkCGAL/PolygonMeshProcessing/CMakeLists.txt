@@ -1,12 +1,10 @@
-set(VTKCGALPMP_SOURCES
+set(vtkcgalpmp_sources
   vtkCGALIsotropicRemesher.cxx
 )
-set(VTKCGALPMP_HEADERS
+set(vtkcgalpmp_headers
   vtkCGALIsotropicRemesher.h
 )
 vtk_module_add_module(vtkCGALPMP
-  SOURCES
-    ${VTKCGALPMP_SOURCES}
-  HEADERS
-    ${VTKCGALPMP_HEADERS}
+  SOURCES ${vtkcgalpmp_sources}
+  HEADERS ${vtkcgalpmp_headers}
 )
