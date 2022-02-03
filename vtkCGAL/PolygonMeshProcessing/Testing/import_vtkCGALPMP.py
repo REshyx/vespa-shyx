@@ -1,6 +1,6 @@
 # Global import
 import vtkCGAL
-import vtkmodules.CommonCore
+import vtkmodules.vtkCommonCore
 
 # Specific import
 from vtkCGAL import vtkCGALPMP
