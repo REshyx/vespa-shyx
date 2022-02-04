@@ -8,15 +8,15 @@
 #ifndef vtkCGALisotropicRemesh_h
 #define vtkCGALisotropicRemesh_h
 
-#include "vtkDataSetAlgorithm.h"
+#include "vtkPolyDataAlgorithm.h"
 
 #include "vtkCGALPMPModule.h" // For export macro
 
-class VTKCGALPMP_EXPORT vtkCGALIsotropicRemesher : public vtkDataSetAlgorithm
+class VTKCGALPMP_EXPORT vtkCGALIsotropicRemesher : public vtkPolyDataAlgorithm
 {
 public:
   static vtkCGALIsotropicRemesher* New();
-  vtkTypeMacro(vtkCGALIsotropicRemesher, vtkDataSetAlgorithm);
+  vtkTypeMacro(vtkCGALIsotropicRemesher, vtkPolyDataAlgorithm);
   void PrintSelf(ostream& os, vtkIndent indent) override;
 
 protected:
