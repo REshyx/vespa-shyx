@@ -1,9 +1,13 @@
 #include "vtkCGALIsotropicRemesher.h"
 
+// VTK related includes
 #include "vtkCellData.h"
 #include "vtkDataSet.h"
 #include "vtkObjectFactory.h"
 #include "vtkPointData.h"
+
+// CGAL related includes
+#include <CGAL/Surface_mesh.h>
 
 vtkStandardNewMacro(vtkCGALIsotropicRemesher);
 
