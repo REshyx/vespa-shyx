@@ -1,7 +1,3 @@
-vtk_module_test_data(
-  dragon.vtp
-)
-
 if (TARGET VTK::vtkpython)
   # import
   add_test(NAME "import_vtkCGALPMP"
@@ -36,8 +32,16 @@ if (TARGET VTK::vtkpython)
   endif ()
 endif ()
 
+vtk_module_test_data(dragon.vtp)
 vtk_add_test_cxx(vtkCGALCxxTests no_data_tests
-  TestPMPInstance.cxx,NO_VALID,NO_OUTPUT
-  TestPMPExecution.cxx
+  NO_DATA NO_VALID NO_OUTPUT
+  TestPMPInstance.cxx
 )
-vtk_test_cxx_executable(vtkCGALCxxTests no_data_tests)
+vtk_add_test_cxx(vtkCGALCxxTests data_tests
+  TestPMPExecution.cxx,NO_VALID
+)
+set(all_tests
+  ${no_data_tests}
+  ${data_tests}
+)
+vtk_test_cxx_executable(vtkCGALCxxTests all_tests)

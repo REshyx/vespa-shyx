@@ -1,15 +1,17 @@
 #include <iostream>
 
 #include "vtkNew.h"
+#include "vtkTestUtilities.h"
 #include "vtkXMLPolyDataReader.h"
 #include "vtkXMLPolyDataWriter.h"
 
 #include "vtkCGALIsotropicRemesher.h"
 
-int TestPMPExecution(int, char* argv[])
+int TestPMPExecution(int argc, char* argv[])
 {
   vtkNew<vtkXMLPolyDataReader> reader;
-  reader->SetFileName(argv[1]);
+  char* cfname = vtkTestUtilities::ExpandDataFileName(argc, argv, "dragon.vtp");
+  reader->SetFileName(cfname);
 
   vtkNew<vtkCGALIsotropicRemesher> rm;
   rm->SetInputConnection(reader->GetOutputPort());
