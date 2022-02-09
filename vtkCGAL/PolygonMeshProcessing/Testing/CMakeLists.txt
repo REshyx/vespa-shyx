@@ -32,16 +32,10 @@ if (TARGET VTK::vtkpython)
   endif ()
 endif ()
 
-vtk_module_test_data(dragon.vtp)
 vtk_add_test_cxx(vtkCGALCxxTests no_data_tests
   NO_DATA NO_VALID NO_OUTPUT
   TestPMPInstance.cxx
+  TestPMPExecution.cxx
+  ${PROJECT_SOURCE_DIR}/Data
 )
-vtk_add_test_cxx(vtkCGALCxxTests data_tests
-  TestPMPExecution.cxx,NO_VALID
-)
-set(all_tests
-  ${no_data_tests}
-  ${data_tests}
-)
-vtk_test_cxx_executable(vtkCGALCxxTests all_tests)
+vtk_test_cxx_executable(vtkCGALCxxTests no_data_tests)

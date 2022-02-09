@@ -7,11 +7,12 @@
 
 #include "vtkCGALIsotropicRemesher.h"
 
-int TestPMPExecution(int argc, char* argv[])
+int TestPMPExecution(int, char* argv[])
 {
   vtkNew<vtkXMLPolyDataReader> reader;
-  char* cfname = vtkTestUtilities::ExpandDataFileName(argc, argv, "dragon.vtp");
-  reader->SetFileName(cfname);
+  std::string cfname(argv[1]);
+  cfname += "/dragon.vtp";
+  reader->SetFileName(cfname.c_str());
 
   vtkNew<vtkCGALIsotropicRemesher> rm;
   rm->SetInputConnection(reader->GetOutputPort());
