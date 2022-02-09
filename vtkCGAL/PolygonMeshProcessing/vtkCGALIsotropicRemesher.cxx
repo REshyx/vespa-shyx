@@ -6,6 +6,7 @@
 #include "vtkInformationVector.h"
 #include "vtkObjectFactory.h"
 #include "vtkPointData.h"
+#include "vtkProbeFilter.h"
 
 // CGAL related includes
 #include <CGAL/Surface_mesh.h>
@@ -121,11 +122,11 @@ int vtkCGALIsotropicRemesher::RequestData(
       pts->InsertNextPoint(CGAL::to_double(p.x()), CGAL::to_double(p.y()), CGAL::to_double(p.z()));
     vmap[vertex] = id;
   }
+  pts->Squeeze();
 
   // cells
   vtkNew<vtkCellArray> cells;
-  // cells->AllocateEstimate(num_faces(surface_mesh), 3);
-  cells->Allocate(num_faces(surface_mesh));
+  cells->AllocateEstimate(num_faces(surface_mesh), 3);
 
   for (auto face : faces(surface_mesh))
   {
@@ -136,11 +137,29 @@ int vtkCGALIsotropicRemesher::RequestData(
     }
     cells->InsertNextCell(ids);
   }
+  cells->Squeeze();
 
   // dataset
-  vtkPolyData* output = vtkPolyData::GetData(outputVector);
-  output->SetPoints(pts);
-  output->SetPolys(cells);
+  vtkNew<vtkPolyData> outputGeo;
+  outputGeo->SetPoints(pts);
+  outputGeo->SetPolys(cells);
 
+  if (this->UpdateAttributes)
+  {
+    // attributes
+    vtkNew<vtkProbeFilter> probe;
+    probe->SetInputData(outputGeo);
+    probe->SetSourceData(input);
+    probe->SpatialMatchOn();
+    probe->Update();
+
+    vtkPolyData* output = vtkPolyData::GetData(outputVector);
+    output->ShallowCopy(probe->GetOutput());
+  }
+  else
+  {
+    vtkPolyData* output = vtkPolyData::GetData(outputVector);
+    output->ShallowCopy(outputGeo);
+  }
   return 1;
 }
