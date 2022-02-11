@@ -37,16 +37,23 @@ int vtkCGALIsotropicRemesher::RequestData(
   using Graph_Verts = boost::graph_traits<CGAL_Surface>::vertex_descriptor;
   using Graph_Coord = boost::property_map<CGAL_Surface, CGAL::vertex_point_t>::type;
 
-  // sanity check
-  if (this->TargetLength <= 0)
+  // Get the input and output data objects.
+  vtkPolyData* input = vtkPolyData::GetData(inputVector[0]);
+
+  // edge target length
+  auto targetLength = this->TargetLength;
+  if (targetLength == -1)
+  {
+    // not specified by the user
+    targetLength = 0.01 * input->GetLength();
+
+  }
+  if (targetLength <= 0)
   {
     vtkErrorMacro(
       "Please, specify a valid TargetLength for edges, current is: " << this->TargetLength);
     return 0;
   }
-
-  // Get the input and output data objects.
-  vtkPolyData* input = vtkPolyData::GetData(inputVector[0]);
 
   // Create the surface mesh for CGAL
   // --------------------------------
@@ -101,7 +108,7 @@ int vtkCGALIsotropicRemesher::RequestData(
   pmp::detect_sharp_edges(surface_mesh, this->ProtectAngle, featureEdges);
 
   // remesh
-  pmp::isotropic_remeshing(surface_mesh.faces(), this->TargetLength, surface_mesh,
+  pmp::isotropic_remeshing(surface_mesh.faces(), targetLength, surface_mesh,
     pmp::parameters::number_of_iterations(this->Iterations)
       .protect_constraints(true)
       .edge_is_constrained_map(featureEdges));

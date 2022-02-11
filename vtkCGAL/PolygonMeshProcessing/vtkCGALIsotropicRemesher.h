@@ -2,8 +2,8 @@
  * @class   vtkCGALIsotropicRemesher
  * @brief   remesh using the CGAL isotropic remeshing
  *
- * vtkCGALisotropicRemesh is a filter allowing to remesh
- * a triangulated ploydata using the CGAL isotropic_remesh method.
+ * vtkCGALIsotropicRemesher is a filter allowing to remesh
+ * a triangulated polydata using the CGAL isotropic_remesh method.
  * This filter protect feature edges.
  */
 
@@ -24,7 +24,8 @@ public:
   //@{
   /**
    * Get / Set the edge target length for the result
-   * Must be specified by the user
+   * If non is specified by the user, the value will
+   * be set as 1% of the boundary box diagonal
    **/
   vtkGetMacro(TargetLength, double);
   vtkSetMacro(TargetLength, double);
@@ -71,7 +72,7 @@ protected:
 
   // Fields
 
-  double TargetLength = 0;
+  double TargetLength = -1;
   double ProtectAngle = 45;
   int    Iterations   = 1;
   bool   UpdateAttributes = true;
