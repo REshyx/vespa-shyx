@@ -12,5 +12,6 @@ DEPENDS
   CGAL::CGAL
 TEST_DEPENDS
   VTK::CommonSystem
+  VTK::IOXML
   VTK::TestingCore
 

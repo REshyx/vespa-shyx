@@ -7,6 +7,8 @@
 BasedOnStyle: Mozilla
 AlignAfterOpenBracket: DontAlign
 AlignOperands: false
+AlignConsecutiveAssignments: true
+AlignConsecutiveDeclarations: true
 AlwaysBreakAfterReturnType: None
 AlwaysBreakAfterDefinitionReturnType: None
 BreakBeforeBraces: Allman
@@ -15,6 +17,7 @@ BinPackParameters: true
 ColumnLimit: 100
 SpaceAfterTemplateKeyword: true
 Standard: Cpp11
+SortIncludes: false
 StatementMacros:
 - PyObject_HEAD
 - PyObject_VAR_HEAD
