@@ -1,0 +1,37 @@
+image: $CI_REGISTRY/khaled.hadj-tahar/vtk-builder/vtk_master:latest
+stages:
+  - build
+  - test
+
+build-plugin:
+  stage: build
+  script:
+    - mkdir -p build
+    - cd build
+    - cmake -DVTK_DIR=/vtk/build/ -D BUILD_TESTING=ON ..
+    - cmake --build . --config Release --parallel 2
+  tags:
+    - build
+    - docker
+    - linux
+    - vtk-cgal
+  artifacts:
+    expire_in: 1h
+    when: always
+    paths:
+      - build/
+
+
+test-plugin:
+  stage: test
+  needs: ['build-plugin']
+  script:
+    - cd build
+    - ctest
+  tags:
+    - test
+    - docker
+    - linux
+    - vtk-cgal
+  dependencies:
+    - build-plugin
