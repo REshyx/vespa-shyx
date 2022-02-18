@@ -5,5 +5,6 @@ pd = vtkSphereSource()
 
 rm = vtkCGALPMP.vtkCGALIsotropicRemesher()
 rm.SetInputConnection(pd.GetOutputPort())
-rm.SetTargetLength(0.1)
+rm.SetTargetLength(0.01)
+rm.SetProtectAngle(90)
 rm.Update()
