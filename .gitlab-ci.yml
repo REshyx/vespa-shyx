@@ -6,6 +6,7 @@ stages:
 build-plugin:
   stage: build
   script:
+    - apt-get install -y libcgal-dev
     - mkdir -p build
     - cd build
     - cmake -DVTK_DIR=/vtk/build/ -D BUILD_TESTING=ON ..
