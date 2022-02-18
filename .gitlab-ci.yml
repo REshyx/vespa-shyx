@@ -28,7 +28,7 @@ test-plugin:
   needs: ['build-plugin']
   script:
     - cd build
-    - ctest
+    - ctest -VV
   tags:
     - test
     - docker
