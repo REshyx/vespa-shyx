@@ -1,4 +1,4 @@
-image: $CI_REGISTRY/khaled.hadj-tahar/vtk-builder/vtk_master:latest
+image: kitware/paraview-ci-plugin:vtk-v9.1.0-stdthread-python-mpi
 stages:
   - build
   - test
