@@ -34,6 +34,7 @@ endif ()
 
 vtk_add_test_cxx(vtkCGALCxxTests no_data_tests
   NO_DATA NO_VALID NO_OUTPUT
+  TestPMPBooleanExecution.cxx
   TestPMPInstance.cxx
   TestPMPExecution.cxx
   ${PROJECT_SOURCE_DIR}/Data/Testing/
