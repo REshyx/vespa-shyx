@@ -11,7 +11,10 @@ DEPENDS
   VTK::FiltersCore
   VTK::FiltersExtraction
   CGAL::CGAL
+OPTIONAL_DEPENDS
+  # one of them should be found depending on CGAL version
   CGAL::Eigen3_support
+  Eigen3::Eigen
 TEST_DEPENDS
   VTK::CommonSystem
   VTK::FiltersSources

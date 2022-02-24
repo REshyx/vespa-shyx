@@ -29,8 +29,13 @@ find_package(VTK
 
 find_package(CGAL REQUIRED)
 
-find_package(Eigen3 3.2.0) #(requires 3.2.0 or greater)
-include(CGAL_Eigen3_support)
+find_package(Eigen3 REQUIRED 3.2.0)
+if (CGAL_VERSION VERSION_GREATER "5.1")
+  # this file only exists in CGAL 5.1 and later
+  include(CGAL_Eigen3_support)
+else()
+  include_directories(${EIGEN3_INCLUDE_DIR})
+endif()
 
 ## VTK Module
 
