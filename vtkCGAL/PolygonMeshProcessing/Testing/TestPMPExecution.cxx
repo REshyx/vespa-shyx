@@ -17,7 +17,6 @@ int TestPMPExecution(int, char* argv[])
   vtkNew<vtkCGALIsotropicRemesher> rm;
   rm->SetInputConnection(reader->GetOutputPort());
   rm->SetIterations(3);
-  rm->SetTargetLength(10.0);
 
   vtkNew<vtkXMLPolyDataWriter> writer;
   writer->SetInputConnection(rm->GetOutputPort());

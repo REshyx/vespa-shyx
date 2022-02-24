@@ -1,0 +1,38 @@
+image: kitware/paraview-ci-plugin:vtk-v9.1.0-stdthread-python-mpi
+stages:
+  - build
+  - test
+
+build-plugin:
+  stage: build
+  script:
+    - apt-get install -y libcgal-dev
+    - mkdir -p build
+    - cd build
+    - cmake -DVTK_DIR=/vtk/build/ -D BUILD_TESTING=ON ..
+    - cmake --build . --config Release --parallel 2
+  tags:
+    - build
+    - docker
+    - linux
+    - vtk-cgal
+  artifacts:
+    expire_in: 1h
+    when: always
+    paths:
+      - build/
+
+
+test-plugin:
+  stage: test
+  needs: ['build-plugin']
+  script:
+    - cd build
+    - ctest -VV
+  tags:
+    - test
+    - docker
+    - linux
+    - vtk-cgal
+  dependencies:
+    - build-plugin
