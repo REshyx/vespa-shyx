@@ -1,20 +1,23 @@
-#include "vtkCGALIsotropicRemesher.h"
+#include "vtkCGALFairRegion.h"
 
 // VTK related includes
 #include "vtkCellIterator.h"
-#include "vtkDataSet.h"
+#include "vtkExtractSelectedIds.h"
+#include "vtkInformation.h"
 #include "vtkInformationVector.h"
 #include "vtkObjectFactory.h"
 #include "vtkPointData.h"
+#include "vtkPointSet.h"
 #include "vtkProbeFilter.h"
+#include "vtkSelection.h"
+#include "vtkSelectionNode.h"
 
 // CGAL related includes
 #include <CGAL/Surface_mesh.h>
 #include <CGAL/Simple_cartesian.h>
-#include <CGAL/Polygon_mesh_processing/detect_features.h>
-#include <CGAL/Polygon_mesh_processing/remesh.h>
+#include <CGAL/Polygon_mesh_processing/fair.h>
 
-vtkStandardNewMacro(vtkCGALIsotropicRemesher);
+vtkStandardNewMacro(vtkCGALFairRegion);
 
 namespace pmp = CGAL::Polygon_mesh_processing;
 
@@ -23,38 +26,60 @@ using CGAL_Kernel  = CGAL::Simple_cartesian<double>;
 using CGAL_Surface = CGAL::Surface_mesh<CGAL_Kernel::Point_3>;
 
 //------------------------------------------------------------------------------
-void vtkCGALIsotropicRemesher::PrintSelf(ostream& os, vtkIndent indent)
+vtkCGALFairRegion::vtkCGALFairRegion()
 {
-  this->Superclass::PrintSelf(os, indent);
-  os << indent << "TargetLength :" << this->TargetLength << std::endl;
-  os << indent << "Iterations :" << this->Iterations << std::endl;
+  this->SetNumberOfInputPorts(2);
 }
 
 //------------------------------------------------------------------------------
-int vtkCGALIsotropicRemesher::RequestData(
+void vtkCGALFairRegion::PrintSelf(ostream& os, vtkIndent indent)
+{
+  this->Superclass::PrintSelf(os, indent);
+}
+
+//------------------------------------------------------------------------------
+int vtkCGALFairRegion::FillInputPortInformation(int port, vtkInformation* info)
+{
+  if (port == 0)
+  {
+    info->Set(vtkAlgorithm::INPUT_REQUIRED_DATA_TYPE(), "vtkPolyData");
+  }
+  else
+  {
+    info->Set(vtkAlgorithm::INPUT_REQUIRED_DATA_TYPE(), "vtkSelection");
+    info->Set(vtkAlgorithm::INPUT_IS_OPTIONAL(), 1);
+  }
+  return 1;
+}
+
+//------------------------------------------------------------------------------
+int vtkCGALFairRegion::RequestData(
   vtkInformation*, vtkInformationVector** inputVector, vtkInformationVector* outputVector)
 {
   using Graph_Verts = boost::graph_traits<CGAL_Surface>::vertex_descriptor;
   using Graph_Coord = boost::property_map<CGAL_Surface, CGAL::vertex_point_t>::type;
 
   // Get the input and output data objects.
-  vtkPolyData* input = vtkPolyData::GetData(inputVector[0]);
+  vtkPolyData* input  = vtkPolyData::GetData(inputVector[0]);
+  vtkPolyData* output = vtkPolyData::GetData(outputVector);
 
-  // edge target length
-  auto targetLength = this->TargetLength;
-  if (targetLength == -1)
+  // Get the selection input
+  vtkInformation* selInfo = inputVector[1]->GetInformationObject(0);
+  if (!selInfo)
   {
-    // not specified by the user
-    targetLength = 0.01 * input->GetLength();
+    // When not given a selection, nothing to do.
+    vtkWarningMacro("No selection made, nothing to do");
+    output->ShallowCopy(input);
+    return 1;
   }
-  if (targetLength <= 0)
-  {
-    vtkErrorMacro(
-      "Please, specify a valid TargetLength for edges, current is: " << this->TargetLength);
-    return 0;
-  }
+  vtkSelection* inputSel = vtkSelection::SafeDownCast(selInfo->Get(vtkDataObject::DATA_OBJECT()));
+  vtkNew<vtkExtractSelectedIds> extractSelection;
+  extractSelection->SetInputData(0, input);
+  extractSelection->SetInputData(1, inputSel);
+  extractSelection->Update();
+  vtkPointSet* dataSel = vtkPointSet::SafeDownCast(extractSelection->GetOutputDataObject(0));
 
-  // Create the surface mesh for CGAL
+  // Create the triangle mesh for CGAL
   // --------------------------------
 
   CGAL_Surface surfaceMesh;
@@ -98,19 +123,16 @@ int vtkCGALIsotropicRemesher::RequestData(
     CGAL::Euler::add_face(tri, surfaceMesh);
   }
 
+  // Retrieve the region to fair (ROI)
+  // ---------------------------------
+  auto gids = vtk::DataArrayValueRange(dataSel->GetPointData()->GetArray("vtkOriginalPointIds"));
+  std::vector<Graph_Verts> sel(gids.cbegin(), gids.cend());
+
   // CGAL Processing
   // ---------------
 
-  // protect feature edges:
-  // https://doc.cgal.org/latest/Polygon_mesh_processing/Polygon_mesh_processing_2mesh_smoothing_example_8cpp-example.html#a3
-  auto featureEdges = get(CGAL::edge_is_feature, surfaceMesh);
-  pmp::detect_sharp_edges(surfaceMesh, this->ProtectAngle, featureEdges);
-
   // remesh
-  pmp::isotropic_remeshing(surfaceMesh.faces(), targetLength, surfaceMesh,
-    pmp::parameters::number_of_iterations(this->Iterations)
-      .protect_constraints(true)
-      .edge_is_constrained_map(featureEdges));
+  pmp::fair(surfaceMesh, sel);
 
   // VTK Output
   // ----------
@@ -159,12 +181,10 @@ int vtkCGALIsotropicRemesher::RequestData(
     probe->SpatialMatchOn();
     probe->Update();
 
-    vtkPolyData* output = vtkPolyData::GetData(outputVector);
     output->ShallowCopy(probe->GetOutput());
   }
   else
   {
-    vtkPolyData* output = vtkPolyData::GetData(outputVector);
     output->ShallowCopy(outputGeo);
   }
   return 1;

@@ -20,8 +20,17 @@ find_package(VTK
     CommonDataModel
     CommonExecutionModel
     FiltersCore
-    Python)
+    FiltersExtraction
+    Python
+  OPTIONAL_COMPONENTS
+    CommonSystem
+    IOXML
+    TestingCore)
+
 find_package(CGAL REQUIRED)
+
+find_package(Eigen3 3.2.0) #(requires 3.2.0 or greater)
+include(CGAL_Eigen3_support)
 
 ## VTK Module
 

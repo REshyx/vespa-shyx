@@ -9,7 +9,9 @@ DEPENDS
   VTK::CommonDataModel
   VTK::CommonExecutionModel
   VTK::FiltersCore
+  VTK::FiltersExtraction
   CGAL::CGAL
+  CGAL::Eigen3_support
 TEST_DEPENDS
   VTK::CommonSystem
   VTK::FiltersSources
