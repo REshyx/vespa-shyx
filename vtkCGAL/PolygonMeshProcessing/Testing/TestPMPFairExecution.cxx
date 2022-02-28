@@ -8,38 +8,25 @@
 #include <vtkXMLPolyDataReader.h>
 #include <vtkXMLPolyDataWriter.h>
 
-#include "vtkCGALIsotropicRemesher.h"
 #include "vtkCGALFairRegion.h"
 
-int TestPMPExecution(int, char* argv[])
+int TestPMPFairExecution(int, char* argv[])
 {
+  // Open data
+
   vtkNew<vtkXMLPolyDataReader> reader;
   std::string                  cfname(argv[1]);
   cfname += "/dragon.vtp";
   reader->SetFileName(cfname.c_str());
 
-  // Remesh
+  // Create point selection
 
-  vtkNew<vtkCGALIsotropicRemesher> rm;
-  rm->SetInputConnection(reader->GetOutputPort());
-  rm->SetIterations(3);
-
-  vtkNew<vtkXMLPolyDataWriter> writer;
-  writer->SetInputConnection(rm->GetOutputPort());
-  writer->SetFileName("isotropic_remesh.vtp");
-  writer->Update();
-  writer->Write();
-
-  // Fair
-
-  // With point selection
   vtkNew<vtkSelection>     sel;
   vtkNew<vtkSelectionNode> node;
   sel->AddNode(node);
   node->GetProperties()->Set(vtkSelectionNode::CONTENT_TYPE(), vtkSelectionNode::INDICES);
   node->GetProperties()->Set(vtkSelectionNode::FIELD_TYPE(), vtkSelectionNode::POINT);
 
-  // list of cells to be selected
   vtkNew<vtkIdTypeArray> arr;
   arr->SetNumberOfTuples(17);
 
@@ -63,10 +50,15 @@ int TestPMPExecution(int, char* argv[])
 
   node->SetSelectionList(arr);
 
+  // Fair selected region
+
   vtkNew<vtkCGALFairRegion> fr;
   fr->SetInputConnection(0, reader->GetOutputPort());
   fr->SetInputData(1, sel);
 
+  // Save result
+
+  vtkNew<vtkXMLPolyDataWriter> writer;
   writer->SetInputConnection(fr->GetOutputPort());
   writer->SetFileName("fair_points.vtp");
   writer->Update();
