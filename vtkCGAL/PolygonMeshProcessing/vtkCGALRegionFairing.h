@@ -1,8 +1,8 @@
 /**
- * @class   vtkCGALFairRegion
- * @brief   remesh using the CGAL isotropic remeshing
+ * @class   vtkCGALRegionFairing
+ * @brief   fair region using the CGAL fair method
  *
- * vtkCGALFairRegion is a filter allowing fair blind-holes on
+ * vtkCGALRegionFairing is a filter allowing fair blind-holes on
  * a triangulated polydata using the CGAL `fair` method.
  */
 
@@ -13,11 +13,11 @@
 
 #include "vtkCGALPMPModule.h" // For export macro
 
-class VTKCGALPMP_EXPORT vtkCGALFairRegion : public vtkPolyDataAlgorithm
+class VTKCGALPMP_EXPORT vtkCGALRegionFairing : public vtkPolyDataAlgorithm
 {
 public:
-  static vtkCGALFairRegion* New();
-  vtkTypeMacro(vtkCGALFairRegion, vtkPolyDataAlgorithm);
+  static vtkCGALRegionFairing* New();
+  vtkTypeMacro(vtkCGALRegionFairing, vtkPolyDataAlgorithm);
   void PrintSelf(ostream& os, vtkIndent indent) override;
 
   //@{
@@ -28,25 +28,24 @@ public:
    * to interpolate values to the new mesh.
    * Default is true
    **/
-   vtkGetMacro(UpdateAttributes, bool);
-   vtkSetMacro(UpdateAttributes, bool);
-   vtkBooleanMacro(UpdateAttributes, bool)
-  //@}
+  vtkGetMacro(UpdateAttributes, bool);
+  vtkSetMacro(UpdateAttributes, bool);
+  vtkBooleanMacro(UpdateAttributes, bool)
+    //@}
 
-protected:
-  vtkCGALFairRegion();
-  ~vtkCGALFairRegion() override = default;
+    protected : vtkCGALRegionFairing();
+  ~vtkCGALRegionFairing() override = default;
 
   int RequestData(vtkInformation*, vtkInformationVector**, vtkInformationVector*) override;
   int FillInputPortInformation(int port, vtkInformation* info) override;
 
   // Fields
 
-  bool   UpdateAttributes = true;
+  bool UpdateAttributes = true;
 
 private:
-  vtkCGALFairRegion(const vtkCGALFairRegion&) = delete;
-  void operator=(const vtkCGALFairRegion&) = delete;
+  vtkCGALRegionFairing(const vtkCGALRegionFairing&) = delete;
+  void operator=(const vtkCGALRegionFairing&) = delete;
 };
 
 #endif

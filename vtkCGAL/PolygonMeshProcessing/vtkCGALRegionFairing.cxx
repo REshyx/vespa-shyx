@@ -1,4 +1,4 @@
-#include "vtkCGALFairRegion.h"
+#include "vtkCGALRegionFairing.h"
 
 // VTK related includes
 #include "vtkCellIterator.h"
@@ -17,7 +17,7 @@
 #include <CGAL/Simple_cartesian.h>
 #include <CGAL/Polygon_mesh_processing/fair.h>
 
-vtkStandardNewMacro(vtkCGALFairRegion);
+vtkStandardNewMacro(vtkCGALRegionFairing);
 
 namespace pmp = CGAL::Polygon_mesh_processing;
 
@@ -26,19 +26,20 @@ using CGAL_Kernel  = CGAL::Simple_cartesian<double>;
 using CGAL_Surface = CGAL::Surface_mesh<CGAL_Kernel::Point_3>;
 
 //------------------------------------------------------------------------------
-vtkCGALFairRegion::vtkCGALFairRegion()
+vtkCGALRegionFairing::vtkCGALRegionFairing()
 {
   this->SetNumberOfInputPorts(2);
 }
 
 //------------------------------------------------------------------------------
-void vtkCGALFairRegion::PrintSelf(ostream& os, vtkIndent indent)
+void vtkCGALRegionFairing::PrintSelf(ostream& os, vtkIndent indent)
 {
+  os << indent << "UpdateAttributes: " << this->UpdateAttributes << std::endl;
   this->Superclass::PrintSelf(os, indent);
 }
 
 //------------------------------------------------------------------------------
-int vtkCGALFairRegion::FillInputPortInformation(int port, vtkInformation* info)
+int vtkCGALRegionFairing::FillInputPortInformation(int port, vtkInformation* info)
 {
   if (port == 0)
   {
@@ -53,7 +54,7 @@ int vtkCGALFairRegion::FillInputPortInformation(int port, vtkInformation* info)
 }
 
 //------------------------------------------------------------------------------
-int vtkCGALFairRegion::RequestData(
+int vtkCGALRegionFairing::RequestData(
   vtkInformation*, vtkInformationVector** inputVector, vtkInformationVector* outputVector)
 {
   using Graph_Verts = boost::graph_traits<CGAL_Surface>::vertex_descriptor;
@@ -131,7 +132,7 @@ int vtkCGALFairRegion::RequestData(
   // CGAL Processing
   // ---------------
 
-  // remesh
+  // fair selected area
   pmp::fair(surfaceMesh, sel);
 
   // VTK Output

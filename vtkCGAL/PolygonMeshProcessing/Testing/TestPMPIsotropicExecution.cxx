@@ -1,6 +1,5 @@
 #include <iostream>
 
-#include <vtkInformation.h>
 #include <vtkNew.h>
 #include <vtkTestUtilities.h>
 #include <vtkXMLPolyDataReader.h>

@@ -1,7 +1,7 @@
 set(vtkcgalpmp_files
   vtkCGALBooleanOperation
-  vtkCGALFairRegion
   vtkCGALIsotropicRemesher
+  vtkCGALRegionFairing
 )
 vtk_module_add_module(vtkCGALPMP
   CLASSES ${vtkcgalpmp_files}

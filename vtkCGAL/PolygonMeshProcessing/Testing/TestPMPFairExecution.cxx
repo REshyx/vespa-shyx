@@ -8,7 +8,7 @@
 #include <vtkXMLPolyDataReader.h>
 #include <vtkXMLPolyDataWriter.h>
 
-#include "vtkCGALFairRegion.h"
+#include "vtkCGALRegionFairing.h"
 
 int TestPMPFairExecution(int, char* argv[])
 {
@@ -52,7 +52,7 @@ int TestPMPFairExecution(int, char* argv[])
 
   // Fair selected region
 
-  vtkNew<vtkCGALFairRegion> fr;
+  vtkNew<vtkCGALRegionFairing> fr;
   fr->SetInputConnection(0, reader->GetOutputPort());
   fr->SetInputData(1, sel);
 
