@@ -1,10 +1,10 @@
 /**
  * @class   vtkCGALPolyDataAlgorithm
- * @brief   virtual superclass of all polydata algorithm using CGAL.
+ * @brief   virtual superclass of all polydata algorithms using CGAL.
  *
  * vtkCGALPolyDataAlgorithm is the superclass of all polydata algorithms
- * using CGAL. It define usefull methods to translate from VTK datasets
- * to CGAL surface back and forth.
+ * using CGAL. It defines useful methods to translate from VTK datasets
+ * to CGAL surfaces back and forth.
  */
 
 #ifndef vtkCGALPolyDataAlgorithm_h
@@ -61,7 +61,7 @@ protected:
 
   /**
    * Convert a vtkPolyData to a CGAL mesh.
-   * This method fills the surfaceMesh and coordsArr
+   * This method fills the surface and coords
    * in the CGAL_Mesh data object
    */
   std::unique_ptr<CGAL_Mesh> toCGAL(vtkPolyData* vtkMesh);

@@ -1,8 +1,8 @@
 #include "vtkCGALBooleanOperation.h"
 
 // VTK related includes
+#include "vtkInformationVector.h"
 #include "vtkObjectFactory.h"
-#include "vtkProbeFilter.h"
 
 // CGAL related includes
 #include <CGAL/Polygon_mesh_processing/corefinement.h>

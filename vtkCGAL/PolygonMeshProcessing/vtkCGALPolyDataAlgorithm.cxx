@@ -62,7 +62,6 @@ std::unique_ptr<CGAL_Mesh> vtkCGALPolyDataAlgorithm::toCGAL(vtkPolyData* vtkMesh
 }
 
 //------------------------------------------------------------------------------
-
 vtkSmartPointer<vtkPolyData> vtkCGALPolyDataAlgorithm::toVTK(CGAL_Mesh* cgalMesh)
 {
   // points (vertices in surfaceMesh are not contiguous)
