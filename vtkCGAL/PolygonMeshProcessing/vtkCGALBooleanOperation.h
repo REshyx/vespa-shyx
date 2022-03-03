@@ -10,15 +10,15 @@
 #ifndef vtkCGALBooleanOperation_h
 #define vtkCGALBooleanOperation_h
 
-#include "vtkPolyDataAlgorithm.h"
+#include "vtkCGALPolyDataAlgorithm.h"
 
 #include "vtkCGALPMPModule.h" // For export macro
 
-class VTKCGALPMP_EXPORT vtkCGALBooleanOperation : public vtkPolyDataAlgorithm
+class VTKCGALPMP_EXPORT vtkCGALBooleanOperation : public vtkCGALPolyDataAlgorithm
 {
 public:
   static vtkCGALBooleanOperation* New();
-  vtkTypeMacro(vtkCGALBooleanOperation, vtkPolyDataAlgorithm);
+  vtkTypeMacro(vtkCGALBooleanOperation, vtkCGALPolyDataAlgorithm);
   void PrintSelf(ostream& os, vtkIndent indent) override;
 
   /**
@@ -42,19 +42,6 @@ public:
     OperationType, int, vtkCGALBooleanOperation::DIFFERENCE, vtkCGALBooleanOperation::UNION);
   ///@}
 
-  ///@{
-  /**
-   * Choose if the result mesh should have the
-   * point / cell data attributes of the input.
-   * If so, a vtkProbeFilter is called in order
-   * to interpolate values to the new mesh.
-   * Default is true.
-   **/
-  vtkGetMacro(UpdateAttributes, bool);
-  vtkSetMacro(UpdateAttributes, bool);
-  vtkBooleanMacro(UpdateAttributes, bool);
-  ///@}
-
   /**
    * Set input connection for the second vtkPolyData.
    **/
@@ -66,7 +53,6 @@ protected:
 
   int RequestData(vtkInformation*, vtkInformationVector**, vtkInformationVector*) override;
 
-  bool UpdateAttributes = true;
   int  OperationType    = vtkCGALBooleanOperation::DIFFERENCE;
 
 private:
