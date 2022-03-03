@@ -6,42 +6,26 @@
  * a triangulated polydata using the CGAL `fair` method.
  */
 
-#ifndef vtkCGALfairRegion_h
-#define vtkCGALfairRegion_h
+#ifndef vtkCGALRegionFairing_h
+#define vtkCGALRegionFairing_h
 
-#include "vtkPolyDataAlgorithm.h"
+#include "vtkCGALPolyDataAlgorithm.h"
 
 #include "vtkCGALPMPModule.h" // For export macro
 
-class VTKCGALPMP_EXPORT vtkCGALRegionFairing : public vtkPolyDataAlgorithm
+class VTKCGALPMP_EXPORT vtkCGALRegionFairing : public vtkCGALPolyDataAlgorithm
 {
 public:
   static vtkCGALRegionFairing* New();
-  vtkTypeMacro(vtkCGALRegionFairing, vtkPolyDataAlgorithm);
+  vtkTypeMacro(vtkCGALRegionFairing, vtkCGALPolyDataAlgorithm);
   void PrintSelf(ostream& os, vtkIndent indent) override;
 
-  //@{
-  /**
-   * Choose if the result mesh should have the
-   * point / cell data attributes of the input.
-   * If so, a vtkProbeFilter is called in order
-   * to interpolate values to the new mesh.
-   * Default is true
-   **/
-  vtkGetMacro(UpdateAttributes, bool);
-  vtkSetMacro(UpdateAttributes, bool);
-  vtkBooleanMacro(UpdateAttributes, bool)
-    //@}
-
-    protected : vtkCGALRegionFairing();
+protected:
+  vtkCGALRegionFairing();
   ~vtkCGALRegionFairing() override = default;
 
   int RequestData(vtkInformation*, vtkInformationVector**, vtkInformationVector*) override;
   int FillInputPortInformation(int port, vtkInformation* info) override;
-
-  // Fields
-
-  bool UpdateAttributes = true;
 
 private:
   vtkCGALRegionFairing(const vtkCGALRegionFairing&) = delete;

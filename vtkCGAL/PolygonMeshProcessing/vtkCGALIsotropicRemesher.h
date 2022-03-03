@@ -7,18 +7,18 @@
  * This filter protect feature edges.
  */
 
-#ifndef vtkCGALisotropicRemesh_h
-#define vtkCGALisotropicRemesh_h
+#ifndef vtkCGALIsotropicRemesher_h
+#define vtkCGALIsotropicRemesher_h
 
-#include "vtkPolyDataAlgorithm.h"
+#include "vtkCGALPolyDataAlgorithm.h"
 
 #include "vtkCGALPMPModule.h" // For export macro
 
-class VTKCGALPMP_EXPORT vtkCGALIsotropicRemesher : public vtkPolyDataAlgorithm
+class VTKCGALPMP_EXPORT vtkCGALIsotropicRemesher : public vtkCGALPolyDataAlgorithm
 {
 public:
   static vtkCGALIsotropicRemesher* New();
-  vtkTypeMacro(vtkCGALIsotropicRemesher, vtkPolyDataAlgorithm);
+  vtkTypeMacro(vtkCGALIsotropicRemesher, vtkCGALPolyDataAlgorithm);
   void PrintSelf(ostream& os, vtkIndent indent) override;
 
   //@{
@@ -51,19 +51,6 @@ public:
    vtkSetMacro(Iterations, int);
   //@}
 
-  //@{
-  /**
-   * Choose if the result mesh should have the
-   * point / cell data attributes of the input.
-   * If so, a vtkProbeFilter is called in order
-   * to interpolate values to the new mesh.
-   * Default is true
-   **/
-   vtkGetMacro(UpdateAttributes, bool);
-   vtkSetMacro(UpdateAttributes, bool);
-   vtkBooleanMacro(UpdateAttributes, bool)
-  //@}
-
 protected:
   vtkCGALIsotropicRemesher()           = default;
   ~vtkCGALIsotropicRemesher() override = default;
@@ -75,7 +62,6 @@ protected:
   double TargetLength = -1;
   double ProtectAngle = 45;
   int    Iterations   = 1;
-  bool   UpdateAttributes = true;
 
 private:
   vtkCGALIsotropicRemesher(const vtkCGALIsotropicRemesher&) = delete;
