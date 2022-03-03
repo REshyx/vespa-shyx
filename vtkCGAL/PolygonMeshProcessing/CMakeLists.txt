@@ -1,12 +1,8 @@
-set(vtkcgalpmp_sources
-  vtkCGALBooleanOperation.cxx
-  vtkCGALIsotropicRemesher.cxx
-)
-set(vtkcgalpmp_headers
-  vtkCGALBooleanOperation.h
-  vtkCGALIsotropicRemesher.h
+set(vtkcgalpmp_files
+  vtkCGALBooleanOperation
+  vtkCGALIsotropicRemesher
+  vtkCGALRegionFairing
 )
 vtk_module_add_module(vtkCGALPMP
-  SOURCES ${vtkcgalpmp_sources}
-  HEADERS ${vtkcgalpmp_headers}
+  CLASSES ${vtkcgalpmp_files}
 )
