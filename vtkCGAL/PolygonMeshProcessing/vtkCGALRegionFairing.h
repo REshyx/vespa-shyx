@@ -6,8 +6,8 @@
  * a triangulated polydata using the CGAL `fair` method.
  */
 
-#ifndef vtkCGALfairRegion_h
-#define vtkCGALfairRegion_h
+#ifndef vtkCGALRegionFairing_h
+#define vtkCGALRegionFairing_h
 
 #include "vtkPolyDataAlgorithm.h"
 

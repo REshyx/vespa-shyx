@@ -1,16 +1,11 @@
 #include "vtkCGALIsotropicRemesher.h"
 
 // VTK related includes
-#include "vtkCellIterator.h"
 #include "vtkDataSet.h"
 #include "vtkInformationVector.h"
 #include "vtkObjectFactory.h"
-#include "vtkPointData.h"
-#include "vtkProbeFilter.h"
 
 // CGAL related includes
-#include <CGAL/Surface_mesh.h>
-#include <CGAL/Simple_cartesian.h>
 #include <CGAL/Polygon_mesh_processing/detect_features.h>
 #include <CGAL/Polygon_mesh_processing/remesh.h>
 
@@ -18,27 +13,21 @@ vtkStandardNewMacro(vtkCGALIsotropicRemesher);
 
 namespace pmp = CGAL::Polygon_mesh_processing;
 
-// Domain types
-using CGAL_Kernel  = CGAL::Simple_cartesian<double>;
-using CGAL_Surface = CGAL::Surface_mesh<CGAL_Kernel::Point_3>;
-
 //------------------------------------------------------------------------------
 void vtkCGALIsotropicRemesher::PrintSelf(ostream& os, vtkIndent indent)
 {
-  this->Superclass::PrintSelf(os, indent);
   os << indent << "TargetLength :" << this->TargetLength << std::endl;
   os << indent << "Iterations :" << this->Iterations << std::endl;
+  this->Superclass::PrintSelf(os, indent);
 }
 
 //------------------------------------------------------------------------------
 int vtkCGALIsotropicRemesher::RequestData(
   vtkInformation*, vtkInformationVector** inputVector, vtkInformationVector* outputVector)
 {
-  using Graph_Verts = boost::graph_traits<CGAL_Surface>::vertex_descriptor;
-  using Graph_Coord = boost::property_map<CGAL_Surface, CGAL::vertex_point_t>::type;
-
   // Get the input and output data objects.
-  vtkPolyData* input = vtkPolyData::GetData(inputVector[0]);
+  vtkPolyData* input  = vtkPolyData::GetData(inputVector[0]);
+  vtkPolyData* output = vtkPolyData::GetData(outputVector);
 
   // edge target length
   auto targetLength = this->TargetLength;
@@ -57,57 +46,18 @@ int vtkCGALIsotropicRemesher::RequestData(
   // Create the surface mesh for CGAL
   // --------------------------------
 
-  CGAL_Surface surfaceMesh;
-  Graph_Coord  coordsArr = get(CGAL::vertex_point, surfaceMesh);
-
-  // Vertices
-  const vtkIdType          inNPts = input->GetNumberOfPoints();
-  std::vector<Graph_Verts> surfaceVertices(inNPts);
-
-  for (vtkIdType i = 0; i < inNPts; i++)
-  {
-    // id
-    surfaceVertices[i] = add_vertex(surfaceMesh);
-
-    // coord
-    double coords[3];
-    input->GetPoint(i, coords);
-    put(coordsArr, surfaceVertices[i], CGAL_Kernel::Point_3(coords[0], coords[1], coords[2]));
-  }
-
-  // Cells
-  std::array<Graph_Verts, 3> tri;
-
-  auto cit = vtk::TakeSmartPointer(input->NewCellIterator());
-  for (cit->InitTraversal(); !cit->IsDoneWithTraversal(); cit->GoToNextCell())
-  {
-    // Sanity check
-    if (cit->GetCellType() != VTK_TRIANGLE)
-    {
-      vtkIdType id = cit->GetCellId();
-      vtkErrorMacro("Cell " << id << " is not a triangle. Abort.");
-      return 0;
-    }
-
-    // Add the triangle
-    vtkIdList* ids = cit->GetPointIds();
-    for (vtkIdType i = 0; i < 3; i++)
-    {
-      tri[i] = surfaceVertices[ids->GetId(i)];
-    }
-    CGAL::Euler::add_face(tri, surfaceMesh);
-  }
+  std::unique_ptr<CGAL_Mesh> cgalMesh = this->toCGAL(input);
 
   // CGAL Processing
   // ---------------
 
   // protect feature edges:
   // https://doc.cgal.org/latest/Polygon_mesh_processing/Polygon_mesh_processing_2mesh_smoothing_example_8cpp-example.html#a3
-  auto featureEdges = get(CGAL::edge_is_feature, surfaceMesh);
-  pmp::detect_sharp_edges(surfaceMesh, this->ProtectAngle, featureEdges);
+  auto featureEdges = get(CGAL::edge_is_feature, cgalMesh->surface);
+  pmp::detect_sharp_edges(cgalMesh->surface, this->ProtectAngle, featureEdges);
 
   // remesh
-  pmp::isotropic_remeshing(surfaceMesh.faces(), targetLength, surfaceMesh,
+  pmp::isotropic_remeshing(cgalMesh->surface.faces(), targetLength, cgalMesh->surface,
     pmp::parameters::number_of_iterations(this->Iterations)
       .protect_constraints(true)
       .edge_is_constrained_map(featureEdges));
@@ -115,57 +65,9 @@ int vtkCGALIsotropicRemesher::RequestData(
   // VTK Output
   // ----------
 
-  // points (vertices in surfaceMesh are not contiguous)
-  vtkNew<vtkPoints> pts;
-  const vtkIdType   outNPts = num_vertices(surfaceMesh);
-  pts->Allocate(outNPts);
-  std::vector<vtkIdType> vmap(outNPts);
+  output->ShallowCopy(this->toVTK(cgalMesh.get()));
 
-  for (auto vertex : vertices(surfaceMesh))
-  {
-    const auto& p = get(coordsArr, vertex);
-    vtkIdType   id =
-      pts->InsertNextPoint(CGAL::to_double(p.x()), CGAL::to_double(p.y()), CGAL::to_double(p.z()));
-    vmap[vertex] = id;
-  }
-  pts->Squeeze();
+  this->interpolateAttributes(input, output);
 
-  // cells
-  vtkNew<vtkCellArray> cells;
-  cells->AllocateEstimate(num_faces(surfaceMesh), 3);
-
-  for (auto face : faces(surfaceMesh))
-  {
-    vtkNew<vtkIdList> ids;
-    for (auto edge : halfedges_around_face(halfedge(face, surfaceMesh), surfaceMesh))
-    {
-      ids->InsertNextId(vmap[source(edge, surfaceMesh)]);
-    }
-    cells->InsertNextCell(ids);
-  }
-  cells->Squeeze();
-
-  // dataset
-  vtkNew<vtkPolyData> outputGeo;
-  outputGeo->SetPoints(pts);
-  outputGeo->SetPolys(cells);
-
-  if (this->UpdateAttributes)
-  {
-    // attributes
-    vtkNew<vtkProbeFilter> probe;
-    probe->SetInputData(outputGeo);
-    probe->SetSourceData(input);
-    probe->SpatialMatchOn();
-    probe->Update();
-
-    vtkPolyData* output = vtkPolyData::GetData(outputVector);
-    output->ShallowCopy(probe->GetOutput());
-  }
-  else
-  {
-    vtkPolyData* output = vtkPolyData::GetData(outputVector);
-    output->ShallowCopy(outputGeo);
-  }
   return 1;
 }
