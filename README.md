@@ -1,3 +1,5 @@
+[![pipeline status](https://gitlab.kitware.com/vtk-cgal/vtk-cgal/badges/master/pipeline.svg)](https://gitlab.kitware.com/vtk-cgal/vtk-cgal/-/commits/master)
+
 # Brief
 
 This project contains VTK filters that uses CGAL for mesh processing.
