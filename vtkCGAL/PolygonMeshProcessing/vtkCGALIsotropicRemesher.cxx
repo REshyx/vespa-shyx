@@ -51,16 +51,24 @@ int vtkCGALIsotropicRemesher::RequestData(
   // CGAL Processing
   // ---------------
 
-  // protect feature edges:
-  // https://doc.cgal.org/latest/Polygon_mesh_processing/Polygon_mesh_processing_2mesh_smoothing_example_8cpp-example.html#a3
-  auto featureEdges = get(CGAL::edge_is_feature, cgalMesh->surface);
-  pmp::detect_sharp_edges(cgalMesh->surface, this->ProtectAngle, featureEdges);
+  try
+  {
+    // protect feature edges:
+    // https://doc.cgal.org/latest/Polygon_mesh_processing/Polygon_mesh_processing_2mesh_smoothing_example_8cpp-example.html#a3
+    auto featureEdges = get(CGAL::edge_is_feature, cgalMesh->surface);
+    pmp::detect_sharp_edges(cgalMesh->surface, this->ProtectAngle, featureEdges);
 
-  // remesh
-  pmp::isotropic_remeshing(cgalMesh->surface.faces(), targetLength, cgalMesh->surface,
-    pmp::parameters::number_of_iterations(this->Iterations)
-      .protect_constraints(true)
-      .edge_is_constrained_map(featureEdges));
+    // remesh
+    pmp::isotropic_remeshing(cgalMesh->surface.faces(), targetLength, cgalMesh->surface,
+      pmp::parameters::number_of_iterations(this->Iterations)
+        .protect_constraints(true)
+        .edge_is_constrained_map(featureEdges));
+  }
+  catch (std::exception& e)
+  {
+    vtkErrorMacro("CGAL Exception: " << e.what());
+    return 0;
+  }
 
   // VTK Output
   // ----------

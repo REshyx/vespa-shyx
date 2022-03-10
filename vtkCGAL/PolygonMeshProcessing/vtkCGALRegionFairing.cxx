@@ -80,8 +80,16 @@ int vtkCGALRegionFairing::RequestData(
   // CGAL Processing
   // ---------------
 
-  // fair selected area
-  pmp::fair(cgalMesh->surface, sel);
+  try
+  {
+    // fair selected area
+    pmp::fair(cgalMesh->surface, sel);
+  }
+  catch (std::exception& e)
+  {
+    vtkErrorMacro("CGAL Exception: " << e.what());
+    return 0;
+  }
 
   // VTK Output
   // ----------

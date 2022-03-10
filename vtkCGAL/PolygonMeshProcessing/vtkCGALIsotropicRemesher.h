@@ -47,8 +47,8 @@ public:
    * CGAL isotropic_remeshing.
    * Default is 1
    **/
-   vtkGetMacro(Iterations, int);
-   vtkSetMacro(Iterations, int);
+  vtkGetMacro(Iterations, int);
+  vtkSetMacro(Iterations, int);
   //@}
 
 protected:
