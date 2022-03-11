@@ -72,23 +72,31 @@ int vtkCGALBooleanOperation::RequestData(
   // CGAL Processing
   // ---------------
 
-  switch (this->OperationType)
+  try
   {
-    case vtkCGALBooleanOperation::DIFFERENCE:
-      pmp::corefine_and_compute_difference(cgalInputMesh->surface, cgalSourceMesh->surface,
-        cgalInputMesh->surface, pmp::parameters::all_default(), pmp::parameters::all_default());
-      break;
-    case vtkCGALBooleanOperation::INTERSECTION:
-      pmp::corefine_and_compute_intersection(cgalInputMesh->surface, cgalSourceMesh->surface,
-        cgalInputMesh->surface, pmp::parameters::all_default(), pmp::parameters::all_default());
-      break;
-    case vtkCGALBooleanOperation::UNION:
-      pmp::corefine_and_compute_union(cgalInputMesh->surface, cgalSourceMesh->surface,
-        cgalInputMesh->surface, pmp::parameters::all_default(), pmp::parameters::all_default());
-      break;
-    default:
-      vtkErrorMacro("Unknown boolean operation!");
-      break;
+    switch (this->OperationType)
+    {
+      case vtkCGALBooleanOperation::DIFFERENCE:
+        pmp::corefine_and_compute_difference(cgalInputMesh->surface, cgalSourceMesh->surface,
+          cgalInputMesh->surface, pmp::parameters::all_default(), pmp::parameters::all_default());
+        break;
+      case vtkCGALBooleanOperation::INTERSECTION:
+        pmp::corefine_and_compute_intersection(cgalInputMesh->surface, cgalSourceMesh->surface,
+          cgalInputMesh->surface, pmp::parameters::all_default(), pmp::parameters::all_default());
+        break;
+      case vtkCGALBooleanOperation::UNION:
+        pmp::corefine_and_compute_union(cgalInputMesh->surface, cgalSourceMesh->surface,
+          cgalInputMesh->surface, pmp::parameters::all_default(), pmp::parameters::all_default());
+        break;
+      default:
+        vtkErrorMacro("Unknown boolean operation!");
+        break;
+    }
+  }
+  catch (std::exception& e)
+  {
+    vtkErrorMacro("CGAL Exception: " << e.what());
+    return 0;
   }
 
   // VTK Output

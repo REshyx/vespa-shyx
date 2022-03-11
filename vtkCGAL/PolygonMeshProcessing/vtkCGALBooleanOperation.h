@@ -53,7 +53,7 @@ protected:
 
   int RequestData(vtkInformation*, vtkInformationVector**, vtkInformationVector*) override;
 
-  int  OperationType    = vtkCGALBooleanOperation::DIFFERENCE;
+  int OperationType = vtkCGALBooleanOperation::DIFFERENCE;
 
 private:
   vtkCGALBooleanOperation(const vtkCGALBooleanOperation&) = delete;
