@@ -13,3 +13,6 @@ help(rm)
 
 rf = vtkCGALPMP.vtkCGALRegionFairing()
 help(rf)
+
+tf = vtkCGALPMP.vtkCGALTunnelFilling()
+help(tf)

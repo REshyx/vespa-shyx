@@ -1,6 +1,7 @@
-#include "vtkCGALRegionFairing.h"
+#include "vtkCGALTunnelFilling.h"
 
 // VTK related includes
+#include "vtkDataSetSurfaceFilter.h"
 #include "vtkExtractSelection.h"
 #include "vtkInformation.h"
 #include "vtkInformationVector.h"
@@ -8,28 +9,30 @@
 #include "vtkPointData.h"
 #include "vtkSelection.h"
 #include "vtkSelectionNode.h"
+#include "vtkTriangleFilter.h"
+#include "vtkThreshold.h"
 
 // CGAL related includes
-#include <CGAL/Polygon_mesh_processing/fair.h>
+#include <CGAL/Polygon_mesh_processing/triangulate_hole.h>
 
-vtkStandardNewMacro(vtkCGALRegionFairing);
+vtkStandardNewMacro(vtkCGALTunnelFilling);
 
 namespace pmp = CGAL::Polygon_mesh_processing;
 
 //------------------------------------------------------------------------------
-vtkCGALRegionFairing::vtkCGALRegionFairing()
+vtkCGALTunnelFilling::vtkCGALTunnelFilling()
 {
   this->SetNumberOfInputPorts(2);
 }
 
 //------------------------------------------------------------------------------
-void vtkCGALRegionFairing::PrintSelf(ostream& os, vtkIndent indent)
+void vtkCGALTunnelFilling::PrintSelf(ostream& os, vtkIndent indent)
 {
   this->Superclass::PrintSelf(os, indent);
 }
 
 //------------------------------------------------------------------------------
-int vtkCGALRegionFairing::FillInputPortInformation(int port, vtkInformation* info)
+int vtkCGALTunnelFilling::FillInputPortInformation(int port, vtkInformation* info)
 {
   if (port == 0)
   {
@@ -44,14 +47,14 @@ int vtkCGALRegionFairing::FillInputPortInformation(int port, vtkInformation* inf
 }
 
 //------------------------------------------------------------------------------
-int vtkCGALRegionFairing::RequestData(
+int vtkCGALTunnelFilling::RequestData(
   vtkInformation*, vtkInformationVector** inputVector, vtkInformationVector* outputVector)
 {
   // Get the input and output data objects.
   vtkPolyData* input  = vtkPolyData::GetData(inputVector[0]);
   vtkPolyData* output = vtkPolyData::GetData(outputVector);
 
-  // Get the selection input
+  // Selection
   vtkInformation* selInfo = inputVector[1]->GetInformationObject(0);
   if (!selInfo)
   {
@@ -60,30 +63,39 @@ int vtkCGALRegionFairing::RequestData(
     output->ShallowCopy(input);
     return 1;
   }
-  vtkSelection* inputSel = vtkSelection::SafeDownCast(selInfo->Get(vtkDataObject::DATA_OBJECT()));
-  vtkNew<vtkExtractSelection> extractSelection;
-  extractSelection->SetInputData(0, input);
-  extractSelection->SetInputData(1, inputSel);
-  extractSelection->Update();
-  vtkPointSet* dataSel = vtkPointSet::SafeDownCast(extractSelection->GetOutputDataObject(0));
+  vtkSelection* inputSel   = vtkSelection::SafeDownCast(selInfo->Get(vtkDataObject::DATA_OBJECT()));
+  const auto    selNbNodes = inputSel->GetNumberOfNodes();
+  if (selNbNodes > 0)
+  {
+    // pipeline to remove selection
+    vtkNew<vtkExtractSelection> extractSelection;
+    extractSelection->SetInputData(0, input);
+    extractSelection->SetInputData(1, inputSel);
+    extractSelection->PreserveTopologyOn();
+    vtkNew<vtkThreshold> threshold;
+    threshold->SetInputConnection(extractSelection->GetOutputPort());
+    threshold->SetInputArrayToProcess(
+      0, 0, 0, vtkDataObject::FIELD_ASSOCIATION_POINTS, "vtkInsidedness");
+    threshold->SetUpperThreshold(0.5);
+    vtkNew<vtkDataSetSurfaceFilter> surface;
+    surface->SetInputConnection(threshold->GetOutputPort());
+    vtkNew<vtkTriangleFilter> tri;
+    tri->SetInputConnection(surface->GetOutputPort());
+    tri->Update();
+    input->ShallowCopy(vtkPolyData::SafeDownCast(tri->GetOutput(0)));
+  }
 
   // Create the triangle mesh for CGAL
   // --------------------------------
 
   std::unique_ptr<CGAL_Mesh> cgalMesh = this->toCGAL(input);
 
-  // Retrieve the region to fair (ROI)
-  // ---------------------------------
-  auto gids = vtk::DataArrayValueRange(dataSel->GetPointData()->GetArray("vtkOriginalPointIds"));
-  std::vector<Graph_Verts> sel(gids.cbegin(), gids.cend());
-
   // CGAL Processing
   // ---------------
 
   try
   {
-    // fair selected area
-    pmp::fair(cgalMesh->surface, sel);
+    // TODO
   }
   catch (std::exception& e)
   {

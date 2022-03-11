@@ -22,7 +22,6 @@ build-plugin:
     paths:
       - build/
 
-
 test-plugin:
   stage: test
   needs: ['build-plugin']
