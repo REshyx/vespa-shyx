@@ -13,6 +13,7 @@
 #include "vtkThreshold.h"
 
 // CGAL related includes
+#include <CGAL/Polygon_mesh_processing/border.h>
 #include <CGAL/Polygon_mesh_processing/triangulate_hole.h>
 
 vtkStandardNewMacro(vtkCGALTunnelFilling);
@@ -29,6 +30,13 @@ vtkCGALTunnelFilling::vtkCGALTunnelFilling()
 void vtkCGALTunnelFilling::PrintSelf(ostream& os, vtkIndent indent)
 {
   this->Superclass::PrintSelf(os, indent);
+}
+
+//------------------------------------------------------------------------------
+void vtkCGALTunnelFilling::SetUpdateAttributes(bool vtkNotUsed(update))
+{
+  vtkWarningMacro(
+    "Unsupported: No attributes are interpolated with the vtkCGALTunnelFilling filter.");
 }
 
 //------------------------------------------------------------------------------
@@ -50,39 +58,40 @@ int vtkCGALTunnelFilling::FillInputPortInformation(int port, vtkInformation* inf
 int vtkCGALTunnelFilling::RequestData(
   vtkInformation*, vtkInformationVector** inputVector, vtkInformationVector* outputVector)
 {
+  using Graph_halfedge = boost::graph_traits<CGAL_Surface>::halfedge_descriptor;
+
   // Get the input and output data objects.
   vtkPolyData* input  = vtkPolyData::GetData(inputVector[0]);
   vtkPolyData* output = vtkPolyData::GetData(outputVector);
 
-  // Selection
+  // result
+  bool success = true;
+
+  // Remove selected elements if any
   vtkInformation* selInfo = inputVector[1]->GetInformationObject(0);
-  if (!selInfo)
+  if (selInfo)
   {
-    // When not given a selection, nothing to do.
-    vtkWarningMacro("No selection made, nothing to do");
-    output->ShallowCopy(input);
-    return 1;
-  }
-  vtkSelection* inputSel   = vtkSelection::SafeDownCast(selInfo->Get(vtkDataObject::DATA_OBJECT()));
-  const auto    selNbNodes = inputSel->GetNumberOfNodes();
-  if (selNbNodes > 0)
-  {
-    // pipeline to remove selection
-    vtkNew<vtkExtractSelection> extractSelection;
-    extractSelection->SetInputData(0, input);
-    extractSelection->SetInputData(1, inputSel);
-    extractSelection->PreserveTopologyOn();
-    vtkNew<vtkThreshold> threshold;
-    threshold->SetInputConnection(extractSelection->GetOutputPort());
-    threshold->SetInputArrayToProcess(
-      0, 0, 0, vtkDataObject::FIELD_ASSOCIATION_POINTS, "vtkInsidedness");
-    threshold->SetUpperThreshold(0.5);
-    vtkNew<vtkDataSetSurfaceFilter> surface;
-    surface->SetInputConnection(threshold->GetOutputPort());
-    vtkNew<vtkTriangleFilter> tri;
-    tri->SetInputConnection(surface->GetOutputPort());
-    tri->Update();
-    input->ShallowCopy(vtkPolyData::SafeDownCast(tri->GetOutput(0)));
+    vtkSelection* inputSel = vtkSelection::SafeDownCast(selInfo->Get(vtkDataObject::DATA_OBJECT()));
+    const auto    selNbNodes = inputSel->GetNumberOfNodes();
+    if (selNbNodes > 0)
+    {
+      // pipeline to remove selection
+      vtkNew<vtkExtractSelection> extractSelection;
+      extractSelection->SetInputData(0, input);
+      extractSelection->SetInputData(1, inputSel);
+      extractSelection->PreserveTopologyOn();
+      vtkNew<vtkThreshold> threshold;
+      threshold->SetInputConnection(extractSelection->GetOutputPort());
+      threshold->SetInputArrayToProcess(
+        0, 0, 0, vtkDataObject::FIELD_ASSOCIATION_POINTS_THEN_CELLS, "vtkInsidedness");
+      threshold->SetUpperThreshold(0.5);
+      vtkNew<vtkDataSetSurfaceFilter> surface;
+      surface->SetInputConnection(threshold->GetOutputPort());
+      vtkNew<vtkTriangleFilter> tri;
+      tri->SetInputConnection(surface->GetOutputPort());
+      tri->Update();
+      input->ShallowCopy(vtkPolyData::SafeDownCast(tri->GetOutput(0)));
+    }
   }
 
   // Create the triangle mesh for CGAL
@@ -93,9 +102,21 @@ int vtkCGALTunnelFilling::RequestData(
   // CGAL Processing
   // ---------------
 
+  std::vector<Graph_Verts> patch_vertices;
+  std::vector<Graph_Faces> patch_facets;
+
   try
   {
-    // TODO
+    // collect one halfedge per boundary cycle
+    std::vector<Graph_halfedge> borderCycles;
+    pmp::extract_boundary_cycles(cgalMesh->surface, std::back_inserter(borderCycles));
+
+    // fill boundary cycles
+    for (Graph_halfedge h : borderCycles)
+    {
+      success &= std::get<0>(pmp::triangulate_refine_and_fair_hole(cgalMesh->surface, h,
+        std::back_inserter(patch_facets), std::back_inserter(patch_vertices)));
+    }
   }
   catch (std::exception& e)
   {
@@ -108,7 +129,8 @@ int vtkCGALTunnelFilling::RequestData(
 
   output->ShallowCopy(this->toVTK(cgalMesh.get()));
 
-  this->interpolateAttributes(input, output);
+  // Note, there is not UpdateAttributes here as the new mesh
+  // contains patches not present in the initial surface
 
-  return 1;
+  return success;
 }

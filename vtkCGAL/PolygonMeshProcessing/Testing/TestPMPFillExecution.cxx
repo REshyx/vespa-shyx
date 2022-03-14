@@ -50,7 +50,7 @@ int TestPMPFillExecution(int, char* argv[])
 
   node->SetSelectionList(arr);
 
-  // Fair selected region
+  // Fill selected region
 
   vtkNew<vtkCGALTunnelFilling> tf;
   tf->SetInputConnection(0, reader->GetOutputPort());
