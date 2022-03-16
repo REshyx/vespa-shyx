@@ -3,6 +3,7 @@ set(vtkcgalpmp_files
 
   vtkCGALBooleanOperation
   vtkCGALIsotropicRemesher
+  vtkCGALPatchFilling
   vtkCGALRegionFairing
 )
 vtk_module_add_module(vtkCGALPMP

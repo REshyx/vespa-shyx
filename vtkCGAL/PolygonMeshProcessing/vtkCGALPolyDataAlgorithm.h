@@ -22,6 +22,7 @@
 using CGAL_Kernel  = CGAL::Simple_cartesian<double>;
 using CGAL_Surface = CGAL::Surface_mesh<CGAL_Kernel::Point_3>;
 using Graph_Verts  = boost::graph_traits<CGAL_Surface>::vertex_descriptor;
+using Graph_Faces  = boost::graph_traits<CGAL_Surface>::face_descriptor;
 using Graph_Coord  = boost::property_map<CGAL_Surface, CGAL::vertex_point_t>::type;
 
 // Container for CGAL related info

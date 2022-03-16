@@ -1,7 +1,7 @@
 #include "vtkCGALRegionFairing.h"
 
 // VTK related includes
-#include "vtkExtractSelectedIds.h"
+#include "vtkExtractSelection.h"
 #include "vtkInformation.h"
 #include "vtkInformationVector.h"
 #include "vtkObjectFactory.h"
@@ -61,7 +61,7 @@ int vtkCGALRegionFairing::RequestData(
     return 1;
   }
   vtkSelection* inputSel = vtkSelection::SafeDownCast(selInfo->Get(vtkDataObject::DATA_OBJECT()));
-  vtkNew<vtkExtractSelectedIds> extractSelection;
+  vtkNew<vtkExtractSelection> extractSelection;
   extractSelection->SetInputData(0, input);
   extractSelection->SetInputData(1, inputSel);
   extractSelection->Update();

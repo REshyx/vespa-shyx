@@ -21,6 +21,7 @@ find_package(VTK
     CommonExecutionModel
     FiltersCore
     FiltersExtraction
+    FiltersGeometry
     Python
   OPTIONAL_COMPONENTS
     CommonSystem
