@@ -14,5 +14,5 @@ help(rm)
 rf = vtkCGALPMP.vtkCGALRegionFairing()
 help(rf)
 
-tf = vtkCGALPMP.vtkCGALTunnelFilling()
-help(tf)
+pf = vtkCGALPMP.vtkCGALPatchFilling()
+help(pf)

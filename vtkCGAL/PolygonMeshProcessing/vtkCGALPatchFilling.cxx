@@ -1,4 +1,4 @@
-#include "vtkCGALTunnelFilling.h"
+#include "vtkCGALPatchFilling.h"
 
 // VTK related includes
 #include "vtkDataSetSurfaceFilter.h"
@@ -16,31 +16,31 @@
 #include <CGAL/Polygon_mesh_processing/border.h>
 #include <CGAL/Polygon_mesh_processing/triangulate_hole.h>
 
-vtkStandardNewMacro(vtkCGALTunnelFilling);
+vtkStandardNewMacro(vtkCGALPatchFilling);
 
 namespace pmp = CGAL::Polygon_mesh_processing;
 
 //------------------------------------------------------------------------------
-vtkCGALTunnelFilling::vtkCGALTunnelFilling()
+vtkCGALPatchFilling::vtkCGALPatchFilling()
 {
   this->SetNumberOfInputPorts(2);
 }
 
 //------------------------------------------------------------------------------
-void vtkCGALTunnelFilling::PrintSelf(ostream& os, vtkIndent indent)
+void vtkCGALPatchFilling::PrintSelf(ostream& os, vtkIndent indent)
 {
   this->Superclass::PrintSelf(os, indent);
 }
 
 //------------------------------------------------------------------------------
-void vtkCGALTunnelFilling::SetUpdateAttributes(bool vtkNotUsed(update))
+void vtkCGALPatchFilling::SetUpdateAttributes(bool vtkNotUsed(update))
 {
   vtkWarningMacro(
-    "Unsupported: No attributes are interpolated with the vtkCGALTunnelFilling filter.");
+    "Unsupported: No attributes are interpolated with the vtkCGALPatchFilling filter.");
 }
 
 //------------------------------------------------------------------------------
-int vtkCGALTunnelFilling::FillInputPortInformation(int port, vtkInformation* info)
+int vtkCGALPatchFilling::FillInputPortInformation(int port, vtkInformation* info)
 {
   if (port == 0)
   {
@@ -55,7 +55,7 @@ int vtkCGALTunnelFilling::FillInputPortInformation(int port, vtkInformation* inf
 }
 
 //------------------------------------------------------------------------------
-int vtkCGALTunnelFilling::RequestData(
+int vtkCGALPatchFilling::RequestData(
   vtkInformation*, vtkInformationVector** inputVector, vtkInformationVector* outputVector)
 {
   using Graph_halfedge = boost::graph_traits<CGAL_Surface>::halfedge_descriptor;

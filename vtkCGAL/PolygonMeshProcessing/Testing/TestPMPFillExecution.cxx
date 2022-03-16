@@ -8,7 +8,7 @@
 #include <vtkXMLPolyDataReader.h>
 #include <vtkXMLPolyDataWriter.h>
 
-#include "vtkCGALTunnelFilling.h"
+#include "vtkCGALPatchFilling.h"
 
 int TestPMPFillExecution(int, char* argv[])
 {
@@ -52,14 +52,14 @@ int TestPMPFillExecution(int, char* argv[])
 
   // Fill selected region
 
-  vtkNew<vtkCGALTunnelFilling> tf;
-  tf->SetInputConnection(0, reader->GetOutputPort());
-  tf->SetInputData(1, sel);
+  vtkNew<vtkCGALPatchFilling> pf;
+  pf->SetInputConnection(0, reader->GetOutputPort());
+  pf->SetInputData(1, sel);
 
   // Save result
 
   vtkNew<vtkXMLPolyDataWriter> writer;
-  writer->SetInputConnection(tf->GetOutputPort());
+  writer->SetInputConnection(pf->GetOutputPort());
   writer->SetFileName("fill_tunnels.vtp");
   writer->Update();
   writer->Write();
