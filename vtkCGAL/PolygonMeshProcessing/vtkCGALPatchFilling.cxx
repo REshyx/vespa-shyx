@@ -115,7 +115,8 @@ int vtkCGALPatchFilling::RequestData(
     for (Graph_halfedge h : borderCycles)
     {
       success &= std::get<0>(pmp::triangulate_refine_and_fair_hole(cgalMesh->surface, h,
-        std::back_inserter(patch_facets), std::back_inserter(patch_vertices)));
+        std::back_inserter(patch_facets), std::back_inserter(patch_vertices),
+        pmp::parameters::fairing_continuity(this->FairingContinuity)));
     }
   }
   catch (std::exception& e)
