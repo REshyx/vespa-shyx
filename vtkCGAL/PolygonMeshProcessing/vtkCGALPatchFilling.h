@@ -27,12 +27,27 @@ public:
 
   void SetUpdateAttributes(bool update) override;
 
+  ///@{
+  /**
+   * Drive the boundary tagencial continuity parameter
+   * given to CGAL:
+   * A value controling the tangential continuity of the output surface patch.
+   * The possible values are 0, 1 and 2, refering to the C0, C1 and C2 continuity
+   * Default is 1.
+   * Use 0 for plannar filling.
+   */
+  vtkGetMacro(FairingContinuity, int);
+  vtkSetClampMacro(FairingContinuity, int, 0, 2);
+  ///@}
+
 protected:
   vtkCGALPatchFilling();
   ~vtkCGALPatchFilling() override = default;
 
   int RequestData(vtkInformation*, vtkInformationVector**, vtkInformationVector*) override;
   int FillInputPortInformation(int port, vtkInformation* info) override;
+
+  int FairingContinuity = 1;
 
 private:
   vtkCGALPatchFilling(const vtkCGALPatchFilling&) = delete;
