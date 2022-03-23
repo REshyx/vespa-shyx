@@ -25,7 +25,7 @@ vtkCGALMeshDeformation::vtkCGALMeshDeformation()
 //------------------------------------------------------------------------------
 void vtkCGALMeshDeformation::PrintSelf(ostream& os, vtkIndent indent)
 {
-  os << indent << "Iterations :" << this->Iterations << std::endl;
+  os << indent << "Number of Iterations :" << this->NumberOfIterations << std::endl;
   os << indent << "Tolerance :" << this->Tolerance << std::endl;
   this->Superclass::PrintSelf(os, indent);
 }
@@ -183,7 +183,7 @@ int vtkCGALMeshDeformation::RequestData(
   try
   {
     // Deform mesh given ROI and control point targets
-    deformer.deform(this->Iterations, this->Tolerance);
+    deformer.deform(this->NumberOfIterations, this->Tolerance);
   }
   catch (std::exception& e)
   {

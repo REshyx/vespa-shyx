@@ -17,7 +17,7 @@ namespace pmp = CGAL::Polygon_mesh_processing;
 void vtkCGALIsotropicRemesher::PrintSelf(ostream& os, vtkIndent indent)
 {
   os << indent << "TargetLength :" << this->TargetLength << std::endl;
-  os << indent << "Iterations :" << this->Iterations << std::endl;
+  os << indent << "Number of Iterations :" << this->NumberOfIterations << std::endl;
   this->Superclass::PrintSelf(os, indent);
 }
 
@@ -60,7 +60,7 @@ int vtkCGALIsotropicRemesher::RequestData(
 
     // remesh
     pmp::isotropic_remeshing(cgalMesh->surface.faces(), targetLength, cgalMesh->surface,
-      pmp::parameters::number_of_iterations(this->Iterations)
+      pmp::parameters::number_of_iterations(this->NumberOfIterations)
         .protect_constraints(true)
         .edge_is_constrained_map(featureEdges));
   }

@@ -35,8 +35,8 @@ public:
    * Get/set the number of iterations used in the deformation process.
    * Default is 5.
    **/
-  vtkGetMacro(Iterations, double);
-  vtkSetMacro(Iterations, double);
+  vtkGetMacro(NumberOfIterations, unsigned int);
+  vtkSetMacro(NumberOfIterations, unsigned int);
   ///@}
 
   ///@{
@@ -64,9 +64,9 @@ protected:
   int RequestData(vtkInformation*, vtkInformationVector**, vtkInformationVector*) override;
   int FillInputPortInformation(int port, vtkInformation* info) override;
 
-  unsigned int Iterations    = 5;
-  double       Tolerance     = 1e-4;
-  std::string  GlobalIdArray = "";
+  unsigned int NumberOfIterations = 5;
+  double       Tolerance          = 1e-4;
+  std::string  GlobalIdArray      = "";
 
 private:
   vtkCGALMeshDeformation(const vtkCGALMeshDeformation&) = delete;

@@ -39,7 +39,7 @@ void vtkCGALMeshSubdivision::PrintSelf(ostream& os, vtkIndent indent)
       break;
   }
 
-  os << indent << "Iterations :" << this->Iterations << std::endl;
+  os << indent << "Number of Iterations :" << this->NumberOfIterations << std::endl;
   this->Superclass::PrintSelf(os, indent);
 }
 
@@ -71,19 +71,19 @@ int vtkCGALMeshSubdivision::RequestData(
     {
       case vtkCGALMeshSubdivision::CATMULL_CLARK:
         CGAL::Subdivision_method_3::CatmullClark_subdivision(
-          cgalMesh->surface, CGAL::parameters::number_of_iterations(this->Iterations));
+          cgalMesh->surface, CGAL::parameters::number_of_iterations(this->NumberOfIterations));
         break;
       case vtkCGALMeshSubdivision::LOOP:
         CGAL::Subdivision_method_3::Loop_subdivision(
-          cgalMesh->surface, CGAL::parameters::number_of_iterations(this->Iterations));
+          cgalMesh->surface, CGAL::parameters::number_of_iterations(this->NumberOfIterations));
         break;
       case vtkCGALMeshSubdivision::DOO_SABIN:
         CGAL::Subdivision_method_3::DooSabin_subdivision(
-          cgalMesh->surface, CGAL::parameters::number_of_iterations(this->Iterations));
+          cgalMesh->surface, CGAL::parameters::number_of_iterations(this->NumberOfIterations));
         break;
       case vtkCGALMeshSubdivision::SQRT3:
         CGAL::Subdivision_method_3::Sqrt3_subdivision(
-          cgalMesh->surface, CGAL::parameters::number_of_iterations(this->Iterations));
+          cgalMesh->surface, CGAL::parameters::number_of_iterations(this->NumberOfIterations));
         break;
       default:
         vtkErrorMacro("Unknown subdivision method!");

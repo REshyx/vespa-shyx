@@ -20,7 +20,7 @@ int TestPMPIsotropicExecution(int, char* argv[])
 
   vtkNew<vtkCGALIsotropicRemesher> rm;
   rm->SetInputConnection(reader->GetOutputPort());
-  rm->SetIterations(3);
+  rm->SetNumberOfIterations(3);
 
   // Save result
 
