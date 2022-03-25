@@ -3,6 +3,7 @@ set(vtkcgalpmp_files
 
   vtkCGALBooleanOperation
   vtkCGALIsotropicRemesher
+  vtkCGALMeshDeformation
   vtkCGALPatchFilling
   vtkCGALRegionFairing
 )

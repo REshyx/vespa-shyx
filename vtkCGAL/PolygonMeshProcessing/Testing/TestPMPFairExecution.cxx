@@ -61,7 +61,6 @@ int TestPMPFairExecution(int, char* argv[])
   vtkNew<vtkXMLPolyDataWriter> writer;
   writer->SetInputConnection(fr->GetOutputPort());
   writer->SetFileName("fair_points.vtp");
-  writer->Update();
   writer->Write();
 
   return 0;

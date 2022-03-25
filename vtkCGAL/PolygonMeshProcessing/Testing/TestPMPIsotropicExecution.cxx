@@ -27,7 +27,6 @@ int TestPMPIsotropicExecution(int, char* argv[])
   vtkNew<vtkXMLPolyDataWriter> writer;
   writer->SetInputConnection(rm->GetOutputPort());
   writer->SetFileName("isotropic_remesh.vtp");
-  writer->Update();
   writer->Write();
 
   return 0;

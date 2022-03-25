@@ -28,19 +28,16 @@ int TestPMPBooleanExecution(int, char* argv[])
   vtkNew<vtkXMLPolyDataWriter> writer;
   writer->SetInputConnection(boolOp->GetOutputPort());
   writer->SetFileName("boolean_operation_difference.vtp");
-  writer->Update();
   writer->Write();
 
   // Compute intersection
   boolOp->SetOperationType(vtkCGALBooleanOperation::INTERSECTION);
   writer->SetFileName("boolean_operation_intersection.vtp");
-  writer->Update();
   writer->Write();
 
   // Compute union
   boolOp->SetOperationType(vtkCGALBooleanOperation::UNION);
   writer->SetFileName("boolean_operation_union.vtp");
-  writer->Update();
   writer->Write();
 
   return 0;
