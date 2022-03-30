@@ -61,7 +61,7 @@ int TestPMPDeformExecution(int, char* argv[])
   vtkNew<vtkIdTypeArray> arr;
   arr->SetNumberOfTuples(roiArr->GetNumberOfTuples());
 
-  for (std::size_t idx = 0; idx < roiArr->GetNumberOfTuples(); ++idx)
+  for (vtkIdType idx = 0; idx < roiArr->GetNumberOfTuples(); ++idx)
   {
     arr->SetValue(idx, roiArr->GetValue(idx));
   }

@@ -1,5 +1,5 @@
 from vtk import vtkSphereSource
-from vtkCGAL import vtkCGALPMP
+from vespa import vtkCGALPMP
 
 pd = vtkSphereSource()
 

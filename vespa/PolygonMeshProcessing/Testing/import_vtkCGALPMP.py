@@ -1,9 +1,9 @@
 # Global import
-import vtkCGAL
+import vespa
 import vtkmodules.vtkCommonCore
 
 # Specific import
-from vtkCGAL import vtkCGALPMP
+from vespa import vtkCGALPMP
 
 bo = vtkCGALPMP.vtkCGALBooleanOperation()
 help(bo)

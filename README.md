@@ -1,4 +1,6 @@
-[![pipeline status](https://gitlab.kitware.com/vtk-cgal/vtk-cgal/badges/master/pipeline.svg)](https://gitlab.kitware.com/vtk-cgal/vtk-cgal/-/commits/master)
+[![pipeline status](https://gitlab.kitware.com/vtk-cgal/vespa/badges/master/pipeline.svg)](https://gitlab.kitware.com/vtk-cgal/vespa/-/commits/master)
+
+(V)TK (E)nhanced with (S)urface (P)rocessing (A)lgorithms
 
 # Brief
 
@@ -9,7 +11,7 @@ CGAL, any binary generated with it retains the GPLv3 license.
 
 # How to install
 
-The vtkCGAL project requires the [CMake](https://cmake.org/) build system, the [VTK library](https://vtk.org/)
+The VESPA project requires the [CMake](https://cmake.org/) build system, the [VTK library](https://vtk.org/)
 and the [CGAL library](https://www.cgal.org/) on your system.
 
 ### VTK
@@ -24,7 +26,7 @@ We need CGAL >= 5.3. It can be installed:
 * using the package manager of your system (including brew on OSX, or vcpkg on Windows),
 * manually using [CMake instructions](https://doc.cgal.org/latest/Manual/installation.html#installation_configwithcmake).
 
-### vtkCGAL
+### VESPA
 
 Then, we can install this project using the standard CMake procedure:
 
