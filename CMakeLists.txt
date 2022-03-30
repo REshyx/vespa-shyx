@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.8)
-project (vtkCGAL)
+project (vespa)
 
 ## Config
 
@@ -40,7 +40,7 @@ endif()
 
 ## VTK Module
 
-vtk_module_find_modules(vtkcgal_module_files "${CMAKE_CURRENT_SOURCE_DIR}/vtkCGAL")
+vtk_module_find_modules(vtkcgal_module_files "${CMAKE_CURRENT_SOURCE_DIR}/vespa")
 
 vtk_module_scan(
   MODULE_FILES     ${vtkcgal_module_files}
@@ -52,24 +52,24 @@ vtk_module_python_default_destination(python_destination)
 
 vtk_module_build(
   MODULES         ${vtkcgal_provided_modules}
-  INSTALL_EXPORT  vtkCGAL
+  INSTALL_EXPORT  vespa
   INSTALL_HEADERS ON
-  CMAKE_DESTINATION   "${CMAKE_INSTALL_LIBDIR}/cmake/vtkCGAL"
+  CMAKE_DESTINATION   "${CMAKE_INSTALL_LIBDIR}/cmake/vespa"
   HEADERS_DESTINATION "include")
 
 
 ## Install
 
-set(vtkCGALExport ${vtkcgal_provided_modules})
+set(vespaExport ${vtkcgal_provided_modules})
 export(
-  TARGETS   ${vtkCGALExport}
+  TARGETS   ${vespaExport}
   NAMESPACE VTK::
-  FILE "${CMAKE_BINARY_DIR}/${CMAKE_INSTALL_LIBDIR}/vtkCGAL/vtkCGAL-targets.cmake")
+  FILE "${CMAKE_BINARY_DIR}/${CMAKE_INSTALL_LIBDIR}/vespa/vespa-targets.cmake")
 install(
-  EXPORT      vtkCGAL
+  EXPORT      vespa
   NAMESPACE   VTK::
-  FILE        vtkCGAL-targets.cmake
-  DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/vtkCGAL")
+  FILE        vespa-targets.cmake
+  DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/vespa")
 
 
 ## Python wrapping
@@ -81,11 +81,11 @@ if(BUILD_PYTHON_WRAPPERS)
   vtk_module_wrap_python(
     MODULES         ${vtkcgal_provided_modules}
     WRAPPED_MODULES vtkcgal_wrapped_modules
-    TARGET          VTKCGAL::Python
-    INSTALL_EXPORT  vtkCGALPython
-    PYTHON_PACKAGE  "vtkCGAL"
+    TARGET          VESPA::Python
+    INSTALL_EXPORT  vespaPython
+    PYTHON_PACKAGE  "vespa"
     MODULE_DESTINATION  "${python_destination}"
-    CMAKE_DESTINATION   "${CMAKE_INSTALL_LIBDIR}/cmake/vtkCGALPython"
+    CMAKE_DESTINATION   "${CMAKE_INSTALL_LIBDIR}/cmake/vespaPython"
     LIBRARY_DESTINATION "${CMAKE_INSTALL_LIBDIR}"
     INSTALL_HEADERS ON
     BUILD_STATIC    OFF)
@@ -99,22 +99,22 @@ if(BUILD_PYTHON_WRAPPERS)
   set(InitContent "__all__ = ${python_modules}")
 
   file(GENERATE
-    OUTPUT  "${CMAKE_BINARY_DIR}/${python_destination}/vtkCGAL/__init__.py"
+    OUTPUT  "${CMAKE_BINARY_DIR}/${python_destination}/vespa/__init__.py"
     CONTENT "${InitContent}")
   install(
-    FILES       "${CMAKE_BINARY_DIR}/${python_destination}/vtkCGAL/__init__.py"
-    DESTINATION "${python_destination}/vtkCGAL/")
+    FILES       "${CMAKE_BINARY_DIR}/${python_destination}/vespa/__init__.py"
+    DESTINATION "${python_destination}/vespa/")
 
-  # Install vtkCGALPython
+  # Install vespaPython
   export(
-    EXPORT    vtkCGALPython
-    NAMESPACE VTKCGAL::
-    FILE "${CMAKE_BINARY_DIR}/${python_destination}/vtkCGALPython/vtkCGALPython-targets.cmake")
+    EXPORT    vespaPython
+    NAMESPACE VESPA::
+    FILE "${CMAKE_BINARY_DIR}/${python_destination}/vespaPython/vespaPython-targets.cmake")
   install(
-    EXPORT    vtkCGALPython
-    NAMESPACE VTKCGAL::
-    FILE      vtkCGALPython-targets.cmake
-    DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/vtkCGALPython")
+    EXPORT    vespaPython
+    NAMESPACE VESPA::
+    FILE      vespaPython-targets.cmake
+    DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/vespaPython")
 
 endif()
 
