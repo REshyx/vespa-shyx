@@ -78,6 +78,12 @@ protected:
    */
   bool interpolateAttributes(vtkPolyData* input, vtkPolyData* vtkMesh);
 
+  /**
+   * Copy the attributes of input onto vtkMesh
+   * if UpdateAttributes is true.
+   */
+  bool copyAttributes(vtkPolyData* input, vtkPolyData* vtkMesh);
+
   // Fields
 
   bool UpdateAttributes = true;

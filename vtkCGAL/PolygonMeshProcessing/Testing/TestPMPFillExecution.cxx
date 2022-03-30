@@ -61,7 +61,6 @@ int TestPMPFillExecution(int, char* argv[])
   vtkNew<vtkXMLPolyDataWriter> writer;
   writer->SetInputConnection(pf->GetOutputPort());
   writer->SetFileName("fill_tunnels.vtp");
-  writer->Update();
   writer->Write();
 
   return 0;

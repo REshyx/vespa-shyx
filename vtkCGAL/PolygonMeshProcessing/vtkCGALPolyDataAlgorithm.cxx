@@ -1,8 +1,10 @@
 #include "vtkCGALPolyDataAlgorithm.h"
 
 // VTK related includes
+#include "vtkCellData.h"
 #include "vtkCellIterator.h"
 #include "vtkObjectFactory.h"
+#include "vtkPointData.h"
 #include "vtkProbeFilter.h"
 
 vtkStandardNewMacro(vtkCGALPolyDataAlgorithm);
@@ -114,5 +116,17 @@ bool vtkCGALPolyDataAlgorithm::interpolateAttributes(vtkPolyData* input, vtkPoly
 
     vtkMesh->ShallowCopy(probe->GetOutput());
   }
-  return 1;
+  return true;
+}
+
+//------------------------------------------------------------------------------
+bool vtkCGALPolyDataAlgorithm::copyAttributes(vtkPolyData* input, vtkPolyData* vtkMesh)
+{
+  if (this->UpdateAttributes)
+  {
+    vtkMesh->GetPointData()->ShallowCopy(input->GetPointData());
+    vtkMesh->GetCellData()->ShallowCopy(input->GetCellData());
+  }
+
+  return true;
 }
