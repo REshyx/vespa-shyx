@@ -35,6 +35,7 @@ endif ()
 vtk_add_test_cxx(vtkCGALCxxTests no_data_tests
   NO_DATA NO_VALID NO_OUTPUT
   TestPMPInstance.cxx
+  TestDelaunayExecution.cxx
   TestPMPBooleanExecution.cxx
   TestPMPDeformExecution.cxx
   TestPMPFairExecution.cxx
