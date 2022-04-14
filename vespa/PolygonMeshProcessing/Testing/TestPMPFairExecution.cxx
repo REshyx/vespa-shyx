@@ -1,9 +1,11 @@
 #include <iostream>
 
+#include <vtkDelimitedTextReader.h>
 #include <vtkInformation.h>
 #include <vtkNew.h>
 #include <vtkSelection.h>
 #include <vtkSelectionNode.h>
+#include <vtkTable.h>
 #include <vtkTestUtilities.h>
 #include <vtkXMLPolyDataReader.h>
 #include <vtkXMLPolyDataWriter.h>
@@ -16,7 +18,7 @@ int TestPMPFairExecution(int, char* argv[])
 
   vtkNew<vtkXMLPolyDataReader> reader;
   std::string                  cfname(argv[1]);
-  cfname += "/dragon.vtp";
+  cfname += "/hand.vtp";
   reader->SetFileName(cfname.c_str());
 
   // Create point selection
@@ -27,28 +29,28 @@ int TestPMPFairExecution(int, char* argv[])
   node->GetProperties()->Set(vtkSelectionNode::CONTENT_TYPE(), vtkSelectionNode::INDICES);
   node->GetProperties()->Set(vtkSelectionNode::FIELD_TYPE(), vtkSelectionNode::POINT);
 
-  vtkNew<vtkIdTypeArray> arr;
-  arr->SetNumberOfTuples(17);
+  // Read selection
+  vtkNew<vtkDelimitedTextReader> roiReader;
+  std::string                    roiFilename(argv[1]);
+  roiFilename += "/PalmSelection.csv";
+  roiReader->SetFileName(roiFilename.c_str());
+  roiReader->SetHaveHeaders(true);
+  roiReader->SetDetectNumericColumns(true);
+  roiReader->Update();
 
-  arr->SetTuple1(0, 37797);
-  arr->SetTuple1(1, 37798);
-  arr->SetTuple1(2, 37799);
-  arr->SetTuple1(3, 37810);
-  arr->SetTuple1(4, 37816);
-  arr->SetTuple1(5, 37819);
-  arr->SetTuple1(6, 37823);
-  arr->SetTuple1(7, 37832);
-  arr->SetTuple1(8, 37833);
-  arr->SetTuple1(9, 37837);
-  arr->SetTuple1(10, 37840);
-  arr->SetTuple1(11, 37846);
-  arr->SetTuple1(12, 37847);
-  arr->SetTuple1(13, 37859);
-  arr->SetTuple1(14, 37861);
-  arr->SetTuple1(15, 37864);
-  arr->SetTuple1(16, 37865);
+  vtkIntArray* roiArr =
+    vtkIntArray::SafeDownCast(roiReader->GetOutput()->GetColumn(0));
+
+  vtkNew<vtkIdTypeArray> arr;
+  arr->SetNumberOfTuples(roiArr->GetNumberOfTuples());
+
+  for (vtkIdType idx = 0; idx < roiArr->GetNumberOfTuples(); ++idx)
+  {
+    arr->SetValue(idx, roiArr->GetValue(idx));
+  }
 
   node->SetSelectionList(arr);
+
 
   // Fair selected region
 
