@@ -43,12 +43,12 @@ public:
 
   //@{
   /**
-   * Get / Set the number of iteration for the
+   * Get / Set the number of iterations for the
    * CGAL isotropic_remeshing.
    * Default is 1
    **/
-  vtkGetMacro(Iterations, int);
-  vtkSetMacro(Iterations, int);
+  vtkGetMacro(NumberOfIterations, int);
+  vtkSetMacro(NumberOfIterations, int);
   //@}
 
 protected:
@@ -59,9 +59,9 @@ protected:
 
   // Fields
 
-  double TargetLength = -1;
-  double ProtectAngle = 45;
-  int    Iterations   = 1;
+  double TargetLength       = -1;
+  double ProtectAngle       = 45;
+  int    NumberOfIterations = 1;
 
 private:
   vtkCGALIsotropicRemesher(const vtkCGALIsotropicRemesher&) = delete;

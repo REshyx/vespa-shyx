@@ -40,6 +40,7 @@ vtk_add_test_cxx(vtkCGALCxxTests no_data_tests
   TestPMPFairExecution.cxx
   TestPMPFillExecution.cxx
   TestPMPIsotropicExecution.cxx
+  TestPMPSmoothingExecution.cxx
   TestPMPSubdivisionExecution.cxx
 
   ${PROJECT_SOURCE_DIR}/Data/Testing/

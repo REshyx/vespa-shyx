@@ -51,8 +51,8 @@ public:
    * Get/set the number of iterations (subdivisions) used in the subdivision process.
    * Default is 1.
    **/
-  vtkGetMacro(Iterations, double);
-  vtkSetMacro(Iterations, double);
+  vtkGetMacro(NumberOfIterations, double);
+  vtkSetMacro(NumberOfIterations, double);
   ///@}
 
 protected:
@@ -61,8 +61,8 @@ protected:
 
   int RequestData(vtkInformation*, vtkInformationVector**, vtkInformationVector*) override;
 
-  int          SubdivisionType = vtkCGALMeshSubdivision::SQRT3;
-  unsigned int Iterations      = 1;
+  int          SubdivisionType    = vtkCGALMeshSubdivision::SQRT3;
+  unsigned int NumberOfIterations = 1;
 
 private:
   vtkCGALMeshSubdivision(const vtkCGALMeshSubdivision&) = delete;
