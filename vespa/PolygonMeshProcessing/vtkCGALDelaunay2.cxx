@@ -1,16 +1,22 @@
 #include "vtkCGALDelaunay2.h"
 
 // VTK related includes
+#include "vtkCellArrayIterator.h"
 #include "vtkDataSet.h"
+#include "vtkIdList.h"
 #include "vtkInformationVector.h"
 #include "vtkObjectFactory.h"
 
 // CGAL related includes
-#include <CGAL/Delaunay_triangulation_2.h>
+#include <CGAL/Projection_traits_3.h>
+#include <CGAL/Constrained_Delaunay_triangulation_2.h>
+#include <CGAL/Default.h>
 
 vtkStandardNewMacro(vtkCGALDelaunay2);
 
-typedef CGAL::Delaunay_triangulation_2<CGAL_Kernel> DT2;
+using CGAL_Proj_Kernel = CGAL::Projection_traits_3<CGAL_Kernel>;
+using CDT2             = CGAL::Constrained_Delaunay_triangulation_2<CGAL_Proj_Kernel, CGAL::Default,
+  CGAL::No_constraint_intersection_requiring_constructions_tag>;
 
 //------------------------------------------------------------------------------
 void vtkCGALDelaunay2::PrintSelf(ostream& os, vtkIndent indent)
@@ -42,54 +48,106 @@ int vtkCGALDelaunay2::RequestData(
     rangeVal[i] = range[1] - range[0];
   }
 
+  std::cout << "range: " << rangeVal[0] << " " << rangeVal[1] << " " << rangeVal[2] << " "
+            << std::endl;
+
   if (rangeVal[0] && rangeVal[1] && rangeVal[2])
   {
     vtkErrorMacro("This dataset is 3D");
   }
-  int d1 = 0, d2 = 1; // z null
-  if (!rangeVal[0])
-  {
-    d1 = 1;
-    d2 = 2;
-  }
-  if (!rangeVal[1])
-  {
-    d1 = 0;
-    d2 = 2;
-  }
 
-  std::vector<CGAL_Kernel::Point_2> pts;
+  std::vector<std::tuple<CDT2::Point, bool>> pts;
   pts.reserve(nbPts);
   for (const auto pt : pointRange)
   {
-    pts.emplace_back(pt[d1], pt[d2]);
+    pts.emplace_back(CDT2::Point(pt[0], pt[1], pt[2]), true);
   }
 
   // CGAL Processing
   // ---------------
 
-  DT2 dt2(pts.begin(), pts.end());
+  CGAL_Proj_Kernel proj{ { 0, 1, 1 } };
+  CDT2             delaunay(proj);
+  try
+  {
+    // Add constraints (lines and polys)
+    vtkCellArray* polys   = input->GetPolys();
+    auto          polysIt = vtk::TakeSmartPointer(polys->NewIterator());
+    // each poly
+    for (polysIt->GoToFirstCell(); !polysIt->IsDoneWithTraversal(); polysIt->GoToNextCell())
+    {
+      vtkIdList*                      p = polysIt->GetCurrentCell();
+      std::list<CDT2::Point> poly;
+      // each segment of poly
+      for (vtkIdType i = 0; i < p->GetNumberOfIds(); i++)
+      {
+        auto point = std::get<0>(pts[p->GetId(i)]);
+        poly.emplace_back(point);
+        std::get<1>(pts[p->GetId(i)]) = false;
+      }
+      delaunay.insert_constraint(poly.begin(), poly.end(), true);
+    }
+
+    vtkCellArray* lines   = input->GetLines();
+    auto          linesIt = vtk::TakeSmartPointer(lines->NewIterator());
+    // each line
+    for (linesIt->GoToFirstCell(); !linesIt->IsDoneWithTraversal(); linesIt->GoToNextCell())
+    {
+      // each segment of line
+      vtkIdList*                      l = linesIt->GetCurrentCell();
+      std::list<CDT2::Point> line;
+      for (vtkIdType i = 1; i < l->GetNumberOfIds(); i++)
+      {
+        if (!std::get<1>(pts[l->GetId(i)]))
+        {
+          std::cerr << "invalid line: " << l->GetId(i) << std::endl;
+          continue;
+        }
+        auto point = std::get<0>(pts[l->GetId(i)]);
+        line.emplace_back(point);
+        std::get<1>(pts[l->GetId(i)]) = false;
+      }
+      delaunay.insert_constraint(line.begin(), line.end());
+    }
+
+    // Add points
+    for (auto point : pts)
+    {
+      if (std::get<1>(point))
+      {
+        delaunay.push_back(CDT2::Point(std::get<0>(point)));
+      }
+    }
+  }
+  catch (std::exception& e)
+  {
+    vtkErrorMacro("CGAL Exception: " << e.what());
+    return 0;
+  }
 
   // VTK Output
   // ----------
   vtkNew<vtkPoints> outPts;
-  const vtkIdType   outNPts = dt2.number_of_vertices();
+  const vtkIdType   outNPts = delaunay.number_of_vertices();
   outPts->Allocate(outNPts);
-  std::map<CGAL::Point_2<CGAL::Simple_cartesian<double>>, vtkIdType> vmap;
+  std::map<CDT2::Point, vtkIdType> vmap;
 
-  for (auto vertex : dt2.finite_vertex_handles())
+  for (auto vertex : delaunay.finite_vertex_handles())
   {
-    vtkIdType id =
-      outPts->InsertNextPoint(vertex->point()[0], vertex->point()[1], vertex->point()[2]);
+    double coords[3];
+    coords[0]            = vertex->point()[0];
+    coords[1]            = vertex->point()[1];
+    coords[2]            = vertex->point()[2];
+    vtkIdType id          = outPts->InsertNextPoint(coords);
     vmap[vertex->point()] = id;
   }
   outPts->Squeeze();
 
   // cells
   vtkNew<vtkCellArray> cells;
-  cells->AllocateEstimate(dt2.number_of_faces(), 3);
+  cells->AllocateEstimate(delaunay.number_of_faces(), 3);
 
-  for (auto face : dt2.finite_face_handles())
+  for (auto face : delaunay.finite_face_handles())
   {
     vtkNew<vtkIdList> ids;
     ids->InsertNextId(vmap[face->vertex(0)->point()]);

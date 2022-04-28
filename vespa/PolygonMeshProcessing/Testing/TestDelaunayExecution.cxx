@@ -12,11 +12,10 @@ int TestDelaunayExecution(int, char* argv[])
 {
   // Open data
 
-  vtkNew<vtkXMLPolyDataReader> reader3;
-  std::string                  cfname3(argv[1]);
-  cfname3 += "/dragon.vtp";
-  reader3->SetFileName(cfname3.c_str());
-
+  // vtkNew<vtkXMLPolyDataReader> reader3;
+  // std::string                  cfname3(argv[1]);
+  // cfname3 += "/dragon.vtp";
+  // reader3->SetFileName(cfname3.c_str());
 
   vtkNew<vtkXMLPolyDataReader> reader2;
   std::string                  cfname2(argv[1]);
@@ -28,8 +27,8 @@ int TestDelaunayExecution(int, char* argv[])
   vtkNew<vtkCGALDelaunay2> rm2;
   rm2->SetInputConnection(reader2->GetOutputPort());
 
-  vtkNew<vtkCGALDelaunay3> rm3;
-  rm3->SetInputConnection(reader3->GetOutputPort());
+  // vtkNew<vtkCGALDelaunay3> rm3;
+  // rm3->SetInputConnection(reader3->GetOutputPort());
 
   // Save result
 
@@ -39,9 +38,9 @@ int TestDelaunayExecution(int, char* argv[])
   writer->SetFileName("delaunay2_remesh.vtp");
   writer->Write();
 
-  writer->SetInputConnection(rm3->GetOutputPort());
-  writer->SetFileName("delaunay3_remesh.vtp");
-  writer->Write();
+  // writer->SetInputConnection(rm3->GetOutputPort());
+  // writer->SetFileName("delaunay3_remesh.vtp");
+  // writer->Write();
 
   return 0;
 }
