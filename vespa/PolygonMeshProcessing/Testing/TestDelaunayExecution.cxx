@@ -19,7 +19,7 @@ int TestDelaunayExecution(int, char* argv[])
 
   vtkNew<vtkXMLPolyDataReader> reader2;
   std::string                  cfname2(argv[1]);
-  cfname2 += "/pts.vtp";
+  cfname2 += "/shrink_sphere.vtp";
   reader2->SetFileName(cfname2.c_str());
 
   // Remesh
