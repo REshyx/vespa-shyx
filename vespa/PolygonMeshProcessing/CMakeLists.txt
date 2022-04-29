@@ -3,7 +3,6 @@ set(vtkcgalpmp_files
 
   vtkCGALBooleanOperation
   vtkCGALDelaunay2
-  vtkCGALDelaunay3
   vtkCGALIsotropicRemesher
   vtkCGALMeshDeformation
   vtkCGALMeshSubdivision

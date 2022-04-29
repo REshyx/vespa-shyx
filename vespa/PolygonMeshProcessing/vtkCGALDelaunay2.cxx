@@ -10,13 +10,13 @@
 // CGAL related includes
 #include <CGAL/Exact_predicates_inexact_constructions_kernel.h>
 #include <CGAL/Constrained_Delaunay_triangulation_2.h>
-#include <CGAL/Default.h>
 
 vtkStandardNewMacro(vtkCGALDelaunay2);
 
-// TODO May try to use ProjectionTraits_3 to handle arbitrary 3D surfaces
+// TODO May try to use ProjectionTraits_3 to handle open 3D surfaces
 // Look at perf then
 // caution, a sphere won't work: intersection
+// caution, infinit loop on some tests
 using CDT2 = CGAL::Constrained_Delaunay_triangulation_2<CGAL_Kernel>;
 
 //------------------------------------------------------------------------------
@@ -41,6 +41,8 @@ int vtkCGALDelaunay2::RequestData(
   vtkDataArray* ptsArr     = vtkPts->GetData();
   const auto    pointRange = vtk::DataArrayTupleRange<3>(ptsArr);
 
+  // manually handle the plannar coordinate
+  // should be along an axix
   double rangeVal[3];
   for (int i = 0; i < 3; i++)
   {
