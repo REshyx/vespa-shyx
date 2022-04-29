@@ -8,6 +8,7 @@
 #include "vtkObjectFactory.h"
 
 // CGAL related includes
+#include <CGAL/Exact_predicates_inexact_constructions_kernel.h>
 #include <CGAL/Constrained_Delaunay_triangulation_2.h>
 #include <CGAL/Default.h>
 
@@ -16,8 +17,7 @@ vtkStandardNewMacro(vtkCGALDelaunay2);
 // TODO May try to use ProjectionTraits_3 to handle arbitrary 3D surfaces
 // Look at perf then
 // caution, a sphere won't work: intersection
-using CDT2 = CGAL::Constrained_Delaunay_triangulation_2<CGAL_Kernel, CGAL::Default,
-  CGAL::No_constraint_intersection_requiring_constructions_tag>;
+using CDT2 = CGAL::Constrained_Delaunay_triangulation_2<CGAL_Kernel>;
 
 //------------------------------------------------------------------------------
 void vtkCGALDelaunay2::PrintSelf(ostream& os, vtkIndent indent)
@@ -67,11 +67,11 @@ int vtkCGALDelaunay2::RequestData(
     d3 = 1;
   }
 
-  std::vector<std::tuple<CGAL_Kernel::Point_2, bool>> pts;
+  std::vector<std::tuple<CDT2::Point, bool>> pts;
   pts.reserve(nbPts);
   for (const auto pt : pointRange)
   {
-    pts.emplace_back(CGAL_Kernel::Point_2(pt[d1], pt[d2]), true);
+    pts.emplace_back(CDT2::Point(pt[d1], pt[d2]), true);
   }
 
   // CGAL Processing
@@ -87,7 +87,7 @@ int vtkCGALDelaunay2::RequestData(
     for (polysIt->GoToFirstCell(); !polysIt->IsDoneWithTraversal(); polysIt->GoToNextCell())
     {
       vtkIdList*                      p = polysIt->GetCurrentCell();
-      std::list<CGAL_Kernel::Point_2> poly;
+      std::list<CDT2::Point> poly;
       // each segment of poly
       for (vtkIdType i = 0; i < p->GetNumberOfIds(); i++)
       {
@@ -105,7 +105,7 @@ int vtkCGALDelaunay2::RequestData(
     {
       // each segment of line
       vtkIdList* l = linesIt->GetCurrentCell();
-      std::list<CGAL_Kernel::Point_2> line;
+      std::list<CDT2::Point> line;
       for (vtkIdType i = 1; i < l->GetNumberOfIds(); i++)
       {
         if (!std::get<1>(pts[l->GetId(i)]))
@@ -125,7 +125,7 @@ int vtkCGALDelaunay2::RequestData(
     {
       if (std::get<1>(point))
       {
-        delaunay.push_back(CGAL_Kernel::Point_2(std::get<0>(point)));
+        delaunay.push_back(CDT2::Point(std::get<0>(point)));
       }
     }
   }
@@ -140,7 +140,7 @@ int vtkCGALDelaunay2::RequestData(
   vtkNew<vtkPoints> outPts;
   const vtkIdType   outNPts = delaunay.number_of_vertices();
   outPts->Allocate(outNPts);
-  std::map<CGAL::Point_2<CGAL::Simple_cartesian<double>>, vtkIdType> vmap;
+  std::map<CDT2::Point, vtkIdType> vmap;
 
   for (auto vertex : delaunay.finite_vertex_handles())
   {
