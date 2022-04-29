@@ -2,7 +2,6 @@ set(vtkcgalpmp_files
   vtkCGALPolyDataAlgorithm
 
   vtkCGALBooleanOperation
-  vtkCGALDelaunay2
   vtkCGALIsotropicRemesher
   vtkCGALMeshDeformation
   vtkCGALMeshSubdivision

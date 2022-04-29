@@ -42,7 +42,7 @@ int vtkCGALDelaunay2::RequestData(
   const auto    pointRange = vtk::DataArrayTupleRange<3>(ptsArr);
 
   // manually handle the plannar coordinate
-  // should be along an axix
+  // should be along the x, y or z axis
   double rangeVal[3];
   for (int i = 0; i < 3; i++)
   {
@@ -58,9 +58,9 @@ int vtkCGALDelaunay2::RequestData(
   int d1 = 0, d2 = 1, d3 = 2; // z null
   if (!rangeVal[0])
   {
-    d1 = 1;
-    d2 = 2;
-    d3 = 0;
+    d1 = 2;
+    d2 = 0;
+    d3 = 1;
   }
   if (!rangeVal[1])
   {
@@ -139,6 +139,7 @@ int vtkCGALDelaunay2::RequestData(
 
   // VTK Output
   // ----------
+
   vtkNew<vtkPoints> outPts;
   const vtkIdType   outNPts = delaunay.number_of_vertices();
   outPts->Allocate(outNPts);
@@ -149,7 +150,7 @@ int vtkCGALDelaunay2::RequestData(
     double coords[3];
     coords[d1]            = vertex->point()[0];
     coords[d2]            = vertex->point()[1];
-    coords[d3]            = rangeVal[d3 * 2];
+    coords[d3]            = rangeVal[d3];
     vtkIdType id          = outPts->InsertNextPoint(coords);
     vmap[vertex->point()] = id;
   }
