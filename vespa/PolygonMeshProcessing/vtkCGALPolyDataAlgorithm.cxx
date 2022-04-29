@@ -38,26 +38,18 @@ std::unique_ptr<CGAL_Mesh> vtkCGALPolyDataAlgorithm::toCGAL(vtkPolyData* vtkMesh
   }
 
   // Cells
-  std::array<Graph_Verts, 3> tri;
-
   auto cit = vtk::TakeSmartPointer(vtkMesh->NewCellIterator());
   for (cit->InitTraversal(); !cit->IsDoneWithTraversal(); cit->GoToNextCell())
   {
-    // Sanity check
-    if (cit->GetCellType() != VTK_TRIANGLE)
-    {
-      vtkIdType id = cit->GetCellId();
-      vtkErrorMacro("Cell " << id << " is not a triangle. Abort.");
-      return 0;
-    }
-
-    // Add the triangle
+    // Add the cell
     vtkIdList* ids = cit->GetPointIds();
-    for (vtkIdType i = 0; i < 3; i++)
+    vtkIdType nbIds = cit->GetNumberOfPoints();
+    std::vector<Graph_Verts> cell(nbIds);
+    for (vtkIdType i = 0; i < nbIds; i++)
     {
-      tri[i] = surfaceVertices[ids->GetId(i)];
+      cell[i] = surfaceVertices[ids->GetId(i)];
     }
-    CGAL::Euler::add_face(tri, cgalMesh->surface);
+    CGAL::Euler::add_face(cell, cgalMesh->surface);
   }
 
   return cgalMesh;

@@ -17,13 +17,13 @@
 #include <CGAL/Surface_mesh.h>
 #include <CGAL/Simple_cartesian.h>
 
-#include "vtkCGALPMPModule.h" // For export macro
-
 using CGAL_Kernel  = CGAL::Simple_cartesian<double>;
 using CGAL_Surface = CGAL::Surface_mesh<CGAL_Kernel::Point_3>;
 using Graph_Verts  = boost::graph_traits<CGAL_Surface>::vertex_descriptor;
 using Graph_Faces  = boost::graph_traits<CGAL_Surface>::face_descriptor;
 using Graph_Coord  = boost::property_map<CGAL_Surface, CGAL::vertex_point_t>::type;
+
+#include "vtkCGALPMPModule.h" // For export macro
 
 // Container for CGAL related info
 struct CGAL_Mesh
