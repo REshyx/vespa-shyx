@@ -55,14 +55,14 @@ int vtkCGALDelaunay2::RequestData(
   {
     vtkErrorMacro("This dataset is 3D");
   }
-  int d1 = 0, d2 = 1, d3 = 2; // z null
-  if (!rangeVal[0])
+  int d1 = 0, d2 = 1, d3 = 2; // assume z is null
+  if (!rangeVal[0]) // x is null
   {
-    d1 = 2;
-    d2 = 0;
-    d3 = 1;
+    d1 = 1;
+    d2 = 2;
+    d3 = 0;
   }
-  if (!rangeVal[1])
+  if (!rangeVal[1]) // y is null
   {
     d1 = 0;
     d2 = 2;
@@ -88,7 +88,7 @@ int vtkCGALDelaunay2::RequestData(
     // each poly
     for (polysIt->GoToFirstCell(); !polysIt->IsDoneWithTraversal(); polysIt->GoToNextCell())
     {
-      vtkIdList*                      p = polysIt->GetCurrentCell();
+      vtkIdList*             p = polysIt->GetCurrentCell();
       std::list<CDT2::Point> poly;
       // each segment of poly
       for (vtkIdType i = 0; i < p->GetNumberOfIds(); i++)
@@ -106,13 +106,13 @@ int vtkCGALDelaunay2::RequestData(
     for (linesIt->GoToFirstCell(); !linesIt->IsDoneWithTraversal(); linesIt->GoToNextCell())
     {
       // each segment of line
-      vtkIdList* l = linesIt->GetCurrentCell();
+      vtkIdList*             l = linesIt->GetCurrentCell();
       std::list<CDT2::Point> line;
       for (vtkIdType i = 1; i < l->GetNumberOfIds(); i++)
       {
         if (!std::get<1>(pts[l->GetId(i)]))
         {
-          std::cerr << "invalid line: " << l->GetId(i) << std::endl;
+          std::cerr << "intersecting line: " << l->GetId(i) << std::endl;
           continue;
         }
         auto point = std::get<0>(pts[l->GetId(i)]);
