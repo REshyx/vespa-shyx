@@ -1,10 +1,12 @@
-from vtk import vtkSphereSource, vtkShrinkPolyData
+from vtk import vtkPlaneSource, vtkShrinkPolyData
 from vespa import vtkCGALDelaunay
 
-sp = vtkSphereSource()
+ps = vtkPlaneSource()
+ps.SetXResolution(5)
+ps.SetYResolution(5)
 
 pd = vtkShrinkPolyData()
-pd.SetInputConnection(sp.GetOutputPort())
+pd.SetInputConnection(ps.GetOutputPort())
 
 d2 = vtkCGALDelaunay.vtkCGALDelaunay2()
 d2.SetInputConnection(pd.GetOutputPort())
