@@ -42,6 +42,7 @@ endif()
 
 ## VTK Module
 option(FORCE_STATIC_MODULES "Build VTK modules statically" OFF)
+mark_as_advanced(FORCE_STATIC_MODULES)
 if (FORCE_STATIC_MODULES)
   set(FORCE_STATIC_MODULES_STRING FORCE_STATIC)
 else ()
