@@ -10,5 +10,6 @@ set(vtkcgalpmp_files
   vtkCGALShapeSmoothing
 )
 vtk_module_add_module(vtkCGALPMP
+  ${FORCE_STATIC_MODULES_STRING}
   CLASSES ${vtkcgalpmp_files}
 )
