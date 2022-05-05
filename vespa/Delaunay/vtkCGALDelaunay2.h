@@ -13,12 +13,6 @@
 
 #include "vtkPolyDataAlgorithm.h"
 
-// CGAL includes
-#include <CGAL/Surface_mesh.h>
-#include <CGAL/Simple_cartesian.h>
-
-using CGAL_Kernel  = CGAL::Simple_cartesian<double>;
-
 #include "vtkCGALDelaunayModule.h" // For export macro
 
 class VTKCGALDELAUNAY_EXPORT vtkCGALDelaunay2 : public vtkPolyDataAlgorithm

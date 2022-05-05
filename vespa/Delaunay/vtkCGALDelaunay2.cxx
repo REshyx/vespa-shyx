@@ -8,15 +8,18 @@
 #include "vtkObjectFactory.h"
 
 // CGAL related includes
-#include <CGAL/Exact_predicates_inexact_constructions_kernel.h>
+#include <CGAL/Surface_mesh.h>
+#include <CGAL/Simple_cartesian.h>
 #include <CGAL/Constrained_Delaunay_triangulation_2.h>
+
+using CGAL_Kernel  = CGAL::Simple_cartesian<double>;
 
 vtkStandardNewMacro(vtkCGALDelaunay2);
 
 // TODO May try to use ProjectionTraits_3 to handle open 3D surfaces
 // Look at perf then
 // caution, a sphere won't work: intersection
-// caution, infinit loop on some tests
+// caution, infinite loop on some tests
 using CDT2 = CGAL::Constrained_Delaunay_triangulation_2<CGAL_Kernel>;
 
 //------------------------------------------------------------------------------
@@ -56,7 +59,7 @@ int vtkCGALDelaunay2::RequestData(
     vtkErrorMacro("This dataset is 3D");
   }
   int d1 = 0, d2 = 1, d3 = 2; // assume z is null
-  if (!rangeVal[0]) // x is null
+  if (!rangeVal[0])           // x is null
   {
     d1 = 1;
     d2 = 2;
@@ -69,11 +72,11 @@ int vtkCGALDelaunay2::RequestData(
     d3 = 1;
   }
 
-  std::vector<std::tuple<CDT2::Point, bool>> pts;
+  std::vector<CDT2::Point> pts;
   pts.reserve(nbPts);
   for (const auto pt : pointRange)
   {
-    pts.emplace_back(CDT2::Point(pt[d1], pt[d2]), true);
+    pts.emplace_back(pt[d1], pt[d2]);
   }
 
   // CGAL Processing
@@ -93,9 +96,7 @@ int vtkCGALDelaunay2::RequestData(
       // each segment of poly
       for (vtkIdType i = 0; i < p->GetNumberOfIds(); i++)
       {
-        auto point = std::get<0>(pts[p->GetId(i)]);
-        poly.emplace_back(point);
-        std::get<1>(pts[p->GetId(i)]) = false;
+        poly.emplace_back(pts[p->GetId(i)]);
       }
       delaunay.insert_constraint(poly.begin(), poly.end(), true);
     }
@@ -110,14 +111,7 @@ int vtkCGALDelaunay2::RequestData(
       std::list<CDT2::Point> line;
       for (vtkIdType i = 1; i < l->GetNumberOfIds(); i++)
       {
-        if (!std::get<1>(pts[l->GetId(i)]))
-        {
-          std::cerr << "intersecting line: " << l->GetId(i) << std::endl;
-          continue;
-        }
-        auto point = std::get<0>(pts[l->GetId(i)]);
-        line.emplace_back(point);
-        std::get<1>(pts[l->GetId(i)]) = false;
+        line.emplace_back(pts[l->GetId(i)]);
       }
       delaunay.insert_constraint(line.begin(), line.end());
     }
@@ -125,10 +119,7 @@ int vtkCGALDelaunay2::RequestData(
     // Add points
     for (auto point : pts)
     {
-      if (std::get<1>(point))
-      {
-        delaunay.push_back(CDT2::Point(std::get<0>(point)));
-      }
+      delaunay.push_back(CDT2::Point(point));
     }
   }
   catch (std::exception& e)
