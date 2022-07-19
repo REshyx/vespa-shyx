@@ -2,6 +2,3 @@ NAME
   VESPAPlugin
 DESCRIPTION
   ParaView plugin based on the VESPA VTK module
-REQUIRES_MODULES
-  vtkCGALDelaunay
-  vtkCGALPMP

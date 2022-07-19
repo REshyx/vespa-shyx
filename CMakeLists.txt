@@ -11,25 +11,11 @@ set(CMAKE_LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/${CMAKE_INSTALL_LIBDIR}"
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/${CMAKE_INSTALL_LIBDIR}")
 
 option(BUILD_SHARED_LIBS "Build shared library" ON)
-option(BUILD_PARAVIEW_PLUGIN "Build VESPA plugin for ParaView" OFF)
+option(BUILD_PARAVIEW_PLUGIN "Build VESPA plugin for ParaView" ON)
 
 include(CTest)
 
 ## Deps
-
-find_package(VTK
-  COMPONENTS
-    CommonCore
-    CommonDataModel
-    CommonExecutionModel
-    FiltersCore
-    FiltersExtraction
-    FiltersGeometry
-    Python
-  OPTIONAL_COMPONENTS
-    CommonSystem
-    IOXML
-    TestingCore)
 
 find_package(CGAL REQUIRED)
 
@@ -42,9 +28,47 @@ else()
 endif()
 
 if (BUILD_PARAVIEW_PLUGIN)
+  ## ParaView plugin
+
   find_package(ParaView REQUIRED)
+
+  set("_paraview_plugin_default_${CMAKE_PROJECT_NAME}" ON)
+  paraview_plugin_scan(
+    PLUGIN_FILES      "${CMAKE_CURRENT_SOURCE_DIR}/ParaViewPlugin/paraview.plugin"
+    ENABLE_BY_DEFAULT ON
+    PROVIDES_PLUGINS  vtkcgal_provided_modules
+    REQUIRES_MODULES  pv_required_modules)
+
+  foreach (module IN LISTS pv_required_modules)
+    if (NOT TARGET "${module}")
+      message("${CMAKE_PROJECT_NAME}: missing required module ${module}")
+      return ()
+    endif ()
+  endforeach ()
+
+  paraview_plugin_build(
+    RUNTIME_DESTINATION "${CMAKE_INSTALL_BINDIR}"
+    LIBRARY_DESTINATION "${CMAKE_INSTALL_LIBDIR}"
+    LIBRARY_SUBDIRECTORY "${PARAVIEW_PLUGIN_SUBDIR}"
+    PLUGINS ${vtkcgal_provided_modules})
+
 else()
   ## VTK Module
+
+  find_package(VTK
+    COMPONENTS
+      CommonCore
+      CommonDataModel
+      CommonExecutionModel
+      FiltersCore
+      FiltersExtraction
+      FiltersGeometry
+      Python
+    OPTIONAL_COMPONENTS
+      CommonSystem
+      IOXML
+      TestingCore)
+
   option(FORCE_STATIC_MODULES "Build VTK modules statically" OFF)
   mark_as_advanced(FORCE_STATIC_MODULES)
   if (FORCE_STATIC_MODULES)
@@ -70,41 +94,20 @@ else()
     CMAKE_DESTINATION   "${CMAKE_INSTALL_LIBDIR}/cmake/vespa"
     HEADERS_DESTINATION "include")
 
-    ## Install
-    set(vespaExport ${vtkcgal_provided_modules})
-    export(
-      TARGETS   ${vespaExport}
-      NAMESPACE VTK::
-      FILE "${CMAKE_BINARY_DIR}/${CMAKE_INSTALL_LIBDIR}/vespa/vespa-targets.cmake")
-    install(
-      EXPORT      vespa
-      NAMESPACE   VTK::
-      FILE        vespa-targets.cmake
-      DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/vespa")
+  ## Install
+  set(vespaExport ${vtkcgal_provided_modules})
+  export(
+    TARGETS   ${vespaExport}
+    NAMESPACE VTK::
+    FILE "${CMAKE_BINARY_DIR}/${CMAKE_INSTALL_LIBDIR}/vespa/vespa-targets.cmake")
+  install(
+    EXPORT      vespa
+    NAMESPACE   VTK::
+    FILE        vespa-targets.cmake
+    DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/vespa")
+
 endif()
 
-## ParaView plugin
-
-if (BUILD_PARAVIEW_PLUGIN)
-  set("_paraview_plugin_default_${CMAKE_PROJECT_NAME}" ON)
-  paraview_plugin_scan(
-    PLUGIN_FILES      "${CMAKE_CURRENT_SOURCE_DIR}/ParaViewPlugin/paraview.plugin"
-    PROVIDES_PLUGINS  plugins
-    REQUIRES_MODULES  required_modules)
-
-  foreach (module IN LISTS required_modules)
-    if (NOT TARGET "${module}")
-      message("${CMAKE_PROJECT_NAME}: missing required module ${module}")
-      return ()
-    endif ()
-  endforeach ()
-
-  paraview_plugin_build(
-    RUNTIME_DESTINATION "${CMAKE_INSTALL_BINDIR}"
-    LIBRARY_DESTINATION "${CMAKE_INSTALL_LIBDIR}"
-    LIBRARY_SUBDIRECTORY "${PARAVIEW_PLUGIN_SUBDIR}"
-    PLUGINS ${plugins})
-endif()
 
 ## Python wrapping
 

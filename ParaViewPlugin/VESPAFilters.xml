@@ -30,8 +30,8 @@
     </SourceProxy>
     <!-- ================================================================== -->
     <SourceProxy class="vtkCGALBooleanOperation"
-                 label="Boolean Operation"
-                 name="BooleanOperation">
+                 label="VESPA Boolean Operation"
+                 name="VESPABooleanOperation">
       <Documentation short_help="Applies boolean operations on two vtkPolyData.">
         This filter performs boolean operations between two closed polygonal meshes. These
         operations include union, intersection, and difference. The resulting mesh is closed.
@@ -84,8 +84,8 @@
     </SourceProxy>
     <!-- ================================================================== -->
     <SourceProxy class="vtkCGALIsotropicRemesher"
-                 label="Isotropic Remesher"
-                 name="IsotropicRemesher">
+                 label="VESPA Isotropic Remesher"
+                 name="VESPAIsotropicRemesher">
       <Documentation short_help="Remesh a triangulated vtkPolyData.">
         This filter remeshes a triangulated vtkPolyData using the CGAL
         isotropic_remesh method. Feature edges are protected.
@@ -142,8 +142,8 @@
     </SourceProxy>
     <!-- ================================================================== -->
     <SourceProxy class="vtkCGALMeshDeformation"
-                 label="Mesh Deformation"
-                 name="MeshDeformation">
+                 label="VESPA Mesh Deformation"
+                 name="VESPAMeshDeformation">
       <Documentation short_help="Deforms a triangulated vtkPolyData by moving points.">
         This filter deforms a surface mesh by moving control points to target positions.
         Neighboring points contained in a Region of Interest (ROI) may be moved to obtain
@@ -251,8 +251,8 @@
     </SourceProxy>
     <!-- ================================================================== -->
     <SourceProxy class="vtkCGALMeshSubdivision"
-                 label="Mesh Subdivision"
-                 name="MeshSubdivision">
+                 label="VESPA Mesh Subdivision"
+                 name="VESPAMeshSubdivision">
       <Documentation short_help="Refines a triangulated vtkPolyData through subdivision.">
         This filter performs a surface mesh subdivision by creating new points to
         refine and smoothen a polygonal mesh. Several subdivision methods are available:
@@ -307,8 +307,8 @@
     </SourceProxy>
     <!-- ================================================================== -->
     <SourceProxy class="vtkCGALPatchFilling"
-                 label="Hole Filling"
-                 name="HoleFilling">
+                 label="VESPA Hole Filling"
+                 name="VESPAHoleFilling">
       <Documentation short_help="Fills a selected hole in a triangulated vtkPolyData.">
         This filter fills a selected hole (or patch) in a triangulated vtkPolyData using meshing,
         refining and fairing. Note that if a patch is selected (even without an existing hole), the
@@ -363,8 +363,8 @@
     </SourceProxy>
     <!-- ================================================================== -->
     <SourceProxy class="vtkCGALRegionFairing"
-                 label="Region Fairing"
-                 name="RegionFairing">
+                 label="VESPA Region Fairing"
+                 name="VESPARegionFairing">
       <Documentation short_help="Fairs a region of a triangulated vtkPolyData.">
         This filter fairs (smoothes) a selected region of a triangulated vtkPolyData
         by moving vertices.
@@ -405,8 +405,8 @@
     </SourceProxy>
     <!-- ================================================================== -->
     <SourceProxy class="vtkCGALShapeSmoothing"
-                 label="Shape Smoothing"
-                 name="ShapeSmoothing">
+                 label="VESPA Shape Smoothing"
+                 name="VESPAShapeSmoothing">
       <Documentation short_help="Smoothes the shape of a triangulated vtkPolyData.">
         This filter smoothes the overall shape of a triangulated vtkPolyData
         using the mean curvature. The degree of smoothing can be controlled using
