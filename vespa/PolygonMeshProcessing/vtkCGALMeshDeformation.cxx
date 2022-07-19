@@ -51,6 +51,18 @@ int vtkCGALMeshDeformation::FillInputPortInformation(int port, vtkInformation* i
 }
 
 //------------------------------------------------------------------------------
+void vtkCGALMeshDeformation::SetSourceConnection(vtkAlgorithmOutput* algOutput)
+{
+  this->SetInputConnection(1, algOutput);
+}
+
+//------------------------------------------------------------------------------
+void vtkCGALMeshDeformation::SetSelectionConnection(vtkAlgorithmOutput* algOutput)
+{
+  this->SetInputConnection(2, algOutput);
+}
+
+//------------------------------------------------------------------------------
 int vtkCGALMeshDeformation::RequestData(
   vtkInformation*, vtkInformationVector** inputVector, vtkInformationVector* outputVector)
 {

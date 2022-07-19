@@ -30,6 +30,16 @@ public:
   vtkTypeMacro(vtkCGALMeshDeformation, vtkCGALPolyDataAlgorithm);
   void PrintSelf(ostream& os, vtkIndent indent) override;
 
+  /**
+   * Set input connection for the second input (vtkPointSet).
+   **/
+  void SetSourceConnection(vtkAlgorithmOutput* algOutput);
+
+  /**
+   * Set input connection for the third input (vtkSelection).
+   **/
+  void SetSelectionConnection(vtkAlgorithmOutput* algOutput);
+
   ///@{
   /**
    * Get/set the number of iterations used in the deformation process.

@@ -44,6 +44,12 @@ int vtkCGALRegionFairing::FillInputPortInformation(int port, vtkInformation* inf
 }
 
 //------------------------------------------------------------------------------
+void vtkCGALRegionFairing::SetSourceConnection(vtkAlgorithmOutput* algOutput)
+{
+  this->SetInputConnection(1, algOutput);
+}
+
+//------------------------------------------------------------------------------
 int vtkCGALRegionFairing::RequestData(
   vtkInformation*, vtkInformationVector** inputVector, vtkInformationVector* outputVector)
 {

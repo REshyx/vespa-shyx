@@ -20,6 +20,11 @@ public:
   vtkTypeMacro(vtkCGALRegionFairing, vtkCGALPolyDataAlgorithm);
   void PrintSelf(ostream& os, vtkIndent indent) override;
 
+  /**
+   * Specify the selection describing the region to fair.
+   */
+  void SetSourceConnection(vtkAlgorithmOutput* algOutput);
+
 protected:
   vtkCGALRegionFairing();
   ~vtkCGALRegionFairing() override = default;
