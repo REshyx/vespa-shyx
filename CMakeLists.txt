@@ -11,7 +11,8 @@ set(CMAKE_LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/${CMAKE_INSTALL_LIBDIR}"
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/${CMAKE_INSTALL_LIBDIR}")
 
 option(BUILD_SHARED_LIBS "Build shared library" ON)
-option(BUILD_PARAVIEW_PLUGIN "Build VESPA plugin for ParaView" ON)
+set(VESPA_BUILD_MODE "NONE" CACHE STRING "Build VESPA VTK module or ParaView plugin")
+set_property(CACHE VESPA_BUILD_MODE PROPERTY STRINGS NONE VTK PARAVIEW)
 
 include(CTest)
 
@@ -27,7 +28,7 @@ else()
   include_directories(${EIGEN3_INCLUDE_DIR})
 endif()
 
-if (BUILD_PARAVIEW_PLUGIN)
+if (VESPA_BUILD_MODE MATCHES "PARAVIEW")
   ## ParaView plugin
 
   find_package(ParaView REQUIRED)
@@ -52,7 +53,7 @@ if (BUILD_PARAVIEW_PLUGIN)
     LIBRARY_SUBDIRECTORY "${PARAVIEW_PLUGIN_SUBDIR}"
     PLUGINS ${vtkcgal_provided_modules})
 
-else()
+elseif (VESPA_BUILD_MODE MATCHES "VTK")
   ## VTK Module
 
   find_package(VTK
