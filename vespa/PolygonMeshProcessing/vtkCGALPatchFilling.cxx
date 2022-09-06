@@ -55,6 +55,12 @@ int vtkCGALPatchFilling::FillInputPortInformation(int port, vtkInformation* info
 }
 
 //------------------------------------------------------------------------------
+void vtkCGALPatchFilling::SetSourceConnection(vtkAlgorithmOutput* algOutput)
+{
+  this->SetInputConnection(1, algOutput);
+}
+
+//------------------------------------------------------------------------------
 int vtkCGALPatchFilling::RequestData(
   vtkInformation*, vtkInformationVector** inputVector, vtkInformationVector* outputVector)
 {

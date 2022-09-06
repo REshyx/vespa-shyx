@@ -27,6 +27,11 @@ public:
 
   void SetUpdateAttributes(bool update) override;
 
+  /**
+   * Specify the selection describing the hole or patch to fill.
+   */
+  void SetSourceConnection(vtkAlgorithmOutput* algOutput);
+
   ///@{
   /**
    * Drive the boundary tagencial continuity parameter

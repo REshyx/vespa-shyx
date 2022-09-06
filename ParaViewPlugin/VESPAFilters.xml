@@ -1,0 +1,460 @@
+<ServerManagerConfiguration>
+
+  <ProxyGroup name="filters">
+    <!-- ================================================================== -->
+    <SourceProxy class="vtkCGALDelaunay2"
+                 label="VESPA Delaunay 2D"
+                 name="VESPADelaunay2D">
+      <Documentation short_help="Create a 2D Delaunay triangulation from points.">
+        This filter creates planar Delaunay meshes from a set of planar points.
+        Edge and polygon constraints can be specified as vtkPolyData lines and polygons.
+        The input mesh needs to be planar along the x, y or z axis.
+        Constraints should not overlap each other.
+      </Documentation>
+
+      <InputProperty name="Input"
+                     command="SetInputConnection">
+        <ProxyGroupDomain name="groups">
+          <Group name="sources"/>
+          <Group name="filters"/>
+        </ProxyGroupDomain>
+        <DataTypeDomain name="input_type">
+          <DataType value="vtkPolyData"/>
+        </DataTypeDomain>
+      </InputProperty>
+
+      <Hints>
+        <ShowInMenu category="VESPA"/>
+      </Hints>
+
+    </SourceProxy>
+    <!-- ================================================================== -->
+    <SourceProxy class="vtkCGALBooleanOperation"
+                 label="VESPA Boolean Operation"
+                 name="VESPABooleanOperation">
+      <Documentation short_help="Applies boolean operations on two vtkPolyData.">
+        This filter performs boolean operations between two closed polygonal meshes. These
+        operations include union, intersection, and difference. The resulting mesh is closed.
+      </Documentation>
+
+      <InputProperty name="Input"
+                     command="SetInputConnection">
+        <ProxyGroupDomain name="groups">
+          <Group name="sources"/>
+          <Group name="filters"/>
+        </ProxyGroupDomain>
+        <DataTypeDomain name="input_type">
+          <DataType value="vtkPolyData"/>
+        </DataTypeDomain>
+      </InputProperty>
+
+      <InputProperty command="SetSourceConnection"
+                     name="Source">
+        <ProxyGroupDomain name="groups">
+          <Group name="sources"/>
+          <Group name="filters"/>
+        </ProxyGroupDomain>
+        <DataTypeDomain name="input_type">
+          <DataType value="vtkPolyData"/>
+        </DataTypeDomain>
+        <Documentation>
+          Second dataset.
+        </Documentation>
+      </InputProperty>
+
+      <IntVectorProperty command="SetOperationType"
+                         name="OperationType"
+                         label="Operation Type"
+                         number_of_elements="1"
+                         default_values="0">
+        <EnumerationDomain name="enum">
+          <Entry text="Difference" value="0"/>
+          <Entry text="Intersection" value="1"/>
+          <Entry text="Union" value="2"/>
+        </EnumerationDomain>
+        <Documentation>
+          Type of boolean operation.
+        </Documentation>
+      </IntVectorProperty>
+
+      <Hints>
+        <ShowInMenu category="VESPA"/>
+      </Hints>
+
+    </SourceProxy>
+    <!-- ================================================================== -->
+    <SourceProxy class="vtkCGALIsotropicRemesher"
+                 label="VESPA Isotropic Remesher"
+                 name="VESPAIsotropicRemesher">
+      <Documentation short_help="Remesh a triangulated vtkPolyData.">
+        This filter remeshes a triangulated vtkPolyData using the CGAL
+        isotropic_remesh method. Feature edges are protected.
+      </Documentation>
+
+      <InputProperty name="Input"
+                     command="SetInputConnection">
+        <ProxyGroupDomain name="groups">
+          <Group name="sources"/>
+          <Group name="filters"/>
+        </ProxyGroupDomain>
+        <DataTypeDomain name="input_type">
+          <DataType value="vtkPolyData"/>
+        </DataTypeDomain>
+      </InputProperty>
+
+      <DoubleVectorProperty command="SetTargetLength"
+                            name="TargetLength"
+                            label="Target Length"
+                            number_of_elements="1"
+                            default_values="1.0">
+        <Documentation>
+          Target length for edges.
+        </Documentation>
+      </DoubleVectorProperty>
+
+      <IntVectorProperty command="SetNumberOfIterations"
+                         name="NumberOfIterations"
+                         label="Number Of Iterations"
+                         number_of_elements="1"
+                         default_values="1">
+        <IntRangeDomain name="range" min="1" max="10"/>
+        <Documentation>
+          Number of iterations for the remeshing algorithm.
+        </Documentation>
+      </IntVectorProperty>
+
+      <DoubleVectorProperty command="SetProtectAngle"
+                            name="ProtectAngle"
+                            label="Protection Angle"
+                            number_of_elements="1"
+                            default_values="45"
+                            panel_visibility="advanced">
+        <DoubleRangeDomain name="range" min="0" max="180"/>
+        <Documentation>
+          Angle threshold for feature edges to protect (in degrees).
+        </Documentation>
+      </DoubleVectorProperty>
+
+      <Hints>
+        <ShowInMenu category="VESPA"/>
+      </Hints>
+
+    </SourceProxy>
+    <!-- ================================================================== -->
+    <SourceProxy class="vtkCGALMeshDeformation"
+                 label="VESPA Mesh Deformation"
+                 name="VESPAMeshDeformation">
+      <Documentation short_help="Deforms a triangulated vtkPolyData by moving points.">
+        This filter deforms a surface mesh by moving control points to target positions.
+        Neighboring points contained in a Region of Interest (ROI) may be moved to obtain
+        a smooth deformation.
+
+        The filter can take three inputs:
+          - the vtkPolyData mesh to deform with unique IDs for the points
+          - a vtkPointSet with the target positions of the control points, identified by their IDs
+          - a vtkSelection corresponding to the ROI (optional)
+
+        If a ROI is not specified, it is defined with the control points.
+        In this case, the control points will simply be moved to their destinations without
+        modifying the rest of the mesh.
+      </Documentation>
+
+      <InputProperty name="Input"
+                     command="SetInputConnection">
+        <ProxyGroupDomain name="groups">
+          <Group name="sources"/>
+          <Group name="filters"/>
+        </ProxyGroupDomain>
+        <DataTypeDomain name="input_type">
+          <DataType value="vtkPolyData"/>
+        </DataTypeDomain>
+        <InputArrayDomain name="point_arrays" attribute_type="point" optional="1" />
+      </InputProperty>
+
+      <InputProperty command="SetSourceConnection"
+                     name="Source">
+        <ProxyGroupDomain name="groups">
+          <Group name="sources"/>
+          <Group name="filters"/>
+        </ProxyGroupDomain>
+        <DataTypeDomain name="input_type">
+          <DataType value="vtkPointSet"/>
+        </DataTypeDomain>
+        <Documentation>
+          Point set describing the control points and their target positions.
+        </Documentation>
+      </InputProperty>
+
+      <InputProperty command="SetSelectionConnection"
+                     name="Selection">
+        <ProxyGroupDomain name="groups">
+          <Group name="sources"/>
+          <Group name="filters"/>
+        </ProxyGroupDomain>
+        <DataTypeDomain name="input_type">
+          <DataType value="vtkSelection"/>
+        </DataTypeDomain>
+        <Documentation>
+          Selection containing the region of interest (points that can be moved).
+        </Documentation>
+      </InputProperty>
+
+      <StringVectorProperty command="SetGlobalIdArray"
+                            name="GlobalIdArray"
+                            label="Global Point ID Array"
+                            number_of_elements="1"
+                            default_values="">
+        <ArrayListDomain attribute_type="Scalars"
+                         name="array_list"
+                         none_string=""
+                         input_domain_name="point_arrays">
+          <RequiredProperties>
+            <Property function="Input"
+                      name="Input" />
+          </RequiredProperties>
+        </ArrayListDomain>
+        <Documentation>
+          Input array describing global point IDs.
+        </Documentation>
+        <Hints>
+          <ArraySelectionWidget icon_type="point"/>
+        </Hints>
+      </StringVectorProperty>
+
+      <IntVectorProperty command="SetNumberOfIterations"
+                         name="NumberOfIterations"
+                         label="Number Of Iterations"
+                         number_of_elements="1"
+                         default_values="5">
+        <IntRangeDomain name="range" min="1" max="20"/>
+        <Documentation>
+          Number of iterations used in the deformation process.
+        </Documentation>
+      </IntVectorProperty>
+
+      <IntVectorProperty command="SetTolerance"
+                         name="Tolerance"
+                         label="Tolerance"
+                         number_of_elements="1"
+                         default_values="1e-4">
+        <IntRangeDomain name="range" min="1e-6" max="0"/>
+        <Documentation>
+          Tolerance of the energy convergence used in the deformation process.
+          If 0 is specified, no energy criterion is used.
+        </Documentation>
+      </IntVectorProperty>
+
+      <Hints>
+        <ShowInMenu category="VESPA"/>
+      </Hints>
+
+    </SourceProxy>
+    <!-- ================================================================== -->
+    <SourceProxy class="vtkCGALMeshSubdivision"
+                 label="VESPA Mesh Subdivision"
+                 name="VESPAMeshSubdivision">
+      <Documentation short_help="Refines a triangulated vtkPolyData through subdivision.">
+        This filter performs a surface mesh subdivision by creating new points to
+        refine and smoothen a polygonal mesh. Several subdivision methods are available:
+          - Catmull-Clark based on the PQQ pattern
+          - Loop based on the PTQ pattern
+          - Doo-Sabin based on the DQQ pattern
+          - Sqrt3 based on the Sqrt3 pattern
+      </Documentation>
+
+      <InputProperty name="Input"
+                     command="SetInputConnection">
+        <ProxyGroupDomain name="groups">
+          <Group name="sources"/>
+          <Group name="filters"/>
+        </ProxyGroupDomain>
+        <DataTypeDomain name="input_type">
+          <DataType value="vtkPolyData"/>
+        </DataTypeDomain>
+      </InputProperty>
+
+      <IntVectorProperty command="SetSubdivisionType"
+                         name="SubdivisionType"
+                         label="Subdivision Type"
+                         number_of_elements="1"
+                         default_values="3">
+        <EnumerationDomain name="enum">
+          <Entry text="Catmull-Clark" value="0"/>
+          <Entry text="Loop" value="1"/>
+          <Entry text="Doo-Sabin" value="2"/>
+          <Entry text="Sqrt3" value="3"/>
+        </EnumerationDomain>
+        <Documentation>
+          Type of subdivision.
+        </Documentation>
+      </IntVectorProperty>
+
+      <IntVectorProperty command="SetNumberOfIterations"
+                         name="NumberOfIterations"
+                         label="Number Of Iterations"
+                         number_of_elements="1"
+                         default_values="1">
+        <IntRangeDomain name="range" min="1" max="10"/>
+        <Documentation>
+          Number of subdivisions.
+        </Documentation>
+      </IntVectorProperty>
+
+      <Hints>
+        <ShowInMenu category="VESPA"/>
+      </Hints>
+
+    </SourceProxy>
+    <!-- ================================================================== -->
+    <SourceProxy class="vtkCGALPatchFilling"
+                 label="VESPA Hole Filling"
+                 name="VESPAHoleFilling">
+      <Documentation short_help="Fills a selected hole in a triangulated vtkPolyData.">
+        This filter fills a selected hole (or patch) in a triangulated vtkPolyData using meshing,
+        refining and fairing. Note that if a patch is selected (even without an existing hole), the
+        the selected triangles will be removed first.
+      </Documentation>
+
+      <InputProperty name="Input"
+                     command="SetInputConnection">
+        <ProxyGroupDomain name="groups">
+          <Group name="sources"/>
+          <Group name="filters"/>
+        </ProxyGroupDomain>
+        <DataTypeDomain name="input_type">
+          <DataType value="vtkPolyData"/>
+        </DataTypeDomain>
+      </InputProperty>
+
+      <InputProperty command="SetSourceConnection"
+                     name="Selection">
+        <ProxyGroupDomain name="groups">
+          <Group name="sources"/>
+          <Group name="filters"/>
+        </ProxyGroupDomain>
+        <DataTypeDomain name="input_type">
+          <DataType value="vtkSelection"/>
+        </DataTypeDomain>
+        <Documentation>
+          Input that provides the selection specifying the patch or hole to fill.
+        </Documentation>
+        <Hints>
+          <SelectionInput/>
+        </Hints>
+      </InputProperty>
+
+      <IntVectorProperty command="SetFairingContinuity"
+                         name="FairingContinuity"
+                         label="Fairing Continuity"
+                         number_of_elements="1"
+                         default_values="1">
+        <IntRangeDomain name="range" min="0" max="2"/>
+        <Documentation>
+          Value for the tangential continuity of the resulting surface patch.
+          Possible values are 0, 1 and 2, referring to C0, C1 and C2 continuity.
+          Use 0 for planar filling.
+        </Documentation>
+      </IntVectorProperty>
+
+      <Hints>
+        <ShowInMenu category="VESPA"/>
+      </Hints>
+
+    </SourceProxy>
+    <!-- ================================================================== -->
+    <SourceProxy class="vtkCGALRegionFairing"
+                 label="VESPA Region Fairing"
+                 name="VESPARegionFairing">
+      <Documentation short_help="Fairs a region of a triangulated vtkPolyData.">
+        This filter fairs (smoothes) a selected region of a triangulated vtkPolyData
+        by moving vertices.
+      </Documentation>
+
+      <InputProperty name="Input"
+                     command="SetInputConnection">
+        <ProxyGroupDomain name="groups">
+          <Group name="sources"/>
+          <Group name="filters"/>
+        </ProxyGroupDomain>
+        <DataTypeDomain name="input_type">
+          <DataType value="vtkPolyData"/>
+        </DataTypeDomain>
+      </InputProperty>
+
+      <InputProperty command="SetSourceConnection"
+                     name="Selection">
+        <ProxyGroupDomain name="groups">
+          <Group name="sources"/>
+          <Group name="filters"/>
+        </ProxyGroupDomain>
+        <DataTypeDomain name="input_type">
+          <DataType value="vtkSelection"/>
+        </DataTypeDomain>
+        <Documentation>
+          Input that provides the selection specifying the region to fair.
+        </Documentation>
+        <Hints>
+          <SelectionInput/>
+        </Hints>
+      </InputProperty>
+
+      <Hints>
+        <ShowInMenu category="VESPA"/>
+      </Hints>
+
+    </SourceProxy>
+    <!-- ================================================================== -->
+    <SourceProxy class="vtkCGALShapeSmoothing"
+                 label="VESPA Shape Smoothing"
+                 name="VESPAShapeSmoothing">
+      <Documentation short_help="Smoothes the shape of a triangulated vtkPolyData.">
+        This filter smoothes the overall shape of a triangulated vtkPolyData
+        using the mean curvature. The degree of smoothing can be controlled using
+        the number of iterations as well as the time step.
+      </Documentation>
+
+      <InputProperty name="Input"
+                     command="SetInputConnection">
+        <ProxyGroupDomain name="groups">
+          <Group name="sources"/>
+          <Group name="filters"/>
+        </ProxyGroupDomain>
+        <DataTypeDomain name="input_type">
+          <DataType value="vtkPolyData"/>
+        </DataTypeDomain>
+      </InputProperty>
+
+      <IntVectorProperty command="SetNumberOfIterations"
+                         name="NumberOfIterations"
+                         label="Number Of Iterations"
+                         number_of_elements="1"
+                         default_values="1">
+        <IntRangeDomain name="range" min="1" max="10"/>
+        <Documentation>
+          Number of iterations for the smoothing algorithm.
+        </Documentation>
+      </IntVectorProperty>
+
+      <DoubleVectorProperty command="SetTimeStep"
+                            name="TimeStep"
+                            label="Time Step"
+                            number_of_elements="1"
+                            default_values="1e-4"
+                            panel_visibility="advanced">
+        <DoubleRangeDomain name="range" min="1e-6" max="1"/>
+        <Documentation>
+          Time step indicating the smoothing speed.
+          A higher value leads to a faster distortion of the shape.
+          Standard values lie between 1e-6 and 1.
+        </Documentation>
+      </DoubleVectorProperty>
+
+      <Hints>
+        <ShowInMenu category="VESPA"/>
+      </Hints>
+
+    </SourceProxy>
+
+ </ProxyGroup>
+
+</ServerManagerConfiguration>
