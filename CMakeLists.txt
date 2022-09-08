@@ -33,6 +33,12 @@ if (VESPA_BUILD_MODE MATCHES "PARAVIEW")
 
   find_package(ParaView REQUIRED)
 
+  # disable unsupported python wrapping
+  if (BUILD_PYTHON_WRAPPERS)
+    message(STATUS "ParaView plugin does not support python wrapping yet.")
+    set(BUILD_PYTHON_WRAPPERS OFF CACHE BOOL "Python wrapping (disabled)" FORCE)
+  endif()
+
   set("_paraview_plugin_default_${CMAKE_PROJECT_NAME}" ON)
   paraview_plugin_scan(
     PLUGIN_FILES      "${CMAKE_CURRENT_SOURCE_DIR}/ParaViewPlugin/paraview.plugin"
