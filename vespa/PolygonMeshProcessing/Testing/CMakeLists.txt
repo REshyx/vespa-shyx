@@ -1,4 +1,6 @@
 if (TARGET VTK::vtkpython)
+  # these tests are VTK only for now
+
   # import
   add_test(NAME "import_vtkCGALPMP"
     COMMAND
