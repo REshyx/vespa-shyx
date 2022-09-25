@@ -9,7 +9,7 @@ build-vtkmodule:
     - apt-get install -y libcgal-dev libeigen3-dev
     - mkdir -p build
     - cd build
-    - cmake -DVTK_DIR=/vtk/build/ -DBUILD_TESTING=ON -DBUILD_PYTHON_WRAPPERS=ON -DVESPA_BUILD_MODE=VTK ..
+    - cmake -DVTK_DIR=/vtk/build/ -DBUILD_TESTING=ON -DBUILD_PYTHON_WRAPPERS=ON ..
     - cmake --build . --config Release --parallel 2
   tags:
     - build
@@ -48,7 +48,7 @@ build-pvplugin:
     - apt-get install -y libcgal-dev libeigen3-dev
     - mkdir -p build
     - cd build
-    - cmake -DCMAKE_PREFIX_PATH=/opt/paraview/install/ -DBUILD_TESTING=OFF -DBUILD_PYTHON_WRAPPERS=OFF -DVESPA_BUILD_MODE=PARAVIEW ..
+    - cmake -DCMAKE_PREFIX_PATH=/opt/paraview/install/ -DBUILD_TESTING=OFF -DBUILD_PYTHON_WRAPPERS=OFF -DVESPA_BUILD_PV_PLUGIN=ON ..
     - cmake --build . --config Release --parallel 2
   tags:
     - build
