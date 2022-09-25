@@ -1,12 +1,16 @@
+# TODO: scan modules
+
 paraview_add_plugin(VESPAPlugin
   VERSION "1.0"
   REQUIRED_ON_CLIENT
   REQUIRED_ON_SERVER
   SERVER_MANAGER_XML VESPAFilters.xml
   MODULES
+    vtkCGALAlgorithm
     vtkCGALDelaunay
     vtkCGALPMP
   MODULE_FILES
+    "${CMAKE_CURRENT_SOURCE_DIR}/../vespa/Algorithm/vtk.module"
     "${CMAKE_CURRENT_SOURCE_DIR}/../vespa/Delaunay/vtk.module"
     "${CMAKE_CURRENT_SOURCE_DIR}/../vespa/PolygonMeshProcessing/vtk.module"
 )
