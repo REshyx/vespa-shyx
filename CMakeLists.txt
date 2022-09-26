@@ -31,8 +31,11 @@ endif()
 ## ----------
 
 if (VESPA_BUILD_PV_PLUGIN)
+  if(VTK_DIR AND NOT ParaView_DIR)
+    # old VTK_DIR
+    unset(VTK_DIR CACHE)
+  endif()
   find_package(ParaView REQUIRED)
-  ## TODO check pv python
 else()
   find_package(VTK
     COMPONENTS
