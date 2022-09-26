@@ -43,8 +43,8 @@ Then, we can install this project using the standard CMake procedure:
 
 1. Create a build folder
 1. Launch CMake with this repository as source folder
-1. Configure the project. It will need CGAL, as well as VTK or ParaView depending on whether the VTK module or ParaView plugin should be built.
-To specify which one to build, set the CMake variable `VESPA_BUILD_MODE` to `VTK` or `PARAVIEW`, respectively.
+1. Configure the project. It will need CGAL, as well as VTK or ParaView depending on whether only the VTK module or the full ParaView plugin should be built.
+If you want to build the ParaView plugin, set the CMake variable `VESPA_BUILD_PV_PLUGIN` to `ON`.
    - If you have installed a library in a custom folder, you can find it in CMake
      by giving the folder: **install_dir**/lib/cmake/**project-version**. For example,
      for VTK: **install_dir**/lib/cmake/vtk-9.1.

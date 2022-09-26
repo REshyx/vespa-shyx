@@ -1,4 +1,6 @@
 if (TARGET VTK::vtkpython)
+  # these tests are VTK only for now
+
   # import
   add_test(NAME "import_vtkCGALPMP"
     COMMAND
@@ -46,3 +48,11 @@ vtk_add_test_cxx(vtkCGALPMPCxxTests no_data_tests
   ${PROJECT_SOURCE_DIR}/Data/Testing/
 )
 vtk_test_cxx_executable(vtkCGALPMPCxxTests no_data_tests)
+
+if (${CGAL_VERSION} VERSION_GREATER 5.5)
+  vtk_add_test_cxx(vtkCGALPMPCxxTests55 no_data_tests
+    NO_DATA NO_VALID NO_OUTPUT
+    TestPMPAlphaWrapping.cxx
+  )
+  vtk_test_cxx_executable(vtkCGALPMPCxxTests55 no_data_tests)
+endif()

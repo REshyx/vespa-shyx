@@ -11,8 +11,7 @@ set(CMAKE_LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/${CMAKE_INSTALL_LIBDIR}"
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/${CMAKE_INSTALL_LIBDIR}")
 
 option(BUILD_SHARED_LIBS "Build shared library" ON)
-set(VESPA_BUILD_MODE "NONE" CACHE STRING "Build VESPA VTK module or ParaView plugin")
-set_property(CACHE VESPA_BUILD_MODE PROPERTY STRINGS NONE VTK PARAVIEW)
+set(VESPA_BUILD_PV_PLUGIN OFF CACHE BOOL "Build VESPA ParaView plugin")
 
 include(CTest)
 
@@ -28,40 +27,16 @@ else()
   include_directories(${EIGEN3_INCLUDE_DIR})
 endif()
 
-if (VESPA_BUILD_MODE MATCHES "PARAVIEW")
-  ## ParaView plugin
+## VTK Module
+## ----------
 
-  find_package(ParaView REQUIRED)
-
-  # disable unsupported python wrapping
-  if (BUILD_PYTHON_WRAPPERS)
-    message(STATUS "ParaView plugin does not support python wrapping yet.")
-    set(BUILD_PYTHON_WRAPPERS OFF CACHE BOOL "Python wrapping (disabled)" FORCE)
+if (VESPA_BUILD_PV_PLUGIN)
+  if(VTK_DIR AND NOT ParaView_DIR)
+    # old VTK_DIR
+    unset(VTK_DIR CACHE)
   endif()
-
-  set("_paraview_plugin_default_${CMAKE_PROJECT_NAME}" ON)
-  paraview_plugin_scan(
-    PLUGIN_FILES      "${CMAKE_CURRENT_SOURCE_DIR}/ParaViewPlugin/paraview.plugin"
-    ENABLE_BY_DEFAULT ON
-    PROVIDES_PLUGINS  vtkcgal_provided_modules
-    REQUIRES_MODULES  pv_required_modules)
-
-  foreach (module IN LISTS pv_required_modules)
-    if (NOT TARGET "${module}")
-      message("${CMAKE_PROJECT_NAME}: missing required module ${module}")
-      return ()
-    endif ()
-  endforeach ()
-
-  paraview_plugin_build(
-    RUNTIME_DESTINATION "${CMAKE_INSTALL_BINDIR}"
-    LIBRARY_DESTINATION "${CMAKE_INSTALL_LIBDIR}"
-    LIBRARY_SUBDIRECTORY "${PARAVIEW_PLUGIN_SUBDIR}"
-    PLUGINS ${vtkcgal_provided_modules})
-
-elseif (VESPA_BUILD_MODE MATCHES "VTK")
-  ## VTK Module
-
+  find_package(ParaView REQUIRED)
+else()
   find_package(VTK
     COMPONENTS
       CommonCore
@@ -75,51 +50,87 @@ elseif (VESPA_BUILD_MODE MATCHES "VTK")
       CommonSystem
       IOXML
       TestingCore)
+endif()
 
-  option(FORCE_STATIC_MODULES "Build VTK modules statically" OFF)
-  mark_as_advanced(FORCE_STATIC_MODULES)
-  if (FORCE_STATIC_MODULES)
-    set(FORCE_STATIC_MODULES_STRING FORCE_STATIC)
-  else ()
-    set(FORCE_STATIC_MODULES_STRING)
+option(FORCE_STATIC_MODULES "Build VTK modules statically" OFF)
+mark_as_advanced(FORCE_STATIC_MODULES)
+if (FORCE_STATIC_MODULES)
+  set(FORCE_STATIC_MODULES_STRING FORCE_STATIC)
+else ()
+  set(FORCE_STATIC_MODULES_STRING)
+endif()
+
+vtk_module_find_modules(vtkcgal_module_files "${CMAKE_SOURCE_DIR}/vespa")
+
+vtk_module_scan(
+  MODULE_FILES     ${vtkcgal_module_files}
+  PROVIDES_MODULES vtkcgal_provided_modules
+  WANT_BY_DEFAULT  ON
+  ENABLE_TESTS     ON)
+
+vtk_module_python_default_destination(python_destination)
+
+vtk_module_build(
+  MODULES         ${vtkcgal_provided_modules}
+  INSTALL_EXPORT  vespa
+  INSTALL_HEADERS ON
+  CMAKE_DESTINATION   "${CMAKE_INSTALL_LIBDIR}/cmake/vespa"
+  HEADERS_DESTINATION "include")
+
+## Install
+set(vespaExport ${vtkcgal_provided_modules})
+export(
+  TARGETS   ${vespaExport}
+  NAMESPACE VTK::
+  FILE "${CMAKE_BINARY_DIR}/${CMAKE_INSTALL_LIBDIR}/vespa/vespa-targets.cmake")
+install(
+  EXPORT      vespa
+  NAMESPACE   VTK::
+  FILE        vespa-targets.cmake
+  DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/vespa")
+
+
+## ParaView plugin
+## ---------------
+
+if (VESPA_BUILD_PV_PLUGIN)
+
+  # disable unsupported python wrapping
+  if (NOT TARGET VTK::PythonUsed)
+    message(STATUS "ParaView has python disabled, no python wrapping available.")
+    set(BUILD_PYTHON_WRAPPERS OFF CACHE BOOL "Python wrapping (disabled)" FORCE)
   endif()
 
-  vtk_module_find_modules(vtkcgal_module_files "${CMAKE_CURRENT_SOURCE_DIR}/vespa")
+  set("_paraview_plugin_default_${CMAKE_PROJECT_NAME}" ON)
+  paraview_plugin_scan(
+    PLUGIN_FILES      "${CMAKE_SOURCE_DIR}/ParaViewPlugin/paraview.plugin"
+    ENABLE_BY_DEFAULT ON
+    PROVIDES_PLUGINS  vespa_plugins
+    REQUIRES_MODULES  vespa_required_modules)
 
-  vtk_module_scan(
-    MODULE_FILES     ${vtkcgal_module_files}
-    PROVIDES_MODULES vtkcgal_provided_modules
-    WANT_BY_DEFAULT  ON
-    ENABLE_TESTS     ON)
+  foreach (module IN LISTS vespa_required_modules)
+    if (NOT TARGET "${module}")
+      message("${CMAKE_PROJECT_NAME}: missing required module ${module}")
+      return ()
+    endif ()
+  endforeach ()
 
-  vtk_module_python_default_destination(python_destination)
-
-  vtk_module_build(
-    MODULES         ${vtkcgal_provided_modules}
-    INSTALL_EXPORT  vespa
-    INSTALL_HEADERS ON
-    CMAKE_DESTINATION   "${CMAKE_INSTALL_LIBDIR}/cmake/vespa"
-    HEADERS_DESTINATION "include")
-
-  ## Install
-  set(vespaExport ${vtkcgal_provided_modules})
-  export(
-    TARGETS   ${vespaExport}
-    NAMESPACE VTK::
-    FILE "${CMAKE_BINARY_DIR}/${CMAKE_INSTALL_LIBDIR}/vespa/vespa-targets.cmake")
-  install(
-    EXPORT      vespa
-    NAMESPACE   VTK::
-    FILE        vespa-targets.cmake
-    DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/vespa")
+  paraview_plugin_build(
+    TARGET VESPAPVPLUGIN
+    PLUGINS ${vespa_plugins}
+    INSTALL_HEADERS OFF
+    RUNTIME_DESTINATION "${CMAKE_INSTALL_BINDIR}"
+    LIBRARY_DESTINATION "${CMAKE_INSTALL_LIBDIR}"
+    LIBRARY_SUBDIRECTORY "${PARAVIEW_PLUGIN_SUBDIR}"
+  )
 
 endif()
 
 
 ## Python wrapping
+## ---------------
 
 option(BUILD_PYTHON_WRAPPERS "Build python wrapping" ON)
-
 if(BUILD_PYTHON_WRAPPERS)
 
   vtk_module_wrap_python(

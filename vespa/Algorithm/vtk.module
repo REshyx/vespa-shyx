@@ -1,0 +1,18 @@
+NAME
+  vtkCGALAlgorithm
+DESCRIPTION
+  "This module contains vtkAlgorithm base file to translate between VTK and CGAL."
+GROUPS
+  Meshing
+DEPENDS
+  VTK::CommonCore
+  VTK::CommonDataModel
+  VTK::CommonExecutionModel
+  VTK::FiltersCore
+  VTK::FiltersExtraction
+  VTK::FiltersGeometry
+  CGAL::CGAL
+OPTIONAL_DEPENDS
+  # one of them should be found depending on CGAL version
+  CGAL::Eigen3_support
+  Eigen3::Eigen

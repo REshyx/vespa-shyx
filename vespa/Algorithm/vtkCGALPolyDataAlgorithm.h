@@ -14,16 +14,16 @@
 #include "vtkPolyDataAlgorithm.h"
 
 // CGAL includes
+#include <CGAL/Exact_predicates_inexact_constructions_kernel.h>
 #include <CGAL/Surface_mesh.h>
-#include <CGAL/Simple_cartesian.h>
 
-using CGAL_Kernel  = CGAL::Simple_cartesian<double>;
+using CGAL_Kernel  = CGAL::Exact_predicates_inexact_constructions_kernel;
 using CGAL_Surface = CGAL::Surface_mesh<CGAL_Kernel::Point_3>;
 using Graph_Verts  = boost::graph_traits<CGAL_Surface>::vertex_descriptor;
 using Graph_Faces  = boost::graph_traits<CGAL_Surface>::face_descriptor;
 using Graph_Coord  = boost::property_map<CGAL_Surface, CGAL::vertex_point_t>::type;
 
-#include "vtkCGALPMPModule.h" // For export macro
+#include "vtkCGALAlgorithmModule.h" // For export macro
 
 // Container for CGAL related info
 struct CGAL_Mesh
@@ -35,7 +35,7 @@ struct CGAL_Mesh
 };
 
 // Filter
-class VTKCGALPMP_EXPORT vtkCGALPolyDataAlgorithm : public vtkPolyDataAlgorithm
+class VTKCGALALGORITHM_EXPORT vtkCGALPolyDataAlgorithm : public vtkPolyDataAlgorithm
 {
 
 public:
@@ -90,7 +90,7 @@ protected:
 
 private:
   vtkCGALPolyDataAlgorithm(const vtkCGALPolyDataAlgorithm&) = delete;
-  void operator=(const vtkCGALPolyDataAlgorithm&) = delete;
+  void operator=(const vtkCGALPolyDataAlgorithm&)           = delete;
 };
 
 #endif
