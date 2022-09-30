@@ -297,6 +297,9 @@
         <Documentation>
           Selection containing the region of interest (points that can be moved).
         </Documentation>
+        <Hints>
+          <SelectionInput/>
+        </Hints>
       </InputProperty>
 
       <StringVectorProperty command="SetGlobalIdArray"
