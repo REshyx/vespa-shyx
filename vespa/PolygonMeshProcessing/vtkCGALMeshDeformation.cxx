@@ -92,6 +92,12 @@ int vtkCGALMeshDeformation::RequestData(
     extractSelection->SetInputData(1, roiSel);
     extractSelection->Update();
     roi->ShallowCopy(extractSelection->GetOutputDataObject(0));
+    if (!roi || roi->GetNumberOfPoints() == 0)
+    {
+      vtkErrorMacro("Not a valid selection, need points.");
+      output->ShallowCopy(input);
+      return 0;
+    }
   }
   else
   {

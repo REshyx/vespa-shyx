@@ -72,6 +72,12 @@ int vtkCGALRegionFairing::RequestData(
   extractSelection->SetInputData(1, inputSel);
   extractSelection->Update();
   vtkPointSet* dataSel = vtkPointSet::SafeDownCast(extractSelection->GetOutputDataObject(0));
+  if (!dataSel || dataSel->GetNumberOfPoints() == 0)
+  {
+    vtkErrorMacro("Not a valid selection, need points.");
+    output->ShallowCopy(input);
+    return 0;
+  }
 
   // Create the triangle mesh for CGAL
   // --------------------------------
