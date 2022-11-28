@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.8)
-project(vespa)
+project(vespa VERSION 0.1.0)
 
 ## Config
 
@@ -79,16 +79,26 @@ vtk_module_build(
 
 ## Install
 set(vespaExport ${vtkcgal_provided_modules})
-export(
-  TARGETS   ${vespaExport}
-  NAMESPACE VTK::
-  FILE "${CMAKE_BINARY_DIR}/${CMAKE_INSTALL_LIBDIR}/vespa/vespa-targets.cmake")
-install(
-  EXPORT      vespa
-  NAMESPACE   VTK::
-  FILE        vespa-targets.cmake
-  DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/vespa")
 
+include(CMakePackageConfigHelpers)
+
+configure_package_config_file(
+    ${PROJECT_SOURCE_DIR}/CMake/vespa.cmake.in
+    ${PROJECT_BINARY_DIR}/vespa-config.cmake
+    INSTALL_DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/vespa
+)
+
+write_basic_package_version_file(
+    ${PROJECT_BINARY_DIR}/vespa-config-version.cmake
+    VERSION ${PROJECT_VERSION}
+    COMPATIBILITY AnyNewerVersion
+)
+
+install(
+  FILES       ${CMAKE_BINARY_DIR}/vespa-config.cmake
+              ${CMAKE_BINARY_DIR}/vespa-config-version.cmake
+  DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/vespa
+  COMPONENT   development)
 
 ## ParaView plugin
 ## ---------------
