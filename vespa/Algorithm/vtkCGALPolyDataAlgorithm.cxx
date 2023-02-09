@@ -6,6 +6,7 @@
 #include "vtkObjectFactory.h"
 #include "vtkPointData.h"
 #include "vtkProbeFilter.h"
+#include "vtkPolyDataNormals.h"
 
 vtkStandardNewMacro(vtkCGALPolyDataAlgorithm);
 
@@ -21,10 +22,19 @@ std::unique_ptr<CGAL_Mesh> vtkCGALPolyDataAlgorithm::toCGAL(vtkPolyData* vtkMesh
 {
   std::unique_ptr<CGAL_Mesh> cgalMesh(new CGAL_Mesh());
 
-  // Vertices
-  const vtkIdType          inNPts = vtkMesh->GetNumberOfPoints();
-  std::vector<Graph_Verts> surfaceVertices(inNPts);
+  // preprocess: ensure cell consistency in VTK
+  // this is required by CGAL
+  vtkNew<vtkPolyDataNormals> consistency;
+  consistency->SetInputData(vtkMesh);
+  consistency->SplittingOff();
+  consistency->NonManifoldTraversalOff();
+  consistency->Update();
+  vtkMesh = consistency->GetOutput(0);
 
+  // Vertices
+  const vtkIdType inNPts = vtkMesh->GetNumberOfPoints();
+
+  std::vector<Graph_Verts> surfaceVertices(inNPts);
   for (vtkIdType i = 0; i < inNPts; i++)
   {
     // id
@@ -42,14 +52,20 @@ std::unique_ptr<CGAL_Mesh> vtkCGALPolyDataAlgorithm::toCGAL(vtkPolyData* vtkMesh
   for (cit->InitTraversal(); !cit->IsDoneWithTraversal(); cit->GoToNextCell())
   {
     // Add the cell
-    vtkIdList* ids = cit->GetPointIds();
-    vtkIdType nbIds = cit->GetNumberOfPoints();
+    vtkIdList* ids   = cit->GetPointIds();
+    vtkIdType  nbIds = cit->GetNumberOfPoints();
+
     std::vector<Graph_Verts> cell(nbIds);
     for (vtkIdType i = 0; i < nbIds; i++)
     {
       cell[i] = surfaceVertices[ids->GetId(i)];
     }
-    CGAL::Euler::add_face(cell, cgalMesh->surface);
+
+    auto it = CGAL::Euler::add_face(cell, cgalMesh->surface);
+    if (!it.is_valid())
+    {
+      vtkWarningMacro("Invalid cell detected, the resulting mesh may be missing cells.");
+    }
   }
 
   return cgalMesh;
