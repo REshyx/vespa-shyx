@@ -14,7 +14,9 @@
 
 vtkStandardNewMacro(vtkCGALMeshDeformation);
 
-using Mesh_Deformation = CGAL::Surface_mesh_deformation<CGAL_Surface>;
+using SmoothDeformation = CGAL::Surface_mesh_deformation<CGAL_Surface>;
+using SRE_ARAPDeformation =
+  CGAL::Surface_mesh_deformation<CGAL_Surface, CGAL::Default, CGAL::Default, CGAL::SRE_ARAP>;
 
 //------------------------------------------------------------------------------
 vtkCGALMeshDeformation::vtkCGALMeshDeformation()
@@ -25,6 +27,8 @@ vtkCGALMeshDeformation::vtkCGALMeshDeformation()
 //------------------------------------------------------------------------------
 void vtkCGALMeshDeformation::PrintSelf(ostream& os, vtkIndent indent)
 {
+  os << indent << "Mode : " << this->Mode << std::endl;
+  os << indent << "SreAlpha : " << this->SreAlpha << std::endl;
   os << indent << "Number of Iterations :" << this->NumberOfIterations << std::endl;
   os << indent << "Tolerance :" << this->Tolerance << std::endl;
   this->Superclass::PrintSelf(os, indent);
@@ -112,7 +116,9 @@ int vtkCGALMeshDeformation::RequestData(
   // Create the deformation object
   // ---------------------------------
 
-  Mesh_Deformation deformer(cgalMesh->surface);
+  SmoothDeformation   smoothDeformer(cgalMesh->surface);
+  SRE_ARAPDeformation arapDeformer(cgalMesh->surface);
+  arapDeformer.set_sre_arap_alpha(this->SreAlpha);
 
   // Find global ID array name
   // ---------------------------------
@@ -146,7 +152,15 @@ int vtkCGALMeshDeformation::RequestData(
   std::vector<Graph_Verts> roiVerts(gids.cbegin(), gids.cend());
   try
   {
-    deformer.insert_roi_vertices(roiVerts.begin(), roiVerts.end());
+    switch (this->Mode)
+    {
+      case SRE_ARAP:
+        arapDeformer.insert_roi_vertices(roiVerts.begin(), roiVerts.end());
+        break;
+      default:
+        smoothDeformer.insert_roi_vertices(roiVerts.begin(), roiVerts.end());
+        break;
+    }
   }
   catch (std::exception& e)
   {
@@ -168,7 +182,15 @@ int vtkCGALMeshDeformation::RequestData(
   std::vector<Graph_Verts> ctrlPoints(gids.cbegin(), gids.cend());
   try
   {
-    deformer.insert_control_vertices(ctrlPoints.begin(), ctrlPoints.end());
+    switch (this->Mode)
+    {
+      case SRE_ARAP:
+        arapDeformer.insert_control_vertices(ctrlPoints.begin(), ctrlPoints.end());
+        break;
+      default:
+        smoothDeformer.insert_control_vertices(ctrlPoints.begin(), ctrlPoints.end());
+        break;
+    }
   }
   catch (std::exception& e)
   {
@@ -183,10 +205,23 @@ int vtkCGALMeshDeformation::RequestData(
   {
     double coords[3] = { 0.0, 0.0, 0.0 };
     targets->GetPoint(ptIdx, coords);
-    Mesh_Deformation::Point targetPos(coords[0], coords[1], coords[2]);
     try
     {
-      deformer.set_target_position(ctrlPoints[ptIdx], targetPos);
+      switch (this->Mode)
+      {
+        case SRE_ARAP:
+        {
+          SRE_ARAPDeformation::Point targetPosARAP(coords[0], coords[1], coords[2]);
+          arapDeformer.set_target_position(ctrlPoints[ptIdx], targetPosARAP);
+          break;
+        }
+        default:
+        {
+          SmoothDeformation::Point targetPosSmooth(coords[0], coords[1], coords[2]);
+          smoothDeformer.set_target_position(ctrlPoints[ptIdx], targetPosSmooth);
+          break;
+        }
+      }
     }
     catch (std::exception& e)
     {
@@ -201,7 +236,15 @@ int vtkCGALMeshDeformation::RequestData(
   try
   {
     // Deform mesh given ROI and control point targets
-    deformer.deform(this->NumberOfIterations, this->Tolerance);
+    switch (this->Mode)
+    {
+      case SRE_ARAP:
+        arapDeformer.deform(this->NumberOfIterations, this->Tolerance);
+        break;
+      default:
+        smoothDeformer.deform(this->NumberOfIterations, this->Tolerance);
+        break;
+    }
   }
   catch (std::exception& e)
   {

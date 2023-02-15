@@ -3,8 +3,9 @@
  * @brief   Performs a boolean operation between two vtkPolyData objects
  *
  * vtkCGALBooleanOperation is a filter allowing to perform a boolean operation
- * between two closed polygonal meshes. These operations include union, intersection,
- * and difference. The resulting mesh is closed.
+ * between two closed, triangulated polygonal meshes.
+ * These operations include union, intersection, and difference.
+ * The resulting mesh is closed.
  */
 
 #ifndef vtkCGALBooleanOperation_h
@@ -57,7 +58,7 @@ protected:
 
 private:
   vtkCGALBooleanOperation(const vtkCGALBooleanOperation&) = delete;
-  void operator=(const vtkCGALBooleanOperation&) = delete;
+  void operator=(const vtkCGALBooleanOperation&)          = delete;
 };
 
 #endif

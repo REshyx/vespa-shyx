@@ -5,6 +5,10 @@
  * vtkCGALPolyDataAlgorithm is the superclass of all polydata algorithms
  * using CGAL. It defines useful methods to translate from VTK datasets
  * to CGAL surfaces back and forth.
+ * This class also ensure face orientation consistency during the VTK to CGAL
+ * export.
+ * All filters inheriting from this class expect triangulated polydata as input,
+ * expect when stated otherwise.
  */
 
 #ifndef vtkCGALPolyDataAlgorithm_h
