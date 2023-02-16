@@ -324,6 +324,20 @@
         </Hints>
       </StringVectorProperty>
 
+      <IntVectorProperty command="SetMode"
+                         name="Mode"
+                         label="Deformation mode"
+                         number_of_elements="1"
+                         default_values="0">
+        <EnumerationDomain name="enum">
+          <Entry text="Smooth" value="0"/>
+          <Entry text="Enhanced As Rigid As Possible" value="1"/>
+        </EnumerationDomain>
+        <Documentation>
+            Deformation mode to use.
+        </Documentation>
+      </IntVectorProperty>
+
       <IntVectorProperty command="SetNumberOfIterations"
                          name="NumberOfIterations"
                          label="Number Of Iterations"

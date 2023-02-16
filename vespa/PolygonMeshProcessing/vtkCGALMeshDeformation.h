@@ -31,6 +31,17 @@ public:
   void PrintSelf(ostream& os, vtkIndent indent) override;
 
   /**
+   * Available modes for the deformation. Smooth tends to minimize non-linear
+   * deformation, while Smoothed Rotation Enhanced As Rigid As Possible (SRE_ARAP) tends to keep the
+   * initial shape
+   */
+  enum Mode
+  {
+    SMOOTH = 0,
+    SRE_ARAP
+  };
+
+  /**
    * Set input connection for the second input (vtkPointSet).
    **/
   void SetSourceConnection(vtkAlgorithmOutput* algOutput);
@@ -39,6 +50,24 @@ public:
    * Set input connection for the third input (vtkSelection).
    **/
   void SetSelectionConnection(vtkAlgorithmOutput* algOutput);
+
+  ///@{
+  /**
+   * Get set the deformation mode,
+   * default is SMOOTH
+   */
+  vtkGetMacro(Mode, int);
+  vtkSetClampMacro(Mode, int, vtkCGALMeshDeformation::SMOOTH, vtkCGALMeshDeformation::SRE_ARAP);
+  ///@}
+
+  ///@{
+  /**
+   * Get/set the rigidity to use for angle deformation in SRE_ARAP mode.
+   * Default is 0.02.
+   **/
+  vtkGetMacro(SreAlpha, double);
+  vtkSetMacro(SreAlpha, double);
+  ///@}
 
   ///@{
   /**
@@ -74,13 +103,15 @@ protected:
   int RequestData(vtkInformation*, vtkInformationVector**, vtkInformationVector*) override;
   int FillInputPortInformation(int port, vtkInformation* info) override;
 
+  int          Mode               = vtkCGALMeshDeformation::SMOOTH;
+  double       SreAlpha           = 0.02;
   unsigned int NumberOfIterations = 5;
   double       Tolerance          = 1e-4;
   std::string  GlobalIdArray      = "";
 
 private:
   vtkCGALMeshDeformation(const vtkCGALMeshDeformation&) = delete;
-  void operator=(const vtkCGALMeshDeformation&) = delete;
+  void operator=(const vtkCGALMeshDeformation&)         = delete;
 };
 
 #endif
