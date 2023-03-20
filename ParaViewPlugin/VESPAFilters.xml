@@ -623,6 +623,68 @@
       </Hints>
 
     </SourceProxy>
+    <!-- ================================================================== -->
+    <SourceProxy class="vtkCGALMeshSmoothing"
+                 label="VESPA Mesh Smoothing"
+                 name="VESPAMeshSmoothing">
+      <Documentation short_help="Smoothes the shape of a triangulated vtkPolyData.">
+        This filter smoothes the overall shape of a triangulated vtkPolyData
+        using the mean curvature. The degree of smoothing can be controlled using
+        the number of iterations as well as the time step.
+      </Documentation>
+
+      <InputProperty name="Input"
+                     command="SetInputConnection">
+        <ProxyGroupDomain name="groups">
+          <Group name="sources"/>
+          <Group name="filters"/>
+        </ProxyGroupDomain>
+        <DataTypeDomain name="input_type">
+          <DataType value="vtkPolyData"/>
+        </DataTypeDomain>
+      </InputProperty>
+
+      <IntVectorProperty command="SetNumberOfIterations"
+                         name="NumberOfIterations"
+                         label="Number Of Iterations"
+                         number_of_elements="1"
+                         default_values="10">
+        <IntRangeDomain name="range" min="1" max="25"/>
+        <Documentation>
+          Number of iterations for the smoothing algorithm.
+        </Documentation>
+      </IntVectorProperty>
+
+      <IntVectorProperty
+         name="UseSafetyConstraints"
+         command="SetUseSafetyConstraints"
+         label="Use Safety Constraints"
+         number_of_elements="1"
+         default_values="0">
+         <BooleanDomain name="bool"/>
+         <Documentation>
+           If false (default), all moves will be allowed.
+         </Documentation>
+      </IntVectorProperty>
+
+      <IntVectorProperty
+         name="UseUpdateAttributes"
+         command="SetUpdateAttributes"
+         label="Copy attributes"
+         number_of_elements="1"
+         default_values="1"
+         panel_visibility="advanced">
+         <BooleanDomain name="bool"/>
+         <Documentation>
+           If ON, attributes will be copied unto the resulting mesh.
+         </Documentation>
+      </IntVectorProperty>
+
+      <Hints>
+        <ShowInMenu category="VESPA"/>
+      </Hints>
+
+    </SourceProxy>
 
  </ProxyGroup>
 
