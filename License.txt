@@ -1,8 +1,8 @@
 Copyright (c) 2021 Kitware SAS
 All rights reserved.
 
-VTK-CGAL is a free software; you can redistribute it and/or modify it
-under the terms of the VTK-CGAL license.
+VESPA is a free software; you can redistribute it and/or modify it
+under the terms of the VESPA license.
 
 Redistribution and use in source and binary forms, with or without modification, are permitted provided that the following conditions are met:
 
