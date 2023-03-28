@@ -70,6 +70,9 @@ int vtkCGALPatchFilling::RequestData(
   vtkPolyData* input  = vtkPolyData::GetData(inputVector[0]);
   vtkPolyData* output = vtkPolyData::GetData(outputVector);
 
+  vtkNew<vtkPolyData> baseDataSet;
+  baseDataSet->ShallowCopy(input);
+
   // result
   bool success = true;
 
@@ -83,7 +86,7 @@ int vtkCGALPatchFilling::RequestData(
     {
       // pipeline to remove selection
       vtkNew<vtkExtractSelection> extractSelection;
-      extractSelection->SetInputData(0, input);
+      extractSelection->SetInputData(0, baseDataSet);
       extractSelection->SetInputData(1, inputSel);
       extractSelection->PreserveTopologyOn();
       vtkNew<vtkThreshold> threshold;
@@ -96,14 +99,14 @@ int vtkCGALPatchFilling::RequestData(
       vtkNew<vtkTriangleFilter> tri;
       tri->SetInputConnection(surface->GetOutputPort());
       tri->Update();
-      input->ShallowCopy(vtkPolyData::SafeDownCast(tri->GetOutput(0)));
+      baseDataSet->ShallowCopy(vtkPolyData::SafeDownCast(tri->GetOutput(0)));
     }
   }
 
   // Create the triangle mesh for CGAL
   // --------------------------------
 
-  std::unique_ptr<CGAL_Mesh> cgalMesh = this->toCGAL(input);
+  std::unique_ptr<CGAL_Mesh> cgalMesh = this->toCGAL(baseDataSet);
 
   // CGAL Processing
   // ---------------
