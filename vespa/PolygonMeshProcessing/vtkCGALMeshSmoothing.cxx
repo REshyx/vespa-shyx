@@ -46,11 +46,8 @@ int vtkCGALMeshSmoothing::RequestData(
 
   try
   {
-    // Constrain edges with a dihedral angle over 60°
-    typedef CGAL::Exact_predicates_inexact_constructions_kernel      K;
-    typedef CGAL::Surface_mesh<K::Point_3>                           Mesh;
-    typedef boost::property_map<Mesh, CGAL::edge_is_feature_t>::type EIFMap;
-    typedef boost::graph_traits<Mesh>::edge_descriptor               edge_descriptor;
+    typedef boost::property_map<CGAL_Surface, CGAL::edge_is_feature_t>::type EIFMap;
+    typedef boost::graph_traits<CGAL_Surface>::edge_descriptor               edge_descriptor;
 
     EIFMap eif = get(CGAL::edge_is_feature, cgalInputMesh->surface);
 
