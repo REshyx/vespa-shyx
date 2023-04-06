@@ -2,11 +2,12 @@
  * @class   vtkCGALMeshSmoothing
  * @brief   Smoothes a surface mesh by moving its vertices.
  *
- * vtkCGALMeshSmoothing is a filter that smoothes the overall shape of a 3D mesh
- * using the mean curvature.
- * The degree of smoothing can be controlled using the number of iterations as well as
- * the time step. The time step specifies the smoothing speed.
- * A higher time step results in a stronger shape distortion than a higher number of iterations.
+ * vtkCGALMeshSmoothing is a filter that moves vertices to optimize
+ * geometry around each vertex: it can try to equalize the angles between
+ * incident edges, or (and) move vertices so that areas of adjacent
+ * triangles tend to equalize. Border vertices are considered constrained
+ * and do not move at any step of the procedure. No vertices are inserted
+ * at any time.
  */
 
 #ifndef vtkCGALMeshSmoothing_h

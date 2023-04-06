@@ -628,9 +628,10 @@
                  label="VESPA Mesh Smoothing"
                  name="VESPAMeshSmoothing">
       <Documentation short_help="Smoothes the shape of a triangulated vtkPolyData.">
-        This filter smoothes the overall shape of a triangulated vtkPolyData
-        using the mean curvature. The degree of smoothing can be controlled using
-        the number of iterations as well as the time step.
+        This filter moves vertices to optimize geometry around each vertex: it can try to equalize
+        the angles between incident edges, or (and) move vertices so that areas of adjacent triangles
+        tend to equalize. Border vertices are considered constrained and do not move at any step of
+        the procedure. No vertices are inserted at any time.
       </Documentation>
 
       <InputProperty name="Input"
