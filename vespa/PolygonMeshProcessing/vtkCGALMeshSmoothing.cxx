@@ -39,33 +39,23 @@ int vtkCGALMeshSmoothing::RequestData(
   // Create the surface mesh for CGAL
   // ----------------------------------
 
-  std::unique_ptr<CGAL_Mesh> cgalInputMesh = this->toCGAL(input);
+  std::unique_ptr<CGAL_Mesh> cgalMesh = this->toCGAL(input);
 
   // CGAL Processing
   // ---------------
 
   try
   {
-    typedef boost::property_map<CGAL_Surface, CGAL::edge_is_feature_t>::type EIFMap;
-    typedef boost::graph_traits<CGAL_Surface>::edge_descriptor               edge_descriptor;
+    auto featureEdges = get(CGAL::edge_is_feature, cgalMesh->surface);
+    pmp::detect_sharp_edges(cgalMesh->surface, 60, featureEdges);
 
-    EIFMap eif = get(CGAL::edge_is_feature, cgalInputMesh->surface);
-
-    pmp::detect_sharp_edges(cgalInputMesh->surface, 60, eif);
-
-    int sharp_counter = 0;
-    for (edge_descriptor e : edges(cgalInputMesh->surface))
-      if (get(eif, e))
-        ++sharp_counter;
-
-    std::cout << sharp_counter << " sharp edges" << std::endl;
     std::cout << "Smoothing mesh... (" << this->NumberOfIterations << " iterations)" << std::endl;
 
     // Smooth with both angle and area criteria + Delaunay flips
-    pmp::angle_and_area_smoothing(cgalInputMesh->surface,
+    pmp::angle_and_area_smoothing(cgalMesh->surface,
       CGAL::parameters::number_of_iterations(this->NumberOfIterations)
         .use_safety_constraints(this->UseSafetyConstraints) // authorize all moves
-        .edge_is_constrained_map(eif));
+        .edge_is_constrained_map(featureEdges));
   }
   catch (std::exception& e)
   {
@@ -76,7 +66,7 @@ int vtkCGALMeshSmoothing::RequestData(
   // VTK Output
   // ----------
 
-  output->ShallowCopy(this->toVTK(cgalInputMesh.get()));
+  output->ShallowCopy(this->toVTK(cgalMesh.get()));
 
   this->copyAttributes(input, output);
 
