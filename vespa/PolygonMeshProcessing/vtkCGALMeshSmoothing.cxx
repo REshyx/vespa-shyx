@@ -4,6 +4,7 @@
 #include "vtkInformation.h"
 #include "vtkInformationVector.h"
 #include "vtkObjectFactory.h"
+#include "vtkLogger.h"
 
 // CGAL related includes
 #include <CGAL/Exact_predicates_inexact_constructions_kernel.h>
@@ -49,7 +50,7 @@ int vtkCGALMeshSmoothing::RequestData(
     auto featureEdges = get(CGAL::edge_is_feature, cgalMesh->surface);
     pmp::detect_sharp_edges(cgalMesh->surface, 60, featureEdges);
 
-    std::cout << "Smoothing mesh... (" << this->NumberOfIterations << " iterations)" << std::endl;
+    vtkLog(INFO, "Smoothing mesh... (" << this->NumberOfIterations << " iterations)");
 
     // Smooth with both angle and area criteria + Delaunay flips
     pmp::angle_and_area_smoothing(cgalMesh->surface,
