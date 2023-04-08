@@ -645,6 +645,16 @@
         </DataTypeDomain>
       </InputProperty>
 
+      <IntVectorProperty name="SmoothingMethod" command="SetSmoothingMethod" number_of_elements="1" default_values="1">
+        <EnumerationDomain name="enum">
+          <Entry value="1" text="Tangential relaxation."/>
+          <Entry value="2" text="Angle and area smoothing."/>
+        </EnumerationDomain>
+        <Documentation>
+          This property indicates which method will be used to smooth the mesh.
+        </Documentation>
+      </IntVectorProperty>
+
       <IntVectorProperty command="SetNumberOfIterations"
                          name="NumberOfIterations"
                          label="Number Of Iterations"

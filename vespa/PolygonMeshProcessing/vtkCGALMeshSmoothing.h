@@ -26,6 +26,15 @@ public:
 
   ///@{
   /**
+   * Get/set the smoothing method (1 - tangential relaxation; 2 - angle and area smoothing).
+   * Default is 1.
+   **/
+  vtkGetMacro(SmoothingMethod, unsigned int);
+  vtkSetMacro(SmoothingMethod, unsigned int);
+  ///@}
+  ///@{
+
+  /**
    * Get/set the number of iterations used in the smoothing process.
    * Default is 10.
    **/
@@ -50,6 +59,7 @@ protected:
   int RequestData(vtkInformation*, vtkInformationVector**, vtkInformationVector*) override;
 
   unsigned int NumberOfIterations = 10;
+  unsigned int SmoothingMethod = 1;
   bool UseSafetyConstraints = false;
 
 private:
