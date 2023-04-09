@@ -13,7 +13,6 @@ int TestPMPMeshSmoothingExecution(int, char* argv[])
   std::string                  cfname(argv[1]);
   cfname += "/hand.vtp";
   reader->SetFileName(cfname.c_str());
-  std::cout << "Reading mesh to smooth: " << cfname << std::endl;
 
   vtkNew<vtkCGALMeshSmoothing> smoother;
   smoother->SetInputConnection(reader->GetOutputPort());
