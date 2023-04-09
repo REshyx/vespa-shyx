@@ -13,14 +13,23 @@ int TestPMPMeshSmoothingExecution(int, char* argv[])
   std::string                  cfname(argv[1]);
   cfname += "/hand.vtp";
   reader->SetFileName(cfname.c_str());
+  std::cout << "Reading mesh to smooth: " << cfname << std::endl;
 
   vtkNew<vtkCGALMeshSmoothing> smoother;
   smoother->SetInputConnection(reader->GetOutputPort());
-  smoother->SetNumberOfIterations(5);
+  smoother->SetNumberOfIterations(10);
 
   vtkNew<vtkXMLPolyDataWriter> writer;
   writer->SetInputConnection(smoother->GetOutputPort());
-  writer->SetFileName("smooth_hand.vtp");
+
+  // change to tangential relaxation
+  smoother->SetSmoothingMethod(1);
+  writer->SetFileName("smooth_hand_tangential_relaxation.vtp");
+  writer->Write();
+
+  // change to angle and area smoothing
+  smoother->SetSmoothingMethod(2);
+  writer->SetFileName("smooth_hand_angle_and_area_smoothing.vtp");
   writer->Write();
 
   return 0;
