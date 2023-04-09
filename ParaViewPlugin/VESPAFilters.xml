@@ -628,9 +628,11 @@
                  label="VESPA Mesh Smoothing"
                  name="VESPAMeshSmoothing">
       <Documentation short_help="Smoothes the shape of a triangulated vtkPolyData.">
-        This filter moves vertices to optimize geometry around each vertex: it can try to equalize
+        This filter moves vertices to optimize geometry around each vertex: it can try to (1) equalize
         the angles between incident edges, or (and) move vertices so that areas of adjacent triangles
-        tend to equalize. Border vertices are considered constrained and do not move at any step of
+        tend to equalize (angle and area smoothing), or (2) moves vertices following an area-based
+        Laplacian smoothing scheme, performed at each vertex in an estimated tangent plane to the surface
+        (tangential relaxation). Border vertices are considered constrained and do not move at any step of
         the procedure. No vertices are inserted at any time.
       </Documentation>
 
