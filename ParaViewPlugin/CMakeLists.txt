@@ -1,7 +1,7 @@
 vtk_module_find_modules(vespa_vtk_modules "${CMAKE_SOURCE_DIR}/vespa")
 
 if (${CERES_FOUND} )
-  set(MESH_SMOOTHING_SERVER_MANAGER_XML "VESPAMeshSMoothingFilter.xml")
+  set(MESH_SMOOTHING_SERVER_MANAGER_XML "VESPAMeshSmoothingFilter.xml")
 endif()
 
 paraview_add_plugin(VESPAPlugin
