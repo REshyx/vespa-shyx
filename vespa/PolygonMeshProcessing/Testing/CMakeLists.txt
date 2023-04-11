@@ -47,6 +47,14 @@ vtk_add_test_cxx(vtkCGALPMPCxxTests no_data_tests
 
   ${PROJECT_SOURCE_DIR}/Data/Testing/
 )
+
+if (${CERES_FOUND} )
+  vtk_add_test_cxx(vtkCGALPMPCxxTests no_data_tests
+    NO_DATA NO_VALID NO_OUTPUT
+    TestPMPMeshSmoothingExecution.cxx
+  )
+endif()
+
 vtk_test_cxx_executable(vtkCGALPMPCxxTests no_data_tests)
 
 if (${CGAL_VERSION} VERSION_GREATER 5.5)

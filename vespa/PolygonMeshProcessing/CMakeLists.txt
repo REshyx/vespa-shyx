@@ -17,6 +17,14 @@ else()
   message(STATUS "CGAL Version lower than 5.5 (${CGAL_VERSION}), Alpha Wrapping is disabled.")
 endif()
 
+if (${CERES_FOUND} )
+  list(APPEND vtkcgalpmp_files
+  vtkCGALMeshSmoothing
+  )
+else()
+  message(WARNING "Mesh smoothing is disabled because it requires the Ceres Library, which is not available.")
+endif()
+
 vtk_module_add_module(vtkCGALPMP
   ${FORCE_STATIC_MODULES_STRING}
   CLASSES ${vtkcgalpmp_files}
