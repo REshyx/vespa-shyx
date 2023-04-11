@@ -1,9 +1,9 @@
 <ServerManagerConfiguration>
 
   <ProxyGroup name="filters">
-    <!-- ================================================================== -->
 
     <!-- ================================================================== -->
+
     <SourceProxy class="vtkCGALMeshSmoothing"
                  label="VESPA Mesh Smoothing"
                  name="VESPAMeshSmoothing">
