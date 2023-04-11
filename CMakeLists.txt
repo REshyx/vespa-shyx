@@ -31,7 +31,7 @@ endif()
 find_package( Ceres )
 
 if ( NOT Ceres_FOUND )
-  message(STATUS "Ceres library not found. Some functionality will be missing.")
+  message(WARNING "Ceres library not found. Some functionality will be missing.")
 endif()
 
 ## VTK Module
