@@ -1,0 +1,81 @@
+<ServerManagerConfiguration>
+
+  <ProxyGroup name="filters">
+
+  <SourceProxy class="vtkCGALAlphaWrapping"
+                  label="VESPA Alpha Wrapping"
+                  name="VESPAAlphaWrapping">
+       <Documentation short_help="Remesh a triangulated vtkPolyData.">
+         This filter remeshes a triangulated vtkPolyData using the CGAL
+         alpha wrapping method.
+       </Documentation>
+
+       <InputProperty name="Input"
+                      command="SetInputConnection">
+         <ProxyGroupDomain name="groups">
+           <Group name="sources"/>
+           <Group name="filters"/>
+         </ProxyGroupDomain>
+         <DataTypeDomain name="input_type">
+           <DataType value="vtkPolyData"/>
+         </DataTypeDomain>
+       </InputProperty>
+
+       <IntVectorProperty
+          name="UseAbsoluteThresholds"
+          command="SetAbsoluteThresholds"
+          label="Use absolute thresholds"
+          number_of_elements="1"
+          default_values="0"
+          panel_visibility="advanced">
+          <BooleanDomain name="bool"/>
+          <Documentation>
+            Is you want to provide absolute values for Alpha
+            and Offest, check this.
+          </Documentation>
+       </IntVectorProperty>
+
+       <DoubleVectorProperty command="SetAlpha"
+                             name="Alpha"
+                             label="Alpha"
+                             number_of_elements="1"
+                             default_values="5.0">
+         <DoubleRangeDomain name="range" min="0.01" max="100"/>
+         <Documentation>
+           Alpha parameter for CGAL.
+         </Documentation>
+       </DoubleVectorProperty>
+
+       <DoubleVectorProperty command="SetOffset"
+                             name="Offset"
+                             label="Offset"
+                             number_of_elements="1"
+                             default_values="3">
+         <DoubleRangeDomain name="range" min="0.01" max="100"/>
+         <Documentation>
+           Offset parameter for CGAL.
+         </Documentation>
+       </DoubleVectorProperty>
+
+       <IntVectorProperty
+          name="UseUpdateAttributes"
+          command="SetUpdateAttributes"
+          label="Interpolate attributes"
+          number_of_elements="1"
+          default_values="1"
+          panel_visibility="advanced">
+          <BooleanDomain name="bool"/>
+          <Documentation>
+            If ON, attributes will be interpolated unto the resulting mesh.
+          </Documentation>
+       </IntVectorProperty>
+
+       <Hints>
+         <ShowInMenu category="VESPA"/>
+       </Hints>
+
+     </SourceProxy>   <!-- ================================================================== -->
+
+ </ProxyGroup>
+
+</ServerManagerConfiguration>

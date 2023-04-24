@@ -28,12 +28,6 @@ else()
   include_directories(${EIGEN3_INCLUDE_DIR})
 endif()
 
-find_package( Ceres )
-
-if ( NOT Ceres_FOUND )
-  message(WARNING "Ceres library not found. Some functionality will be missing.")
-endif()
-
 ## VTK Module
 ## ----------
 
