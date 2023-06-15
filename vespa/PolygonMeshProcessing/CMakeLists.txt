@@ -1,6 +1,7 @@
 set(vtkcgalpmp_files
   vtkCGALBooleanOperation
   vtkCGALIsotropicRemesher
+  vtkCGALMeshChecker
   vtkCGALMeshDeformation
   vtkCGALMeshSubdivision
   vtkCGALPatchFilling
