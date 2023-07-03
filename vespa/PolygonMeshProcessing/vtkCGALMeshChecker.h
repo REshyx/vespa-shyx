@@ -20,20 +20,56 @@ public:
   vtkTypeMacro(vtkCGALMeshChecker, vtkCGALPolyDataAlgorithm);
   void PrintSelf(ostream& os, vtkIndent indent) override;
 
+  // Accessors:
+
+  // {@
+  /**
+   *   Set / Get the CheckWatertight property, default: true
+   *   If true, check the input mesh is closed and bounds a volume
+   *   using the accordingly named CGAL methods.
+   */
+  vtkGetMacro(CheckWatertight, bool);
+  vtkSetMacro(CheckWatertight, bool);
+  vtkBooleanMacro(CheckWatertight, bool);
+  // }@
+
+  // {@
+  /**
+   *   Set / Get the RepairWatertight property, default: false
+   *   If true, this filter will try to repair non watertight meshes
+   *   using the accordingly named CGAL methods.
+   *   This triggers an additional deep copy.
+   */
+  vtkGetMacro(RepairWatertight, bool);
+  vtkSetMacro(RepairWatertight, bool);
+  vtkBooleanMacro(RepairWatertight, bool);
+  // }@
+
+  // {@
+  /**
+   *   Set / Get the CheckIntersect property, default: true
+   *   If true, check the input mesh does not self intersect
+   *   using the accordingly named CGAL methods.
+   */
+  vtkGetMacro(CheckIntersect, bool);
+  vtkSetMacro(CheckIntersect, bool);
+  vtkBooleanMacro(CheckIntersect, bool);
+  // }@
+
 protected:
-  vtkCGALMeshChecker() = default;
+  vtkCGALMeshChecker()           = default;
   ~vtkCGALMeshChecker() override = default;
 
   int RequestData(vtkInformation*, vtkInformationVector**, vtkInformationVector*) override;
 
   // fields
-  bool CheckWatertight = true;
+  bool CheckWatertight  = true;
   bool RepairWatertight = false;
-  bool CheckIntersect = true;
+  bool CheckIntersect   = true;
 
 private:
   vtkCGALMeshChecker(const vtkCGALMeshChecker&) = delete;
-  void operator=(const vtkCGALMeshChecker&)          = delete;
+  void operator=(const vtkCGALMeshChecker&)     = delete;
 };
 
 #endif

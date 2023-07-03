@@ -167,6 +167,67 @@
       </Hints>
 
     </SourceProxy>
+
+    <!-- ================================================================== -->
+    <SourceProxy class="vtkCGALMeshChecker"
+                 label="VESPA Mesh Checker"
+                 name="VESPAMeshChecker">
+      <Documentation short_help="Check a mesh for various unconformities">
+        This filters check its input mesh is conforming to several paramters:
+        - Watertight: the mesh is closed and bounds a volume
+        - Intersect: the mesh do not self intersect
+      </Documentation>
+
+      <InputProperty name="Input"
+                     command="SetInputConnection">
+        <ProxyGroupDomain name="groups">
+          <Group name="sources"/>
+          <Group name="filters"/>
+        </ProxyGroupDomain>
+        <DataTypeDomain name="input_type">
+          <DataType value="vtkPolyData"/>
+        </DataTypeDomain>
+      </InputProperty>
+
+      <IntVectorProperty command="SetCheckWatertight"
+                         name="CheckWatertight"
+                         label="Check Watertight"
+                         number_of_elements="1"
+                         default_values="1">
+                         <BooleanDomain name="bool"/>
+        <Documentation>
+            If ON, checks the input mesh is watertight (closed and bounds a volume).
+        </Documentation>
+      </IntVectorProperty>
+
+      <IntVectorProperty command="SetRepairWatertight"
+                         name="RepairWatertight"
+                         label="Repair Watertight"
+                         number_of_elements="1"
+                         default_values="0">
+                         <BooleanDomain name="bool"/>
+        <Documentation>
+            If ON, tries to repair non watertight meshes.
+        </Documentation>
+      </IntVectorProperty>
+
+      <IntVectorProperty command="SetCheckIntersect"
+                         name="CheckIntersect"
+                         label="Check Intersect"
+                         number_of_elements="1"
+                         default_values="1">
+                         <BooleanDomain name="bool"/>
+        <Documentation>
+            If ON, checks the input mesh does not self intersect.
+        </Documentation>
+      </IntVectorProperty>
+
+      <Hints>
+        <ShowInMenu category="VESPA"/>
+      </Hints>
+
+    </SourceProxy>
+
     <!-- ================================================================== -->
     <SourceProxy class="vtkCGALMeshDeformation"
                  label="VESPA Mesh Deformation"
@@ -288,17 +349,16 @@
         </Documentation>
       </IntVectorProperty>
 
-      <IntVectorProperty
-         name="UseUpdateAttributes"
-         command="SetUpdateAttributes"
-         label="Copy attributes"
-         number_of_elements="1"
-         default_values="1"
-         panel_visibility="advanced">
-         <BooleanDomain name="bool"/>
-         <Documentation>
-           If ON, attributes will be copied unto the resulting mesh.
-         </Documentation>
+      <IntVectorProperty command="SetUpdateAttributes"
+                         name="UseUpdateAttributes"
+                         label="Copy attributes"
+                         number_of_elements="1"
+                         default_values="1"
+                         panel_visibility="advanced">
+                         <BooleanDomain name="bool"/>
+                         <Documentation>
+                           If ON, attributes will be copied unto the resulting mesh.
+                         </Documentation>
       </IntVectorProperty>
 
       <Hints>
