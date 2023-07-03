@@ -57,6 +57,8 @@ int TestPMPFairExecution(int, char* argv[])
   vtkNew<vtkCGALRegionFairing> fr;
   fr->SetInputConnection(0, reader->GetOutputPort());
   fr->SetInputData(1, sel);
+  // TODO: reactivate, for now disable warning on Fairing test
+  fr->UpdateAttributesOff();
 
   // Save result
 

@@ -107,7 +107,6 @@ int vtkCGALRegionFairing::RequestData(
   // ----------
 
   output->ShallowCopy(this->toVTK(cgalMesh.get()));
-
   this->interpolateAttributes(input, output);
 
   return 1;

@@ -61,10 +61,10 @@ std::unique_ptr<CGAL_Mesh> vtkCGALPolyDataAlgorithm::toCGAL(vtkPolyData* vtkMesh
       cell[i] = surfaceVertices[ids->GetId(i)];
     }
 
-    auto it = CGAL::Euler::add_face(cell, cgalMesh->surface);
-    if (!it.is_valid())
+    auto newFace = CGAL::Euler::add_face(cell, cgalMesh->surface);
+    if (!newFace.is_valid())
     {
-      vtkWarningMacro("Invalid cell detected, the resulting mesh may be missing cells.");
+      vtkWarningMacro("Invalid cell detected, CGAL may have a incomplete input mesh.");
     }
   }
 

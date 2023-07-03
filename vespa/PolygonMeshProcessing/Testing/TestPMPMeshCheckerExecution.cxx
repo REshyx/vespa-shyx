@@ -19,7 +19,8 @@ int TestPMPMeshCheckerExecution(int, char* argv[])
   vtkNew<vtkCGALMeshChecker> checker;
   checker->SetInputConnection(reader->GetOutputPort());
   checker->AttemptRepairOn();
-  // Expect warning and successful repair
+
+  std::cout << "EXPECTED WARNING|: Not closed, Attempt reparation, Closing successful." << std::endl;
 
   vtkNew<vtkXMLPolyDataWriter> writer;
   writer->SetInputConnection(checker->GetOutputPort());
