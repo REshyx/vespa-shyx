@@ -33,7 +33,7 @@ int vtkCGALMeshChecker::RequestData(
     vtkErrorMacro("Missing input mesh.");
   }
 
-  if (this->RepairWatertight)
+  if (this->AttemptRepair)
   {
     output->DeepCopy(inputData);
   }
@@ -62,7 +62,7 @@ int vtkCGALMeshChecker::RequestData(
       if (!closed)
       {
         vtkWarningMacro("Not closed.");
-        if (this->RepairWatertight)
+        if (this->AttemptRepair)
         {
           vtkWarningMacro("Attempt reparation on open mesh: shrink holes.");
 
@@ -70,6 +70,7 @@ int vtkCGALMeshChecker::RequestData(
           patchFilling->SetInputData(output);
           patchFilling->Update();
           output->DeepCopy(patchFilling->GetOutputDataObject(0));
+          this->interpolateAttributes(inputData, output);
           cgalMesh = this->toCGAL(output);
 
           // check reparation
@@ -84,10 +85,11 @@ int vtkCGALMeshChecker::RequestData(
         if (!volume)
         {
           vtkWarningMacro("Not watertight.");
-          if (this->RepairWatertight)
+          if (this->AttemptRepair)
           {
             pmp::orient_to_bound_a_volume(cgalMesh->surface);
             output->DeepCopy(this->toVTK(cgalMesh.get()));
+            this->interpolateAttributes(inputData, output);
 
             // check reparation
             volume = CGAL::Polygon_mesh_processing::does_bound_a_volume(cgalMesh->surface);

@@ -7,7 +7,7 @@
 
 #include "vtkCGALMeshSubdivision.h"
 
-int TestPMPSubdivisionExecution(int, char* argv[])
+int TestPMPMeshSubdivisionExecution(int, char* argv[])
 {
   vtkNew<vtkSphereSource> sphere;
   sphere->SetRadius(2.0);

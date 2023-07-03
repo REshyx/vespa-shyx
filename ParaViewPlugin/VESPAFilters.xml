@@ -200,17 +200,6 @@
         </Documentation>
       </IntVectorProperty>
 
-      <IntVectorProperty command="SetRepairWatertight"
-                         name="RepairWatertight"
-                         label="Repair Watertight"
-                         number_of_elements="1"
-                         default_values="0">
-                         <BooleanDomain name="bool"/>
-        <Documentation>
-            If ON, tries to repair non watertight meshes.
-        </Documentation>
-      </IntVectorProperty>
-
       <IntVectorProperty command="SetCheckIntersect"
                          name="CheckIntersect"
                          label="Check Intersect"
@@ -219,6 +208,17 @@
                          <BooleanDomain name="bool"/>
         <Documentation>
             If ON, checks the input mesh does not self intersect.
+        </Documentation>
+      </IntVectorProperty>
+
+      <IntVectorProperty command="SetAttemptRepair"
+                         name="AttemptRepair"
+                         label="Attempt Repairing meshes"
+                         number_of_elements="1"
+                         default_values="0">
+                         <BooleanDomain name="bool"/>
+        <Documentation>
+            If ON, tries to repair non-conformal meshes.
         </Documentation>
       </IntVectorProperty>
 

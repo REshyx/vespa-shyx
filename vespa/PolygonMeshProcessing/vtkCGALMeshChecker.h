@@ -35,18 +35,6 @@ public:
 
   // {@
   /**
-   *   Set / Get the RepairWatertight property, default: false
-   *   If true, this filter will try to repair non watertight meshes
-   *   using the accordingly named CGAL methods.
-   *   This triggers an additional deep copy.
-   */
-  vtkGetMacro(RepairWatertight, bool);
-  vtkSetMacro(RepairWatertight, bool);
-  vtkBooleanMacro(RepairWatertight, bool);
-  // }@
-
-  // {@
-  /**
    *   Set / Get the CheckIntersect property, default: true
    *   If true, check the input mesh does not self intersect
    *   using the accordingly named CGAL methods.
@@ -56,6 +44,19 @@ public:
   vtkBooleanMacro(CheckIntersect, bool);
   // }@
 
+  // {@
+  /**
+   *   Set / Get the AttemptRepair property, default: false
+   *   If true, this filter will try to repair non conformal meshes
+  *    by various ways.
+   *   This triggers an additional deep copy.
+   */
+  vtkGetMacro(AttemptRepair, bool);
+  vtkSetMacro(AttemptRepair, bool);
+  vtkBooleanMacro(AttemptRepair, bool);
+  // }@
+
+
 protected:
   vtkCGALMeshChecker()           = default;
   ~vtkCGALMeshChecker() override = default;
@@ -64,7 +65,7 @@ protected:
 
   // fields
   bool CheckWatertight  = true;
-  bool RepairWatertight = false;
+  bool AttemptRepair = false;
   bool CheckIntersect   = true;
 
 private:
