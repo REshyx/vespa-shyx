@@ -60,7 +60,8 @@ int vtkCGALMeshSubdivision::RequestData(
   // Create the triangle mesh for CGAL
   // ---------------------------------
 
-  std::unique_ptr<CGAL_Mesh> cgalMesh = this->toCGAL(input);
+  std::unique_ptr<Vespa_surface> cgalMesh = std::make_unique<Vespa_surface>();
+  this->toCGAL(input, cgalMesh.get());
 
   // CGAL Processing
   // ---------------
@@ -99,18 +100,16 @@ int vtkCGALMeshSubdivision::RequestData(
   // VTK Output
   // ----------
 
+  this->toVTK(cgalMesh.get(), output);
+
   // Triangulate if needed
   if (this->SubdivisionType == vtkCGALMeshSubdivision::CATMULL_CLARK ||
     this->SubdivisionType == vtkCGALMeshSubdivision::DOO_SABIN)
   {
     vtkNew<vtkTriangleFilter> triangulator;
-    triangulator->SetInputData(this->toVTK(cgalMesh.get()));
+    triangulator->SetInputData(output);
     triangulator->Update();
     output->ShallowCopy(triangulator->GetOutput());
-  }
-  else
-  {
-    output->ShallowCopy(this->toVTK(cgalMesh.get()));
   }
 
   this->interpolateAttributes(input, output);

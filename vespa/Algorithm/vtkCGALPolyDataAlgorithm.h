@@ -29,13 +29,20 @@ using Graph_Coord  = boost::property_map<CGAL_Surface, CGAL::vertex_point_t>::ty
 
 #include "vtkCGALAlgorithmModule.h" // For export macro
 
+struct Vespa_soup
+{
+  std::vector<double[3]>                points;
+  std::vector<std::vector<std::size_t>> faces;
+};
+
 // Container for CGAL related info
-struct CGAL_Mesh
+// contains either a surface or a polygon soup
+struct Vespa_surface
 {
   CGAL_Surface surface;
   Graph_Coord  coords;
 
-  CGAL_Mesh() { coords = get(CGAL::vertex_point, surface); }
+  Vespa_surface() { coords = get(CGAL::vertex_point, surface); }
 };
 
 // Filter
@@ -65,16 +72,28 @@ protected:
   ~vtkCGALPolyDataAlgorithm() override = default;
 
   /**
-   * Convert a vtkPolyData to a CGAL mesh.
-   * This method fills the surface and coords
-   * in the CGAL_Mesh data object
+   * Convert a vtkPolyData to a CGAL surface mesh.
+   * This method fills the internal surface and coords
+   * in the Vespa_surface data object
+   * return true if operation was successful
    */
-  std::unique_ptr<CGAL_Mesh> toCGAL(vtkPolyData* vtkMesh);
+  bool toCGAL(vtkPolyData* vtkMesh, Vespa_surface* cgalMesh);
 
   /**
-   * Convert a CGAL mesh to a vtk polydata.
+   * Convert a vtkPolyData to a CGAL surface mesh.
+   * This method fills the internal points and cells
+   * in the Vespa_soup data object
+   * return true if operation was successful
    */
-  vtkSmartPointer<vtkPolyData> toVTK(CGAL_Mesh* cgalMesh);
+  // bool toCGAL(vtkPolyData* vtkMesh, Vespa_soup* cgalMesh);
+
+  // TODO toCGAL with Vespa_soup
+
+  /**
+   * Convert a CGAL mesh to a vtkPolydata.
+   * return true if operation was successful
+   */
+  bool toVTK(Vespa_surface* cgalMesh, vtkSmartPointer<vtkPolyData> vtkMesh);
 
   /**
    * interpolate attributes of input onto the new VTK mesh

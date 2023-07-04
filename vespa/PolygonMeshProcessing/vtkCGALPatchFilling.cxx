@@ -106,7 +106,8 @@ int vtkCGALPatchFilling::RequestData(
   // Create the triangle mesh for CGAL
   // --------------------------------
 
-  std::unique_ptr<CGAL_Mesh> cgalMesh = this->toCGAL(baseDataSet);
+  std::unique_ptr<Vespa_surface> cgalMesh = std::make_unique<Vespa_surface>();
+  this->toCGAL(baseDataSet, cgalMesh.get());
 
   // CGAL Processing
   // ---------------
@@ -137,7 +138,7 @@ int vtkCGALPatchFilling::RequestData(
   // VTK Output
   // ----------
 
-  output->ShallowCopy(this->toVTK(cgalMesh.get()));
+  this->toVTK(cgalMesh.get(), output);
 
   // Note, there is not UpdateAttributes here as the new mesh
   // contains patches not present in the initial surface

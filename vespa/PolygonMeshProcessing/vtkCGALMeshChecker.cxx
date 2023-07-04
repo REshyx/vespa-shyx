@@ -46,7 +46,8 @@ int vtkCGALMeshChecker::RequestData(
   // Create the surface meshes for CGAL
   // ----------------------------------
 
-  std::unique_ptr<CGAL_Mesh> cgalMesh = this->toCGAL(output);
+  std::unique_ptr<Vespa_surface> cgalMesh = std::make_unique<Vespa_surface>();
+  this->toCGAL(output, cgalMesh.get());
 
   // CGAL Processing
   // ---------------
@@ -71,7 +72,7 @@ int vtkCGALMeshChecker::RequestData(
           patchFilling->Update();
           output->DeepCopy(patchFilling->GetOutputDataObject(0));
           this->interpolateAttributes(inputData, output);
-          cgalMesh = this->toCGAL(output);
+          this->toCGAL(output, cgalMesh.get());
 
           // check reparation
           closed = CGAL::is_closed(cgalMesh->surface);
@@ -88,12 +89,12 @@ int vtkCGALMeshChecker::RequestData(
           if (this->AttemptRepair)
           {
             pmp::orient_to_bound_a_volume(cgalMesh->surface);
-            output->DeepCopy(this->toVTK(cgalMesh.get()));
+            this->toVTK(cgalMesh.get(), output);
             this->interpolateAttributes(inputData, output);
 
             // check reparation
             volume = CGAL::Polygon_mesh_processing::does_bound_a_volume(cgalMesh->surface);
-            vtkWarningMacro("Repair " << (volume ? "successful." : "failed."));
+            vtkWarningMacro("Closing " << (volume ? "successful." : "failed."));
           }
         }
       }
@@ -105,6 +106,17 @@ int vtkCGALMeshChecker::RequestData(
       if (intersect)
       {
         vtkWarningMacro("Self intersection detected");
+        if (this->AttemptRepair)
+        {
+          pmp::experimental::autorefine_and_remove_self_intersections(
+            cgalMesh->surface, pmp::parameters::preserve_genus(false));
+          this->toVTK(cgalMesh.get(), output);
+          this->interpolateAttributes(inputData, output);
+
+          // check reparation
+          intersect = CGAL::Polygon_mesh_processing::does_self_intersect(cgalMesh->surface);
+          vtkWarningMacro("Remove intersection " << (intersect ? "successful." : "failed."));
+        }
       }
     }
   }

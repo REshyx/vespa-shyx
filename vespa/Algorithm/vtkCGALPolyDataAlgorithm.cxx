@@ -18,9 +18,9 @@ void vtkCGALPolyDataAlgorithm::PrintSelf(ostream& os, vtkIndent indent)
 }
 
 //------------------------------------------------------------------------------
-std::unique_ptr<CGAL_Mesh> vtkCGALPolyDataAlgorithm::toCGAL(vtkPolyData* vtkMesh)
+bool vtkCGALPolyDataAlgorithm::toCGAL(vtkPolyData* vtkMesh, Vespa_surface* cgalMesh)
 {
-  std::unique_ptr<CGAL_Mesh> cgalMesh(new CGAL_Mesh());
+  bool status = true;
 
   // preprocess: ensure cell consistency in VTK
   // this is required by CGAL
@@ -62,17 +62,21 @@ std::unique_ptr<CGAL_Mesh> vtkCGALPolyDataAlgorithm::toCGAL(vtkPolyData* vtkMesh
     }
 
     auto newFace = CGAL::Euler::add_face(cell, cgalMesh->surface);
-    if (!newFace.is_valid())
-    {
-      vtkWarningMacro("Invalid cell detected, CGAL may have a incomplete input mesh.");
-    }
+    status &= newFace.is_valid();
   }
 
-  return cgalMesh;
+  if (!status)
+  {
+    vtkWarningMacro("Invalid cell detected, CGAL may have an incomplete input mesh."
+                    "This is likely du to a non-manifold input."
+                    "You may want to try the Vespa Mesh Checker filter.");
+  }
+
+  return status;
 }
 
 //------------------------------------------------------------------------------
-vtkSmartPointer<vtkPolyData> vtkCGALPolyDataAlgorithm::toVTK(CGAL_Mesh* cgalMesh)
+bool vtkCGALPolyDataAlgorithm::toVTK(Vespa_surface* cgalMesh, vtkSmartPointer<vtkPolyData> vtkMesh)
 {
   // points (vertices in surfaceMesh are not contiguous)
   vtkNew<vtkPoints> pts;
@@ -105,10 +109,11 @@ vtkSmartPointer<vtkPolyData> vtkCGALPolyDataAlgorithm::toVTK(CGAL_Mesh* cgalMesh
   cells->Squeeze();
 
   // VTK dataset
-  auto vtkMesh = vtkSmartPointer<vtkPolyData>::New();
+  vtkMesh.TakeReference(vtkPolyData::New()); // always start from new mesh
   vtkMesh->SetPoints(pts);
   vtkMesh->SetPolys(cells);
-  return vtkMesh;
+
+  return true;
 }
 
 //------------------------------------------------------------------------------

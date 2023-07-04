@@ -66,9 +66,12 @@ int vtkCGALBooleanOperation::RequestData(
   // Create the surface meshes for CGAL
   // ----------------------------------
 
-  std::unique_ptr<CGAL_Mesh> cgalInputMesh  = this->toCGAL(inputData);
-  std::unique_ptr<CGAL_Mesh> cgalSourceMesh = this->toCGAL(sourceData);
-  std::unique_ptr<CGAL_Mesh> cgalOutMesh    = this->toCGAL(output);
+  std::unique_ptr<Vespa_surface> cgalInputMesh = std::make_unique<Vespa_surface>();
+  this->toCGAL(inputData, cgalInputMesh.get());
+  std::unique_ptr<Vespa_surface> cgalSourceMesh = std::make_unique<Vespa_surface>();
+  this->toCGAL(sourceData, cgalSourceMesh.get());
+
+  std::unique_ptr<Vespa_surface> cgalOutMesh = std::make_unique<Vespa_surface>();
 
   // CGAL Processing
   // ---------------
@@ -116,6 +119,8 @@ int vtkCGALBooleanOperation::RequestData(
 
   if (!res)
   {
+    // TODO: use the mesh checker instead here.
+
     // help user know the issue with their data.
     // Most of these checks are done after the processing for performance reasons
     std::cerr << "Boolean operation failed. Checking precondition:" << std::endl;
@@ -134,8 +139,7 @@ int vtkCGALBooleanOperation::RequestData(
   // VTK Output
   // ----------
 
-  output->ShallowCopy(this->toVTK(cgalOutMesh.get()));
-
+  this->toVTK(cgalOutMesh.get(), output);
   this->interpolateAttributes(inputData, output);
 
   return 1;

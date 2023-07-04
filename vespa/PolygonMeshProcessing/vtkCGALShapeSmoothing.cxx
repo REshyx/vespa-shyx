@@ -36,14 +36,15 @@ int vtkCGALShapeSmoothing::RequestData(
   // Create the surface mesh for CGAL
   // ----------------------------------
 
-  std::unique_ptr<CGAL_Mesh> cgalInputMesh = this->toCGAL(input);
+  std::unique_ptr<Vespa_surface> cgalMesh = std::make_unique<Vespa_surface>();
+  this->toCGAL(input, cgalMesh.get());
 
   // CGAL Processing
   // ---------------
 
   try
   {
-    pmp::smooth_shape(cgalInputMesh->surface, this->TimeStep,
+    pmp::smooth_shape(cgalMesh->surface, this->TimeStep,
       pmp::parameters::number_of_iterations(this->NumberOfIterations));
   }
   catch (std::exception& e)
@@ -55,8 +56,7 @@ int vtkCGALShapeSmoothing::RequestData(
   // VTK Output
   // ----------
 
-  output->ShallowCopy(this->toVTK(cgalInputMesh.get()));
-
+  this->toVTK(cgalMesh.get(), output);
   this->copyAttributes(input, output);
 
   return 1;
