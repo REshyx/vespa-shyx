@@ -9,6 +9,12 @@
 
 // CGAL related includes
 #include <CGAL/Polygon_mesh_processing/corefinement.h>
+#include <CGAL/Polygon_mesh_processing/repair_polygon_soup.h>
+#include <CGAL/Polygon_mesh_processing/orient_polygon_soup.h>
+#include <CGAL/Polygon_mesh_processing/polygon_soup_to_polygon_mesh.h>
+// hole fairing
+#include <CGAL/Polygon_mesh_processing/border.h>
+#include <CGAL/Polygon_mesh_processing/triangulate_hole.h>
 
 vtkStandardNewMacro(vtkCGALMeshChecker);
 
@@ -24,97 +30,126 @@ void vtkCGALMeshChecker::PrintSelf(ostream& os, vtkIndent indent)
 int vtkCGALMeshChecker::RequestData(
   vtkInformation*, vtkInformationVector** inputVector, vtkInformationVector* outputVector)
 {
-  // Get the input and source data object
-  vtkPolyData* inputData = vtkPolyData::GetData(inputVector[0]);
-  vtkPolyData* output    = vtkPolyData::GetData(outputVector);
+  using Graph_halfedge = boost::graph_traits<CGAL_Surface>::halfedge_descriptor;
 
-  if (!inputData)
+  // Get the input and source data object
+  vtkPolyData* input = vtkPolyData::GetData(inputVector[0]);
+
+  if (!input)
   {
     vtkErrorMacro("Missing input mesh.");
   }
 
-  if (this->AttemptRepair)
-  {
-    output->DeepCopy(inputData);
-  }
-  else
-  {
-    // mesh won't be modified
-    output->ShallowCopy(inputData);
-  }
+  vtkPolyData* output = vtkPolyData::GetData(outputVector);
 
-  // Create the surface meshes for CGAL
+  // Create the soup meshes for CGAL
   // ----------------------------------
 
-  std::unique_ptr<Vespa_surface> cgalMesh = std::make_unique<Vespa_surface>();
-  this->toCGAL(output, cgalMesh.get());
+  std::unique_ptr<Vespa_soup> cgalSoup = std::make_unique<Vespa_soup>();
+  this->toCGAL(input, cgalSoup.get());
+  std::unique_ptr<Vespa_surface> cgalSurface = std::make_unique<Vespa_surface>();
 
   // CGAL Processing
   // ---------------
 
-  // TODO: add fields data
-  // TODO avoid VTK copy if still invalid ?
+  bool isSurface = false;
 
+  // TODO: add fields data
+  // TODO: Only one VTK copy at the end, always, all fix in  CGAL world ?
+
+  // Tries to convert the soup into a surfacce
   try
   {
-    if (this->CheckWatertight)
+    if (this->AttemptRepair)
     {
-      bool closed = CGAL::is_closed(cgalMesh->surface);
+      pmp::repair_polygon_soup(cgalSoup->points, cgalSoup->faces);
+      if (!pmp::orient_polygon_soup(cgalSoup->points, cgalSoup->faces))
+      {
+        vtkWarningMacro("Failed to orient the polygon soup correctly.");
+        return 0;
+      }
+    }
+
+    isSurface = pmp::is_polygon_soup_a_polygon_mesh(cgalSoup->faces);
+    if (isSurface)
+    {
+      pmp::polygon_soup_to_polygon_mesh(cgalSoup->points, cgalSoup->faces, cgalSurface->surface);
+    }
+    else
+    {
+      vtkWarningMacro(
+        "Warning: polygon soup does not describe a polygon mesh."
+        "You may want to try the VESPA Alpha Wrapping filter if you need a manifold mesh.");
+    }
+  }
+  catch (std::exception& e)
+  {
+    vtkErrorMacro("CGAL Exception during soup processing: " << e.what());
+    return 0;
+  }
+
+  // Now that we have a surface, inspect its properties
+  try
+  {
+    if (isSurface && this->CheckWatertight)
+    {
+      bool closed = CGAL::is_closed(cgalSurface->surface);
       if (!closed)
       {
-        vtkWarningMacro("Not closed.");
+        vtkWarningMacro("Input is not closed.");
         if (this->AttemptRepair)
         {
-          vtkWarningMacro("Attempt reparation on open mesh: shrink holes.");
+          // collect one halfedge per boundary cycle
+          std::vector<Graph_halfedge> borderCycles;
+          pmp::extract_boundary_cycles(cgalSurface->surface, std::back_inserter(borderCycles));
 
-          vtkNew<vtkCGALPatchFilling> patchFilling;
-          patchFilling->SetInputData(output);
-          patchFilling->Update();
-          output->DeepCopy(patchFilling->GetOutputDataObject(0));
-          this->interpolateAttributes(inputData, output);
-          this->toCGAL(output, cgalMesh.get());
+          std::vector<Graph_Verts> patch_vertices;
+          std::vector<Graph_Faces> patch_facets;
+          // fill boundary cycles
+          for (Graph_halfedge h : borderCycles)
+          {
+            std::get<0>(pmp::triangulate_refine_and_fair_hole(cgalSurface->surface, h,
+              std::back_inserter(patch_facets), std::back_inserter(patch_vertices),
+              pmp::parameters::fairing_continuity(0)));
+          }
 
           // check reparation
-          closed = CGAL::is_closed(cgalMesh->surface);
+          closed = CGAL::is_closed(cgalSurface->surface);
           vtkWarningMacro("Closing " << (closed ? "successful." : "failed."));
         }
       }
 
       if (closed) // may have been repaired
       {
-        bool volume = CGAL::Polygon_mesh_processing::does_bound_a_volume(cgalMesh->surface);
+        bool volume = CGAL::Polygon_mesh_processing::does_bound_a_volume(cgalSurface->surface);
         if (!volume)
         {
-          vtkWarningMacro("Not watertight.");
+          vtkWarningMacro("Input is not watertight.");
           if (this->AttemptRepair)
           {
-            pmp::orient_to_bound_a_volume(cgalMesh->surface);
-            this->toVTK(cgalMesh.get(), output);
-            this->interpolateAttributes(inputData, output);
+            pmp::orient_to_bound_a_volume(cgalSurface->surface);
 
             // check reparation
-            volume = CGAL::Polygon_mesh_processing::does_bound_a_volume(cgalMesh->surface);
-            vtkWarningMacro("Closing " << (volume ? "successful." : "failed."));
+            volume = CGAL::Polygon_mesh_processing::does_bound_a_volume(cgalSurface->surface);
+            vtkWarningMacro("Re-orientation " << (volume ? "successful." : "failed."));
           }
         }
       }
     }
 
-    if (this->CheckIntersect)
+    if (isSurface && this->CheckIntersect)
     {
-      bool intersect = CGAL::Polygon_mesh_processing::does_self_intersect(cgalMesh->surface);
+      bool intersect = CGAL::Polygon_mesh_processing::does_self_intersect(cgalSurface->surface);
       if (intersect)
       {
         vtkWarningMacro("Self intersection detected");
         if (this->AttemptRepair)
         {
           pmp::experimental::autorefine_and_remove_self_intersections(
-            cgalMesh->surface, pmp::parameters::preserve_genus(false));
-          this->toVTK(cgalMesh.get(), output);
-          this->interpolateAttributes(inputData, output);
+            cgalSurface->surface, pmp::parameters::preserve_genus(false));
 
           // check reparation
-          intersect = CGAL::Polygon_mesh_processing::does_self_intersect(cgalMesh->surface);
+          intersect = CGAL::Polygon_mesh_processing::does_self_intersect(cgalSurface->surface);
           vtkWarningMacro("Remove intersection " << (intersect ? "successful." : "failed."));
         }
       }
@@ -122,8 +157,27 @@ int vtkCGALMeshChecker::RequestData(
   }
   catch (std::exception& e)
   {
-    vtkErrorMacro("CGAL Exception: " << e.what());
+    vtkErrorMacro("CGAL Exception during surface processing: " << e.what());
     return 0;
+  }
+
+  // VTK output
+  if (this->AttemptRepair)
+  {
+    if (isSurface)
+    {
+      this->toVTK(cgalSurface.get(), output);
+      this->interpolateAttributes(input, output);
+    }
+    else
+    {
+      this->toVTK(cgalSoup.get(), output);
+      this->interpolateAttributes(input, output);
+    }
+  }
+  else
+  {
+    output->ShallowCopy(input);
   }
 
   return 1;
