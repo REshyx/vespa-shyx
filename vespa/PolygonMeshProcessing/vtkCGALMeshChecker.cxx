@@ -24,6 +24,9 @@ namespace pmp = CGAL::Polygon_mesh_processing;
 void vtkCGALMeshChecker::PrintSelf(ostream& os, vtkIndent indent)
 {
   this->Superclass::PrintSelf(os, indent);
+  os << indent << "CheckWatertight: " << (this->CheckWatertight ? "True" : "False") << std::endl;
+  os << indent << "CheckIntersect: " << (this->CheckIntersect ? "True" : "False") << std::endl;
+  os << indent << "AttemptRepair: " << (this->AttemptRepair ? "True" : "False") << std::endl;
 }
 
 //------------------------------------------------------------------------------
@@ -55,7 +58,7 @@ int vtkCGALMeshChecker::RequestData(
 
   bool isSurface = false;
 
-  // Tries to convert the soup into a surfacce
+  // Tries to convert the soup into a surface
   try
   {
     if (this->AttemptRepair)

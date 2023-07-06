@@ -173,9 +173,9 @@
                  label="VESPA Mesh Checker"
                  name="VESPAMeshChecker">
       <Documentation short_help="Check a mesh for various unconformities">
-        This filters check its input mesh is conforming to several paramters:
+        This filter checks its input mesh is conforming to several paramters:
         - Watertight: the mesh is closed and bounds a volume
-        - Intersect: the mesh do not self intersect
+        - Intersect: the mesh does not self intersect
       </Documentation>
 
       <InputProperty name="Input"
@@ -213,7 +213,7 @@
 
       <IntVectorProperty command="SetAttemptRepair"
                          name="AttemptRepair"
-                         label="Attempt Repairing meshes"
+                         label="Attempt Repairing Mesh"
                          number_of_elements="1"
                          default_values="0">
                          <BooleanDomain name="bool"/>

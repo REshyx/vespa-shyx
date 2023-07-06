@@ -110,7 +110,7 @@ bool vtkCGALPolyDataAlgorithm::toCGAL(vtkPolyData* vtkMesh, Vespa_surface* cgalM
   if (!status)
   {
     vtkWarningMacro("Invalid cell detected, CGAL may have an incomplete input mesh."
-                    "This is likely du to a non-manifold input."
+                    "This is likely due to a non-manifold input."
                     "You may want to try the Vespa Mesh Checker filter.");
   }
 
