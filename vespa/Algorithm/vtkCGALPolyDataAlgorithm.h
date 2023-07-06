@@ -98,13 +98,13 @@ protected:
    * return true if operation was successful
    * result may not be manifold
    */
-  bool toVTK(Vespa_soup* cgalMesh, vtkSmartPointer<vtkPolyData> vtkMesh);
+  bool toVTK(Vespa_soup const* cgalMesh, vtkPolyData* vtkMesh);
 
   /**
    * Convert a CGAL surface mesh to a vtkPolydata.
    * return true if operation was successful
    */
-  bool toVTK(Vespa_surface* cgalMesh, vtkSmartPointer<vtkPolyData> vtkMesh);
+  bool toVTK(Vespa_surface const* cgalMesh, vtkPolyData* vtkMesh);
 
   /**
    * interpolate attributes of input onto the new VTK mesh

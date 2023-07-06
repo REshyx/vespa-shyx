@@ -118,7 +118,7 @@ bool vtkCGALPolyDataAlgorithm::toCGAL(vtkPolyData* vtkMesh, Vespa_surface* cgalM
 }
 
 //------------------------------------------------------------------------------
-bool vtkCGALPolyDataAlgorithm::toVTK(Vespa_soup* cgalMesh, vtkSmartPointer<vtkPolyData> vtkMesh)
+bool vtkCGALPolyDataAlgorithm::toVTK(Vespa_soup const* cgalMesh, vtkPolyData* vtkMesh)
 {
   // points (vertices in surfaceMesh are not contiguous)
   vtkNew<vtkPoints> pts;
@@ -149,7 +149,7 @@ bool vtkCGALPolyDataAlgorithm::toVTK(Vespa_soup* cgalMesh, vtkSmartPointer<vtkPo
   cells->Squeeze();
 
   // VTK dataset
-  vtkMesh.TakeReference(vtkPolyData::New()); // always start from new mesh
+  vtkMesh->Reset(); // always start from new mesh
   vtkMesh->SetPoints(pts);
   vtkMesh->SetPolys(cells);
 
@@ -157,7 +157,7 @@ bool vtkCGALPolyDataAlgorithm::toVTK(Vespa_soup* cgalMesh, vtkSmartPointer<vtkPo
 }
 
 //------------------------------------------------------------------------------
-bool vtkCGALPolyDataAlgorithm::toVTK(Vespa_surface* cgalMesh, vtkSmartPointer<vtkPolyData> vtkMesh)
+bool vtkCGALPolyDataAlgorithm::toVTK(Vespa_surface const* cgalMesh, vtkPolyData* vtkMesh)
 {
   // points (vertices in surfaceMesh are not contiguous)
   vtkNew<vtkPoints> pts;
@@ -191,7 +191,7 @@ bool vtkCGALPolyDataAlgorithm::toVTK(Vespa_surface* cgalMesh, vtkSmartPointer<vt
   cells->Squeeze();
 
   // VTK dataset
-  vtkMesh.TakeReference(vtkPolyData::New()); // always start from new mesh
+  vtkMesh->Reset(); // always start from new mesh
   vtkMesh->SetPoints(pts);
   vtkMesh->SetPolys(cells);
 

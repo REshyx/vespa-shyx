@@ -65,8 +65,8 @@ protected:
 
   // fields
   bool CheckWatertight  = true;
-  bool AttemptRepair = false;
   bool CheckIntersect   = true;
+  bool AttemptRepair = false;
 
 private:
   vtkCGALMeshChecker(const vtkCGALMeshChecker&) = delete;

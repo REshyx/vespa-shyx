@@ -51,11 +51,9 @@ int vtkCGALMeshChecker::RequestData(
 
   // CGAL Processing
   // ---------------
+  // TODO: add fields data
 
   bool isSurface = false;
-
-  // TODO: add fields data
-  // TODO: Only one VTK copy at the end, always, all fix in  CGAL world ?
 
   // Tries to convert the soup into a surfacce
   try

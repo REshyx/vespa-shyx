@@ -54,7 +54,7 @@ int vtkCGALAlphaWrapping::RequestData(
   // --------------------------------
 
   // TODO switch to soup ? (or shrink 1)
-  std::unique_ptr<Vespa_surface> cgalMesh = std::make_unique<Vespa_surface>();
+  std::unique_ptr<Vespa_soup> cgalMesh = std::make_unique<Vespa_soup>();
   this->toCGAL(input, cgalMesh.get());
 
   std::unique_ptr<Vespa_surface> cgalOutput = std::make_unique<Vespa_surface>();
@@ -64,8 +64,7 @@ int vtkCGALAlphaWrapping::RequestData(
 
   try
   {
-    // TODO Use the point / face range version
-    CGAL::alpha_wrap_3(cgalMesh->surface, alpha, offset, cgalOutput->surface);
+    CGAL::alpha_wrap_3(cgalMesh->points, cgalMesh->faces, alpha, offset, cgalOutput->surface);
   }
   catch (std::exception& e)
   {
