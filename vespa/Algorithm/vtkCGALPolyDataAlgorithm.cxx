@@ -18,9 +18,50 @@ void vtkCGALPolyDataAlgorithm::PrintSelf(ostream& os, vtkIndent indent)
 }
 
 //------------------------------------------------------------------------------
-std::unique_ptr<CGAL_Mesh> vtkCGALPolyDataAlgorithm::toCGAL(vtkPolyData* vtkMesh)
+bool vtkCGALPolyDataAlgorithm::toCGAL(vtkPolyData* vtkMesh, Vespa_soup* cgalMesh)
 {
-  std::unique_ptr<CGAL_Mesh> cgalMesh(new CGAL_Mesh());
+
+  // Points
+  const vtkIdType inNPts = vtkMesh->GetNumberOfPoints();
+  cgalMesh->points.clear();
+  cgalMesh->points.reserve(inNPts);
+
+  for (vtkIdType pid = 0; pid < inNPts; pid++)
+  {
+    double coords[3];
+    vtkMesh->GetPoint(pid, coords);
+    cgalMesh->points.emplace_back(coords[0], coords[1], coords[2]);
+  }
+
+  // Cells
+  const vtkIdType inNCells = vtkMesh->GetNumberOfCells();
+  cgalMesh->faces.clear();
+  cgalMesh->faces.resize(inNCells);
+
+  vtkIdType cid = 0;
+  auto      cit = vtk::TakeSmartPointer(vtkMesh->NewCellIterator());
+  for (cit->InitTraversal(); !cit->IsDoneWithTraversal(); cit->GoToNextCell(), cid++)
+  {
+    // Add the cell
+    vtkIdList* ids   = cit->GetPointIds();
+    vtkIdType  nbIds = cit->GetNumberOfPoints();
+
+    cgalMesh->faces[cid].reserve(3); // mostly triangles
+
+    std::vector<Graph_Verts> cell(nbIds);
+    for (vtkIdType i = 0; i < nbIds; i++)
+    {
+      cgalMesh->faces[cid].emplace_back(ids->GetId(i));
+    }
+  }
+
+  return true;
+}
+
+//------------------------------------------------------------------------------
+bool vtkCGALPolyDataAlgorithm::toCGAL(vtkPolyData* vtkMesh, Vespa_surface* cgalMesh)
+{
+  bool status = true;
 
   // preprocess: ensure cell consistency in VTK
   // this is required by CGAL
@@ -40,7 +81,7 @@ std::unique_ptr<CGAL_Mesh> vtkCGALPolyDataAlgorithm::toCGAL(vtkPolyData* vtkMesh
     // id
     surfaceVertices[i] = add_vertex(cgalMesh->surface);
 
-    // coord
+    // coords
     double coords[3];
     vtkMesh->GetPoint(i, coords);
     put(
@@ -61,18 +102,62 @@ std::unique_ptr<CGAL_Mesh> vtkCGALPolyDataAlgorithm::toCGAL(vtkPolyData* vtkMesh
       cell[i] = surfaceVertices[ids->GetId(i)];
     }
 
-    auto it = CGAL::Euler::add_face(cell, cgalMesh->surface);
-    if (!it.is_valid())
-    {
-      vtkWarningMacro("Invalid cell detected, the resulting mesh may be missing cells.");
-    }
+    // Fails on non-manifold cells
+    auto newFace = CGAL::Euler::add_face(cell, cgalMesh->surface);
+    status &= newFace.is_valid();
   }
 
-  return cgalMesh;
+  if (!status)
+  {
+    vtkWarningMacro("Invalid cell detected, CGAL may have an incomplete input mesh."
+                    "This is likely due to a non-manifold input."
+                    "You may want to try the Vespa Mesh Checker filter.");
+  }
+
+  return status;
 }
 
 //------------------------------------------------------------------------------
-vtkSmartPointer<vtkPolyData> vtkCGALPolyDataAlgorithm::toVTK(CGAL_Mesh* cgalMesh)
+bool vtkCGALPolyDataAlgorithm::toVTK(Vespa_soup const* cgalMesh, vtkPolyData* vtkMesh)
+{
+  // points (vertices in surfaceMesh are not contiguous)
+  vtkNew<vtkPoints> pts;
+  const vtkIdType   outNPts = cgalMesh->points.size();
+  pts->Allocate(outNPts);
+
+  for (auto point : cgalMesh->points)
+  {
+    pts->InsertNextPoint(point[0], point[1], point[2]);
+  }
+  pts->Squeeze();
+
+  // cells
+  vtkNew<vtkCellArray> cells;
+  cells->AllocateEstimate(cgalMesh->faces.size(), 3);
+
+  for (auto face : cgalMesh->faces)
+  {
+    vtkNew<vtkIdList> ids;
+    ids->Allocate(face.size());
+
+    for (auto id : face)
+    {
+      ids->InsertNextId(id);
+    }
+    cells->InsertNextCell(ids);
+  }
+  cells->Squeeze();
+
+  // VTK dataset
+  vtkMesh->Reset(); // always start from new mesh
+  vtkMesh->SetPoints(pts);
+  vtkMesh->SetPolys(cells);
+
+  return true;
+}
+
+//------------------------------------------------------------------------------
+bool vtkCGALPolyDataAlgorithm::toVTK(Vespa_surface const* cgalMesh, vtkPolyData* vtkMesh)
 {
   // points (vertices in surfaceMesh are not contiguous)
   vtkNew<vtkPoints> pts;
@@ -96,6 +181,7 @@ vtkSmartPointer<vtkPolyData> vtkCGALPolyDataAlgorithm::toVTK(CGAL_Mesh* cgalMesh
   for (auto face : faces(cgalMesh->surface))
   {
     vtkNew<vtkIdList> ids;
+    ids->Allocate(3);
     for (auto edge : halfedges_around_face(halfedge(face, cgalMesh->surface), cgalMesh->surface))
     {
       ids->InsertNextId(vmap[source(edge, cgalMesh->surface)]);
@@ -105,10 +191,11 @@ vtkSmartPointer<vtkPolyData> vtkCGALPolyDataAlgorithm::toVTK(CGAL_Mesh* cgalMesh
   cells->Squeeze();
 
   // VTK dataset
-  auto vtkMesh = vtkSmartPointer<vtkPolyData>::New();
+  vtkMesh->Reset(); // always start from new mesh
   vtkMesh->SetPoints(pts);
   vtkMesh->SetPolys(cells);
-  return vtkMesh;
+
+  return true;
 }
 
 //------------------------------------------------------------------------------

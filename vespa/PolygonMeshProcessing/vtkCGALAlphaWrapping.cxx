@@ -53,15 +53,18 @@ int vtkCGALAlphaWrapping::RequestData(
   // Create the surface mesh for CGAL
   // --------------------------------
 
-  std::unique_ptr<CGAL_Mesh> cgalInput  = this->toCGAL(input);
-  std::unique_ptr<CGAL_Mesh> cgalOutput = std::make_unique<CGAL_Mesh>();
+  // TODO switch to soup ? (or shrink 1)
+  std::unique_ptr<Vespa_soup> cgalMesh = std::make_unique<Vespa_soup>();
+  this->toCGAL(input, cgalMesh.get());
+
+  std::unique_ptr<Vespa_surface> cgalOutput = std::make_unique<Vespa_surface>();
 
   // CGAL Processing
   // ---------------
 
   try
   {
-    CGAL::alpha_wrap_3(cgalInput->surface, alpha, offset, cgalOutput->surface);
+    CGAL::alpha_wrap_3(cgalMesh->points, cgalMesh->faces, alpha, offset, cgalOutput->surface);
   }
   catch (std::exception& e)
   {
@@ -72,8 +75,7 @@ int vtkCGALAlphaWrapping::RequestData(
   // VTK Output
   // ----------
 
-  output->ShallowCopy(this->toVTK(cgalOutput.get()));
-
+  this->toVTK(cgalOutput.get(), output);
   this->interpolateAttributes(input, output);
 
   return 1;

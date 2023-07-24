@@ -57,6 +57,7 @@ int TestPMPFairExecution(int, char* argv[])
   vtkNew<vtkCGALRegionFairing> fr;
   fr->SetInputConnection(0, reader->GetOutputPort());
   fr->SetInputData(1, sel);
+  fr->UpdateAttributesOff();
 
   // Save result
 

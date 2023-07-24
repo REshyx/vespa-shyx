@@ -43,7 +43,8 @@ int vtkCGALMeshSmoothing::RequestData(
   // Create the surface mesh for CGAL
   // ----------------------------------
 
-  std::unique_ptr<CGAL_Mesh> cgalMesh = this->toCGAL(input);
+  std::unique_ptr<Vespa_surface> cgalMesh = std::make_unique<Vespa_surface>();
+  this->toCGAL(input, cgalMesh.get());
 
   // CGAL Processing
   // ---------------
@@ -82,8 +83,7 @@ int vtkCGALMeshSmoothing::RequestData(
   // VTK Output
   // ----------
 
-  output->ShallowCopy(this->toVTK(cgalMesh.get()));
-
+  this->toVTK(cgalMesh.get(), output);
   this->copyAttributes(input, output);
 
   return 1;
