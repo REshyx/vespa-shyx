@@ -7,6 +7,7 @@ set(vtkcgalpmp_files
   vtkCGALPatchFilling
   vtkCGALRegionFairing
   vtkCGALShapeSmoothing
+  vtkCGALPoissonSurfaceReconstructionDelaunay
 )
 
 if (${CGAL_VERSION} VERSION_GREATER_EQUAL 5.5)
