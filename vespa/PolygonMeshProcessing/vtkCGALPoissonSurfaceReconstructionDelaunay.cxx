@@ -67,23 +67,11 @@ int vtkCGALPoissonSurfaceReconstructionDelaunay::RequestData(
         std::make_pair(Point(pin[0], pin[1], pin[2]), Vector(vin[0], vin[1], vin[2])));
     }
 
-    // if (!CGAL::IO::read_points("/Users/theusst/kitten.ply",
-    //       std::back_inserter(points),
-    //       CGAL::parameters::point_map(CGAL::First_of_pair_property_map<Pwn>())
-    //         .normal_map(CGAL::Second_of_pair_property_map<Pwn>())))
-    // {
-    //   std::cerr << "Error: cannot read input file!" << std::endl;
-    //   return EXIT_FAILURE;
-    // }
-
-    // Polyhedron output_mesh;
     double average_spacing = CGAL::compute_average_spacing<CGAL::Sequential_tag>(
       points, 6, CGAL::parameters::point_map(CGAL::First_of_pair_property_map<Pwn>()));
     CGAL::poisson_surface_reconstruction_delaunay(points.begin(), points.end(),
       CGAL::First_of_pair_property_map<Pwn>(), CGAL::Second_of_pair_property_map<Pwn>(),
       cgalMesh->surface, average_spacing);
-    // std::ofstream out("/Users/theusst/kitten_poisson-20-30-0.375.off");
-    // out << cgalMesh->surface;
   }
   catch (std::exception& e)
   {
@@ -97,6 +85,5 @@ int vtkCGALPoissonSurfaceReconstructionDelaunay::RequestData(
   this->toVTK(cgalMesh.get(), output);
   this->copyAttributes(input, output);
 
-  output->set
   return 1;
 }

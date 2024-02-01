@@ -1,13 +1,10 @@
 /**
  * @class   vtkCGALPoissonSurfaceReconstructionDelaunay
- * @brief   Smoothes a surface mesh by moving its vertices.
+ * @brief   Poisson surface reconstruction.
  *
- * vtkCGALPoissonSurfaceReconstructionDelaunay is a filter that moves vertices to optimize geometry around each vertex: it can
-        try to (1) equalize the angles between incident edges, or (and) move vertices so that areas of
-        adjacent triangles tend to equalize (angle and area smoothing), or (2) moves vertices following
-        an area-based Laplacian smoothing scheme, performed at each vertex in an estimated tangent plane
-        to the surface (tangential relaxation). Border vertices are considered constrained and do not move
-        at any step of the procedure. No vertices are inserted at any time.
+ * vtkCGALPoissonSurfaceReconstructionDelaunay 
+ * adapted from
+ * https://doc.cgal.org/latest/Poisson_surface_reconstruction_3/Poisson_surface_reconstruction_3_2poisson_reconstruction_function_8cpp-example.html
  */
 
 #ifndef vtkCGALPoissonSurfaceReconstructionDelaunay_h
