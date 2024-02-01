@@ -684,6 +684,81 @@
 
     </SourceProxy>
 
+    <SourceProxy class="vtkCGALPCAEstimateNormals"
+                 label="VESPA PCA Estimate Normals"
+                 name="VESPAPCAEstimateNormals">
+      <Documentation short_help="Smoothes the shape of a triangulated vtkPolyData.">
+        This filter moves vertices to optimize geometry around each vertex: it can try to (1) equalize
+        the angles between incident edges, or (and) move vertices so that areas of adjacent triangles
+        tend to equalize (angle and area smoothing), or (2) moves vertices following an area-based
+        Laplacian smoothing scheme, performed at each vertex in an estimated tangent plane to the surface
+        (tangential relaxation). Border vertices are considered constrained and do not move at any step of
+        the procedure. No vertices are inserted at any time.
+      </Documentation>
+
+      <InputProperty name="Input"
+                     command="SetInputConnection">
+        <ProxyGroupDomain name="groups">
+          <Group name="sources"/>
+          <Group name="filters"/>
+        </ProxyGroupDomain>
+        <DataTypeDomain name="input_type">
+          <DataType value="vtkPolyData"/>
+        </DataTypeDomain>
+      </InputProperty>
+
+      <IntVectorProperty name="Neighborhood" command="SetNeighborhood" number_of_elements="1" default_values="1">
+        <EnumerationDomain name="enum">
+          <Entry value="1" text="Fixed Radius."/>
+          <Entry value="2" text="Fixed Number of Neighbors."/>
+        </EnumerationDomain>
+        <Documentation>
+          This property indicates which method will be used to determine the neighborhood.
+        </Documentation>
+      </IntVectorProperty>
+
+      <IntVectorProperty
+         name="NumberOfNeighbors"
+         command="SetNumberOfNeighbors"
+         label="Number of Neighbors"
+         number_of_elements="1"
+         default_values="18"
+         panel_visibility="advanced">
+         <Documentation>
+           bla
+         </Documentation>
+      </IntVectorProperty>
+
+      <IntVectorProperty
+         name="OrientNormals"
+         command="SetOrientNormals"
+         label="Orient Normals"
+         number_of_elements="1"
+         default_values="1">
+         <BooleanDomain name="bool"/>
+         <Documentation>
+           If ON, normals will be oriented.
+         </Documentation>
+      </IntVectorProperty>
+
+      <IntVectorProperty
+         name="DeleteUnoriented"
+         command="SetDeleteUnoriented"
+         label="Delete Unoriented"
+         number_of_elements="1"
+         default_values="1">
+         <BooleanDomain name="bool"/>
+         <Documentation>
+           If ON, points with unoriented normals will be deleted.
+         </Documentation>
+      </IntVectorProperty>
+
+      <Hints>
+        <ShowInMenu category="VESPA"/>
+      </Hints>
+
+    </SourceProxy>
+
  </ProxyGroup>
 
 </ServerManagerConfiguration>
