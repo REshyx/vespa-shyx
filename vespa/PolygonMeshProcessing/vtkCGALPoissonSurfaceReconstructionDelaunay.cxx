@@ -55,6 +55,14 @@ int vtkCGALPoissonSurfaceReconstructionDelaunay::RequestData(
   // CGAL Processing
   // ---------------
 
+  auto normals = input->GetPointData()->GetArray("Normals");
+
+  if (!normals)
+  {
+    vtkErrorMacro("Point normals required.");
+    return 0;
+  }
+
   try
   {
     std::vector<Pwn> points;
@@ -62,7 +70,7 @@ int vtkCGALPoissonSurfaceReconstructionDelaunay::RequestData(
     for (int k = 0; k < input->GetNumberOfPoints(); k++)
     {
       auto pin = input->GetPoint(k);
-      auto vin = input->GetPointData()->GetArray("Normals")->GetTuple3(k);
+      auto vin = normals->GetTuple3(k);
       points.push_back(
         std::make_pair(Point(pin[0], pin[1], pin[2]), Vector(vin[0], vin[1], vin[2])));
     }
