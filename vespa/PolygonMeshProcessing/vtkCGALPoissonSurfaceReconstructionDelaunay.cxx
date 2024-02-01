@@ -17,19 +17,17 @@
 #include <vector>
 #include <fstream>
 
-typedef CGAL::Exact_predicates_inexact_constructions_kernel  Kernel;
-typedef Kernel::FT                                           FT;
-typedef Kernel::Point_3                                      Point;
-typedef Kernel::Vector_3                                     Vector;
-typedef Kernel::Sphere_3                                     Sphere;
+typedef CGAL_Kernel::FT                                      FT;
+typedef CGAL_Kernel::Point_3                                 Point;
+typedef CGAL_Kernel::Vector_3                                Vector;
+typedef CGAL_Kernel::Sphere_3                                Sphere;
 typedef std::pair<Point, Vector>                             Pwn;
 typedef CGAL::First_of_pair_property_map<Pwn>                Point_map;
 typedef CGAL::Second_of_pair_property_map<Pwn>               Normal_map;
-typedef CGAL::Polyhedron_3<Kernel>                           Polyhedron;
-typedef CGAL::Poisson_reconstruction_function<Kernel>        Poisson_reconstruction_function;
+typedef CGAL::Poisson_reconstruction_function<CGAL_Kernel>   Poisson_reconstruction_function;
 typedef CGAL::Surface_mesh_default_triangulation_3           STr;
 typedef CGAL::Surface_mesh_complex_2_in_triangulation_3<STr> C2t3;
-typedef CGAL::Implicit_surface_3<Kernel, Poisson_reconstruction_function> Surface_3;
+typedef CGAL::Implicit_surface_3<CGAL_Kernel, Poisson_reconstruction_function> Surface_3;
 
 vtkStandardNewMacro(vtkCGALPoissonSurfaceReconstructionDelaunay);
 
@@ -130,12 +128,6 @@ int vtkCGALPoissonSurfaceReconstructionDelaunay::RequestData(
       CGAL::Manifold_with_boundary_tag()); // require manifold mesh
 
     CGAL::facets_in_complex_2_to_triangle_mesh(c2t3, cgalMesh->surface);
-
-    // double average_spacing = CGAL::compute_average_spacing<CGAL::Sequential_tag>(
-    //   points, 6, CGAL::parameters::point_map(CGAL::First_of_pair_property_map<Pwn>()));
-    // CGAL::poisson_surface_reconstruction_delaunay(points.begin(), points.end(),
-    //   CGAL::First_of_pair_property_map<Pwn>(), CGAL::Second_of_pair_property_map<Pwn>(),
-    //   cgalMesh->surface, average_spacing);
   }
   catch (std::exception& e)
   {
