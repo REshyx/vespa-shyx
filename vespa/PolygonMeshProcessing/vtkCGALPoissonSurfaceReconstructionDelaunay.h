@@ -21,6 +21,27 @@ public:
   vtkTypeMacro(vtkCGALPoissonSurfaceReconstructionDelaunay, vtkCGALPolyDataAlgorithm);
   void PrintSelf(ostream& os, vtkIndent indent) override;
 
+  /**
+   * Get/set the number of iterations used in the smoothing process.
+   * Default is 10.
+   **/
+  vtkGetMacro(MinTriangleAngle, double);
+  vtkSetMacro(MinTriangleAngle, double);
+
+  /**
+   * Get/set the number of iterations used in the smoothing process.
+   * Default is 10.
+   **/
+  vtkGetMacro(MaxTriangleSize, double);
+  vtkSetMacro(MaxTriangleSize, double);
+
+  /**
+   * Get/set the number of iterations used in the smoothing process.
+   * Default is 10.
+   **/
+  vtkGetMacro(Distance, double);
+  vtkSetMacro(Distance, double);
+
 protected:
   vtkCGALPoissonSurfaceReconstructionDelaunay()           = default;
   ~vtkCGALPoissonSurfaceReconstructionDelaunay() override = default;
@@ -30,6 +51,10 @@ protected:
 private:
   vtkCGALPoissonSurfaceReconstructionDelaunay(const vtkCGALPoissonSurfaceReconstructionDelaunay&) = delete;
   void operator=(const vtkCGALPoissonSurfaceReconstructionDelaunay&)       = delete;
+
+  double MinTriangleAngle;
+  double MaxTriangleSize;
+  double Distance;
 };
 
 #endif

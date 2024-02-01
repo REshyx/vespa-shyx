@@ -633,6 +633,36 @@
         </DataTypeDomain>
       </InputProperty>
 
+       <DoubleVectorProperty command="SetMinTriangleAngle"
+                            name="MinTriangleAngle"
+                            label="Min Triangle Angle"
+                            number_of_elements="1"
+                            default_values="20.0">
+        <Documentation>
+          Use RadiusFactor*spacing (computed from point cloud) as neighborhood radius.
+        </Documentation>
+      </DoubleVectorProperty>
+
+       <DoubleVectorProperty command="SetMaxTriangleSize"
+                            name="MaxTriangleSize"
+                            label="Max Triangle Size"
+                            number_of_elements="1"
+                            default_values="2.0">
+        <Documentation>
+          Use RadiusFactor*spacing (computed from point cloud) as neighborhood radius.
+        </Documentation>
+      </DoubleVectorProperty>
+
+       <DoubleVectorProperty command="SetDistance"
+                            name="Distance"
+                            label="Distance"
+                            number_of_elements="1"
+                            default_values="0.375">
+        <Documentation>
+          Use RadiusFactor*spacing (computed from point cloud) as neighborhood radius.
+        </Documentation>
+      </DoubleVectorProperty>
+
       <Hints>
         <ShowInMenu category="VESPA"/>
       </Hints>
