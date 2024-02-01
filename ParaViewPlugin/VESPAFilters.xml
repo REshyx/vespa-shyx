@@ -639,6 +639,51 @@
 
     </SourceProxy>
     
+      <SourceProxy class="vtkCGALAdvancingFrontSurfaceReconstruction"
+                 label="VESPA Advancing Front Surface Reconstruction"
+                 name="CGALAdvancingFrontSurfaceReconstruction">
+      <Documentation short_help="Surface reconstruction of point sets with oriented normals.">
+        This CGAL component implements a surface reconstruction method which takes as input
+        point sets ...
+      </Documentation>
+
+      <InputProperty name="Input"
+                     command="SetInputConnection">
+        <ProxyGroupDomain name="groups">
+          <Group name="sources"/>
+          <Group name="filters"/>
+        </ProxyGroupDomain>
+        <DataTypeDomain name="input_type">
+          <DataType value="vtkPolyData"/>
+        </DataTypeDomain>
+      </InputProperty>
+
+     <DoubleVectorProperty command="SetPer"
+                            name="Per"
+                            label="Perimeter"
+                            number_of_elements="1"
+                            default_values="0.0">
+        <Documentation>
+          Target length for edges.
+        </Documentation>
+      </DoubleVectorProperty>
+
+           <DoubleVectorProperty command="SetRadiusRatioBound"
+                            name="RadiusRatioBound"
+                            label="Radius Ratio Bound"
+                            number_of_elements="1"
+                            default_values="5.0">
+        <Documentation>
+          Target length for edges.
+        </Documentation>
+      </DoubleVectorProperty>
+
+      <Hints>
+        <ShowInMenu category="VESPA"/>
+      </Hints>
+
+    </SourceProxy>
+
  </ProxyGroup>
 
 </ServerManagerConfiguration>
