@@ -668,7 +668,7 @@
         </Documentation>
       </DoubleVectorProperty>
 
-           <DoubleVectorProperty command="SetRadiusRatioBound"
+       <DoubleVectorProperty command="SetRadiusRatioBound"
                             name="RadiusRatioBound"
                             label="Radius Ratio Bound"
                             number_of_elements="1"
@@ -687,13 +687,8 @@
     <SourceProxy class="vtkCGALPCAEstimateNormals"
                  label="VESPA PCA Estimate Normals"
                  name="VESPAPCAEstimateNormals">
-      <Documentation short_help="Smoothes the shape of a triangulated vtkPolyData.">
-        This filter moves vertices to optimize geometry around each vertex: it can try to (1) equalize
-        the angles between incident edges, or (and) move vertices so that areas of adjacent triangles
-        tend to equalize (angle and area smoothing), or (2) moves vertices following an area-based
-        Laplacian smoothing scheme, performed at each vertex in an estimated tangent plane to the surface
-        (tangential relaxation). Border vertices are considered constrained and do not move at any step of
-        the procedure. No vertices are inserted at any time.
+      <Documentation short_help="Estimates normals for point clouds with PCA.">
+        This filter bla.
       </Documentation>
 
       <InputProperty name="Input"
@@ -728,6 +723,16 @@
            bla
          </Documentation>
       </IntVectorProperty>
+
+       <DoubleVectorProperty command="SetRadiusFactor"
+                            name="RadiusFactor"
+                            label="Radius Factor"
+                            number_of_elements="1"
+                            default_values="2.0">
+        <Documentation>
+          Use RadiusFactor*spacing (computed from point cloud) as neighborhood radius.
+        </Documentation>
+      </DoubleVectorProperty>
 
       <IntVectorProperty
          name="OrientNormals"

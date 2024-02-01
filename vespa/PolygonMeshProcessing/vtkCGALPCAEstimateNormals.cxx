@@ -76,7 +76,7 @@ int vtkCGALPCAEstimateNormals::RequestData(
            // returns
         CGAL::parameters::point_map(CGAL::First_of_pair_property_map<Pwn>())
           .normal_map(CGAL::Second_of_pair_property_map<Pwn>())
-          .neighbor_radius(2. * spacing)); // use 2*spacing as neighborhood radius
+          .neighbor_radius(this->RadiusFactor * spacing)); // use RadiusFactor*spacing as neighborhood radius
     }
     else if (this->Neighborhood == 2) // Use a fixed number of neighbors
     {

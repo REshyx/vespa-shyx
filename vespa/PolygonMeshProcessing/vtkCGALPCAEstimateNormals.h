@@ -46,6 +46,13 @@ public:
   vtkGetMacro(OrientNormals, bool);
   vtkSetMacro(OrientNormals, bool);
 
+  /**
+   * Get/set the number of iterations used in the smoothing process.
+   * Default is 10.
+   **/
+  vtkGetMacro(RadiusFactor, double);
+  vtkSetMacro(RadiusFactor, double);
+
   ///@}
     /**
    * Get/set the number of iterations used in the smoothing process.
@@ -66,6 +73,7 @@ private:
 
   unsigned int Neighborhood;
   unsigned int NumberOfNeighbors;
+  double RadiusFactor;
   bool OrientNormals;
   bool DeleteUnoriented;
 };
