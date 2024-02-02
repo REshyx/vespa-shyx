@@ -1,15 +1,15 @@
 <ServerManagerConfiguration>
 
   <ProxyGroup name="sources">
-    <SourceProxy name="CGALXYZReader" class="vtkCGALXYZReader" label="XYZ Reader (CGAL)">
-      <Documentation long_help="Reads CGAL XYZ data." short_help="Reads CGAL XYZ files.">
+    <SourceProxy name="CGALXYZReader" class="vtkCGALXYZReader" label="CGAL Point Cloud Reader">
+      <Documentation long_help="Reads CGAL point cloud data." short_help="Reads CGAL point cloud files.">
       </Documentation>
 
       <StringVectorProperty animateable="0" command="SetFileName" name="FileName" number_of_elements="1">
         <FileListDomain name="files" />
       </StringVectorProperty>
       <Hints>
-        <ReaderFactory extensions="xyz" file_description="CGAL XYZ files" />
+        <ReaderFactory extensions="las off ply xyz" file_description="CGAL Point Cloud (.las,.off,.ply,.xyz)" />
       </Hints>
 
     </SourceProxy>
