@@ -10,6 +10,7 @@ set(vtkcgalpmp_files
   vtkCGALPoissonSurfaceReconstructionDelaunay
   vtkCGALAdvancingFrontSurfaceReconstruction
   vtkCGALPCAEstimateNormals
+  vtkCGALXYZReader
 )
 
 if (${CGAL_VERSION} VERSION_GREATER_EQUAL 5.5)

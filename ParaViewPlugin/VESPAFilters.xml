@@ -1,5 +1,21 @@
 <ServerManagerConfiguration>
 
+  <ProxyGroup name="sources">
+    <SourceProxy name="CGALXYZReader" class="vtkCGALXYZReader" label="XYZ Reader (CGAL)">
+      <Documentation long_help="Reads CGAL XYZ data." short_help="Reads CGAL XYZ files.">
+      </Documentation>
+
+      <StringVectorProperty animateable="0" command="SetFileName" name="FileName" number_of_elements="1">
+        <FileListDomain name="files" />
+      </StringVectorProperty>
+      <Hints>
+        <ReaderFactory extensions="xyz" file_description="CGAL XYZ files" />
+      </Hints>
+
+    </SourceProxy>
+
+  </ProxyGroup>
+
   <ProxyGroup name="filters">
     <!-- ================================================================== -->
     <SourceProxy class="vtkCGALDelaunay2"
