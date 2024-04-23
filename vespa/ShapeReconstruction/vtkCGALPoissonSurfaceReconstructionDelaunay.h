@@ -12,9 +12,9 @@
 
 #include "vtkCGALPolyDataAlgorithm.h"
 
-#include "vtkCGALPMPModule.h" // For export macro
+#include "vtkCGALSRModule.h" // For export macro
 
-class VTKCGALPMP_EXPORT vtkCGALPoissonSurfaceReconstructionDelaunay : public vtkCGALPolyDataAlgorithm
+class VTKCGALSR_EXPORT vtkCGALPoissonSurfaceReconstructionDelaunay : public vtkCGALPolyDataAlgorithm
 {
 public:
   static vtkCGALPoissonSurfaceReconstructionDelaunay* New();

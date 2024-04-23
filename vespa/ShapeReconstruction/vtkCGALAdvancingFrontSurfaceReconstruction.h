@@ -15,9 +15,9 @@
 
 #include "vtkCGALPolyDataAlgorithm.h"
 
-#include "vtkCGALPMPModule.h" // For export macro
+#include "vtkCGALSRModule.h" // For export macro
 
-class VTKCGALPMP_EXPORT vtkCGALAdvancingFrontSurfaceReconstruction : public vtkCGALPolyDataAlgorithm
+class VTKCGALSR_EXPORT vtkCGALAdvancingFrontSurfaceReconstruction : public vtkCGALPolyDataAlgorithm
 {
 public:
   static vtkCGALAdvancingFrontSurfaceReconstruction* New();
