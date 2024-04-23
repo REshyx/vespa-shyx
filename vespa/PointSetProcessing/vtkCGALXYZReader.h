@@ -34,7 +34,7 @@
 #ifndef vtkCGALXYZReader_h
 #define vtkCGALXYZReader_h
 
-#include "vtkCGALPMPModule.h" // For export macro
+#include "vtkCGALPSPModule.h" // For export macro
 #include "vtkCGALPolyDataAlgorithm.h"
 
 #include "vtkDataArraySelection.h" // for ivars
@@ -48,7 +48,7 @@ class vtkStdString;
 class vtkStringArray;
 class vtkAIMToolsPrivate;
 
-class VTKCGALPMP_EXPORT vtkCGALXYZReader : public vtkCGALPolyDataAlgorithm
+class VTKCGALPSP_EXPORT vtkCGALXYZReader : public vtkCGALPolyDataAlgorithm
 {
 public:
   vtkTypeMacro(vtkCGALXYZReader, vtkCGALPolyDataAlgorithm);

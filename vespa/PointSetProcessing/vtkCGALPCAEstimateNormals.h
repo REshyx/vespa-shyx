@@ -12,9 +12,9 @@
 
 #include "vtkCGALPolyDataAlgorithm.h"
 
-#include "vtkCGALPMPModule.h" // For export macro
+#include "vtkCGALPSPModule.h" // For export macro
 
-class VTKCGALPMP_EXPORT vtkCGALPCAEstimateNormals : public vtkCGALPolyDataAlgorithm
+class VTKCGALPSP_EXPORT vtkCGALPCAEstimateNormals : public vtkCGALPolyDataAlgorithm
 {
 public:
   static vtkCGALPCAEstimateNormals* New();
