@@ -13,7 +13,7 @@
 #include <CGAL/Exact_predicates_inexact_constructions_kernel.h>
 #include <CGAL/Polyhedron_3.h>
 #include <CGAL/poisson_surface_reconstruction.h>
-#include <CGAL/IO/read_points.h>
+
 #include <vector>
 #include <fstream>
 
