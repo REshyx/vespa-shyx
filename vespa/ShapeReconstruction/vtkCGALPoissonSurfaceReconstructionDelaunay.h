@@ -42,8 +42,15 @@ public:
   vtkGetMacro(Distance, double);
   vtkSetMacro(Distance, double);
 
+  /**
+   * Get/set (re-)generating surface normals.
+   * Default is true.
+   **/
+  vtkGetMacro(GenerateSurfaceNormals, bool);
+  vtkSetMacro(GenerateSurfaceNormals, bool);
+
 protected:
-  vtkCGALPoissonSurfaceReconstructionDelaunay()           = default;
+  vtkCGALPoissonSurfaceReconstructionDelaunay();
   ~vtkCGALPoissonSurfaceReconstructionDelaunay() override = default;
 
   int RequestData(vtkInformation*, vtkInformationVector**, vtkInformationVector*) override;
@@ -55,6 +62,7 @@ private:
   double MinTriangleAngle;
   double MaxTriangleSize;
   double Distance;
+  bool GenerateSurfaceNormals;
 };
 
 #endif

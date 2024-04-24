@@ -679,6 +679,19 @@
         </Documentation>
       </DoubleVectorProperty>
 
+      <IntVectorProperty command="SetGenerateSurfaceNormals"
+                            name="GenerateSurfaceNormals"
+                            label="Generate Surface Normals"
+                            number_of_elements="1"
+                            default_values="1"
+                            panel_visibility="advanced">
+         <BooleanDomain name="bool"/>
+        <Documentation>
+          (Re-)generate surface normals. If true normals will be generated and overwritten
+          if they already exist. Otherwise, if normals exist, they will be kept.
+        </Documentation>
+      </IntVectorProperty>
+
       <Hints>
         <ShowInMenu category="VESPA"/>
       </Hints>

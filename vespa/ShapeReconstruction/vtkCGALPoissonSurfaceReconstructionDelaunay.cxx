@@ -7,6 +7,7 @@
 #include "vtkInformationVector.h"
 #include "vtkObjectFactory.h"
 #include "vtkPointData.h"
+#include "vtkPolyDataNormals.h"
 #include "vtkLogger.h"
 
 // CGAL related includes
@@ -32,6 +33,12 @@ typedef CGAL::Implicit_surface_3<CGAL_Kernel, Poisson_reconstruction_function> S
 vtkStandardNewMacro(vtkCGALPoissonSurfaceReconstructionDelaunay);
 
 namespace pmp = CGAL::Polygon_mesh_processing;
+
+//------------------------------------------------------------------------------
+vtkCGALPoissonSurfaceReconstructionDelaunay::vtkCGALPoissonSurfaceReconstructionDelaunay() : MinTriangleAngle(20.0), MaxTriangleSize(2.0), Distance(0.375), GenerateSurfaceNormals(true)
+{
+
+}
 
 //------------------------------------------------------------------------------
 void vtkCGALPoissonSurfaceReconstructionDelaunay::PrintSelf(ostream& os, vtkIndent indent)
@@ -138,8 +145,23 @@ int vtkCGALPoissonSurfaceReconstructionDelaunay::RequestData(
   // VTK Output
   // ----------
 
-  this->toVTK(cgalMesh.get(), output);
-  this->copyAttributes(input, output);
+  vtkNew<vtkPolyData> mesh;
+  this->toVTK(cgalMesh.get(), mesh);
+  this->copyAttributes(input, mesh);
+
+  if (this->GenerateSurfaceNormals)
+  {
+    vtkNew<vtkPolyDataNormals> normals;
+    normals->SetInputData(mesh);
+    normals->ComputePointNormalsOn();
+    normals->ConsistencyOn();
+    normals->SplittingOff();
+    normals->Update();
+
+    output->ShallowCopy(normals->GetOutput());
+  }
+  else
+    output->ShallowCopy(mesh);
 
   return 1;
 }
