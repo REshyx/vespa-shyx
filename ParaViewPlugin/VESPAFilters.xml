@@ -655,7 +655,7 @@
                             number_of_elements="1"
                             default_values="20.0">
         <Documentation>
-          Use RadiusFactor*spacing (computed from point cloud) as neighborhood radius.
+          Minimum triangle angle in degrees.
         </Documentation>
       </DoubleVectorProperty>
 
@@ -665,7 +665,7 @@
                             number_of_elements="1"
                             default_values="2.0">
         <Documentation>
-          Use RadiusFactor*spacing (computed from point cloud) as neighborhood radius.
+          Maximum triangle size w.r.t. point set average spacing.
         </Documentation>
       </DoubleVectorProperty>
 
@@ -675,7 +675,7 @@
                             number_of_elements="1"
                             default_values="0.375">
         <Documentation>
-          Use RadiusFactor*spacing (computed from point cloud) as neighborhood radius.
+          Surface Approximation error w.r.t. point set average spacing.
         </Documentation>
       </DoubleVectorProperty>
 
@@ -702,8 +702,11 @@
                  label="VESPA Advancing Front Surface Reconstruction"
                  name="CGALAdvancingFrontSurfaceReconstruction">
       <Documentation short_help="Surface reconstruction of point sets with oriented normals.">
-        This CGAL component implements a surface reconstruction method which takes as input
-        point sets ...
+        This CGAL component implements a surface-based Delaunay surface reconstruction algorithm
+        that sequentially selects the triangles, that is it uses previously selected triangles to
+        select a new triangle for advancing the front. At each advancing step the most plausible
+        triangle is selected, and such that the triangles selected generates an orientable
+        manifold triangulated surface.
       </Documentation>
 
       <InputProperty name="Input"
@@ -723,7 +726,7 @@
                             number_of_elements="1"
                             default_values="0.0">
         <Documentation>
-          Target length for edges.
+          Perimeter bound.
         </Documentation>
       </DoubleVectorProperty>
 
@@ -733,7 +736,7 @@
                             number_of_elements="1"
                             default_values="5.0">
         <Documentation>
-          Target length for edges.
+          Radius ratio bound.
         </Documentation>
       </DoubleVectorProperty>
 
@@ -747,7 +750,9 @@
                  label="VESPA PCA Estimate Normals"
                  name="VESPAPCAEstimateNormals">
       <Documentation short_help="Estimates normals for point clouds with PCA.">
-        This filter bla.
+        This filter estimates the normals a point set through PCA (either over a fixed
+        number of neighbors or using a spherical neighborhood radius of a factor times
+        the average spacing) and orients the normals.
       </Documentation>
 
       <InputProperty name="Input"
@@ -779,7 +784,7 @@
          default_values="18"
          panel_visibility="advanced">
          <Documentation>
-           bla
+           Number of neighbors.
          </Documentation>
       </IntVectorProperty>
 
