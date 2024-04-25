@@ -24,6 +24,13 @@ vtkStandardNewMacro(vtkCGALAdvancingFrontSurfaceReconstruction);
 namespace pmp = CGAL::Polygon_mesh_processing;
 
 //------------------------------------------------------------------------------
+vtkCGALAdvancingFrontSurfaceReconstruction::vtkCGALAdvancingFrontSurfaceReconstruction()
+  : Per(0.0)
+  , RadiusRatioBound(5.0)
+{
+}
+
+//------------------------------------------------------------------------------
 void vtkCGALAdvancingFrontSurfaceReconstruction::PrintSelf(ostream& os, vtkIndent indent)
 {
   this->Superclass::PrintSelf(os, indent);

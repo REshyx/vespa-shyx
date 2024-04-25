@@ -31,7 +31,7 @@ public:
   vtkSetMacro(RadiusRatioBound, double);
 
 protected:
-  vtkCGALAdvancingFrontSurfaceReconstruction()           = default;
+  vtkCGALAdvancingFrontSurfaceReconstruction();
   ~vtkCGALAdvancingFrontSurfaceReconstruction() override = default;
 
   int RequestData(vtkInformation*, vtkInformationVector**, vtkInformationVector*) override;

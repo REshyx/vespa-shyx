@@ -35,9 +35,12 @@ vtkStandardNewMacro(vtkCGALPoissonSurfaceReconstructionDelaunay);
 namespace pmp = CGAL::Polygon_mesh_processing;
 
 //------------------------------------------------------------------------------
-vtkCGALPoissonSurfaceReconstructionDelaunay::vtkCGALPoissonSurfaceReconstructionDelaunay() : MinTriangleAngle(20.0), MaxTriangleSize(2.0), Distance(0.375), GenerateSurfaceNormals(true)
+vtkCGALPoissonSurfaceReconstructionDelaunay::vtkCGALPoissonSurfaceReconstructionDelaunay()
+  : MinTriangleAngle(20.0)
+  , MaxTriangleSize(2.0)
+  , Distance(0.375)
+  , GenerateSurfaceNormals(true)
 {
-
 }
 
 //------------------------------------------------------------------------------

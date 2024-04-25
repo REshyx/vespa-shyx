@@ -62,7 +62,7 @@ public:
   vtkSetMacro(DeleteUnoriented, bool);
   ///@}
 protected:
-  vtkCGALPCAEstimateNormals()           = default;
+  vtkCGALPCAEstimateNormals();
   ~vtkCGALPCAEstimateNormals() override = default;
 
   int RequestData(vtkInformation*, vtkInformationVector**, vtkInformationVector*) override;

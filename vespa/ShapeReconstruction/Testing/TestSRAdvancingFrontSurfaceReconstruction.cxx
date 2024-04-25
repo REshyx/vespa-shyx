@@ -17,8 +17,6 @@ int TestSRAdvancingFrontSurfaceReconstruction(int, char* argv[])
 
   vtkNew<vtkCGALAdvancingFrontSurfaceReconstruction> afsr;
   afsr->SetInputConnection(reader->GetOutputPort());
-  afsr->SetPer(0.0);
-  afsr->SetRadiusRatioBound(5.0);
   afsr->Update();
 
   vtkNew<vtkXMLPolyDataWriter> writer;

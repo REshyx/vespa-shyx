@@ -33,6 +33,16 @@ vtkStandardNewMacro(vtkCGALPCAEstimateNormals);
 namespace pmp = CGAL::Polygon_mesh_processing;
 
 //------------------------------------------------------------------------------
+vtkCGALPCAEstimateNormals::vtkCGALPCAEstimateNormals()
+  : Neighborhood(1)
+  , NumberOfNeighbors(18)
+  , RadiusFactor(2.0)
+  , OrientNormals(true)
+  , DeleteUnoriented(true)
+{
+}
+
+//------------------------------------------------------------------------------
 void vtkCGALPCAEstimateNormals::PrintSelf(ostream& os, vtkIndent indent)
 {
   this->Superclass::PrintSelf(os, indent);
@@ -76,7 +86,8 @@ int vtkCGALPCAEstimateNormals::RequestData(
            // returns
         CGAL::parameters::point_map(CGAL::First_of_pair_property_map<Pwn>())
           .normal_map(CGAL::Second_of_pair_property_map<Pwn>())
-          .neighbor_radius(this->RadiusFactor * spacing)); // use RadiusFactor*spacing as neighborhood radius
+          .neighbor_radius(
+            this->RadiusFactor * spacing)); // use RadiusFactor*spacing as neighborhood radius
     }
     else if (this->Neighborhood == 2) // Use a fixed number of neighbors
     {
