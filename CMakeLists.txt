@@ -17,6 +17,12 @@ include(CTest)
 
 ## Deps
 
+find_package(Ceres 2.0 QUIET)
+option(USE_CERES "Use Ceres library" ${CERES_FOUND})
+if (${USE_CERES} AND NOT ${CERES_FOUND})
+  message(FATAL_ERROR "USE_CERES is set to ON, but Ceres in considered NOT found.")
+endif()
+
 find_package(CGAL REQUIRED)
 
 find_package(Eigen3 REQUIRED 3.2.0)
