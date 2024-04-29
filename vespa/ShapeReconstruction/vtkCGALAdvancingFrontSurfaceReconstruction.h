@@ -1,13 +1,14 @@
 /**
  * @class   vtkCGALAdvancingFrontSurfaceReconstruction
- * @brief   Smoothes a surface mesh by moving its vertices.
+ * @brief   Greedy algorithm for surface reconstruction from an unorganized point set
  *
- * vtkCGALAdvancingFrontSurfaceReconstruction is a filter that moves vertices to optimize geometry around each vertex: it can
-        try to (1) equalize the angles between incident edges, or (and) move vertices so that areas of
-        adjacent triangles tend to equalize (angle and area smoothing), or (2) moves vertices following
-        an area-based Laplacian smoothing scheme, performed at each vertex in an estimated tangent plane
-        to the surface (tangential relaxation). Border vertices are considered constrained and do not move
-        at any step of the procedure. No vertices are inserted at any time.
+ * vtkCGALAdvancingFrontSurfaceReconstruction implements a surface-based Delaunay surface reconstruction algorithm
+        that sequentially selects the triangles, that is it uses previously selected triangles to
+        select a new triangle for advancing the front. At each advancing step the most plausible
+        triangle is selected, and such that the triangles selected generates an orientable
+        manifold triangulated surface.
+        Adapted from
+        https://doc.cgal.org/latest/Advancing_front_surface_reconstruction/index.html#AFSR_Example_function
  */
 
 #ifndef vtkCGALAdvancingFrontSurfaceReconstruction_h
@@ -24,10 +25,18 @@ public:
   vtkTypeMacro(vtkCGALAdvancingFrontSurfaceReconstruction, vtkCGALPolyDataAlgorithm);
   void PrintSelf(ostream& os, vtkIndent indent) override;
 
- vtkGetMacro(Per, double);
+ /**
+   * Get/set the perimeter bound.
+   * Default is 0.0.
+   **/
+  vtkGetMacro(Per, double);
   vtkSetMacro(Per, double);
 
-   vtkGetMacro(RadiusRatioBound, double);
+ /**
+   * Get/set the radius ratio bound.
+   * Default is 5.0.
+   **/
+  vtkGetMacro(RadiusRatioBound, double);
   vtkSetMacro(RadiusRatioBound, double);
 
 protected:
@@ -37,8 +46,9 @@ protected:
   int RequestData(vtkInformation*, vtkInformationVector**, vtkInformationVector*) override;
 
 private:
-  vtkCGALAdvancingFrontSurfaceReconstruction(const vtkCGALAdvancingFrontSurfaceReconstruction&) = delete;
-  void operator=(const vtkCGALAdvancingFrontSurfaceReconstruction&)       = delete;
+  vtkCGALAdvancingFrontSurfaceReconstruction(
+    const vtkCGALAdvancingFrontSurfaceReconstruction&)              = delete;
+  void operator=(const vtkCGALAdvancingFrontSurfaceReconstruction&) = delete;
 
   double Per;
   double RadiusRatioBound;

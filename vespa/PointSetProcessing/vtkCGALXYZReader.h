@@ -1,34 +1,9 @@
-// -*- c++ -*-
-/*=========================================================================
-
-  Program:   Visualization Toolkit
-  Module:    vtkCGALXYZReader.h
-
-  Copyright (c) Ken Martin, Will Schroeder, Bill Lorensen
-  All rights reserved.
-  See Copyright.txt or http://www.kitware.com/Copyright.htm for details.
-
-     This software is distributed WITHOUT ANY WARRANTY; without even
-     the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR
-     PURPOSE.  See the above copyright notice for more information.
-
-=========================================================================*/
-
-/*-------------------------------------------------------------------------
-  Copyright 2008 Sandia Corporation.
-  Under the terms of Contract DE-AC04-94AL85000 with Sandia Corporation,
-  the U.S. Government retains certain rights in this software.
--------------------------------------------------------------------------*/
-
 /**
  * @class   vtkCGALXYZReader
+ * @brief   Normal estimation from an unorganized point set.
  *
- *
- *
- * A superclass for reading AIM files.  Subclass add conventions to the
- * reader.  This class just outputs data into a multi block data set with a
- * vtkImageData at each block.  A block is created for each variable except that
- * variables with matching dimensions will be placed in the same block.
+ * vtkCGALXYZReader reads point clouds (.las, .off, .ply, .xyz) using
+ * CGAL point cloud data reader functionality.
  */
 
 #ifndef vtkCGALXYZReader_h

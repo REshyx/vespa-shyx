@@ -1,10 +1,12 @@
 /**
  * @class   vtkCGALPCAEstimateNormals
- * @brief   Poisson surface reconstruction.
+ * @brief   Normal estimation from an unorganized point set.
  *
- * vtkCGALPCAEstimateNormals 
- * adapted from
- * https://doc.cgal.org/latest/Poisson_surface_reconstruction_3/Poisson_surface_reconstruction_3_2poisson_reconstruction_function_8cpp-example.html
+ * vtkCGALPCAEstimateNormals estimates the normals of a point set through PCA (either over a fixed
+        number of neighbors or using a spherical neighborhood radius of a factor times
+        the average spacing) and orients the normals.
+ * Adapted from
+ * https://doc.cgal.org/latest/Point_set_processing_3/index.html#Point_set_processing_3NormalEstimation
  */
 
 #ifndef vtkCGALPCAEstimateNormals_h
@@ -23,7 +25,7 @@ public:
 
   ///@{
   /**
-   * Get/set the smoothing method (1 - tangential relaxation; 2 - angle and area smoothing).
+   * Get/set the method used to determine the neighborhood.
    * Default is 1.
    **/
   vtkGetMacro(Neighborhood, unsigned int);
@@ -32,31 +34,31 @@ public:
   ///@{
 
   /**
-   * Get/set the number of iterations used in the smoothing process.
-   * Default is 10.
+   * Get/set the number of neighbors"
+   * Default is 18.
    **/
   vtkGetMacro(NumberOfNeighbors, unsigned int);
   vtkSetMacro(NumberOfNeighbors, unsigned int);
   ///@}
 
   /**
-   * Get/set the number of iterations used in the smoothing process.
-   * Default is 10.
+   * Get/set if normals will be oriented.
+   * Default is true.
    **/
   vtkGetMacro(OrientNormals, bool);
   vtkSetMacro(OrientNormals, bool);
 
   /**
-   * Get/set the number of iterations used in the smoothing process.
+   * Get/set the radius factor (using RadiusFactor*spacing (computed from point cloud) as neighborhood radius).
    * Default is 10.
    **/
   vtkGetMacro(RadiusFactor, double);
   vtkSetMacro(RadiusFactor, double);
 
   ///@}
-    /**
-   * Get/set the number of iterations used in the smoothing process.
-   * Default is 10.
+  /**
+   * Get/set if unoriented normals wll be deleted.
+   * Default is true.
    **/
   vtkGetMacro(DeleteUnoriented, bool);
   vtkSetMacro(DeleteUnoriented, bool);
@@ -69,13 +71,13 @@ protected:
 
 private:
   vtkCGALPCAEstimateNormals(const vtkCGALPCAEstimateNormals&) = delete;
-  void operator=(const vtkCGALPCAEstimateNormals&)       = delete;
+  void operator=(const vtkCGALPCAEstimateNormals&)            = delete;
 
   unsigned int Neighborhood;
   unsigned int NumberOfNeighbors;
-  double RadiusFactor;
-  bool OrientNormals;
-  bool DeleteUnoriented;
+  double       RadiusFactor;
+  bool         OrientNormals;
+  bool         DeleteUnoriented;
 };
 
 #endif
