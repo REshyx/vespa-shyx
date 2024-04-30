@@ -1,7 +1,7 @@
 NAME
   vtkCGALSR
 DESCRIPTION
-  "This module contains filters related to the PolygonMeshProcessing module of CGAL."
+  "This module contains filters related to the ShapeReconstruction module of CGAL."
 GROUPS
   Meshing
 DEPENDS
