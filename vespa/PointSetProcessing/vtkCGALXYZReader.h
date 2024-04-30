@@ -1,6 +1,6 @@
 /**
  * @class   vtkCGALXYZReader
- * @brief   Normal estimation from an unorganized point set.
+ * @brief   Reader for CGAL point cloud data.
  *
  * vtkCGALXYZReader reads point clouds (.las, .off, .ply, .xyz) using
  * CGAL point cloud data reader functionality.
@@ -11,9 +11,6 @@
 
 #include "vtkCGALPSPModule.h" // For export macro
 #include "vtkCGALPolyDataAlgorithm.h"
-
-#include "vtkDataArraySelection.h" // for ivars
-#include <string>                  //For std::string
 
 class vtkDataArraySelection;
 class vtkDataSet;
@@ -39,8 +36,6 @@ protected:
 
   int RequestData(vtkInformation *request, vtkInformationVector **inputVector,
                   vtkInformationVector *outputVector) override;
-
-  int FillOutputPortInformation(int port, vtkInformation *info) override;
 
 private:
   vtkCGALXYZReader(const vtkCGALXYZReader &) = delete;

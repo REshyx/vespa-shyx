@@ -1,52 +1,9 @@
-// -*- c++ -*-
-/*=========================================================================
-
-  Program:   Visualization Toolkit
-  Module:    vtkCGALXYZReader.cxx
-
-  Copyright (c) Ken Martin, Will Schroeder, Bill Lorensen
-  All rights reserved.
-  See Copyright.txt or http://www.kitware.com/Copyright.htm for details.
-
-     This software is distributed WITHOUT ANY WARRANTY; without even
-     the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR
-     PURPOSE.  See the above copyright notice for more information.
-
-=========================================================================*/
-
-/*-------------------------------------------------------------------------
-  Copyright 2008 Sandia Corporation.
-  Under the terms of Contract DE-AC04-94AL85000 with Sandia Corporation,
-  the U.S. Government retains certain rights in this software.
--------------------------------------------------------------------------*/
-
 #include "vtkCGALXYZReader.h"
 
-#include "vtkCallbackCommand.h"
-#include "vtkCellData.h"
-#include "vtkDataArraySelection.h"
 #include "vtkDoubleArray.h"
 #include "vtkInformation.h"
 #include "vtkInformationVector.h"
-#include "vtkIntArray.h"
-#include "vtkMath.h"
-#include "vtkObjectFactory.h"
 #include "vtkPointData.h"
-#include "vtkRectilinearGrid.h"
-#include "vtkStreamingDemandDrivenPipeline.h"
-#include "vtkStringArray.h"
-#include "vtkStructuredGrid.h"
-#include "vtkPolyData.h"
-#include <vtkLogger.h>
-
-#include <algorithm>
-#include <map>
-#include <set>
-#include <sstream>
-#include <string>
-#include <regex>
-
-#include <vtksys/SystemTools.hxx>
 
 #include <CGAL/IO/read_points.h>
 
@@ -79,17 +36,6 @@ void vtkCGALXYZReader::PrintSelf(ostream& os, vtkIndent indent)
   this->Superclass::PrintSelf(os, indent);
 
   os << indent << "FileName: " << (this->FileName ? this->FileName : "(nullptr)") << endl;
-}
-
-int vtkCGALXYZReader::FillOutputPortInformation(int port, vtkInformation* info)
-{
-  if (port == 0)
-  {
-    info->Set(vtkDataObject::DATA_TYPE_NAME(), "vtkPolyData");
-    return 1;
-  }
-
-  return 0;
 }
 
 //------------------------------------------------------------------------------
