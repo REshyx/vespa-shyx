@@ -12,7 +12,7 @@ int TestSRAdvancingFrontSurfaceReconstruction(int, char* argv[])
 {
   vtkNew<vtkCGALXYZReader> reader;
   std::string              cfname(argv[1]);
-  cfname += "/kitten.xyz";
+  cfname += "/dragon.xyz";
   reader->SetFileName(cfname.c_str());
 
   vtkNew<vtkCGALAdvancingFrontSurfaceReconstruction> afsr;
@@ -21,7 +21,7 @@ int TestSRAdvancingFrontSurfaceReconstruction(int, char* argv[])
 
   vtkNew<vtkXMLPolyDataWriter> writer;
   writer->SetInputConnection(afsr->GetOutputPort());
-  writer->SetFileName("kitten_advancing_front_surface_reconstruction.vtp");
+  writer->SetFileName("dragon_advancing_front_surface_reconstruction.vtp");
   writer->Write();
 
   return 0;

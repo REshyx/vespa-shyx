@@ -12,7 +12,7 @@ int TestSRPoissonSurfaceReconstructionDelaunay(int, char* argv[])
 {
   vtkNew<vtkCGALXYZReader> reader;
   std::string              cfname(argv[1]);
-  cfname += "/kitten.xyz";
+  cfname += "/dragon.xyz";
   reader->SetFileName(cfname.c_str());
 
   vtkNew<vtkCGALPoissonSurfaceReconstructionDelaunay> psrd;
@@ -24,7 +24,7 @@ int TestSRPoissonSurfaceReconstructionDelaunay(int, char* argv[])
 
   vtkNew<vtkXMLPolyDataWriter> writer;
   writer->SetInputConnection(psrd->GetOutputPort());
-  writer->SetFileName("kitten_poisson_surface_reconstruction_delaunay.vtp");
+  writer->SetFileName("dragon_poisson_surface_reconstruction_delaunay.vtp");
   writer->Write();
 
   return 0;
