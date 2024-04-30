@@ -5,7 +5,7 @@
       <Documentation long_help="Reads CGAL point cloud data." short_help="Reads CGAL point cloud files.">
       </Documentation>
 
-      <StringVectorProperty animateable="0" command="SetFileName" name="FileName" number_of_elements="1">
+      <StringVectorProperty animateable="0" command="SetFileName" name="FileName" number_of_elements="1" panel_visibility="never">
         <FileListDomain name="files" />
       </StringVectorProperty>
       <Hints>
