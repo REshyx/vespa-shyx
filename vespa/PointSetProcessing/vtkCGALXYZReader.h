@@ -27,7 +27,7 @@ public:
   static vtkCGALXYZReader *New();
   void PrintSelf(ostream &os, vtkIndent indent) override;
 
-  virtual void SetFileName(VTK_FILEPATH const char *filename);
+  vtkSetFilePathMacro(FileName);
   vtkGetFilePathMacro(FileName);
 
 protected:

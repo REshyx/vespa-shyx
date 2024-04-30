@@ -94,25 +94,3 @@ int vtkCGALXYZReader::RequestData(vtkInformation* vtkNotUsed(request),
 
   return 1;
 }
-
-//------------------------------------------------------------------------------
-void vtkCGALXYZReader::SetFileName(const char* filename)
-{
-  if (this->FileName == filename)
-    return;
-  if (this->FileName && filename && (strcmp(this->FileName, filename) == 0))
-  {
-    return;
-  }
-
-  delete[] this->FileName;
-  this->FileName = nullptr;
-
-  if (filename)
-  {
-    this->FileName = new char[strlen(filename) + 1];
-    strcpy(this->FileName, filename);
-  }
-
-  this->Modified();
-}
