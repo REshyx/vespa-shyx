@@ -68,10 +68,10 @@ int vtkCGALPCAEstimateNormals::RequestData(
 
   try
   {
-    for (int k = 0; k < input->GetNumberOfPoints(); k++)
+    for (vtkIdType k = 0; k < input->GetNumberOfPoints(); k++)
     {
       auto pin = input->GetPoint(k);
-      points.push_back(std::make_pair(Point(pin[0], pin[1], pin[2]), Vector(1.0, 0.0, 0.0)));
+      points.emplace_back(Point(pin[0], pin[1], pin[2]), Vector(1.0, 0.0, 0.0));
     }
 
     if (this->Neighborhood == 1) // Use a fixed neighborhood radius
@@ -142,7 +142,7 @@ int vtkCGALPCAEstimateNormals::RequestData(
   polydata->GetPointData()->AddArray(pointNormalsArray);
   polydata->GetPointData()->SetNormals(pointNormalsArray);
 
-  output->DeepCopy(polydata);
+  output->ShallowCopy(polydata);
   // this->copyAttributes(input, output);
 
   return 1;
