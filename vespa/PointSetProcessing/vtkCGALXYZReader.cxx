@@ -26,11 +26,13 @@ vtkCGALXYZReader::vtkCGALXYZReader()
   this->FileName = nullptr;
 }
 
+//------------------------------------------------------------------------------
 vtkCGALXYZReader::~vtkCGALXYZReader()
 {
   this->SetFileName(nullptr);
 }
 
+//------------------------------------------------------------------------------
 void vtkCGALXYZReader::PrintSelf(ostream& os, vtkIndent indent)
 {
   this->Superclass::PrintSelf(os, indent);
@@ -93,6 +95,7 @@ int vtkCGALXYZReader::RequestData(vtkInformation* vtkNotUsed(request),
   return 1;
 }
 
+//------------------------------------------------------------------------------
 void vtkCGALXYZReader::SetFileName(const char* filename)
 {
   if (this->FileName == filename)

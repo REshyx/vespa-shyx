@@ -36,6 +36,7 @@ void vtkCGALAdvancingFrontSurfaceReconstruction::PrintSelf(ostream& os, vtkInden
   this->Superclass::PrintSelf(os, indent);
 }
 
+//------------------------------------------------------------------------------
 struct Perimeter
 {
   double bound;
