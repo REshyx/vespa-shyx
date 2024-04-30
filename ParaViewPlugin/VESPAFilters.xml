@@ -768,8 +768,8 @@
 
       <IntVectorProperty name="Neighborhood" command="SetNeighborhood" number_of_elements="1" default_values="1">
         <EnumerationDomain name="enum">
-          <Entry value="1" text="Fixed Radius."/>
-          <Entry value="2" text="Fixed Number of Neighbors."/>
+          <Entry value="1" text="Fixed Radius"/>
+          <Entry value="2" text="Fixed Number of Neighbors"/>
         </EnumerationDomain>
         <Documentation>
           This property indicates which method will be used to determine the neighborhood.
@@ -781,10 +781,11 @@
          command="SetNumberOfNeighbors"
          label="Number of Neighbors"
          number_of_elements="1"
-         default_values="18"
-         panel_visibility="advanced">
+         default_values="18">
          <Documentation>
-           Number of neighbors.
+           Number of neighbors for computing the normal when Neighborhood=="Fixed Number of Neighbors"
+           and for computing the average spacing when Neighborhood=="Fixed Radius".
+           .
          </Documentation>
       </IntVectorProperty>
 
@@ -793,6 +794,12 @@
                             label="Radius Factor"
                             number_of_elements="1"
                             default_values="2.0">
+        <Hints>
+             <PropertyWidgetDecorator type="GenericDecorator"
+                                      mode="visibility"
+                                      property="Neighborhood"
+                                      value="1" />
+         </Hints>
         <Documentation>
           Use RadiusFactor*spacing (computed from point cloud) as neighborhood radius.
         </Documentation>

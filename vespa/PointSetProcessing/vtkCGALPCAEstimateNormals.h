@@ -34,7 +34,8 @@ public:
   ///@{
 
   /**
-   * Get/set the number of neighbors"
+   * Get/set the number of neighbors for computing the normal when Neighborhood=="Fixed Number of Neighbors"
+           and for computing the average spacing when Neighborhood=="Fixed Radius".
    * Default is 18.
    **/
   vtkGetMacro(NumberOfNeighbors, unsigned int);
