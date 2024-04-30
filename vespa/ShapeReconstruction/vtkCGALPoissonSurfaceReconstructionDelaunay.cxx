@@ -88,12 +88,11 @@ int vtkCGALPoissonSurfaceReconstructionDelaunay::RequestData(
   {
     std::vector<Pwn> points;
 
-    for (int k = 0; k < input->GetNumberOfPoints(); k++)
+    for (vtkIdType k = 0; k < input->GetNumberOfPoints(); k++)
     {
       auto pin = input->GetPoint(k);
       auto vin = normals->GetTuple3(k);
-      points.push_back(
-        std::make_pair(Point(pin[0], pin[1], pin[2]), Vector(vin[0], vin[1], vin[2])));
+      points.emplace_back(Point(pin[0], pin[1], pin[2]), Vector(vin[0], vin[1], vin[2]));
     }
 
     // Note: this method requires an iterator over points
