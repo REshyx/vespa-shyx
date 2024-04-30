@@ -76,7 +76,7 @@ int vtkCGALPoissonSurfaceReconstructionDelaunay::RequestData(
   FT sm_radius   = this->MaxTriangleSize;  // Max triangle size w.r.t. point set average spacing.
   FT sm_distance = this->Distance; // Surface Approximation error w.r.t. point set average spacing.
 
-  auto normals = input->GetPointData()->GetArray("Normals");
+  auto normals = input->GetPointData()->GetNormals();
 
   if (!normals)
   {
