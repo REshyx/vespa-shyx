@@ -104,7 +104,7 @@ int vtkCGALAdvancingFrontSurfaceReconstruction::RequestData(
     for (vtkIdType k = 0; k < input->GetNumberOfPoints(); k++)
     {
       auto pin = input->GetPoint(k);
-      points.emplace_back(Point_3(pin[0], pin[1], pin[2]));
+      points.emplace_back(pin[0], pin[1], pin[2]);
     }
 
     Perimeter perimeter(this->Per);
