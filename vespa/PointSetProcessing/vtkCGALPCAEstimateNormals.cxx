@@ -34,9 +34,7 @@ namespace pmp = CGAL::Polygon_mesh_processing;
 
 //------------------------------------------------------------------------------
 vtkCGALPCAEstimateNormals::vtkCGALPCAEstimateNormals()
-  : Neighborhood(1)
-  , NumberOfNeighbors(18)
-  , RadiusFactor(2.0)
+  : NumberOfNeighbors(18)
   , OrientNormals(true)
   , DeleteUnoriented(true)
 {
@@ -74,29 +72,9 @@ int vtkCGALPCAEstimateNormals::RequestData(
       points.emplace_back(Point(pin[0], pin[1], pin[2]), Vector(1.0, 0.0, 0.0));
     }
 
-    if (this->Neighborhood == 1) // Use a fixed neighborhood radius
-    {
-      // First compute a spacing using the K parameter
-      double spacing =
-        CGAL::compute_average_spacing<Concurrency_tag>(points, this->NumberOfNeighbors,
-          CGAL::parameters::point_map(CGAL::First_of_pair_property_map<Pwn>()));
-      // Then, estimate normals with a fixed radius
-      CGAL::pca_estimate_normals<Concurrency_tag>(points,
-        0, // when using a neighborhood radius, K=0 means no limit on the number of neighbors
-           // returns
-        CGAL::parameters::point_map(CGAL::First_of_pair_property_map<Pwn>())
-          .normal_map(CGAL::Second_of_pair_property_map<Pwn>())
-          .neighbor_radius(
-            this->RadiusFactor * spacing)); // use RadiusFactor*spacing as neighborhood radius
-    }
-    else if (this->Neighborhood == 2) // Use a fixed number of neighbors
-    {
-      CGAL::pca_estimate_normals<Concurrency_tag>(points, this->NumberOfNeighbors,
-        CGAL::parameters::point_map(CGAL::First_of_pair_property_map<Pwn>())
-          .normal_map(CGAL::Second_of_pair_property_map<Pwn>()));
-    }
-    else
-      vtkLog(INFO, "Invalid neighborhood method.");
+    CGAL::pca_estimate_normals<Concurrency_tag>(points, this->NumberOfNeighbors,
+      CGAL::parameters::point_map(CGAL::First_of_pair_property_map<Pwn>())
+        .normal_map(CGAL::Second_of_pair_property_map<Pwn>()));
 
     if (this->OrientNormals || this->DeleteUnoriented)
     {

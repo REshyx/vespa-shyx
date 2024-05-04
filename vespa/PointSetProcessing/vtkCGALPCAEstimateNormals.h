@@ -23,16 +23,6 @@ public:
   vtkTypeMacro(vtkCGALPCAEstimateNormals, vtkCGALPolyDataAlgorithm);
   void PrintSelf(ostream& os, vtkIndent indent) override;
 
-  ///@{
-  /**
-   * Get/set the method used to determine the neighborhood.
-   * Default is 1.
-   **/
-  vtkGetMacro(Neighborhood, unsigned int);
-  vtkSetMacro(Neighborhood, unsigned int);
-  ///@}
-  ///@{
-
   /**
    * Get/set the number of neighbors for computing the normal when Neighborhood=="Fixed Number of Neighbors"
            and for computing the average spacing when Neighborhood=="Fixed Radius".
@@ -40,7 +30,6 @@ public:
    **/
   vtkGetMacro(NumberOfNeighbors, unsigned int);
   vtkSetMacro(NumberOfNeighbors, unsigned int);
-  ///@}
 
   /**
    * Get/set if normals will be oriented.
@@ -50,20 +39,12 @@ public:
   vtkSetMacro(OrientNormals, bool);
 
   /**
-   * Get/set the radius factor (using RadiusFactor*spacing (computed from point cloud) as neighborhood radius).
-   * Default is 10.
-   **/
-  vtkGetMacro(RadiusFactor, double);
-  vtkSetMacro(RadiusFactor, double);
-
-  ///@}
-  /**
    * Get/set if unoriented normals wll be deleted.
    * Default is true.
    **/
   vtkGetMacro(DeleteUnoriented, bool);
   vtkSetMacro(DeleteUnoriented, bool);
-  ///@}
+
 protected:
   vtkCGALPCAEstimateNormals();
   ~vtkCGALPCAEstimateNormals() override = default;
@@ -74,9 +55,7 @@ private:
   vtkCGALPCAEstimateNormals(const vtkCGALPCAEstimateNormals&) = delete;
   void operator=(const vtkCGALPCAEstimateNormals&)            = delete;
 
-  unsigned int Neighborhood;
   unsigned int NumberOfNeighbors;
-  double       RadiusFactor;
   bool         OrientNormals;
   bool         DeleteUnoriented;
 };
