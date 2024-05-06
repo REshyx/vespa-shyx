@@ -6,7 +6,6 @@ GROUPS
   Meshing
 DEPENDS
   vtkCGALAlgorithm
-  CGAL::Eigen3_support
 TEST_DEPENDS
   VTK::CommonSystem
   VTK::FiltersSources

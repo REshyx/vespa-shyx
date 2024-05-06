@@ -5,7 +5,6 @@ DESCRIPTION
 GROUPS
   Meshing
 DEPENDS
-  CGAL::Eigen3_support
   vtkCGALAlgorithm
   vtkCGALPSP
 TEST_DEPENDS

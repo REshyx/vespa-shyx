@@ -1,3 +1,8 @@
+if (CGAL_VERSION VERSION_LESS "5.1")
+  message(WARGNING "Module Point SetProcessing disabled (CGAL version) < 5.1")
+  return()
+endif()
+
 set(vtkcgalpsp_files
   vtkCGALPCAEstimateNormals
 )
