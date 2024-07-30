@@ -8,15 +8,16 @@
 #include "vtkObjectFactory.h"
 #include "vtkPointData.h"
 #include "vtkPolyDataNormals.h"
-#include "vtkLogger.h"
 
 // CGAL related includes
 #include <CGAL/Exact_predicates_inexact_constructions_kernel.h>
 #include <CGAL/Polyhedron_3.h>
+#include <CGAL/Surface_mesh_default_triangulation_3.h>
+#include <CGAL/Surface_mesh_complex_2_in_triangulation_3.h>
+#include <CGAL/Implicit_surface_3.h>
 #include <CGAL/poisson_surface_reconstruction.h>
-
-#include <vector>
-#include <fstream>
+#include <CGAL/IO/facets_in_complex_2_to_triangle_mesh.h>
+#include <CGAL/Surface_mesh.h>
 
 typedef CGAL_Kernel::FT                                      FT;
 typedef CGAL_Kernel::Point_3                                 Point;
@@ -31,8 +32,6 @@ typedef CGAL::Surface_mesh_complex_2_in_triangulation_3<STr> C2t3;
 typedef CGAL::Implicit_surface_3<CGAL_Kernel, Poisson_reconstruction_function> Surface_3;
 
 vtkStandardNewMacro(vtkCGALPoissonSurfaceReconstructionDelaunay);
-
-namespace pmp = CGAL::Polygon_mesh_processing;
 
 //------------------------------------------------------------------------------
 vtkCGALPoissonSurfaceReconstructionDelaunay::vtkCGALPoissonSurfaceReconstructionDelaunay()
