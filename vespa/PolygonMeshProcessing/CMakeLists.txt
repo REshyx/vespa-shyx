@@ -35,6 +35,12 @@ vtk_module_add_module(vtkCGALPMP
   CLASSES ${vtkcgalpmp_files}
 )
 
+if (${CGAL_VERSION} VERSION_GREATER_EQUAL 5.1)
+  vtk_module_link(vtkCGALPMP PRIVATE CGAL::Eigen3_support)
+else()
+  vtk_module_link(vtkCGALPMP PRIVATE Eigen3::Eigen)
+endif()
+
 # ensure correct link of module
 # OPTIONAL_DEPENDS does not work here for an unknown reason
 if (${USE_CERES})

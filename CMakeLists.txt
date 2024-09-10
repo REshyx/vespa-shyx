@@ -23,15 +23,13 @@ if (${USE_CERES} AND NOT ${CERES_FOUND})
   message(FATAL_ERROR "USE_CERES is set to ON, but Ceres in considered NOT found.")
 endif()
 
+find_package(Eigen3 REQUIRED 3.2.0)
 find_package(CGAL REQUIRED)
 
-find_package(Eigen3 REQUIRED 3.2.0)
 if (CGAL_VERSION VERSION_GREATER "5.1")
   # this file only exists in CGAL 5.1 and later
   message(STATUS "include(CGAL_Eigen3_support)")
   include(CGAL_Eigen3_support)
-else()
-  include_directories(${EIGEN3_INCLUDE_DIR})
 endif()
 
 ## VTK Module
