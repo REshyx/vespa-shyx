@@ -12,7 +12,7 @@ int TestPMPMeshCheckerExecution(int, char* argv[])
   // Open data
   vtkNew<vtkXMLPolyDataReader> reader;
   std::string                  cfname(argv[1]);
-  cfname += "/pegasus.vtp";
+  cfname += "/sphere_open.vtp";
   reader->SetFileName(cfname.c_str());
 
   // Create checker filter
