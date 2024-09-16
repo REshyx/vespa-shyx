@@ -1,62 +1,19 @@
+workflow:
+   rules:
+     - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_REF_NAME == "master"
+       when: always
+     - if: $CI_MERGE_REQUEST_ID
+       when: always
+     - when: never
+
 stages:
   - build
   - test
 
-build-vtkmodule:
-  image: kitware/paraview-ci-plugin:vtk-v9.1.0-stdthread-python-mpi
-  stage: build
-  script:
-    - apt-get install -y libcgal-dev libeigen3-dev
-    - mkdir -p build
-    - cd build
-    - cmake -DVTK_DIR=/vtk/build/ -DBUILD_TESTING=ON -DCMAKE_BUILD_TYPE=Release -DBUILD_PYTHON_WRAPPERS=ON ..
-    - cmake --build . --config Release --parallel 2
-  tags:
-    - build
-    - docker
-    - linux-x86_64
-    - vtk-cgal
-  artifacts:
-    expire_in: 1h
-    when: always
-    paths:
-      - build/
-
-test-vtkmodule:
-  image: kitware/paraview-ci-plugin:vtk-v9.1.0-stdthread-python-mpi
-  stage: test
-  needs: ['build-vtkmodule']
-  script:
-    - cd build
-    - ctest -VV
-  tags:
-    - test
-    - docker
-    - linux-x86_64
-    - vtk-cgal
-  dependencies:
-    - build-vtkmodule
-
-build-pvplugin:
-  image: kitware/paraview-for-ci:latest
-  stage: build
-  script:
-      # This is needed because the build of ParaView uses some absolute path
-    - ln -s /paraview/gitlab-kitware-sciviz-ci/ /builds/gitlab-kitware-sciviz-ci
-    - git submodule update --init --recursive
-    - apt update
-    - apt-get install -y libcgal-dev libeigen3-dev
-    - mkdir -p build
-    - cd build
-    - cmake -DCMAKE_PREFIX_PATH=/opt/paraview/install/ -DBUILD_TESTING=OFF -DCMAKE_BUILD_TYPE=Release -DBUILD_PYTHON_WRAPPERS=OFF -DVESPA_BUILD_PV_PLUGIN=ON ..
-    - cmake --build . --config Release --parallel 2
-  tags:
-    - build
-    - docker
-    - linux-x86_64
-    - vtk-cgal
-  artifacts:
-    expire_in: 1h
-    when: always
-    paths:
-      - build/
+include:
+  - local: .gitlab/common.yml
+  - local: .gitlab/latest.yml
+  - local: .gitlab/5.13.yml
+  - local: .gitlab/5.12.yml
+  - local: .gitlab/5.11.yml
+  - local: .gitlab/5.10.yml
