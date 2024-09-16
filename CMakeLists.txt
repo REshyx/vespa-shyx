@@ -79,8 +79,6 @@ vtk_module_scan(
   WANT_BY_DEFAULT  ON
   ENABLE_TESTS     ON)
 
-vtk_module_python_default_destination(python_destination)
-
 vtk_module_build(
   MODULES         ${vtkcgal_provided_modules}
   INSTALL_EXPORT  vespa
@@ -153,7 +151,7 @@ endif()
 
 option(BUILD_PYTHON_WRAPPERS "Build python wrapping" ON)
 if(BUILD_PYTHON_WRAPPERS)
-
+  vtk_module_python_default_destination(python_destination)
   vtk_module_wrap_python(
     MODULES         ${vtkcgal_provided_modules}
     WRAPPED_MODULES vtkcgal_wrapped_modules
