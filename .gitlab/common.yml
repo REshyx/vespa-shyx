@@ -60,7 +60,8 @@
     - cd build
     - |
       cmake \
-      -DBUILD_TESTING=ON -DCMAKE_PREFIX_PATH=/opt/paraview/install/ \
+      -DBUILD_TESTING=ON \
+      -DCMAKE_PREFIX_PATH=/opt/paraview/install/ \
       -DCGAL_DIR=/builds/vtk/meshing/cgal/install/lib/cmake/CGAL/ \
       -DCMAKE_BUILD_TYPE=Release \
       -DEigen3_DIR=/builds/vtk/meshing/eigen/install/share/eigen3/cmake/ \

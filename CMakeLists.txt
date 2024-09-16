@@ -1,6 +1,10 @@
 cmake_minimum_required(VERSION 3.8)
 project(vespa VERSION 0.1.0)
 
+## Testing
+enable_testing()
+option(BUILD_TESTING "Build Testing" OFF)
+
 ## Config
 
 set(CMAKE_CXX_STANDARD 11)
@@ -41,6 +45,7 @@ if (VESPA_BUILD_PV_PLUGIN)
     unset(VTK_DIR CACHE)
   endif()
   find_package(ParaView REQUIRED)
+  message(STATUS "Found ParaView ${ParaView_VERSION}")
 else()
   find_package(VTK
     COMPONENTS
@@ -55,6 +60,7 @@ else()
       CommonSystem
       IOXML
       TestingCore)
+  message(STATUS "Found VTK ${VTK_VERSION}")
 endif()
 
 option(FORCE_STATIC_MODULES "Build VTK modules statically" OFF)

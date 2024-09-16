@@ -23,3 +23,7 @@ target_link_libraries(VESPAPlugin
   PRIVATE
     vtkCGALDelaunay
     vtkCGALPMP)
+
+if (BUILD_TESTING AND BUILD_SHARED_LIBS)
+  add_subdirectory(Testing)
+endif()
