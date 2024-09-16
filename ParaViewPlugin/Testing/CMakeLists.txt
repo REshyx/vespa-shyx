@@ -3,7 +3,7 @@ if (TARGET ParaView::paraview)
   # Support testing with different ParaView versions
   set(_test_surface_normals "SurfaceNormals")
   if(ParaView_VERSION VERSION_LESS 5.13.0)
-    set(_test_surface_normals "GenerateSurfaceNormals")
+    set(_test_surface_normals "PolyDataNormals")
   endif()
   configure_file("${CMAKE_CURRENT_SOURCE_DIR}/TestAlphaWrapping.xml.in"
     "${CMAKE_CURRENT_BINARY_DIR}/TestAlphaWrapping.xml")
