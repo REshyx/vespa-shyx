@@ -2,8 +2,10 @@ cmake_minimum_required(VERSION 3.8)
 project(vespa VERSION 0.1.0)
 
 ## Testing
-enable_testing()
 option(BUILD_TESTING "Build Testing" OFF)
+if (BUILD_TESTING)
+  enable_testing()
+endif()
 
 ## Config
 
