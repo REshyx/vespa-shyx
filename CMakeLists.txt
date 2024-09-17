@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.8)
-project(vespa VERSION 0.1.0)
+project(vespa VERSION 0.2.0)
 
 ## Testing
 option(BUILD_TESTING "Build Testing" OFF)
@@ -15,6 +15,13 @@ include(GNUInstallDirs)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/${CMAKE_INSTALL_BINDIR}")
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/${CMAKE_INSTALL_LIBDIR}")
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/${CMAKE_INSTALL_LIBDIR}")
+
+get_property(generator_is_multi_config GLOBAL PROPERTY GENERATOR_IS_MULTI_CONFIG)
+if (NOT CMAKE_BUILD_TYPE AND NOT generator_is_multi_config)
+  message(STATUS "Setting build type to 'Release'.")
+  set(CMAKE_BUILD_TYPE "Release" CACHE STRING "Choose the type of build." FORCE)
+  set_property(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS "Debug" "Release" "RelWithDebInfo")
+endif ()
 
 option(BUILD_SHARED_LIBS "Build shared library" ON)
 set(VESPA_BUILD_PV_PLUGIN OFF CACHE BOOL "Build VESPA ParaView plugin")
