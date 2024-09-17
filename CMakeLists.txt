@@ -1,6 +1,12 @@
 cmake_minimum_required(VERSION 3.8)
 project(vespa VERSION 0.1.0)
 
+## Testing
+option(BUILD_TESTING "Build Testing" OFF)
+if (BUILD_TESTING)
+  enable_testing()
+endif()
+
 ## Config
 
 set(CMAKE_CXX_STANDARD 11)
@@ -41,6 +47,7 @@ if (VESPA_BUILD_PV_PLUGIN)
     unset(VTK_DIR CACHE)
   endif()
   find_package(ParaView REQUIRED)
+  message(STATUS "Found ParaView ${ParaView_VERSION}")
 else()
   find_package(VTK
     COMPONENTS
@@ -55,6 +62,7 @@ else()
       CommonSystem
       IOXML
       TestingCore)
+  message(STATUS "Found VTK ${VTK_VERSION}")
 endif()
 
 option(FORCE_STATIC_MODULES "Build VTK modules statically" OFF)
@@ -72,8 +80,6 @@ vtk_module_scan(
   PROVIDES_MODULES vtkcgal_provided_modules
   WANT_BY_DEFAULT  ON
   ENABLE_TESTS     ON)
-
-vtk_module_python_default_destination(python_destination)
 
 vtk_module_build(
   MODULES         ${vtkcgal_provided_modules}
@@ -147,7 +153,7 @@ endif()
 
 option(BUILD_PYTHON_WRAPPERS "Build python wrapping" ON)
 if(BUILD_PYTHON_WRAPPERS)
-
+  vtk_module_python_default_destination(python_destination)
   vtk_module_wrap_python(
     MODULES         ${vtkcgal_provided_modules}
     WRAPPED_MODULES vtkcgal_wrapped_modules
