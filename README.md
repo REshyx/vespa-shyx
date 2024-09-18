@@ -13,7 +13,7 @@
     - [VESPA](#vespa)
 - [How to use](#how-to-use)
   - [VTK Module](#vtk-module)
-    - [Cope examples](#cope-examples)
+    - [Code examples](#code-examples)
   - [ParaView plugin](#paraview-plugin)
 - [How to contribute](#how-to-contribute)
 <!--toc:end-->
@@ -89,7 +89,7 @@ and the
 to get a valid triangulation. The `vtkCGALAlphaWrapping ` filter can be used
 to ensure watertight, 2-manifold mesh then.
 
-#### Cope examples
+#### Code examples
 
 The testing of the project may be used to get simple examples on how to use each
 provided filters. For instance,
