@@ -1,5 +1,24 @@
-.build_binary_compatible:
+.tags:
+  tags:
+    - build
+    - docker
+    - linux-x86_64
+    - vtk-cgal
+
+.build:
+  extends:
+    - .tags
   stage: build
+  artifacts:
+    expire_in: 12h
+    when: always
+    paths:
+      - build/
+  interruptible: true
+
+.build_plugin_artifact:
+  extends:
+    - .build
   before_script:
     - source /opt/rh/devtoolset-7/enable
   script:
@@ -33,22 +52,36 @@
       -S ..
     - cmake --build . --parallel 2
   tags:
-    - docker
-    - linux-x86_64
-    - paraview
-  artifacts:
-    expire_in: 12h
-    when: always
-    paths:
-      - build/
-  rules:
-    - if: $DISABLE_BINARY == "True"
-      when: never
-    - when: on_success
-  interruptible: true
+    # Needed because qhelpgenerator would fail with illegal instructions without it
+    - linux-x86_64-v3
+
+.build_module:
+  extends:
+    - .build
+  script:
+    - apt update
+    - apt install -y libgmp3-dev libmpfr-dev
+    - cd /builds/vtk/meshing/
+    - ./vespa/.gitlab/ci/eigen.sh
+    - ./vespa/.gitlab/ci/cgal.sh
+    - ./vespa/.gitlab/ci/boost.sh
+    - cd vespa
+    - mkdir build
+    - cd build
+    - |
+      cmake \
+      -DBUILD_TESTING=ON  \
+      -DBoost_DIR=/builds/vtk/meshing/boost/install/lib/cmake/Boost-1.86.0/ \
+      -DCGAL_DIR=/builds/vtk/meshing/cgal/install/lib/cmake/CGAL/ \
+      -DCMAKE_BUILD_TYPE=Release \
+      -DEigen3_DIR=/builds/vtk/meshing/eigen/install/share/eigen3/cmake/ \
+      -DVTK_DIR=/vtk/build/ \
+      -S ..
+    - cmake --build . --parallel 2
 
 .build_plugin:
-  stage: build
+  extends:
+    - .build
   script:
     - apt update
     - apt install -y libgmp3-dev libmpfr-dev
@@ -68,10 +101,11 @@
       -DVESPA_BUILD_PV_PLUGIN=ON \
       -S ..
     - cmake --build . --parallel 2
-  tags:
-    - docker
-    - linux-x86_64
-    - paraview
+
+.test:
+  extends:
+    - .tags
+  stage: test
   artifacts:
     expire_in: 1h
     when: always
@@ -80,17 +114,15 @@
   interruptible: true
 
 .test_plugin:
-  stage: test
+  extends:
+    - .test
   script:
     - cd build
     - xvfb-run ctest -j 2 --output-on-failure --no-tests=error || xvfb-run ctest -j 1 --rerun-failed --no-tests=error -VV
-  tags:
-    - docker
-    - linux-x86_64
-    - paraview
-  artifacts:
-    expire_in: 1h
-    when: always
-    paths:
-      - build/
-  interruptible: true
+
+.test_module:
+  extends:
+    - .test
+  script:
+    - cd build
+    - ctest -j 2 --output-on-failure --no-tests=error || ctest -j 1 --rerun-failed --no-tests=error -VV

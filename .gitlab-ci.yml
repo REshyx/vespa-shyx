@@ -17,3 +17,4 @@ include:
   - local: .gitlab/5.12.yml
   - local: .gitlab/5.11.yml
   - local: .gitlab/5.10.yml
+  - local: .gitlab/vtk.yml

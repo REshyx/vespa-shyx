@@ -1,0 +1,16 @@
+.vtk_9_1:
+  image: kitware/paraview-ci-plugin:vtk-v9.1.0-stdthread-python-mpi
+
+build_module_v9.1:
+  extends:
+    - .build_module
+    - .vtk_9_1
+
+test_module_v9.1:
+  extends:
+    - .test_module
+    - .vtk_9_1
+  dependencies:
+    - build_module_v9.1
+  needs:
+    - build_module_v9.1
