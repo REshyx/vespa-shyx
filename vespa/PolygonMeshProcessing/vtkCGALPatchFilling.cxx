@@ -6,7 +6,6 @@
 #include "vtkInformation.h"
 #include "vtkInformationVector.h"
 #include "vtkObjectFactory.h"
-#include "vtkPointData.h"
 #include "vtkSelection.h"
 #include "vtkSelectionNode.h"
 #include "vtkTriangleFilter.h"
@@ -107,7 +106,11 @@ int vtkCGALPatchFilling::RequestData(
   // --------------------------------
 
   std::unique_ptr<Vespa_surface> cgalMesh = std::make_unique<Vespa_surface>();
-  this->toCGAL(baseDataSet, cgalMesh.get());
+  if (this->toCGAL(baseDataSet, cgalMesh.get()) == false)
+  {
+    vtkErrorMacro("Non manifold input may lead to crash, please fix the input mesh.") ;
+    return 0;
+  }
 
   // CGAL Processing
   // ---------------
