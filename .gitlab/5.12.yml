@@ -3,9 +3,9 @@
   variables:
     PARAVIEW_VERSION: "5.12.1"
 
-build_binary_compatible_5.12.1:
+build_plugin_artifact_5.12.1:
   extends:
-    - .build_binary_compatible
+    - .build_plugin_artifact
     - .binary_5_12
 
 .v5_12:

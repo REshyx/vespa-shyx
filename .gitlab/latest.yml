@@ -22,7 +22,7 @@ test_plugin_latest:
   variables:
     PARAVIEW_VERSION: "latest"
 
-build_binary_compatible_latest:
+build_plugin_artifact_latest:
   extends:
-    - .build_binary_compatible
+    - .build_plugin_artifact
     - .binary_latest

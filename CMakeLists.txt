@@ -24,19 +24,17 @@ include(CTest)
 ## Deps
 
 find_package(Ceres 2.0 QUIET)
+message(STATUS "Found Ceres ${Ceres_VERSION}")
 option(USE_CERES "Use Ceres library" ${CERES_FOUND})
 if (${USE_CERES} AND NOT ${CERES_FOUND})
   message(FATAL_ERROR "USE_CERES is set to ON, but Ceres in considered NOT found.")
 endif()
 
-find_package(Eigen3 REQUIRED 3.2.0)
-find_package(CGAL REQUIRED)
-
-if (CGAL_VERSION VERSION_GREATER "5.1")
-  # this file only exists in CGAL 5.1 and later
-  message(STATUS "include(CGAL_Eigen3_support)")
-  include(CGAL_Eigen3_support)
-endif()
+find_package(Eigen3 3.2.0 REQUIRED)
+message(STATUS "Found Eigen3 ${Eigen3_VERSION}")
+find_package(CGAL 5.3.0 REQUIRED)
+message(STATUS "Found CGAL ${CGAL_VERSION}")
+include(CGAL_Eigen3_support)
 
 ## VTK Module
 ## ----------
