@@ -49,6 +49,7 @@
       -DEigen3_DIR=/builds/vtk/meshing/eigen/install/share/eigen3/cmake/ \
       -DFORCE_STATIC_MODULES=ON \
       -DVESPA_BUILD_PV_PLUGIN=ON \
+      -DVESPA_SHOW_CGAL_LICENSE_ON_LOAD=ON \
       -S ..
     - cmake --build . --parallel 2
   tags:

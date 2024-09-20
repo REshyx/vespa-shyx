@@ -8,8 +8,15 @@ if (${VESPA_MESH_SMOOTHING})
   set(MESH_SMOOTHING_SERVER_MANAGER_XML "VESPAMeshSmoothingFilter.xml")
 endif()
 
+option(VESPA_SHOW_CGAL_LICENSE_ON_LOAD "Show CGAL License when loading plugin" OFF)
+mark_as_advanced(VESPA_SHOW_CGAL_LICENSE_ON_LOAD)
+if (${VESPA_SHOW_CGAL_LICENSE_ON_LOAD})
+  set(VESPA_CGAL_LICENSE "${CMAKE_SOURCE_DIR}/Data/Resources/CGAL_LICENSE.GPL")
+endif()
+
 paraview_add_plugin(VESPAPlugin
   VERSION "1.0"
+  EULA ${VESPA_CGAL_LICENSE}
   REQUIRED_ON_CLIENT
   REQUIRED_ON_SERVER
   MODULES ${vtkcgal_provided_modules}
