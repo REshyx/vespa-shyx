@@ -46,6 +46,7 @@ include(CGAL_Eigen3_support)
 ## VTK Module
 ## ----------
 
+
 if (VESPA_BUILD_PV_PLUGIN)
   if(VTK_DIR AND NOT ParaView_DIR)
     # old VTK_DIR
@@ -70,6 +71,7 @@ else()
   message(STATUS "Found VTK ${VTK_VERSION}")
 endif()
 
+## Options
 option(FORCE_STATIC_MODULES "Build VTK modules statically" OFF)
 mark_as_advanced(FORCE_STATIC_MODULES)
 if (FORCE_STATIC_MODULES)
@@ -78,6 +80,12 @@ else ()
   set(FORCE_STATIC_MODULES_STRING)
 endif()
 
+option(BUILD_PYTHON_WRAPPERS "Build python wrapping" ON)
+if(BUILD_PYTHON_WRAPPERS)
+  vtk_module_python_default_destination(python_destination)
+endif()
+
+## Module build
 vtk_module_find_modules(vtkcgal_module_files "${CMAKE_CURRENT_SOURCE_DIR}/vespa")
 
 vtk_module_scan(
@@ -156,9 +164,7 @@ endif()
 ## Python wrapping
 ## ---------------
 
-option(BUILD_PYTHON_WRAPPERS "Build python wrapping" ON)
 if(BUILD_PYTHON_WRAPPERS)
-  vtk_module_python_default_destination(python_destination)
   vtk_module_wrap_python(
     MODULES         ${vtkcgal_provided_modules}
     WRAPPED_MODULES vtkcgal_wrapped_modules
