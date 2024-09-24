@@ -2,7 +2,9 @@
 
 set -e
 
-readonly version="6.3.0"
+# We use an older gmp because of an illegal instruction issue
+# https://gmplib.org/list-archives/gmp-bugs/2021-January/004989.html
+readonly version="5.1.3"
 
 mkdir gmp
 cd gmp
