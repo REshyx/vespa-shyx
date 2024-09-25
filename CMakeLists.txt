@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.8)
-project(vespa VERSION 0.1.0)
+project(vespa VERSION 0.2.0)
 
 ## Testing
 option(BUILD_TESTING "Build Testing" OFF)
@@ -15,6 +15,13 @@ include(GNUInstallDirs)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/${CMAKE_INSTALL_BINDIR}")
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/${CMAKE_INSTALL_LIBDIR}")
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/${CMAKE_INSTALL_LIBDIR}")
+
+get_property(generator_is_multi_config GLOBAL PROPERTY GENERATOR_IS_MULTI_CONFIG)
+if (NOT CMAKE_BUILD_TYPE AND NOT generator_is_multi_config)
+  message(STATUS "Setting build type to 'Release'.")
+  set(CMAKE_BUILD_TYPE "Release" CACHE STRING "Choose the type of build." FORCE)
+  set_property(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS "Debug" "Release" "RelWithDebInfo")
+endif ()
 
 option(BUILD_SHARED_LIBS "Build shared library" ON)
 set(VESPA_BUILD_PV_PLUGIN OFF CACHE BOOL "Build VESPA ParaView plugin")
@@ -38,6 +45,7 @@ include(CGAL_Eigen3_support)
 
 ## VTK Module
 ## ----------
+
 
 if (VESPA_BUILD_PV_PLUGIN)
   if(VTK_DIR AND NOT ParaView_DIR)
@@ -63,6 +71,7 @@ else()
   message(STATUS "Found VTK ${VTK_VERSION}")
 endif()
 
+## Options
 option(FORCE_STATIC_MODULES "Build VTK modules statically" OFF)
 mark_as_advanced(FORCE_STATIC_MODULES)
 if (FORCE_STATIC_MODULES)
@@ -71,6 +80,12 @@ else ()
   set(FORCE_STATIC_MODULES_STRING)
 endif()
 
+option(BUILD_PYTHON_WRAPPERS "Build python wrapping" ON)
+if(BUILD_PYTHON_WRAPPERS)
+  vtk_module_python_default_destination(python_destination)
+endif()
+
+## Module build
 vtk_module_find_modules(vtkcgal_module_files "${CMAKE_CURRENT_SOURCE_DIR}/vespa")
 
 vtk_module_scan(
@@ -149,9 +164,7 @@ endif()
 ## Python wrapping
 ## ---------------
 
-option(BUILD_PYTHON_WRAPPERS "Build python wrapping" ON)
 if(BUILD_PYTHON_WRAPPERS)
-  vtk_module_python_default_destination(python_destination)
   vtk_module_wrap_python(
     MODULES         ${vtkcgal_provided_modules}
     WRAPPED_MODULES vtkcgal_wrapped_modules
