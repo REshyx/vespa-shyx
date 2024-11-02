@@ -9,6 +9,10 @@
 // CGAL related includes
 #include <CGAL/alpha_wrap_3.h>
 
+#include <exception>
+#include <iostream>
+#include <memory>
+
 vtkStandardNewMacro(vtkCGALAlphaWrapping);
 
 //------------------------------------------------------------------------------

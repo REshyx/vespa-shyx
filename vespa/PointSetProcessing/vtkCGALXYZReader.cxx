@@ -7,6 +7,11 @@
 
 #include <CGAL/IO/read_points.h>
 
+#include <exception>
+#include <iterator>
+#include <utility>
+#include <vector>
+
 typedef CGAL_Kernel::Point_3                                 Point;
 typedef CGAL_Kernel::Vector_3                                Vector;
 typedef std::pair<Point, Vector>                             Point_with_normal;

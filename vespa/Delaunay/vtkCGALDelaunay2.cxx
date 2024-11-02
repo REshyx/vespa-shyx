@@ -11,6 +11,10 @@
 #include <CGAL/Exact_predicates_inexact_constructions_kernel.h>
 #include <CGAL/Constrained_Delaunay_triangulation_2.h>
 
+#include <list>
+#include <map>
+#include <vector>
+
 using CGAL_Kernel  = CGAL::Exact_predicates_inexact_constructions_kernel;
 
 vtkStandardNewMacro(vtkCGALDelaunay2);

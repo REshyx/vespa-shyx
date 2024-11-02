@@ -12,8 +12,12 @@
 // CGAL related includes
 #include <CGAL/Exact_predicates_inexact_constructions_kernel.h>
 #include <CGAL/Advancing_front_surface_reconstruction.h>
-#include <vector>
+
+#include <array>
 #include <fstream>
+#include <iterator>
+#include <memory>
+#include <vector>
 
 typedef CGAL::Exact_predicates_inexact_constructions_kernel K;
 typedef K::Point_3                                          Point_3;

@@ -10,6 +10,10 @@
 // CGAL related includes
 #include <CGAL/subdivision_method_3.h>
 
+#include <exception>
+#include <fstream>
+#include <memory>
+
 vtkStandardNewMacro(vtkCGALMeshSubdivision);
 
 //------------------------------------------------------------------------------

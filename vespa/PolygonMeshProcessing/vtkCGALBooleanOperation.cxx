@@ -7,6 +7,10 @@
 // CGAL related includes
 #include <CGAL/Polygon_mesh_processing/corefinement.h>
 
+#include <exception>
+#include <iostream>
+#include <memory>
+
 vtkStandardNewMacro(vtkCGALBooleanOperation);
 
 namespace pmp = CGAL::Polygon_mesh_processing;

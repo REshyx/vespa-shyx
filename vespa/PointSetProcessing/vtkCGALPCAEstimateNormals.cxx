@@ -19,8 +19,10 @@
 #include <CGAL/pca_estimate_normals.h>
 #include <CGAL/mst_orient_normals.h>
 
-#include <vector>
+#include <exception>
+#include <list>
 #include <fstream>
+#include <utility>
 
 typedef CGAL::Exact_predicates_inexact_constructions_kernel Kernel;
 typedef Kernel::Point_3                                     Point;

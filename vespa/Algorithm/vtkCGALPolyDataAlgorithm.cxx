@@ -8,6 +8,9 @@
 #include "vtkProbeFilter.h"
 #include "vtkPolyDataNormals.h"
 
+#include <iostream>
+#include <vector>
+
 vtkStandardNewMacro(vtkCGALPolyDataAlgorithm);
 
 //------------------------------------------------------------------------------

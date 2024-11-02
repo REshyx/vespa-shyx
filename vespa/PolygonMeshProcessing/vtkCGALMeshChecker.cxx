@@ -16,6 +16,12 @@
 #include <CGAL/Polygon_mesh_processing/border.h>
 #include <CGAL/Polygon_mesh_processing/triangulate_hole.h>
 
+#include <exception>
+#include <fstream>
+#include <iterator>
+#include <memory>
+#include <vector>
+
 vtkStandardNewMacro(vtkCGALMeshChecker);
 
 namespace pmp = CGAL::Polygon_mesh_processing;
