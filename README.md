@@ -95,7 +95,9 @@ The testing of the project may be used to get simple examples on how to use each
 provided filters. For instance,
 for the [Isotropic remeshing](https://doc.cgal.org/latest/Polygon_mesh_processing/group__PMP__meshing__grp.html#gaa5cc92275df27f0baab2472ecbc4ea3f)
 you get a [C++ example](./vespa/PolygonMeshProcessing/Testing/TestPMPIsotropicExecution.cxx)
-and a [Python example](./vespa/PolygonMeshProcessing/Testing/execute_IsotropicRemesher.py)
+and a [Python example](./vespa/PolygonMeshProcessing/Testing/execute_IsotropicRemesher.py).
+
+Set the CMake variable `BUILD_TESTING` to `ON`, and pull the data files using `git lfs`.
 
 ### ParaView plugin
 
