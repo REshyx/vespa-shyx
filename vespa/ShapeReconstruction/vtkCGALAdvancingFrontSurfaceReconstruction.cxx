@@ -10,14 +10,14 @@
 #include "vtkLogger.h"
 
 // CGAL related includes
-#include <CGAL/Simple_cartesian.h>
+#include <CGAL/Exact_predicates_inexact_constructions_kernel.h>
 #include <CGAL/Advancing_front_surface_reconstruction.h>
 #include <vector>
 #include <fstream>
 
-typedef CGAL::Simple_cartesian<double> K;
-typedef K::Point_3                     Point_3;
-typedef std::array<std::size_t, 3>     Facet;
+typedef CGAL::Exact_predicates_inexact_constructions_kernel K;
+typedef K::Point_3                                          Point_3;
+typedef std::array<std::size_t, 3>                          Facet;
 
 vtkStandardNewMacro(vtkCGALAdvancingFrontSurfaceReconstruction);
 
