@@ -105,25 +105,33 @@ int vtkCGALBooleanOperation::RequestData(
     }
 
     // Main process
-    switch (this->OperationType)
+    try
     {
-      case vtkCGALBooleanOperation::DIFFERENCE:
-        res = pmp::corefine_and_compute_difference(cgalInputMesh->surface, cgalSourceMesh->surface,
-          cgalOutMesh->surface, pmp::parameters::all_default(), pmp::parameters::all_default());
-        break;
-      case vtkCGALBooleanOperation::INTERSECTION:
-        res =
-          pmp::corefine_and_compute_intersection(cgalInputMesh->surface, cgalSourceMesh->surface,
-            cgalOutMesh->surface, pmp::parameters::all_default(), pmp::parameters::all_default());
-        break;
-      case vtkCGALBooleanOperation::UNION:
-        res = pmp::corefine_and_compute_union(cgalInputMesh->surface, cgalSourceMesh->surface,
-          cgalOutMesh->surface, pmp::parameters::all_default(), pmp::parameters::all_default());
-        break;
-      default:
-        vtkErrorMacro("Unknown boolean operation!");
-        res = false;
-        break;
+      switch (this->OperationType)
+      {
+        case vtkCGALBooleanOperation::DIFFERENCE:
+          res = pmp::corefine_and_compute_difference(cgalInputMesh->surface, cgalSourceMesh->surface,
+            cgalOutMesh->surface, pmp::parameters::throw_on_self_intersection(true), pmp::parameters::all_default());
+          break;
+        case vtkCGALBooleanOperation::INTERSECTION:
+          res =
+            pmp::corefine_and_compute_intersection(cgalInputMesh->surface, cgalSourceMesh->surface,
+              cgalOutMesh->surface, pmp::parameters::throw_on_self_intersection(true), pmp::parameters::all_default());
+          break;
+        case vtkCGALBooleanOperation::UNION:
+          res = pmp::corefine_and_compute_union(cgalInputMesh->surface, cgalSourceMesh->surface,
+            cgalOutMesh->surface, pmp::parameters::throw_on_self_intersection(true), pmp::parameters::all_default());
+          break;
+        default:
+          vtkErrorMacro("Unknown Boolean operation!");
+          res = false;
+          break;
+      }
+    }
+    catch(const CGAL::Polygon_mesh_processing::Corefinement::Self_intersection_exception& e)
+    {
+      vtkErrorMacro("Self-intersections in meshes; Boolean operation cannot be performed.");
+      return 0;
     }
   }
   catch (std::exception& e)
