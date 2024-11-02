@@ -8,11 +8,10 @@
 #include "vtkObjectFactory.h"
 
 // CGAL related includes
-#include <CGAL/Surface_mesh.h>
-#include <CGAL/Simple_cartesian.h>
+#include <CGAL/Exact_predicates_inexact_constructions_kernel.h>
 #include <CGAL/Constrained_Delaunay_triangulation_2.h>
 
-using CGAL_Kernel  = CGAL::Simple_cartesian<double>;
+using CGAL_Kernel  = CGAL::Exact_predicates_inexact_constructions_kernel;
 
 vtkStandardNewMacro(vtkCGALDelaunay2);
 
