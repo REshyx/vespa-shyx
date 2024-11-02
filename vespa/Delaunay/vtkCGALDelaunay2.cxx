@@ -101,7 +101,7 @@ int vtkCGALDelaunay2::RequestData(
       {
         delaunay.insert_constraint(poly.begin(), poly.end(), true);
       }
-      catch(const std::exception& e)
+      catch(const CDT2::Intersection_of_constraints_exception& e)
       {
         // If we have an invalid constraint (for example overlaping edges)
         // we just ignore the constraint and continue
@@ -126,7 +126,7 @@ int vtkCGALDelaunay2::RequestData(
       {
         delaunay.insert_constraint(line.begin(), line.end());
       }
-      catch(const std::exception& e)
+      catch(const CDT2::Intersection_of_constraints_exception& e)
       {
         // If we have an invalid constraint (for example overlaping edges)
         // we just ignore the constraint and continue
