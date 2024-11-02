@@ -80,7 +80,7 @@ int vtkCGALXYZReader::RequestData(vtkInformation* vtkNotUsed(request),
   pointNormalsArray->SetName("Normals");
   pointNormalsArray->SetNumberOfComponents(3); // 3d normals (ie x,y,z)
 
-  for (auto p : points)
+  for (const auto& p : points)
   {
     outpoints->InsertNextPoint(p.first[0], p.first[1], p.first[2]);
     pointNormalsArray->InsertNextTuple3(p.second[0], p.second[1], p.second[2]);

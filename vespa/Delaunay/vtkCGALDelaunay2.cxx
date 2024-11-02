@@ -73,7 +73,7 @@ int vtkCGALDelaunay2::RequestData(
 
   std::vector<CDT2::Point> pts;
   pts.reserve(nbPts);
-  for (const auto pt : pointRange)
+  for (const auto& pt : pointRange)
   {
     pts.emplace_back(pt[d1], pt[d2]);
   }
@@ -136,7 +136,7 @@ int vtkCGALDelaunay2::RequestData(
     }
 
     // Add points
-    for (auto point : pts)
+    for (const auto& point : pts)
     {
       delaunay.push_back(CDT2::Point(point));
     }
