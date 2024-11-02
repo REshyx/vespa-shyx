@@ -101,9 +101,10 @@ int vtkCGALDelaunay2::RequestData(
       {
         poly.emplace_back(pts[p->GetId(i)]);
       }
+
       try
       {
-        delaunay.insert_constraint(poly.begin(), poly.end(), true);
+        delaunay.insert_constraint(poly.begin(), poly.end(), true /*close*/);
       }
       catch(const CDT2::Intersection_of_constraints_exception& e)
       {
@@ -126,9 +127,10 @@ int vtkCGALDelaunay2::RequestData(
       {
         line.emplace_back(pts[l->GetId(i)]);
       }
+
       try
       {
-        delaunay.insert_constraint(line.begin(), line.end());
+        delaunay.insert_constraint(line.begin(), line.end(), false /*close*/);
       }
       catch(const CDT2::Intersection_of_constraints_exception& e)
       {
