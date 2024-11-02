@@ -63,6 +63,7 @@ else()
       FiltersCore
       FiltersExtraction
       FiltersGeometry
+      freetype
       Python
     OPTIONAL_COMPONENTS
       CommonSystem
