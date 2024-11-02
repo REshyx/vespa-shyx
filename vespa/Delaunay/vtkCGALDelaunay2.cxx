@@ -162,7 +162,7 @@ int vtkCGALDelaunay2::RequestData(
     coords[d2]            = vertex->point()[1];
     coords[d3]            = rangeVal[d3];
     vtkIdType id          = outPts->InsertNextPoint(coords);
-    vmap[vertex->point()] = id;
+    vmap[delaunay.point(vertex)] = id;
   }
   outPts->Squeeze();
 
@@ -173,9 +173,9 @@ int vtkCGALDelaunay2::RequestData(
   for (auto face : delaunay.finite_face_handles())
   {
     vtkNew<vtkIdList> ids;
-    ids->InsertNextId(vmap[face->vertex(0)->point()]);
-    ids->InsertNextId(vmap[face->vertex(1)->point()]);
-    ids->InsertNextId(vmap[face->vertex(2)->point()]);
+    ids->InsertNextId(vmap[delaunay.point(face, 0)]);
+    ids->InsertNextId(vmap[delaunay.point(face, 1)]);
+    ids->InsertNextId(vmap[delaunay.point(face, 2)]);
 
     cells->InsertNextCell(ids);
   }
