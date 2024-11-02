@@ -43,7 +43,7 @@ int vtkCGALDelaunay2::RequestData(
   vtkDataArray* ptsArr     = vtkPts->GetData();
   const auto    pointRange = vtk::DataArrayTupleRange<3>(ptsArr);
 
-  // manually handle the plannar coordinate
+  // manually handle the planar coordinate
   // should be along the x, y or z axis
   double rangeVal[3];
   for (int i = 0; i < 3; i++)
@@ -105,7 +105,7 @@ int vtkCGALDelaunay2::RequestData(
       {
         // If we have an invalid constraint (for example overlaping edges)
         // we just ignore the constraint and continue
-        vtkWarningMacro("Ill-formed constraint detected : constraint ignored.");
+        vtkWarningMacro("Ill-formed constraint detected: constraint ignored.");
         continue;
       }
     }
@@ -130,7 +130,7 @@ int vtkCGALDelaunay2::RequestData(
       {
         // If we have an invalid constraint (for example overlaping edges)
         // we just ignore the constraint and continue
-        vtkWarningMacro("Ill-formed constraint detected : constraint ignored.");
+        vtkWarningMacro("Ill-formed constraint detected: constraint ignored.");
         continue;
       }
     }

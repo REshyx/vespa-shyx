@@ -48,7 +48,7 @@ be compiled from sources manually using these
 
 ### CGAL
 
-VESPA need CGAL >= 5.3. It can be installed:
+VESPA needs CGAL >= 5.3. It can be installed:
 * using the package manager of your system (including brew on OSX, or vcpkg on Windows),
 * manually using [CMake instructions](https://doc.cgal.org/latest/Manual/installation.html#installation_configwithcmake).
 

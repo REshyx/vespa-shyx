@@ -123,7 +123,7 @@ int vtkCGALBooleanOperation::RequestData(
 
     // help user know the issue with their data.
     // Most of these checks are done after the processing for performance reasons
-    std::cerr << "Boolean operation failed. Checking precondition:" << std::endl;
+    std::cerr << "Boolean operation failed. Checking preconditions:" << std::endl;
     bool se1 = CGAL::Polygon_mesh_processing::does_self_intersect(cgalInputMesh->surface);
     bool se2 = CGAL::Polygon_mesh_processing::does_self_intersect(cgalSourceMesh->surface);
     std::cerr << "Input self intersect: " << se1 << std::endl;

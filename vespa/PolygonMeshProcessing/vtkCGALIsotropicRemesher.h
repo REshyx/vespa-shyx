@@ -23,9 +23,9 @@ public:
 
   //@{
   /**
-   * Get / Set the edge target length for the result
-   * If non is specified by the user, the value will
-   * be set as 1% of the boundary box diagonal
+   * Get / Set the edge target length for the result.
+   * If not specified by the user, the value will
+   * be set as 1% of the boundary box diagonal.
    **/
   vtkGetMacro(TargetLength, double);
   vtkSetMacro(TargetLength, double);
@@ -34,8 +34,8 @@ public:
   //@{
   /**
    * Get / Set the feature edge angle threshold.
-   * These edges will be protected during remeshing
-   * Default is 45°
+   * These edges will be protected during remeshing.
+   * Default is 45°.
    **/
   vtkGetMacro(ProtectAngle, double);
   vtkSetMacro(ProtectAngle, double);
@@ -45,7 +45,7 @@ public:
   /**
    * Get / Set the number of iterations for the
    * CGAL isotropic_remeshing.
-   * Default is 1
+   * Default is 1.
    **/
   vtkGetMacro(NumberOfIterations, int);
   vtkSetMacro(NumberOfIterations, int);

@@ -5,10 +5,10 @@
  * vtkCGALPolyDataAlgorithm is the superclass of all polydata algorithms
  * using CGAL. It defines useful methods to translate from VTK datasets
  * to CGAL surfaces back and forth.
- * This class also ensure face orientation consistency during the VTK to CGAL
+ * This class also ensures face orientation consistency during the VTK to CGAL
  * export.
  * All filters inheriting from this class expect triangulated polydata as input,
- * expect when stated otherwise.
+ * except when stated otherwise.
  */
 
 #ifndef vtkCGALPolyDataAlgorithm_h
@@ -66,7 +66,7 @@ public:
    * point / cell data attributes of the input.
    * If so, a vtkProbeFilter is called in order
    * to interpolate values to the new mesh.
-   * Default is true
+   * Default is true.
    **/
   vtkGetMacro(UpdateAttributes, bool);
   vtkSetMacro(UpdateAttributes, bool);
@@ -80,35 +80,35 @@ protected:
   /**
    * Convert a vtkPolyData to a CGAL surface mesh.
    * This method fills the internal points and cells
-   * in the Vespa_soup data object
-   * return true if operation was successful
+   * in the Vespa_soup data object.
+   * return true if operation was successful.
    */
   bool toCGAL(vtkPolyData* vtkMesh, Vespa_soup* cgalMesh);
 
   /**
    * Convert a vtkPolyData to a CGAL surface mesh.
    * This method fills the internal surface and coords
-   * in the Vespa_surface data object
-   * return true if operation was successful
+   * in the Vespa_surface data object.
+   * return true if operation was successful.
    */
   bool toCGAL(vtkPolyData* vtkMesh, Vespa_surface* cgalMesh);
 
   /**
    * Convert a CGAL polygon soup to a vtkPolydata.
-   * return true if operation was successful
-   * result may not be manifold
+   * return true if operation was successful.
+   * result may not be manifold.
    */
   bool toVTK(Vespa_soup const* cgalMesh, vtkPolyData* vtkMesh);
 
   /**
    * Convert a CGAL surface mesh to a vtkPolydata.
-   * return true if operation was successful
+   * return true if operation was successful.
    */
   bool toVTK(Vespa_surface const* cgalMesh, vtkPolyData* vtkMesh);
 
   /**
    * interpolate attributes of input onto the new VTK mesh
-   * if UpdateAttributes is true
+   * if UpdateAttributes is true.
    */
   bool interpolateAttributes(vtkPolyData* input, vtkPolyData* vtkMesh);
 
