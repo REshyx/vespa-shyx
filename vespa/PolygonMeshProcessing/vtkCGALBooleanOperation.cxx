@@ -83,6 +83,17 @@ int vtkCGALBooleanOperation::RequestData(
   bool res = true;
   try
   {
+    if (!CGAL::is_closed(cgalInputMesh->surface))
+    {
+      vtkErrorMacro("Input Mesh is not closed; Boolean operation cannot be performed");
+      return 0;
+    }
+    if (!CGAL::is_closed(cgalSourceMesh->surface))
+    {
+      vtkErrorMacro("Source Mesh is not closed; Boolean operation cannot be performed.");
+      return 0;
+    }
+
     // Preprocess
     if (!CGAL::Polygon_mesh_processing::does_bound_a_volume(cgalInputMesh->surface))
     {
