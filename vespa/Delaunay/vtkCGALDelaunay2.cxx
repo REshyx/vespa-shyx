@@ -21,9 +21,9 @@ vtkStandardNewMacro(vtkCGALDelaunay2);
 
 // TODO May try to use ProjectionTraits_3 to handle open 3D surfaces
 // Look at perf then
-// caution, a sphere won't work: intersection
-// caution, infinite loop on some tests
-using CDT2 = CGAL::Constrained_Delaunay_triangulation_2<CGAL_Kernel>;
+using CDT2 = CGAL::Constrained_Delaunay_triangulation_2<CGAL_Kernel,
+                                                        CGAL::Default,
+                                                        CGAL::No_constraint_intersection_tag>;
 
 //------------------------------------------------------------------------------
 void vtkCGALDelaunay2::PrintSelf(ostream& os, vtkIndent indent)
