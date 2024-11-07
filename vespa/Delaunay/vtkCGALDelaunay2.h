@@ -2,10 +2,11 @@
  * @class   vtkCGALDelaunay2
  * @brief   remesh using CGAL's 2D Delaunay triangulation.
  *
- * vtkCGALDelaunay2 allows to create planar Delaunay triangulations
+ * vtkCGALDelaunay2 enables creating planar Delaunay triangulations
  * from a set of planar points, edges, and polygons.
  * From now on, the input data needs to be planar along x, y, or z.
- * Constraints should not overlap each other.
+ * Edge constraints may intersect as long as no new point is needed to
+ * represent the geometry of the intersection.
  */
 
 #ifndef vtkCGALDelaunay2_h

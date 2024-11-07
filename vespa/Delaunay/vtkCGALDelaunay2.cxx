@@ -23,7 +23,7 @@ vtkStandardNewMacro(vtkCGALDelaunay2);
 // Look at perf then
 using CDT2 = CGAL::Constrained_Delaunay_triangulation_2<CGAL_Kernel,
                                                         CGAL::Default,
-                                                        CGAL::No_constraint_intersection_tag>;
+                                                        CGAL::No_constraint_intersection_requiring_constructions_tag>;
 
 //------------------------------------------------------------------------------
 void vtkCGALDelaunay2::PrintSelf(ostream& os, vtkIndent indent)
@@ -108,8 +108,8 @@ int vtkCGALDelaunay2::RequestData(
       }
       catch(const CDT2::Intersection_of_constraints_exception& e)
       {
-        // If we have an invalid constraint (for example overlaping edges)
-        // we just ignore the constraint and continue
+        // If we have an invalid constraint (such as edges intersecting in at least
+        // one of the edges' interiors), we just ignore the constraint and continue
         vtkWarningMacro("Ill-formed constraint detected: constraint ignored.");
         continue;
       }
@@ -134,8 +134,8 @@ int vtkCGALDelaunay2::RequestData(
       }
       catch(const CDT2::Intersection_of_constraints_exception& e)
       {
-        // If we have an invalid constraint (for example overlaping edges)
-        // we just ignore the constraint and continue
+        // If we have an invalid constraint (such as edges intersecting in at least
+        // one of the edges' interiors), we just ignore the constraint and continue
         vtkWarningMacro("Ill-formed constraint detected: constraint ignored.");
         continue;
       }
