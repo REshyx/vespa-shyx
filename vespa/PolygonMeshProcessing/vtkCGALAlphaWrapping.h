@@ -4,7 +4,7 @@
  *
  * vtkCGALAlphaWrapping is a filter allowing to construct
  * a 2-manifold surface mesh from a point cloud or a polygon soup.
- * The resulting meshes is guaranteed to strictly encloses the input.
+ * The resulting mesh is guaranteed to strictly encloses the input.
  * For now, only points and triangles are supported in input.
  */
 
