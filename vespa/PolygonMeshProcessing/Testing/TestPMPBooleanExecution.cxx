@@ -1,25 +1,32 @@
 #include <iostream>
+#include <vtkDataSetSurfaceFilter.h>
 
+#include "vtkConeSource.h"
+#include "vtkDataSetTriangleFilter.h"
 #include "vtkNew.h"
 #include "vtkSphereSource.h"
 #include "vtkTestUtilities.h"
-#include "vtkXMLPolyDataReader.h"
 #include "vtkXMLPolyDataWriter.h"
 
 #include "vtkCGALBooleanOperation.h"
 
-int TestPMPBooleanExecution(int, char* argv[])
+int TestPMPBooleanExecution(int, char**)
 {
-  vtkNew<vtkXMLPolyDataReader> reader;
-  std::string cfname(argv[1]);
-  cfname += "/dragon.vtp";
-  reader->SetFileName(cfname.c_str());
+  vtkNew<vtkConeSource> cone;
+  cone->SetRadius(2.0);
+
+  vtkNew<vtkDataSetTriangleFilter> tri;
+  tri->SetInputConnection(cone->GetOutputPort());
+
+  vtkNew<vtkDataSetSurfaceFilter> surf;
+  surf->SetInputConnection(tri->GetOutputPort());
 
   vtkNew<vtkSphereSource> sphere;
   sphere->SetRadius(2.0);
+  sphere->SetCenter(1.0, 0., 0.);
 
   vtkNew<vtkCGALBooleanOperation> boolOp;
-  boolOp->SetInputConnection(reader->GetOutputPort());
+  boolOp->SetInputConnection(surf->GetOutputPort());
   boolOp->SetSourceConnection(sphere->GetOutputPort());
 
   // Compute difference
