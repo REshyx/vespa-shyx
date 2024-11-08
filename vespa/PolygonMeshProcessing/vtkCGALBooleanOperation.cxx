@@ -7,6 +7,10 @@
 // CGAL related includes
 #include <CGAL/Polygon_mesh_processing/corefinement.h>
 
+#include <exception>
+#include <iostream>
+#include <memory>
+
 vtkStandardNewMacro(vtkCGALBooleanOperation);
 
 namespace pmp = CGAL::Polygon_mesh_processing;
@@ -79,6 +83,17 @@ int vtkCGALBooleanOperation::RequestData(
   bool res = true;
   try
   {
+    if (!CGAL::is_closed(cgalInputMesh->surface))
+    {
+      vtkErrorMacro("Input Mesh is not closed; Boolean operation cannot be performed");
+      return 0;
+    }
+    if (!CGAL::is_closed(cgalSourceMesh->surface))
+    {
+      vtkErrorMacro("Source Mesh is not closed; Boolean operation cannot be performed.");
+      return 0;
+    }
+
     // Preprocess
     if (!CGAL::Polygon_mesh_processing::does_bound_a_volume(cgalInputMesh->surface))
     {
@@ -90,25 +105,33 @@ int vtkCGALBooleanOperation::RequestData(
     }
 
     // Main process
-    switch (this->OperationType)
+    try
     {
-      case vtkCGALBooleanOperation::DIFFERENCE:
-        res = pmp::corefine_and_compute_difference(cgalInputMesh->surface, cgalSourceMesh->surface,
-          cgalOutMesh->surface, pmp::parameters::all_default(), pmp::parameters::all_default());
-        break;
-      case vtkCGALBooleanOperation::INTERSECTION:
-        res =
-          pmp::corefine_and_compute_intersection(cgalInputMesh->surface, cgalSourceMesh->surface,
-            cgalOutMesh->surface, pmp::parameters::all_default(), pmp::parameters::all_default());
-        break;
-      case vtkCGALBooleanOperation::UNION:
-        res = pmp::corefine_and_compute_union(cgalInputMesh->surface, cgalSourceMesh->surface,
-          cgalOutMesh->surface, pmp::parameters::all_default(), pmp::parameters::all_default());
-        break;
-      default:
-        vtkErrorMacro("Unknown boolean operation!");
-        res = false;
-        break;
+      switch (this->OperationType)
+      {
+        case vtkCGALBooleanOperation::DIFFERENCE:
+          res = pmp::corefine_and_compute_difference(cgalInputMesh->surface, cgalSourceMesh->surface,
+            cgalOutMesh->surface, pmp::parameters::throw_on_self_intersection(true), pmp::parameters::all_default());
+          break;
+        case vtkCGALBooleanOperation::INTERSECTION:
+          res =
+            pmp::corefine_and_compute_intersection(cgalInputMesh->surface, cgalSourceMesh->surface,
+              cgalOutMesh->surface, pmp::parameters::throw_on_self_intersection(true), pmp::parameters::all_default());
+          break;
+        case vtkCGALBooleanOperation::UNION:
+          res = pmp::corefine_and_compute_union(cgalInputMesh->surface, cgalSourceMesh->surface,
+            cgalOutMesh->surface, pmp::parameters::throw_on_self_intersection(true), pmp::parameters::all_default());
+          break;
+        default:
+          vtkErrorMacro("Unknown Boolean operation!");
+          res = false;
+          break;
+      }
+    }
+    catch(const CGAL::Polygon_mesh_processing::Corefinement::Self_intersection_exception& e)
+    {
+      vtkErrorMacro("Self-intersections in meshes; Boolean operation cannot be performed.");
+      return 0;
     }
   }
   catch (std::exception& e)
@@ -123,7 +146,7 @@ int vtkCGALBooleanOperation::RequestData(
 
     // help user know the issue with their data.
     // Most of these checks are done after the processing for performance reasons
-    std::cerr << "Boolean operation failed. Checking precondition:" << std::endl;
+    std::cerr << "Boolean operation failed. Checking preconditions:" << std::endl;
     bool se1 = CGAL::Polygon_mesh_processing::does_self_intersect(cgalInputMesh->surface);
     bool se2 = CGAL::Polygon_mesh_processing::does_self_intersect(cgalSourceMesh->surface);
     std::cerr << "Input self intersect: " << se1 << std::endl;

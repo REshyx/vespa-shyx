@@ -9,6 +9,10 @@
 #include <CGAL/Polygon_mesh_processing/detect_features.h>
 #include <CGAL/Polygon_mesh_processing/remesh.h>
 
+#include <exception>
+#include <fstream>
+#include <memory>
+
 vtkStandardNewMacro(vtkCGALIsotropicRemesher);
 
 namespace pmp = CGAL::Polygon_mesh_processing;

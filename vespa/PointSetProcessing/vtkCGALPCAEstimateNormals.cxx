@@ -19,8 +19,10 @@
 #include <CGAL/pca_estimate_normals.h>
 #include <CGAL/mst_orient_normals.h>
 
-#include <vector>
+#include <exception>
+#include <list>
 #include <fstream>
+#include <utility>
 
 typedef CGAL::Exact_predicates_inexact_constructions_kernel Kernel;
 typedef Kernel::Point_3                                     Point;
@@ -110,7 +112,7 @@ int vtkCGALPCAEstimateNormals::RequestData(
   pointNormalsArray->SetName("Normals");
   pointNormalsArray->SetNumberOfComponents(3); // 3d normals (ie x,y,z)
 
-  for (auto p : points)
+  for (const auto& p : points)
   {
     outpoints->InsertNextPoint(p.first[0], p.first[1], p.first[2]);
     pointNormalsArray->InsertNextTuple3(p.second[0], p.second[1], p.second[2]);

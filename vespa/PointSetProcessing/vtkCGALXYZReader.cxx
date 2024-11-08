@@ -7,6 +7,11 @@
 
 #include <CGAL/IO/read_points.h>
 
+#include <exception>
+#include <iterator>
+#include <utility>
+#include <vector>
+
 typedef CGAL_Kernel::Point_3                                 Point;
 typedef CGAL_Kernel::Vector_3                                Vector;
 typedef std::pair<Point, Vector>                             Point_with_normal;
@@ -80,7 +85,7 @@ int vtkCGALXYZReader::RequestData(vtkInformation* vtkNotUsed(request),
   pointNormalsArray->SetName("Normals");
   pointNormalsArray->SetNumberOfComponents(3); // 3d normals (ie x,y,z)
 
-  for (auto p : points)
+  for (const auto& p : points)
   {
     outpoints->InsertNextPoint(p.first[0], p.first[1], p.first[2]);
     pointNormalsArray->InsertNextTuple3(p.second[0], p.second[1], p.second[2]);

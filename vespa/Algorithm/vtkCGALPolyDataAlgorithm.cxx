@@ -8,6 +8,9 @@
 #include "vtkProbeFilter.h"
 #include "vtkPolyDataNormals.h"
 
+#include <iostream>
+#include <vector>
+
 vtkStandardNewMacro(vtkCGALPolyDataAlgorithm);
 
 //------------------------------------------------------------------------------
@@ -125,7 +128,7 @@ bool vtkCGALPolyDataAlgorithm::toVTK(Vespa_soup const* cgalMesh, vtkPolyData* vt
   const vtkIdType   outNPts = cgalMesh->points.size();
   pts->Allocate(outNPts);
 
-  for (auto point : cgalMesh->points)
+  for (const auto& point : cgalMesh->points)
   {
     pts->InsertNextPoint(point[0], point[1], point[2]);
   }
@@ -135,7 +138,7 @@ bool vtkCGALPolyDataAlgorithm::toVTK(Vespa_soup const* cgalMesh, vtkPolyData* vt
   vtkNew<vtkCellArray> cells;
   cells->AllocateEstimate(cgalMesh->faces.size(), 3);
 
-  for (auto face : cgalMesh->faces)
+  for (const auto& face : cgalMesh->faces)
   {
     vtkNew<vtkIdList> ids;
     ids->Allocate(face.size());

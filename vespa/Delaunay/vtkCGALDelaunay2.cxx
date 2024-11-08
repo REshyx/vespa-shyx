@@ -8,19 +8,22 @@
 #include "vtkObjectFactory.h"
 
 // CGAL related includes
-#include <CGAL/Surface_mesh.h>
-#include <CGAL/Simple_cartesian.h>
+#include <CGAL/Exact_predicates_inexact_constructions_kernel.h>
 #include <CGAL/Constrained_Delaunay_triangulation_2.h>
 
-using CGAL_Kernel  = CGAL::Simple_cartesian<double>;
+#include <list>
+#include <map>
+#include <vector>
+
+using CGAL_Kernel  = CGAL::Exact_predicates_inexact_constructions_kernel;
 
 vtkStandardNewMacro(vtkCGALDelaunay2);
 
 // TODO May try to use ProjectionTraits_3 to handle open 3D surfaces
 // Look at perf then
-// caution, a sphere won't work: intersection
-// caution, infinite loop on some tests
-using CDT2 = CGAL::Constrained_Delaunay_triangulation_2<CGAL_Kernel>;
+using CDT2 = CGAL::Constrained_Delaunay_triangulation_2<CGAL_Kernel,
+                                                        CGAL::Default,
+                                                        CGAL::No_constraint_intersection_requiring_constructions_tag>;
 
 //------------------------------------------------------------------------------
 void vtkCGALDelaunay2::PrintSelf(ostream& os, vtkIndent indent)
@@ -44,7 +47,7 @@ int vtkCGALDelaunay2::RequestData(
   vtkDataArray* ptsArr     = vtkPts->GetData();
   const auto    pointRange = vtk::DataArrayTupleRange<3>(ptsArr);
 
-  // manually handle the plannar coordinate
+  // manually handle the planar coordinate
   // should be along the x, y or z axis
   double rangeVal[3];
   for (int i = 0; i < 3; i++)
@@ -74,7 +77,7 @@ int vtkCGALDelaunay2::RequestData(
 
   std::vector<CDT2::Point> pts;
   pts.reserve(nbPts);
-  for (const auto pt : pointRange)
+  for (const auto& pt : pointRange)
   {
     pts.emplace_back(pt[d1], pt[d2]);
   }
@@ -98,15 +101,16 @@ int vtkCGALDelaunay2::RequestData(
       {
         poly.emplace_back(pts[p->GetId(i)]);
       }
+
       try
       {
-        delaunay.insert_constraint(poly.begin(), poly.end(), true);
+        delaunay.insert_constraint(poly.begin(), poly.end(), true /*close*/);
       }
-      catch(const std::exception& e)
+      catch(const CDT2::Intersection_of_constraints_exception& e)
       {
-        // If we have an invalid constraint (for example overlaping edges)
-        // we just ignore the constraint and continue
-        vtkWarningMacro("Ill-formed constraint detected : constraint ignored.");
+        // If we have an invalid constraint (such as edges intersecting in at least
+        // one of the edges' interiors), we just ignore the constraint and continue
+        vtkWarningMacro("Ill-formed constraint detected: constraint ignored.");
         continue;
       }
     }
@@ -123,21 +127,22 @@ int vtkCGALDelaunay2::RequestData(
       {
         line.emplace_back(pts[l->GetId(i)]);
       }
+
       try
       {
-        delaunay.insert_constraint(line.begin(), line.end());
+        delaunay.insert_constraint(line.begin(), line.end(), false /*close*/);
       }
-      catch(const std::exception& e)
+      catch(const CDT2::Intersection_of_constraints_exception& e)
       {
-        // If we have an invalid constraint (for example overlaping edges)
-        // we just ignore the constraint and continue
-        vtkWarningMacro("Ill-formed constraint detected : constraint ignored.");
+        // If we have an invalid constraint (such as edges intersecting in at least
+        // one of the edges' interiors), we just ignore the constraint and continue
+        vtkWarningMacro("Ill-formed constraint detected: constraint ignored.");
         continue;
       }
     }
 
     // Add points
-    for (auto point : pts)
+    for (const auto& point : pts)
     {
       delaunay.push_back(CDT2::Point(point));
     }
@@ -163,7 +168,7 @@ int vtkCGALDelaunay2::RequestData(
     coords[d2]            = vertex->point()[1];
     coords[d3]            = rangeVal[d3];
     vtkIdType id          = outPts->InsertNextPoint(coords);
-    vmap[vertex->point()] = id;
+    vmap[delaunay.point(vertex)] = id;
   }
   outPts->Squeeze();
 
@@ -174,9 +179,9 @@ int vtkCGALDelaunay2::RequestData(
   for (auto face : delaunay.finite_face_handles())
   {
     vtkNew<vtkIdList> ids;
-    ids->InsertNextId(vmap[face->vertex(0)->point()]);
-    ids->InsertNextId(vmap[face->vertex(1)->point()]);
-    ids->InsertNextId(vmap[face->vertex(2)->point()]);
+    ids->InsertNextId(vmap[delaunay.point(face, 0)]);
+    ids->InsertNextId(vmap[delaunay.point(face, 1)]);
+    ids->InsertNextId(vmap[delaunay.point(face, 2)]);
 
     cells->InsertNextCell(ids);
   }

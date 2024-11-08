@@ -1,8 +1,8 @@
 /**
  * @class   vtkCGALBooleanOperation
- * @brief   Performs a boolean operation between two vtkPolyData objects
+ * @brief   Performs a Boolean operation between two vtkPolyData objects
  *
- * vtkCGALBooleanOperation is a filter allowing to perform a boolean operation
+ * vtkCGALBooleanOperation is a filter allowing to perform a Boolean operation
  * between two closed, triangulated polygonal meshes.
  * These operations include union, intersection, and difference.
  * The resulting mesh is closed.
@@ -23,7 +23,7 @@ public:
   void PrintSelf(ostream& os, vtkIndent indent) override;
 
   /**
-   * List of available boolean operations between the volume bounded by the input
+   * List of available Boolean operations between the volume bounded by the input
    * and the volume bounded by the source. The result is a closed mesh.
    **/
   enum Operation
@@ -35,7 +35,7 @@ public:
 
   ///@{
   /**
-   * Get/set the type of boolean operation.
+   * Get/set the type of Boolean operation.
    * Default is DIFFERENCE.
    **/
   vtkGetMacro(OperationType, int);

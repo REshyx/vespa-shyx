@@ -19,6 +19,12 @@
 #include <CGAL/IO/facets_in_complex_2_to_triangle_mesh.h>
 #include <CGAL/Surface_mesh.h>
 
+#include <exception>
+#include <fstream>
+#include <memory>
+#include <utility>
+#include <vector>
+
 typedef CGAL_Kernel::FT                                      FT;
 typedef CGAL_Kernel::Point_3                                 Point;
 typedef CGAL_Kernel::Vector_3                                Vector;

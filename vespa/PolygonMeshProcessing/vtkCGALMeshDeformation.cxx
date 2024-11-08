@@ -12,6 +12,11 @@
 // CGAL related includes
 #include <CGAL/Surface_mesh_deformation.h>
 
+#include <exception>
+#include <fstream>
+#include <memory>
+#include <vector>
+
 vtkStandardNewMacro(vtkCGALMeshDeformation);
 
 using SmoothDeformation = CGAL::Surface_mesh_deformation<CGAL_Surface>;

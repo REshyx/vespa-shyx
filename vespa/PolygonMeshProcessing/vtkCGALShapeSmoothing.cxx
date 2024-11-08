@@ -8,6 +8,11 @@
 // CGAL related includes
 #include <CGAL/Polygon_mesh_processing/smooth_shape.h>
 
+#include <exception>
+#include <fstream>
+#include <memory>
+#include <vector>
+
 vtkStandardNewMacro(vtkCGALShapeSmoothing);
 
 namespace pmp = CGAL::Polygon_mesh_processing;

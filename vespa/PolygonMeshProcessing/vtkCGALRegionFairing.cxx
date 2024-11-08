@@ -12,6 +12,10 @@
 // CGAL related includes
 #include <CGAL/Polygon_mesh_processing/fair.h>
 
+#include <exception>
+#include <memory>
+#include <vector>
+
 vtkStandardNewMacro(vtkCGALRegionFairing);
 
 namespace pmp = CGAL::Polygon_mesh_processing;

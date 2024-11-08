@@ -1,10 +1,11 @@
 /**
  * @class   vtkCGALAlphaWrapping
- * @brief   remesh point clouds / triangle soups using the CGAL Alpha wrapping.
+ * @brief   generate meshes from point clouds or triangle soups, using the CGAL Alpha wrapping.
  *
- * vtkCGALAlphaWrapping is a filter allowing to reconstruct
- * a 2-manifold from an arbitrary polygon soup, for now
- * on only points / triangles are supported.
+ * vtkCGALAlphaWrapping is a filter allowing to construct
+ * a 2-manifold surface mesh from a point cloud or a polygon soup.
+ * The resulting mesh is guaranteed to strictly encloses the input.
+ * For now, only points and triangles are supported in input.
  */
 
 #ifndef vtkCGALAlphaWrapping_h
@@ -35,7 +36,7 @@ public:
   //@{
   /**
    * Get / Set the Alpha property,
-   * driving the maximum circumcenter of the faces in the resulting mesh.
+   * controlling the maximum circumcenter of the faces in the resulting mesh.
    * A smaller Alpha means a better penetration into concave parts of the mesh.
    **/
   vtkGetMacro(Alpha, double);
@@ -44,9 +45,9 @@ public:
 
   //@{
   /**
-   * Get / Set the Offset property, driving a dilatation
-   * off the resulting mesh. This non-null dilatation fix degeneracies
-   * and garantee a 2-manifold output.
+   * Get / Set the Offset property, controlling the dilatation
+   * of the resulting mesh with respect to the input mesh.
+   * The dilatation value must be non-null and garantees a 2-manifold output.
    **/
   vtkGetMacro(Offset, double);
   vtkSetMacro(Offset, double);

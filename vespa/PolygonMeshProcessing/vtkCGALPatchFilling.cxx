@@ -15,6 +15,11 @@
 #include <CGAL/Polygon_mesh_processing/border.h>
 #include <CGAL/Polygon_mesh_processing/triangulate_hole.h>
 
+#include <exception>
+#include <iterator>
+#include <memory>
+#include <vector>
+
 vtkStandardNewMacro(vtkCGALPatchFilling);
 
 namespace pmp = CGAL::Polygon_mesh_processing;
@@ -128,8 +133,9 @@ int vtkCGALPatchFilling::RequestData(
     for (Graph_halfedge h : borderCycles)
     {
       success &= std::get<0>(pmp::triangulate_refine_and_fair_hole(cgalMesh->surface, h,
-        std::back_inserter(patch_facets), std::back_inserter(patch_vertices),
-        pmp::parameters::fairing_continuity(this->FairingContinuity)));
+        pmp::parameters::fairing_continuity(this->FairingContinuity)
+                        .face_output_iterator(std::back_inserter(patch_facets))
+                        .vertex_output_iterator(std::back_inserter(patch_vertices))));
     }
   }
   catch (std::exception& e)
