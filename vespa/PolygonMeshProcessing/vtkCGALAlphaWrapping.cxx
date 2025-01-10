@@ -57,7 +57,6 @@ int vtkCGALAlphaWrapping::RequestData(
   // Create the surface mesh for CGAL
   // --------------------------------
 
-  // TODO switch to soup ? (or shrink 1)
   std::unique_ptr<Vespa_soup> cgalMesh = std::make_unique<Vespa_soup>();
   this->toCGAL(input, cgalMesh.get());
 
@@ -68,7 +67,24 @@ int vtkCGALAlphaWrapping::RequestData(
 
   try
   {
-    CGAL::alpha_wrap_3(cgalMesh->points, cgalMesh->faces, alpha, offset, cgalOutput->surface);
+    bool isPointCloud = true;
+    for (auto& cell : cgalMesh->faces)
+    {
+      if (cell.size() > 1)
+      {
+        isPointCloud = false;
+      }
+    }
+
+    if (isPointCloud)
+    {
+      // Specific version when we have only points
+      CGAL::alpha_wrap_3(cgalMesh->points, alpha, offset, cgalOutput->surface);
+    }
+    else
+    {
+      CGAL::alpha_wrap_3(cgalMesh->points, cgalMesh->faces, alpha, offset, cgalOutput->surface);
+    }
   }
   catch (std::exception& e)
   {

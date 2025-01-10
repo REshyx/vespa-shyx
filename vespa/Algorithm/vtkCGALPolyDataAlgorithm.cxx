@@ -49,9 +49,7 @@ bool vtkCGALPolyDataAlgorithm::toCGAL(vtkPolyData* vtkMesh, Vespa_soup* cgalMesh
     vtkIdList* ids   = cit->GetPointIds();
     vtkIdType  nbIds = cit->GetNumberOfPoints();
 
-    cgalMesh->faces[cid].reserve(3); // mostly triangles
-
-    std::vector<Graph_Verts> cell(nbIds);
+    cgalMesh->faces[cid].reserve(ids->GetNumberOfIds());
     for (vtkIdType i = 0; i < nbIds; i++)
     {
       cgalMesh->faces[cid].emplace_back(ids->GetId(i));
