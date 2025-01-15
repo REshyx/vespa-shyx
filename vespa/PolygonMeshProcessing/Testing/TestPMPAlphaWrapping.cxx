@@ -1,5 +1,4 @@
-#include <iostream>
-
+#include <vtkConvertToPointCloud.h>
 #include <vtkNew.h>
 #include <vtkTestUtilities.h>
 #include <vtkXMLPolyDataReader.h>
@@ -16,15 +15,24 @@ int TestPMPAlphaWrapping(int, char* argv[])
   cfname += "/dragon.vtp";
   reader->SetFileName(cfname.c_str());
 
-  // Remesh
+  // Remesh surface
+  vtkNew<vtkCGALAlphaWrapping> aw1;
+  aw1->SetInputConnection(reader->GetOutputPort());
 
-  vtkNew<vtkCGALAlphaWrapping> aw;
-  aw->SetInputConnection(reader->GetOutputPort());
+  // Remesh point cloud
+  vtkNew<vtkConvertToPointCloud> toPC;
+  toPC->SetInputConnection(aw1->GetOutputPort());
+  toPC->SetCellGenerationMode(vtkConvertToPointCloud::VERTEX_CELLS); 
+
+  // Remesh point cloud
+  vtkNew<vtkCGALAlphaWrapping> aw2;
+  aw2->SetInputConnection(toPC->GetOutputPort());
+  aw2->SetAlpha(2);
 
   // Save result
 
   vtkNew<vtkXMLPolyDataWriter> writer;
-  writer->SetInputConnection(aw->GetOutputPort());
+  writer->SetInputConnection(aw2->GetOutputPort());
   writer->SetFileName("alpha_wrapping.vtp");
   writer->Write();
 

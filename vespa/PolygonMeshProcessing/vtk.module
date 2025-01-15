@@ -9,6 +9,7 @@ DEPENDS
 TEST_DEPENDS
   VTK::CommonSystem
   VTK::FiltersSources
+  VTK::FiltersPoints
   VTK::IOInfovis
   VTK::IOXML
   VTK::TestingCore
