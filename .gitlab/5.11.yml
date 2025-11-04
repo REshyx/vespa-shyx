@@ -4,6 +4,8 @@
     PARAVIEW_VERSION: "5.11.2"
 
 build_plugin_artifact_5.11.2:
+  before_script:
+    - source /opt/rh/devtoolset-7/enable
   extends:
     - .build_plugin_artifact
     - .binary_5_11

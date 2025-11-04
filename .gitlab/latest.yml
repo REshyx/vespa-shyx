@@ -1,3 +1,15 @@
+.binary_latest:
+  image: kitware/paraview_org-plugin-devel:latest
+  variables:
+    PARAVIEW_VERSION: "latest"
+
+build_plugin_artifact_latest:
+  before_script:
+    - scl enable gcc-toolset-10 --
+  extends:
+    - .build_plugin_artifact
+    - .binary_latest
+
 .latest:
   image: kitware/paraview-for-ci:latest
   variables:
@@ -16,13 +28,3 @@ test_plugin_latest:
     - build_plugin_latest
   needs:
     - build_plugin_latest
-
-.binary_latest:
-  image: kitware/paraview_org-plugin-devel:latest
-  variables:
-    PARAVIEW_VERSION: "latest"
-
-build_plugin_artifact_latest:
-  extends:
-    - .build_plugin_artifact
-    - .binary_latest
