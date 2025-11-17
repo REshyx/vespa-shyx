@@ -93,7 +93,7 @@ vtk_module_scan(
   MODULE_FILES     ${vtkcgal_module_files}
   PROVIDES_MODULES vtkcgal_provided_modules
   WANT_BY_DEFAULT  ON
-  ENABLE_TESTS     ON)
+  ENABLE_TESTS     ${BUILD_TESTING})
 
 vtk_module_build(
   MODULES         ${vtkcgal_provided_modules}
