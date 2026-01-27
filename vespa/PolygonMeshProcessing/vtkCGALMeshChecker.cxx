@@ -1,11 +1,11 @@
 #include "vtkCGALMeshChecker.h"
 
+// VESPA related includes
+#include "vtkCGALHelper.h"
+
 // VTK related includes
 #include "vtkInformationVector.h"
 #include "vtkObjectFactory.h"
-
-// VESPA related includes
-#include "vtkCGALPatchFilling.h"
 
 // CGAL related includes
 #include <CGAL/Polygon_mesh_processing/corefinement.h>
@@ -17,7 +17,6 @@
 #include <CGAL/Polygon_mesh_processing/triangulate_hole.h>
 
 #include <exception>
-#include <fstream>
 #include <iterator>
 #include <memory>
 #include <vector>
@@ -54,9 +53,9 @@ int vtkCGALMeshChecker::RequestData(
   // Create the soup meshes for CGAL
   // ----------------------------------
 
-  std::unique_ptr<Vespa_soup> cgalSoup = std::make_unique<Vespa_soup>();
-  this->toCGAL(input, cgalSoup.get());
-  std::unique_ptr<Vespa_surface> cgalSurface = std::make_unique<Vespa_surface>();
+  std::unique_ptr<vtkCGALHelper::Vespa_soup> cgalSoup = std::make_unique<vtkCGALHelper::Vespa_soup>();
+  vtkCGALHelper::toCGAL(input, cgalSoup.get());
+  std::unique_ptr<vtkCGALHelper::Vespa_surface> cgalSurface = std::make_unique<vtkCGALHelper::Vespa_surface>();
 
   // CGAL Processing
   // ---------------
@@ -174,12 +173,12 @@ int vtkCGALMeshChecker::RequestData(
   {
     if (isSurface)
     {
-      this->toVTK(cgalSurface.get(), output);
+      vtkCGALHelper::toVTK(cgalSurface.get(), output);
       this->interpolateAttributes(input, output);
     }
     else
     {
-      this->toVTK(cgalSoup.get(), output);
+      vtkCGALHelper::toVTK(cgalSoup.get(), output);
       this->interpolateAttributes(input, output);
     }
   }

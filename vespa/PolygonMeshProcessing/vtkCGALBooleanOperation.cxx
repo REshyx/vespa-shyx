@@ -1,5 +1,8 @@
 #include "vtkCGALBooleanOperation.h"
 
+// VESPA related includes
+#include "vtkCGALHelper.h"
+
 // VTK related includes
 #include "vtkInformationVector.h"
 #include "vtkObjectFactory.h"
@@ -70,12 +73,12 @@ int vtkCGALBooleanOperation::RequestData(
   // Create the surface meshes for CGAL
   // ----------------------------------
 
-  std::unique_ptr<Vespa_surface> cgalInputMesh = std::make_unique<Vespa_surface>();
-  this->toCGAL(inputData, cgalInputMesh.get());
-  std::unique_ptr<Vespa_surface> cgalSourceMesh = std::make_unique<Vespa_surface>();
-  this->toCGAL(sourceData, cgalSourceMesh.get());
+  std::unique_ptr<vtkCGALHelper::Vespa_surface> cgalInputMesh = std::make_unique<vtkCGALHelper::Vespa_surface>();
+  vtkCGALHelper::toCGAL(inputData, cgalInputMesh.get());
+  std::unique_ptr<vtkCGALHelper::Vespa_surface> cgalSourceMesh = std::make_unique<vtkCGALHelper::Vespa_surface>();
+  vtkCGALHelper::toCGAL(sourceData, cgalSourceMesh.get());
 
-  std::unique_ptr<Vespa_surface> cgalOutMesh = std::make_unique<Vespa_surface>();
+  std::unique_ptr<vtkCGALHelper::Vespa_surface> cgalOutMesh = std::make_unique<vtkCGALHelper::Vespa_surface>();
 
   // CGAL Processing
   // ---------------
@@ -162,7 +165,7 @@ int vtkCGALBooleanOperation::RequestData(
   // VTK Output
   // ----------
 
-  this->toVTK(cgalOutMesh.get(), output);
+  vtkCGALHelper::toVTK(cgalOutMesh.get(), output);
   this->interpolateAttributes(inputData, output);
 
   return 1;

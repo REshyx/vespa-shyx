@@ -2,6 +2,9 @@
 
 #include "vtkCGALPoissonSurfaceReconstructionDelaunay.h"
 
+// VESPA related includes
+#include "vtkCGALHelper.h"
+
 // VTK related includes
 #include "vtkInformation.h"
 #include "vtkInformationVector.h"
@@ -20,7 +23,6 @@
 #include <CGAL/Surface_mesh.h>
 
 #include <exception>
-#include <fstream>
 #include <memory>
 #include <utility>
 #include <vector>
@@ -70,8 +72,8 @@ int vtkCGALPoissonSurfaceReconstructionDelaunay::RequestData(
   // Create the surface mesh for CGAL
   // ----------------------------------
 
-  std::unique_ptr<Vespa_surface> cgalMesh = std::make_unique<Vespa_surface>();
-  this->toCGAL(input, cgalMesh.get());
+  std::unique_ptr<vtkCGALHelper::Vespa_surface> cgalMesh = std::make_unique<vtkCGALHelper::Vespa_surface>();
+  vtkCGALHelper::toCGAL(input, cgalMesh.get());
 
   // CGAL Processing
   // ---------------
@@ -153,7 +155,7 @@ int vtkCGALPoissonSurfaceReconstructionDelaunay::RequestData(
   // ----------
 
   vtkNew<vtkPolyData> mesh;
-  this->toVTK(cgalMesh.get(), mesh);
+  vtkCGALHelper::toVTK(cgalMesh.get(), mesh);
   this->copyAttributes(input, mesh);
 
   if (this->GenerateSurfaceNormals)

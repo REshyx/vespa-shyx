@@ -11,7 +11,6 @@
 #include "vtkPoints.h"
 #include "vtkDoubleArray.h"
 #include "vtkNew.h"
-#include "vtkLogger.h"
 
 // CGAL related includes
 #include <CGAL/Exact_predicates_inexact_constructions_kernel.h>
@@ -21,7 +20,6 @@
 
 #include <exception>
 #include <list>
-#include <fstream>
 #include <utility>
 
 typedef CGAL::Exact_predicates_inexact_constructions_kernel Kernel;
@@ -31,8 +29,6 @@ typedef std::pair<Point, Vector>                            Pwn;
 typedef CGAL::Parallel_if_available_tag                     Concurrency_tag;
 
 vtkStandardNewMacro(vtkCGALPCAEstimateNormals);
-
-namespace pmp = CGAL::Polygon_mesh_processing;
 
 //------------------------------------------------------------------------------
 vtkCGALPCAEstimateNormals::vtkCGALPCAEstimateNormals()

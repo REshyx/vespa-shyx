@@ -2,19 +2,19 @@
 
 #include "vtkCGALAdvancingFrontSurfaceReconstruction.h"
 
+// VESPA related includes
+#include "vtkCGALHelper.h"
+
 // VTK related includes
 #include "vtkInformation.h"
 #include "vtkInformationVector.h"
 #include "vtkObjectFactory.h"
-#include "vtkPointData.h"
-#include "vtkLogger.h"
 
 // CGAL related includes
 #include <CGAL/Exact_predicates_inexact_constructions_kernel.h>
 #include <CGAL/Advancing_front_surface_reconstruction.h>
 
 #include <array>
-#include <fstream>
 #include <iterator>
 #include <memory>
 #include <vector>
@@ -93,8 +93,8 @@ int vtkCGALAdvancingFrontSurfaceReconstruction::RequestData(
   // Create the surface mesh for CGAL
   // ----------------------------------
 
-  std::unique_ptr<Vespa_surface> cgalMesh = std::make_unique<Vespa_surface>();
-  this->toCGAL(input, cgalMesh.get());
+  std::unique_ptr<vtkCGALHelper::Vespa_surface> cgalMesh = std::make_unique<vtkCGALHelper::Vespa_surface>();
+  vtkCGALHelper::toCGAL(input, cgalMesh.get());
 
   // CGAL Processing
   // ---------------
@@ -124,7 +124,7 @@ int vtkCGALAdvancingFrontSurfaceReconstruction::RequestData(
   // VTK Output
   // ----------
 
-  this->toVTK(cgalMesh.get(), output);
+  vtkCGALHelper::toVTK(cgalMesh.get(), output);
   this->copyAttributes(input, output);
 
   for (auto facet : facets)

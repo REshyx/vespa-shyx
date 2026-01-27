@@ -1,8 +1,9 @@
 #include "vtkCGALAlphaWrapping.h"
 
+// VESPA related includes
+#include "vtkCGALHelper.h"
+
 // VTK related includes
-#include "vtkDataSet.h"
-#include "vtkCellIterator.h"
 #include "vtkInformationVector.h"
 #include "vtkObjectFactory.h"
 
@@ -57,10 +58,10 @@ int vtkCGALAlphaWrapping::RequestData(
   // Create the surface mesh for CGAL
   // --------------------------------
 
-  std::unique_ptr<Vespa_soup> cgalMesh = std::make_unique<Vespa_soup>();
-  this->toCGAL(input, cgalMesh.get());
+  std::unique_ptr<vtkCGALHelper::Vespa_soup> cgalMesh = std::make_unique<vtkCGALHelper::Vespa_soup>();
+  vtkCGALHelper::toCGAL(input, cgalMesh.get());
 
-  std::unique_ptr<Vespa_surface> cgalOutput = std::make_unique<Vespa_surface>();
+  std::unique_ptr<vtkCGALHelper::Vespa_surface> cgalOutput = std::make_unique<vtkCGALHelper::Vespa_surface>();
 
   // CGAL Processing
   // ---------------
@@ -95,7 +96,7 @@ int vtkCGALAlphaWrapping::RequestData(
   // VTK Output
   // ----------
 
-  this->toVTK(cgalOutput.get(), output);
+  vtkCGALHelper::toVTK(cgalOutput.get(), output);
   this->interpolateAttributes(input, output);
 
   return 1;

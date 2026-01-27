@@ -1,5 +1,8 @@
 #include "vtkCGALRegionFairing.h"
 
+// VESPA related includes
+#include "vtkCGALHelper.h"
+
 // VTK related includes
 #include "vtkExtractSelection.h"
 #include "vtkInformation.h"
@@ -86,8 +89,8 @@ int vtkCGALRegionFairing::RequestData(
   // Create the triangle mesh for CGAL
   // --------------------------------
 
-  std::unique_ptr<Vespa_surface> cgalMesh = std::make_unique<Vespa_surface>();
-  this->toCGAL(input, cgalMesh.get());
+  std::unique_ptr<vtkCGALHelper::Vespa_surface> cgalMesh = std::make_unique<vtkCGALHelper::Vespa_surface>();
+  vtkCGALHelper::toCGAL(input, cgalMesh.get());
 
   // Retrieve the region to fair (ROI)
   // ---------------------------------
@@ -111,7 +114,7 @@ int vtkCGALRegionFairing::RequestData(
   // VTK Output
   // ----------
 
-  this->toVTK(cgalMesh.get(), output);
+  vtkCGALHelper::toVTK(cgalMesh.get(), output);
   this->interpolateAttributes(input, output);
 
   return 1;
