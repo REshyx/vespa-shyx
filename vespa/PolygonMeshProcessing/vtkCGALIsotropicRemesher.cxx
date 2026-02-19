@@ -4,8 +4,8 @@
 #include "vtkCGALHelper.h"
 
 // VTK related includes
-#include "vtkInformationVector.h"
-#include "vtkObjectFactory.h"
+#include <vtkInformationVector.h>
+#include <vtkObjectFactory.h>
 
 // CGAL related includes
 #include <CGAL/Polygon_mesh_processing/detect_features.h>

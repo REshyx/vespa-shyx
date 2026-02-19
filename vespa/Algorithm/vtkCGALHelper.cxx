@@ -1,10 +1,10 @@
 #include "vtkCGALHelper.h"
 
 // VTK related includes
-#include "vtkCellIterator.h"
-#include "vtkPolyData.h"
-#include "vtkPolyDataNormals.h"
-#include "vtkSetGet.h"
+#include <vtkCellIterator.h>
+#include <vtkPolyData.h>
+#include <vtkPolyDataNormals.h>
+#include <vtkSetGet.h>
 
 //------------------------------------------------------------------------------
 bool vtkCGALHelper::toCGAL(vtkPolyData* vtkMesh, vtkCGALHelper::Vespa_soup* cgalMesh)

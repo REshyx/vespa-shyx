@@ -1,6 +1,6 @@
 #include <iostream>
 
-#include "vtkNew.h"
+#include <vtkNew.h>
 
 #include "vtkCGALIsotropicRemesher.h"
 

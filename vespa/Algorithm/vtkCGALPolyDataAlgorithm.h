@@ -12,7 +12,7 @@
 #define vtkCGALPolyDataAlgorithm_h
 
 // VTK includes
-#include "vtkPolyDataAlgorithm.h"
+#include <vtkPolyDataAlgorithm.h>
 
 // CGAL includes
 #include <CGAL/Exact_predicates_inexact_constructions_kernel.h>

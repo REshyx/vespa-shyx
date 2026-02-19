@@ -1,9 +1,9 @@
 #include <iostream>
 
-#include "vtkNew.h"
-#include "vtkSphereSource.h"
-#include "vtkTestUtilities.h"
-#include "vtkXMLPolyDataWriter.h"
+#include <vtkNew.h>
+#include <vtkSphereSource.h>
+#include <vtkTestUtilities.h>
+#include <vtkXMLPolyDataWriter.h>
 
 #include "vtkCGALMeshSubdivision.h"
 

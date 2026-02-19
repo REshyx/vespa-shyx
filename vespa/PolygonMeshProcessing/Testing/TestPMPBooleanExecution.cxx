@@ -1,12 +1,11 @@
-#include <iostream>
-#include <vtkDataSetSurfaceFilter.h>
 
-#include "vtkConeSource.h"
-#include "vtkDataSetTriangleFilter.h"
-#include "vtkNew.h"
-#include "vtkSphereSource.h"
-#include "vtkTestUtilities.h"
-#include "vtkXMLPolyDataWriter.h"
+#include <vtkConeSource.h>
+#include <vtkDataSetSurfaceFilter.h>
+#include <vtkDataSetTriangleFilter.h>
+#include <vtkNew.h>
+#include <vtkSphereSource.h>
+#include <vtkTestUtilities.h>
+#include <vtkXMLPolyDataWriter.h>
 
 #include "vtkCGALBooleanOperation.h"
 

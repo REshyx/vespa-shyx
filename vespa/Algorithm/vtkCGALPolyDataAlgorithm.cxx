@@ -1,11 +1,11 @@
 #include "vtkCGALPolyDataAlgorithm.h"
 
 // VTK related includes
-#include "vtkCellData.h"
-#include "vtkObjectFactory.h"
-#include "vtkPointData.h"
-#include "vtkPolyDataNormals.h"
-#include "vtkProbeFilter.h"
+#include <vtkCellData.h>
+#include <vtkObjectFactory.h>
+#include <vtkPointData.h>
+#include <vtkPolyDataNormals.h>
+#include <vtkProbeFilter.h>
 
 #include <iostream>
 

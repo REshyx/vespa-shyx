@@ -4,11 +4,11 @@
 #include "vtkCGALHelper.h"
 
 // VTK related includes
-#include "vtkInformation.h"
-#include "vtkInformationVector.h"
-#include "vtkNew.h"
-#include "vtkObjectFactory.h"
-#include "vtkTriangleFilter.h"
+#include <vtkInformation.h>
+#include <vtkInformationVector.h>
+#include <vtkNew.h>
+#include <vtkObjectFactory.h>
+#include <vtkTriangleFilter.h>
 
 // CGAL related includes
 #include <CGAL/subdivision_method_3.h>

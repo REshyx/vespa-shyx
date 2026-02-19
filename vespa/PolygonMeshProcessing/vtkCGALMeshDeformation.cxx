@@ -4,13 +4,13 @@
 #include "vtkCGALHelper.h"
 
 // VTK related includes
-#include "vtkExtractSelection.h"
-#include "vtkInformation.h"
-#include "vtkInformationVector.h"
-#include "vtkObjectFactory.h"
-#include "vtkPointData.h"
-#include "vtkPointSet.h"
-#include "vtkSelection.h"
+#include <vtkExtractSelection.h>
+#include <vtkInformation.h>
+#include <vtkInformationVector.h>
+#include <vtkObjectFactory.h>
+#include <vtkPointData.h>
+#include <vtkPointSet.h>
+#include <vtkSelection.h>
 
 // CGAL related includes
 #include <CGAL/Surface_mesh_deformation.h>

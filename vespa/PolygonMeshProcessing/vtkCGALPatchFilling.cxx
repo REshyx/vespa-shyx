@@ -4,15 +4,15 @@
 #include "vtkCGALHelper.h"
 
 // VTK related includes
-#include "vtkDataSetSurfaceFilter.h"
-#include "vtkExtractSelection.h"
-#include "vtkInformation.h"
-#include "vtkInformationVector.h"
-#include "vtkObjectFactory.h"
-#include "vtkSelection.h"
-#include "vtkSelectionNode.h"
-#include "vtkTriangleFilter.h"
-#include "vtkThreshold.h"
+#include <vtkDataSetSurfaceFilter.h>
+#include <vtkExtractSelection.h>
+#include <vtkInformation.h>
+#include <vtkInformationVector.h>
+#include <vtkObjectFactory.h>
+#include <vtkSelection.h>
+#include <vtkSelectionNode.h>
+#include <vtkTriangleFilter.h>
+#include <vtkThreshold.h>
 
 // CGAL related includes
 #include <CGAL/Polygon_mesh_processing/border.h>

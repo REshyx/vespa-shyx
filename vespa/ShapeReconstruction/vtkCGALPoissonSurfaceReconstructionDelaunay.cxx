@@ -6,11 +6,11 @@
 #include "vtkCGALHelper.h"
 
 // VTK related includes
-#include "vtkInformation.h"
-#include "vtkInformationVector.h"
-#include "vtkObjectFactory.h"
-#include "vtkPointData.h"
-#include "vtkPolyDataNormals.h"
+#include <vtkInformation.h>
+#include <vtkInformationVector.h>
+#include <vtkObjectFactory.h>
+#include <vtkPointData.h>
+#include <vtkPolyDataNormals.h>
 
 // CGAL related includes
 #include <CGAL/Exact_predicates_inexact_constructions_kernel.h>

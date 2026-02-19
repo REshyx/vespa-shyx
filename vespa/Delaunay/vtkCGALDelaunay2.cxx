@@ -1,11 +1,11 @@
 #include "vtkCGALDelaunay2.h"
 
 // VTK related includes
-#include "vtkCellArrayIterator.h"
-#include "vtkDataSet.h"
-#include "vtkIdList.h"
-#include "vtkInformationVector.h"
-#include "vtkObjectFactory.h"
+#include <vtkCellArrayIterator.h>
+#include <vtkDataSet.h>
+#include <vtkIdList.h>
+#include <vtkInformationVector.h>
+#include <vtkObjectFactory.h>
 
 // CGAL related includes
 #include <CGAL/Exact_predicates_inexact_constructions_kernel.h>

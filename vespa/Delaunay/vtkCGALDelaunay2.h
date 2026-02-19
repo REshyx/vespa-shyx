@@ -12,7 +12,7 @@
 #ifndef vtkCGALDelaunay2_h
 #define vtkCGALDelaunay2_h
 
-#include "vtkPolyDataAlgorithm.h"
+#include <vtkPolyDataAlgorithm.h>
 
 #include "vtkCGALDelaunayModule.h" // For export macro
 

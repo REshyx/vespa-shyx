@@ -3,14 +3,14 @@
 #include "vtkCGALPCAEstimateNormals.h"
 
 // VTK related includes
-#include "vtkInformation.h"
-#include "vtkInformationVector.h"
-#include "vtkObjectFactory.h"
-#include "vtkPointData.h"
-#include "vtkPolyData.h"
-#include "vtkPoints.h"
-#include "vtkDoubleArray.h"
-#include "vtkNew.h"
+#include <vtkInformation.h>
+#include <vtkInformationVector.h>
+#include <vtkObjectFactory.h>
+#include <vtkPointData.h>
+#include <vtkPolyData.h>
+#include <vtkPoints.h>
+#include <vtkDoubleArray.h>
+#include <vtkNew.h>
 
 // CGAL related includes
 #include <CGAL/Exact_predicates_inexact_constructions_kernel.h>

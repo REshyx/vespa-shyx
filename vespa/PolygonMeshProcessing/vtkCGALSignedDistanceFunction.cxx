@@ -4,15 +4,15 @@
 #include "vtkCGALHelper.h"
 
 // VTK related includes
-#include "vtkDataSet.h"
-#include "vtkFloatArray.h"
-#include "vtkImageData.h"
-#include "vtkInformation.h"
-#include "vtkInformationVector.h"
-#include "vtkObjectFactory.h"
-#include "vtkPointData.h"
-#include "vtkPolyData.h"
-#include "vtkSMPTools.h"
+#include <vtkDataSet.h>
+#include <vtkFloatArray.h>
+#include <vtkImageData.h>
+#include <vtkInformation.h>
+#include <vtkInformationVector.h>
+#include <vtkObjectFactory.h>
+#include <vtkPointData.h>
+#include <vtkPolyData.h>
+#include <vtkSMPTools.h>
 
 // CGAL related includes
 #include <CGAL/AABB_face_graph_triangle_primitive.h>

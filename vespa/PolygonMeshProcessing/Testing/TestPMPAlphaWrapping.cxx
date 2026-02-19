@@ -22,7 +22,7 @@ int TestPMPAlphaWrapping(int, char* argv[])
   // Remesh point cloud
   vtkNew<vtkConvertToPointCloud> toPC;
   toPC->SetInputConnection(aw1->GetOutputPort());
-  toPC->SetCellGenerationMode(vtkConvertToPointCloud::VERTEX_CELLS); 
+  toPC->SetCellGenerationMode(vtkConvertToPointCloud::VERTEX_CELLS);
 
   // Remesh point cloud
   vtkNew<vtkCGALAlphaWrapping> aw2;

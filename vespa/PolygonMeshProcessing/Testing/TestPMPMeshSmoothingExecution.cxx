@@ -1,9 +1,9 @@
-#include "vtkNew.h"
-#include "vtkSphereSource.h"
-#include "vtkTestUtilities.h"
-#include "vtkXMLPolyDataWriter.h"
+#include <vtkNew.h>
+#include <vtkSphereSource.h>
+#include <vtkTestUtilities.h>
+#include <vtkXMLPolyDataWriter.h>
 
-#include "vtkCGALMeshSmoothing.h" 
+#include "vtkCGALMeshSmoothing.h"
 int TestPMPMeshSmoothingExecution(int, char**)
 {
   vtkNew<vtkSphereSource> sphere;

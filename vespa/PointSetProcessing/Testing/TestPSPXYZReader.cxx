@@ -1,9 +1,9 @@
 #include <iostream>
 
-#include "vtkNew.h"
-#include "vtkTestUtilities.h"
-#include "vtkXMLPolyDataReader.h"
-#include "vtkXMLPolyDataWriter.h"
+#include <vtkNew.h>
+#include <vtkTestUtilities.h>
+#include <vtkXMLPolyDataReader.h>
+#include <vtkXMLPolyDataWriter.h>
 
 #include "vtkCGALXYZReader.h"
 
