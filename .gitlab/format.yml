@@ -1,0 +1,10 @@
+check-formatting:
+  stage: build
+  image: gitlab.kitware.com:4567/vtk/meshing/vespa:latest
+  script:
+    - shopt -s globstar; clang-format-20 --dry-run --Werror ./**/*.{h,cxx}
+
+  tags:
+    - docker
+    - linux-x86_64
+    - paraview
