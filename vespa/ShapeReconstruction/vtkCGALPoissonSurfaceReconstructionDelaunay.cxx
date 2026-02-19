@@ -72,7 +72,8 @@ int vtkCGALPoissonSurfaceReconstructionDelaunay::RequestData(
   // Create the surface mesh for CGAL
   // ----------------------------------
 
-  std::unique_ptr<vtkCGALHelper::Vespa_surface> cgalMesh = std::make_unique<vtkCGALHelper::Vespa_surface>();
+  std::unique_ptr<vtkCGALHelper::Vespa_surface> cgalMesh =
+    std::make_unique<vtkCGALHelper::Vespa_surface>();
   vtkCGALHelper::toCGAL(input, cgalMesh.get());
 
   // CGAL Processing

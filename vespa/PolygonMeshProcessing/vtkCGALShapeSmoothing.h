@@ -54,7 +54,7 @@ protected:
 
 private:
   vtkCGALShapeSmoothing(const vtkCGALShapeSmoothing&) = delete;
-  void operator=(const vtkCGALShapeSmoothing&) = delete;
+  void operator=(const vtkCGALShapeSmoothing&)        = delete;
 };
 
 #endif

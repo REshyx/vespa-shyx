@@ -48,14 +48,13 @@ public:
   /**
    *   Set / Get the AttemptRepair property, default: false
    *   If true, this filter will try to repair non conformal meshes
-  *    by various ways.
+   *    by various ways.
    *   This triggers an additional deep copy.
    */
   vtkGetMacro(AttemptRepair, bool);
   vtkSetMacro(AttemptRepair, bool);
   vtkBooleanMacro(AttemptRepair, bool);
   // }@
-
 
 protected:
   vtkCGALMeshChecker()           = default;
@@ -64,9 +63,9 @@ protected:
   int RequestData(vtkInformation*, vtkInformationVector**, vtkInformationVector*) override;
 
   // fields
-  bool CheckWatertight  = true;
-  bool CheckIntersect   = true;
-  bool AttemptRepair = false;
+  bool CheckWatertight = true;
+  bool CheckIntersect  = true;
+  bool AttemptRepair   = false;
 
 private:
   vtkCGALMeshChecker(const vtkCGALMeshChecker&) = delete;

@@ -34,7 +34,7 @@ protected:
 
 private:
   vtkCGALRegionFairing(const vtkCGALRegionFairing&) = delete;
-  void operator=(const vtkCGALRegionFairing&) = delete;
+  void operator=(const vtkCGALRegionFairing&)       = delete;
 };
 
 #endif

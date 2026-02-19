@@ -38,8 +38,7 @@ int TestPMPFairExecution(int, char* argv[])
   roiReader->SetDetectNumericColumns(true);
   roiReader->Update();
 
-  vtkIntArray* roiArr =
-    vtkIntArray::SafeDownCast(roiReader->GetOutput()->GetColumn(0));
+  vtkIntArray* roiArr = vtkIntArray::SafeDownCast(roiReader->GetOutput()->GetColumn(0));
 
   vtkNew<vtkIdTypeArray> arr;
   arr->SetNumberOfTuples(roiArr->GetNumberOfTuples());
@@ -50,7 +49,6 @@ int TestPMPFairExecution(int, char* argv[])
   }
 
   node->SetSelectionList(arr);
-
 
   // Fair selected region
 

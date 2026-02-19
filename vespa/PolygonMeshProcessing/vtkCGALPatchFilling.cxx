@@ -113,10 +113,11 @@ int vtkCGALPatchFilling::RequestData(
   // Create the triangle mesh for CGAL
   // --------------------------------
 
-  std::unique_ptr<vtkCGALHelper::Vespa_surface> cgalMesh = std::make_unique<vtkCGALHelper::Vespa_surface>();
+  std::unique_ptr<vtkCGALHelper::Vespa_surface> cgalMesh =
+    std::make_unique<vtkCGALHelper::Vespa_surface>();
   if (vtkCGALHelper::toCGAL(baseDataSet, cgalMesh.get()) == false)
   {
-    vtkErrorMacro("Non manifold input may lead to crash, please fix the input mesh.") ;
+    vtkErrorMacro("Non manifold input may lead to crash, please fix the input mesh.");
     return 0;
   }
 
@@ -137,8 +138,8 @@ int vtkCGALPatchFilling::RequestData(
     {
       success &= std::get<0>(pmp::triangulate_refine_and_fair_hole(cgalMesh->surface, h,
         pmp::parameters::fairing_continuity(this->FairingContinuity)
-                        .face_output_iterator(std::back_inserter(patch_facets))
-                        .vertex_output_iterator(std::back_inserter(patch_vertices))));
+          .face_output_iterator(std::back_inserter(patch_facets))
+          .vertex_output_iterator(std::back_inserter(patch_vertices))));
     }
   }
   catch (std::exception& e)

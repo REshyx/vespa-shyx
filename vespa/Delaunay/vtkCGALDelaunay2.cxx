@@ -15,15 +15,14 @@
 #include <map>
 #include <vector>
 
-using CGAL_Kernel  = CGAL::Exact_predicates_inexact_constructions_kernel;
+using CGAL_Kernel = CGAL::Exact_predicates_inexact_constructions_kernel;
 
 vtkStandardNewMacro(vtkCGALDelaunay2);
 
 // TODO May try to use ProjectionTraits_3 to handle open 3D surfaces
 // Look at perf then
-using CDT2 = CGAL::Constrained_Delaunay_triangulation_2<CGAL_Kernel,
-                                                        CGAL::Default,
-                                                        CGAL::No_constraint_intersection_requiring_constructions_tag>;
+using CDT2 = CGAL::Constrained_Delaunay_triangulation_2<CGAL_Kernel, CGAL::Default,
+  CGAL::No_constraint_intersection_requiring_constructions_tag>;
 
 //------------------------------------------------------------------------------
 void vtkCGALDelaunay2::PrintSelf(ostream& os, vtkIndent indent)
@@ -106,7 +105,7 @@ int vtkCGALDelaunay2::RequestData(
       {
         delaunay.insert_constraint(poly.begin(), poly.end(), true /*close*/);
       }
-      catch(const CDT2::Intersection_of_constraints_exception& e)
+      catch (const CDT2::Intersection_of_constraints_exception& e)
       {
         // If we have an invalid constraint (such as edges intersecting in at least
         // one of the edges' interiors), we just ignore the constraint and continue
@@ -132,7 +131,7 @@ int vtkCGALDelaunay2::RequestData(
       {
         delaunay.insert_constraint(line.begin(), line.end(), false /*close*/);
       }
-      catch(const CDT2::Intersection_of_constraints_exception& e)
+      catch (const CDT2::Intersection_of_constraints_exception& e)
       {
         // If we have an invalid constraint (such as edges intersecting in at least
         // one of the edges' interiors), we just ignore the constraint and continue
@@ -164,10 +163,10 @@ int vtkCGALDelaunay2::RequestData(
   for (auto vertex : delaunay.finite_vertex_handles())
   {
     double coords[3];
-    coords[d1]            = vertex->point()[0];
-    coords[d2]            = vertex->point()[1];
-    coords[d3]            = rangeVal[d3];
-    vtkIdType id          = outPts->InsertNextPoint(coords);
+    coords[d1]                   = vertex->point()[0];
+    coords[d2]                   = vertex->point()[1];
+    coords[d3]                   = rangeVal[d3];
+    vtkIdType id                 = outPts->InsertNextPoint(coords);
     vmap[delaunay.point(vertex)] = id;
   }
   outPts->Squeeze();

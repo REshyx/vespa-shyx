@@ -31,7 +31,7 @@ protected:
 
 private:
   vtkCGALDelaunay2(const vtkCGALDelaunay2&) = delete;
-  void operator=(const vtkCGALDelaunay2&) = delete;
+  void operator=(const vtkCGALDelaunay2&)   = delete;
 };
 
 #endif

@@ -20,7 +20,8 @@ int TestPMPMeshCheckerExecution(int, char* argv[])
   checker->SetInputConnection(reader->GetOutputPort());
   checker->AttemptRepairOn();
 
-  std::cout << "EXPECTED WARNING|: Not closed, Attempt reparation, Closing successful." << std::endl;
+  std::cout << "EXPECTED WARNING|: Not closed, Attempt reparation, Closing successful."
+            << std::endl;
 
   vtkNew<vtkXMLPolyDataWriter> writer;
   writer->SetInputConnection(checker->GetOutputPort());

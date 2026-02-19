@@ -30,20 +30,16 @@ void vtkCGALBooleanOperation::PrintSelf(ostream& os, vtkIndent indent)
   switch (this->OperationType)
   {
     case vtkCGALBooleanOperation::DIFFERENCE:
-      os << indent << "OperationType: "
-         << "Difference" << std::endl;
+      os << indent << "OperationType: " << "Difference" << std::endl;
       break;
     case vtkCGALBooleanOperation::INTERSECTION:
-      os << indent << "OperationType: "
-         << "Intersection" << std::endl;
+      os << indent << "OperationType: " << "Intersection" << std::endl;
       break;
     case vtkCGALBooleanOperation::UNION:
-      os << indent << "OperationType: "
-         << "Union" << std::endl;
+      os << indent << "OperationType: " << "Union" << std::endl;
       break;
     default:
-      os << indent << "OperationType: "
-         << "Unknown" << std::endl;
+      os << indent << "OperationType: " << "Unknown" << std::endl;
       break;
   }
 
@@ -73,12 +69,15 @@ int vtkCGALBooleanOperation::RequestData(
   // Create the surface meshes for CGAL
   // ----------------------------------
 
-  std::unique_ptr<vtkCGALHelper::Vespa_surface> cgalInputMesh = std::make_unique<vtkCGALHelper::Vespa_surface>();
+  std::unique_ptr<vtkCGALHelper::Vespa_surface> cgalInputMesh =
+    std::make_unique<vtkCGALHelper::Vespa_surface>();
   vtkCGALHelper::toCGAL(inputData, cgalInputMesh.get());
-  std::unique_ptr<vtkCGALHelper::Vespa_surface> cgalSourceMesh = std::make_unique<vtkCGALHelper::Vespa_surface>();
+  std::unique_ptr<vtkCGALHelper::Vespa_surface> cgalSourceMesh =
+    std::make_unique<vtkCGALHelper::Vespa_surface>();
   vtkCGALHelper::toCGAL(sourceData, cgalSourceMesh.get());
 
-  std::unique_ptr<vtkCGALHelper::Vespa_surface> cgalOutMesh = std::make_unique<vtkCGALHelper::Vespa_surface>();
+  std::unique_ptr<vtkCGALHelper::Vespa_surface> cgalOutMesh =
+    std::make_unique<vtkCGALHelper::Vespa_surface>();
 
   // CGAL Processing
   // ---------------
@@ -113,17 +112,19 @@ int vtkCGALBooleanOperation::RequestData(
       switch (this->OperationType)
       {
         case vtkCGALBooleanOperation::DIFFERENCE:
-          res = pmp::corefine_and_compute_difference(cgalInputMesh->surface, cgalSourceMesh->surface,
-            cgalOutMesh->surface, pmp::parameters::throw_on_self_intersection(true), pmp::parameters::all_default());
+          res = pmp::corefine_and_compute_difference(cgalInputMesh->surface,
+            cgalSourceMesh->surface, cgalOutMesh->surface,
+            pmp::parameters::throw_on_self_intersection(true), pmp::parameters::all_default());
           break;
         case vtkCGALBooleanOperation::INTERSECTION:
-          res =
-            pmp::corefine_and_compute_intersection(cgalInputMesh->surface, cgalSourceMesh->surface,
-              cgalOutMesh->surface, pmp::parameters::throw_on_self_intersection(true), pmp::parameters::all_default());
+          res = pmp::corefine_and_compute_intersection(cgalInputMesh->surface,
+            cgalSourceMesh->surface, cgalOutMesh->surface,
+            pmp::parameters::throw_on_self_intersection(true), pmp::parameters::all_default());
           break;
         case vtkCGALBooleanOperation::UNION:
           res = pmp::corefine_and_compute_union(cgalInputMesh->surface, cgalSourceMesh->surface,
-            cgalOutMesh->surface, pmp::parameters::throw_on_self_intersection(true), pmp::parameters::all_default());
+            cgalOutMesh->surface, pmp::parameters::throw_on_self_intersection(true),
+            pmp::parameters::all_default());
           break;
         default:
           vtkErrorMacro("Unknown Boolean operation!");
@@ -131,7 +132,7 @@ int vtkCGALBooleanOperation::RequestData(
           break;
       }
     }
-    catch(const CGAL::Polygon_mesh_processing::Corefinement::Self_intersection_exception& e)
+    catch (const CGAL::Polygon_mesh_processing::Corefinement::Self_intersection_exception& e)
     {
       vtkErrorMacro("Self-intersections in meshes; Boolean operation cannot be performed.");
       return 0;

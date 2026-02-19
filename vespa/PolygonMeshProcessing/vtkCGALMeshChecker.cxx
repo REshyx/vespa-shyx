@@ -53,9 +53,11 @@ int vtkCGALMeshChecker::RequestData(
   // Create the soup meshes for CGAL
   // ----------------------------------
 
-  std::unique_ptr<vtkCGALHelper::Vespa_soup> cgalSoup = std::make_unique<vtkCGALHelper::Vespa_soup>();
+  std::unique_ptr<vtkCGALHelper::Vespa_soup> cgalSoup =
+    std::make_unique<vtkCGALHelper::Vespa_soup>();
   vtkCGALHelper::toCGAL(input, cgalSoup.get());
-  std::unique_ptr<vtkCGALHelper::Vespa_surface> cgalSurface = std::make_unique<vtkCGALHelper::Vespa_surface>();
+  std::unique_ptr<vtkCGALHelper::Vespa_surface> cgalSurface =
+    std::make_unique<vtkCGALHelper::Vespa_surface>();
 
   // CGAL Processing
   // ---------------
@@ -116,8 +118,8 @@ int vtkCGALMeshChecker::RequestData(
           {
             pmp::triangulate_refine_and_fair_hole(cgalSurface->surface, h,
               pmp::parameters::fairing_continuity(0)
-                              .face_output_iterator(std::back_inserter(patch_facets))
-                              .vertex_output_iterator(std::back_inserter(patch_vertices)));
+                .face_output_iterator(std::back_inserter(patch_facets))
+                .vertex_output_iterator(std::back_inserter(patch_vertices)));
           }
 
           // check reparation

@@ -60,13 +60,14 @@ protected:
   int RequestData(vtkInformation*, vtkInformationVector**, vtkInformationVector*) override;
 
 private:
-  vtkCGALPoissonSurfaceReconstructionDelaunay(const vtkCGALPoissonSurfaceReconstructionDelaunay&) = delete;
-  void operator=(const vtkCGALPoissonSurfaceReconstructionDelaunay&)       = delete;
+  vtkCGALPoissonSurfaceReconstructionDelaunay(
+    const vtkCGALPoissonSurfaceReconstructionDelaunay&)              = delete;
+  void operator=(const vtkCGALPoissonSurfaceReconstructionDelaunay&) = delete;
 
   double MinTriangleAngle;
   double MaxTriangleSize;
   double Distance;
-  bool GenerateSurfaceNormals;
+  bool   GenerateSurfaceNormals;
 };
 
 #endif

@@ -10,7 +10,7 @@
 int TestPSPXYZReader(int, char* argv[])
 {
   vtkNew<vtkCGALXYZReader> reader;
-  std::string                  cfname(argv[1]);
+  std::string              cfname(argv[1]);
   cfname += "/dragon.xyz";
   reader->SetFileName(cfname.c_str());
 

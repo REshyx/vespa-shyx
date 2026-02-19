@@ -49,7 +49,8 @@ int vtkCGALMeshSmoothing::RequestData(
   // Create the surface mesh for CGAL
   // ----------------------------------
 
-  std::unique_ptr<vtkCGALHelper::Vespa_surface> cgalMesh = std::make_unique<vtkCGALHelper::Vespa_surface>();
+  std::unique_ptr<vtkCGALHelper::Vespa_surface> cgalMesh =
+    std::make_unique<vtkCGALHelper::Vespa_surface>();
   vtkCGALHelper::toCGAL(input, cgalMesh.get());
 
   // CGAL Processing
@@ -78,7 +79,7 @@ int vtkCGALMeshSmoothing::RequestData(
           .edge_is_constrained_map(featureEdges));
     }
     else
-          vtkLog(INFO, "Invalid smoothing method.");
+      vtkLog(INFO, "Invalid smoothing method.");
   }
   catch (std::exception& e)
   {

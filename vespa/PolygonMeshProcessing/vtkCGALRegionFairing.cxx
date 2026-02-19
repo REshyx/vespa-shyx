@@ -89,7 +89,8 @@ int vtkCGALRegionFairing::RequestData(
   // Create the triangle mesh for CGAL
   // --------------------------------
 
-  std::unique_ptr<vtkCGALHelper::Vespa_surface> cgalMesh = std::make_unique<vtkCGALHelper::Vespa_surface>();
+  std::unique_ptr<vtkCGALHelper::Vespa_surface> cgalMesh =
+    std::make_unique<vtkCGALHelper::Vespa_surface>();
   vtkCGALHelper::toCGAL(input, cgalMesh.get());
 
   // Retrieve the region to fair (ROI)

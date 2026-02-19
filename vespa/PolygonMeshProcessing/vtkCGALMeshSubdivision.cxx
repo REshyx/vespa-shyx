@@ -24,24 +24,19 @@ void vtkCGALMeshSubdivision::PrintSelf(ostream& os, vtkIndent indent)
   switch (this->SubdivisionType)
   {
     case vtkCGALMeshSubdivision::CATMULL_CLARK:
-      os << indent << "SubdivisionType: "
-         << "Catmull-Clark" << std::endl;
+      os << indent << "SubdivisionType: " << "Catmull-Clark" << std::endl;
       break;
     case vtkCGALMeshSubdivision::LOOP:
-      os << indent << "SubdivisionType: "
-         << "Loop" << std::endl;
+      os << indent << "SubdivisionType: " << "Loop" << std::endl;
       break;
     case vtkCGALMeshSubdivision::DOO_SABIN:
-      os << indent << "SubdivisionType: "
-         << "Doo-Sabin" << std::endl;
+      os << indent << "SubdivisionType: " << "Doo-Sabin" << std::endl;
       break;
     case vtkCGALMeshSubdivision::SQRT3:
-      os << indent << "SubdivisionType: "
-         << "Sqrt3" << std::endl;
+      os << indent << "SubdivisionType: " << "Sqrt3" << std::endl;
       break;
     default:
-      os << indent << "SubdivisionType: "
-         << "Unknown" << std::endl;
+      os << indent << "SubdivisionType: " << "Unknown" << std::endl;
       break;
   }
 
@@ -66,7 +61,8 @@ int vtkCGALMeshSubdivision::RequestData(
   // Create the triangle mesh for CGAL
   // ---------------------------------
 
-  std::unique_ptr<vtkCGALHelper::Vespa_surface> cgalMesh = std::make_unique<vtkCGALHelper::Vespa_surface>();
+  std::unique_ptr<vtkCGALHelper::Vespa_surface> cgalMesh =
+    std::make_unique<vtkCGALHelper::Vespa_surface>();
   vtkCGALHelper::toCGAL(input, cgalMesh.get());
 
   // CGAL Processing

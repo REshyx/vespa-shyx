@@ -12,7 +12,7 @@
 
 int TestPMPSignedDistanceFunction(int, char* argv[])
 {
-  float radius = 1.0f;
+  float                   radius = 1.0f;
   vtkNew<vtkSphereSource> sphere;
   sphere->SetThetaResolution(20);
   sphere->SetPhiResolution(20);
@@ -23,7 +23,7 @@ int TestPMPSignedDistanceFunction(int, char* argv[])
   triangulator->SetInputData(sphere->GetOutput());
   triangulator->Update();
 
-  unsigned int resolution = 21;
+  unsigned int                          resolution = 21;
   vtkNew<vtkCGALSignedDistanceFunction> sdf;
   sdf->SetInputConnection(triangulator->GetOutputPort());
   sdf->SetBaseResolution(resolution);

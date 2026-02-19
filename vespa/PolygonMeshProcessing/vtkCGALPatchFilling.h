@@ -56,7 +56,7 @@ protected:
 
 private:
   vtkCGALPatchFilling(const vtkCGALPatchFilling&) = delete;
-  void operator=(const vtkCGALPatchFilling&) = delete;
+  void operator=(const vtkCGALPatchFilling&)      = delete;
 };
 
 #endif

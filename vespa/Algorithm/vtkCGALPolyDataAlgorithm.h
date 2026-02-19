@@ -26,7 +26,6 @@ using Graph_Coord  = boost::property_map<CGAL_Surface, CGAL::vertex_point_t>::ty
 
 #include "vtkCGALAlgorithmModule.h" // For export macro
 
-
 // Filter
 class VTKCGALALGORITHM_EXPORT vtkCGALPolyDataAlgorithm : public vtkPolyDataAlgorithm
 {

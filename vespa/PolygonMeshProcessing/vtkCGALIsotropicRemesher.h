@@ -65,7 +65,7 @@ protected:
 
 private:
   vtkCGALIsotropicRemesher(const vtkCGALIsotropicRemesher&) = delete;
-  void operator=(const vtkCGALIsotropicRemesher&) = delete;
+  void operator=(const vtkCGALIsotropicRemesher&)           = delete;
 };
 
 #endif

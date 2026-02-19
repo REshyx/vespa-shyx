@@ -66,7 +66,7 @@ protected:
 
 private:
   vtkCGALMeshSubdivision(const vtkCGALMeshSubdivision&) = delete;
-  void operator=(const vtkCGALMeshSubdivision&) = delete;
+  void operator=(const vtkCGALMeshSubdivision&)         = delete;
 };
 
 #endif

@@ -24,8 +24,8 @@ class VTKCGALPSP_EXPORT vtkCGALXYZReader : public vtkCGALPolyDataAlgorithm
 {
 public:
   vtkTypeMacro(vtkCGALXYZReader, vtkCGALPolyDataAlgorithm);
-  static vtkCGALXYZReader *New();
-  void PrintSelf(ostream &os, vtkIndent indent) override;
+  static vtkCGALXYZReader* New();
+  void                     PrintSelf(ostream& os, vtkIndent indent) override;
 
   vtkSetFilePathMacro(FileName);
   vtkGetFilePathMacro(FileName);
@@ -34,14 +34,14 @@ protected:
   vtkCGALXYZReader();
   ~vtkCGALXYZReader() override;
 
-  int RequestData(vtkInformation *request, vtkInformationVector **inputVector,
-                  vtkInformationVector *outputVector) override;
+  int RequestData(vtkInformation* request, vtkInformationVector** inputVector,
+    vtkInformationVector* outputVector) override;
 
 private:
-  vtkCGALXYZReader(const vtkCGALXYZReader &) = delete;
-  void operator=(const vtkCGALXYZReader &) = delete;
+  vtkCGALXYZReader(const vtkCGALXYZReader&) = delete;
+  void operator=(const vtkCGALXYZReader&)   = delete;
 
-  char *FileName;
+  char* FileName;
 };
 
 #endif // vtkCGALXYZReader_h

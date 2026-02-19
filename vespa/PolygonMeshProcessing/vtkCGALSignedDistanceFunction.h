@@ -55,9 +55,9 @@ protected:
 
 private:
   vtkCGALSignedDistanceFunction(const vtkCGALSignedDistanceFunction&) = delete;
-  void operator=(const vtkCGALSignedDistanceFunction&)       = delete;
+  void operator=(const vtkCGALSignedDistanceFunction&)                = delete;
 
-  int Padding = 0;
+  int Padding        = 0;
   int BaseResolution = 64;
 };
 
