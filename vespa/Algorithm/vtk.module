@@ -1,7 +1,7 @@
 NAME
   vtkCGALAlgorithm
 DESCRIPTION
-  "This module contains vtkAlgorithm base file to translate between VTK and CGAL."
+  "This module contains helper namespace and class to translate between VTK and CGAL."
 GROUPS
   Meshing
 DEPENDS

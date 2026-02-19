@@ -2,6 +2,9 @@
 
 #include "vtkCGALMeshSmoothing.h"
 
+// VESPA related includes
+#include "vtkCGALHelper.h"
+
 // VTK related includes
 #include "vtkInformation.h"
 #include "vtkInformationVector.h"
@@ -17,7 +20,6 @@
 #include <CGAL/Polygon_mesh_processing/IO/polygon_mesh_io.h>
 
 #include <exception>
-#include <fstream>
 #include <memory>
 
 vtkStandardNewMacro(vtkCGALMeshSmoothing);
@@ -47,8 +49,8 @@ int vtkCGALMeshSmoothing::RequestData(
   // Create the surface mesh for CGAL
   // ----------------------------------
 
-  std::unique_ptr<Vespa_surface> cgalMesh = std::make_unique<Vespa_surface>();
-  this->toCGAL(input, cgalMesh.get());
+  std::unique_ptr<vtkCGALHelper::Vespa_surface> cgalMesh = std::make_unique<vtkCGALHelper::Vespa_surface>();
+  vtkCGALHelper::toCGAL(input, cgalMesh.get());
 
   // CGAL Processing
   // ---------------
@@ -87,7 +89,7 @@ int vtkCGALMeshSmoothing::RequestData(
   // VTK Output
   // ----------
 
-  this->toVTK(cgalMesh.get(), output);
+  vtkCGALHelper::toVTK(cgalMesh.get(), output);
   this->copyAttributes(input, output);
 
   return 1;

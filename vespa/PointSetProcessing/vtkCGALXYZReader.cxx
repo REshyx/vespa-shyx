@@ -1,10 +1,12 @@
 #include "vtkCGALXYZReader.h"
 
+// VTK related includes
 #include "vtkDoubleArray.h"
 #include "vtkInformation.h"
 #include "vtkInformationVector.h"
 #include "vtkPointData.h"
 
+// CGAL related includes
 #include <CGAL/IO/read_points.h>
 
 #include <exception>

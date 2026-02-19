@@ -1,5 +1,8 @@
 #include "vtkCGALPatchFilling.h"
 
+// VESPA related includes
+#include "vtkCGALHelper.h"
+
 // VTK related includes
 #include "vtkDataSetSurfaceFilter.h"
 #include "vtkExtractSelection.h"
@@ -110,8 +113,8 @@ int vtkCGALPatchFilling::RequestData(
   // Create the triangle mesh for CGAL
   // --------------------------------
 
-  std::unique_ptr<Vespa_surface> cgalMesh = std::make_unique<Vespa_surface>();
-  if (this->toCGAL(baseDataSet, cgalMesh.get()) == false)
+  std::unique_ptr<vtkCGALHelper::Vespa_surface> cgalMesh = std::make_unique<vtkCGALHelper::Vespa_surface>();
+  if (vtkCGALHelper::toCGAL(baseDataSet, cgalMesh.get()) == false)
   {
     vtkErrorMacro("Non manifold input may lead to crash, please fix the input mesh.") ;
     return 0;
@@ -147,7 +150,7 @@ int vtkCGALPatchFilling::RequestData(
   // VTK Output
   // ----------
 
-  this->toVTK(cgalMesh.get(), output);
+  vtkCGALHelper::toVTK(cgalMesh.get(), output);
 
   // Note, there is not UpdateAttributes here as the new mesh
   // contains patches not present in the initial surface

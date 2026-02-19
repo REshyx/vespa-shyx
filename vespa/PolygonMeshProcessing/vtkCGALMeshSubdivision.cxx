@@ -1,5 +1,8 @@
 #include "vtkCGALMeshSubdivision.h"
 
+// VESPA related includes
+#include "vtkCGALHelper.h"
+
 // VTK related includes
 #include "vtkInformation.h"
 #include "vtkInformationVector.h"
@@ -11,7 +14,6 @@
 #include <CGAL/subdivision_method_3.h>
 
 #include <exception>
-#include <fstream>
 #include <memory>
 
 vtkStandardNewMacro(vtkCGALMeshSubdivision);
@@ -64,8 +66,8 @@ int vtkCGALMeshSubdivision::RequestData(
   // Create the triangle mesh for CGAL
   // ---------------------------------
 
-  std::unique_ptr<Vespa_surface> cgalMesh = std::make_unique<Vespa_surface>();
-  this->toCGAL(input, cgalMesh.get());
+  std::unique_ptr<vtkCGALHelper::Vespa_surface> cgalMesh = std::make_unique<vtkCGALHelper::Vespa_surface>();
+  vtkCGALHelper::toCGAL(input, cgalMesh.get());
 
   // CGAL Processing
   // ---------------
@@ -104,7 +106,7 @@ int vtkCGALMeshSubdivision::RequestData(
   // VTK Output
   // ----------
 
-  this->toVTK(cgalMesh.get(), output);
+  vtkCGALHelper::toVTK(cgalMesh.get(), output);
 
   // Triangulate if needed
   if (this->SubdivisionType == vtkCGALMeshSubdivision::CATMULL_CLARK ||
