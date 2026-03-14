@@ -32,6 +32,12 @@ endif ()
 option(BUILD_SHARED_LIBS "Build shared library" ON)
 set(VESPA_BUILD_PV_PLUGIN ON CACHE BOOL "Build VESPA ParaView plugin")
 
+# Plugin 模式下将 vespa 模块全部编译为静态库并链接进 VESPAPlugin.dll，无需再配置 build\bin\Release 到 PATH
+if (VESPA_BUILD_PV_PLUGIN)
+    set(BUILD_SHARED_LIBS OFF CACHE BOOL "Build shared libraries; OFF when building ParaView plugin so all modules are linked into VESPAPlugin.dll" FORCE)
+    message(STATUS "VESPA: Building ParaView plugin with static vespa modules (all linked into VESPAPlugin.dll)")
+endif()
+
 include(CTest)
 
 ## Deps
@@ -161,6 +167,9 @@ if (VESPA_BUILD_PV_PLUGIN)
       return ()
     endif ()
   endforeach ()
+
+  # 插件目标必须是 SHARED(DLL) 供 ParaView 加载；vespa 模块已在上面 vtk_module_build 时建为静态库，会链接进此 DLL
+  set(BUILD_SHARED_LIBS ON)
 
   paraview_plugin_build(
     TARGET VESPAPVPLUGIN
