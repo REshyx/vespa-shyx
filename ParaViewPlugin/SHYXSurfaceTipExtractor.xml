@@ -1,0 +1,44 @@
+<ServerManagerConfiguration>
+
+  <ProxyGroup name="filters">
+    <SourceProxy name="SHYXSurfaceTipExtractor"
+                 class="vtkSurfaceTipExtractor"
+                 label="SHYX Surface Tip Extractor">
+      <Documentation
+          long_help="Identify tip / sharp points on a polygonal surface by computing, for each vertex, the distance between the vertex and the centroid of its geodesically-connected neighbourhood within a search radius. The result is stored as a point data array called TipScore."
+          short_help="Compute surface sharpness (TipScore) via centroid-offset within a local neighbourhood.">
+        Input: vtkPolyData. Output: copy of input with an additional TipScore point data array.
+      </Documentation>
+
+      <InputProperty name="Input" command="SetInputConnection">
+        <ProxyGroupDomain name="groups">
+          <Group name="sources"/>
+          <Group name="filters"/>
+        </ProxyGroupDomain>
+        <DataTypeDomain name="input_type">
+          <DataType value="vtkPolyData"/>
+        </DataTypeDomain>
+        <Documentation>
+          Input polygonal surface mesh.
+        </Documentation>
+      </InputProperty>
+
+      <DoubleVectorProperty name="SearchRadius"
+          label="Search Radius"
+          command="SetSearchRadius"
+          number_of_elements="1"
+          default_values="5.0"
+          animateable="1">
+        <DoubleRangeDomain name="range" min="0.0"/>
+        <Documentation>
+          Radius used to define each vertex's local neighbourhood. Larger values capture broader surface features; smaller values are more sensitive to fine details.
+        </Documentation>
+      </DoubleVectorProperty>
+
+      <Hints>
+        <ShowInMenu category="SHYX"/>
+      </Hints>
+    </SourceProxy>
+  </ProxyGroup>
+
+</ServerManagerConfiguration>

@@ -1,0 +1,13 @@
+NAME
+  vtkGeodesicDistanceFilter
+DESCRIPTION
+  "Compute geodesic (shortest surface) distance from all vertices to a source vertex."
+GROUPS
+  Meshing
+DEPENDS
+  VTK::FiltersCore
+  VTK::FiltersModeling
+PRIVATE_DEPENDS
+  VTK::CommonCore
+  VTK::CommonDataModel
+  VTK::CommonExecutionModel

@@ -1,0 +1,32 @@
+<ServerManagerConfiguration>
+  <ProxyGroup name="filters">
+    <SourceProxy name="SHYXGeodesicDistance"
+                 class="vtkGeodesicDistanceFilter"
+                 label="SHYX Geodesic Distance">
+      <Documentation
+          long_help="Compute the shortest surface (geodesic) distance from every vertex to a user-specified source vertex using Dijkstra's algorithm. The result is stored as a point data array named 'GeodesicDistance'."
+          short_help="Compute geodesic distance from all vertices to a source vertex."/>
+
+      <InputProperty name="Input" command="SetInputConnection">
+        <ProxyGroupDomain name="groups">
+          <Group name="sources"/>
+          <Group name="filters"/>
+        </ProxyGroupDomain>
+        <DataTypeDomain name="input_type">
+          <DataType value="vtkPolyData"/>
+        </DataTypeDomain>
+      </InputProperty>
+
+      <IntVectorProperty name="SourceVertexId" label="Source Vertex ID" command="SetSourceVertexId"
+          number_of_elements="1" default_values="0" animateable="0">
+        <Documentation>
+          The vertex ID of the source point. Geodesic distances are measured from this vertex to all other vertices on the surface.
+        </Documentation>
+      </IntVectorProperty>
+
+      <Hints>
+        <ShowInMenu category="SHYX"/>
+      </Hints>
+    </SourceProxy>
+  </ProxyGroup>
+</ServerManagerConfiguration>

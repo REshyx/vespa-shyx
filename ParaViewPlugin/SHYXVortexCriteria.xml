@@ -1,0 +1,92 @@
+<ServerManagerConfiguration>
+  <ProxyGroup name="filters">
+    <SourceProxy name="SHYXVortexCriteria" class="vtkVortexCriteriaFilter" label="SHYX Vortex Criteria">
+      <Documentation
+          long_help="Compute flow quantities and vortex identification criteria from velocity: vorticity, velocity gradient, strain/rotation tensors, Q-criterion, Lambda2, swirling strength, Liutex, Omega method, helicity. All outputs are optional."
+          short_help="Compute vortex identification criteria and flow quantities from velocity."/>
+
+      <InputProperty name="Input" command="SetInputConnection">
+        <ProxyGroupDomain name="groups">
+          <Group name="sources"/>
+          <Group name="filters"/>
+        </ProxyGroupDomain>
+        <DataTypeDomain name="input_type">
+          <DataType value="vtkDataSet"/>
+        </DataTypeDomain>
+      </InputProperty>
+
+      <StringVectorProperty name="VelocityArrayName" label="Velocity Array" command="SetVelocityArrayName"
+          number_of_elements="1" animateable="0">
+        <ArrayListDomain name="array_list" input_domain_name="inputs_array">
+          <RequiredProperties>
+            <Property name="Input" function="Input"/>
+          </RequiredProperties>
+        </ArrayListDomain>
+      </StringVectorProperty>
+
+      <IntVectorProperty name="ComputeVelocity" label="Output Velocity" command="SetComputeVelocity"
+          number_of_elements="1" default_values="0" animateable="0">
+        <BooleanDomain name="bool"/>
+      </IntVectorProperty>
+
+      <IntVectorProperty name="ComputeVorticity" label="Output Vorticity" command="SetComputeVorticity"
+          number_of_elements="1" default_values="1" animateable="0">
+        <BooleanDomain name="bool"/>
+      </IntVectorProperty>
+
+      <IntVectorProperty name="ComputeGradient" label="Output Velocity Gradient" command="SetComputeGradient"
+          number_of_elements="1" default_values="0" animateable="0">
+        <BooleanDomain name="bool"/>
+      </IntVectorProperty>
+
+      <IntVectorProperty name="ComputeStrainRate" label="Output Strain Rate Tensor" command="SetComputeStrainRate"
+          number_of_elements="1" default_values="0" animateable="0">
+        <BooleanDomain name="bool"/>
+      </IntVectorProperty>
+
+      <IntVectorProperty name="ComputeRotationTensor" label="Output Rotation Tensor" command="SetComputeRotationTensor"
+          number_of_elements="1" default_values="0" animateable="0">
+        <BooleanDomain name="bool"/>
+      </IntVectorProperty>
+
+      <IntVectorProperty name="ComputeQCriterion" label="Output Q-Criterion" command="SetComputeQCriterion"
+          number_of_elements="1" default_values="1" animateable="0">
+        <BooleanDomain name="bool"/>
+      </IntVectorProperty>
+
+      <IntVectorProperty name="ComputeLambda2" label="Output Lambda2" command="SetComputeLambda2"
+          number_of_elements="1" default_values="0" animateable="0">
+        <BooleanDomain name="bool"/>
+      </IntVectorProperty>
+
+      <IntVectorProperty name="ComputeSwirlingStrength" label="Output Swirling Strength" command="SetComputeSwirlingStrength"
+          number_of_elements="1" default_values="0" animateable="0">
+        <BooleanDomain name="bool"/>
+      </IntVectorProperty>
+
+      <IntVectorProperty name="ComputeLiutex" label="Output Liutex (Rortex)" command="SetComputeLiutex"
+          number_of_elements="1" default_values="0" animateable="0">
+        <BooleanDomain name="bool"/>
+      </IntVectorProperty>
+
+      <IntVectorProperty name="ComputeOmegaMethod" label="Output Omega Method" command="SetComputeOmegaMethod"
+          number_of_elements="1" default_values="0" animateable="0">
+        <BooleanDomain name="bool"/>
+      </IntVectorProperty>
+
+      <DoubleVectorProperty name="Epsilon" label="Epsilon" command="SetEpsilon"
+          number_of_elements="1" default_values="1e-10" animateable="0">
+        <Documentation>Small value in Omega formula. Default 1e-10.</Documentation>
+      </DoubleVectorProperty>
+
+      <IntVectorProperty name="ComputeHelicity" label="Output Helicity" command="SetComputeHelicity"
+          number_of_elements="1" default_values="0" animateable="0">
+        <BooleanDomain name="bool"/>
+      </IntVectorProperty>
+
+      <Hints>
+        <ShowInMenu category="SHYX"/>
+      </Hints>
+    </SourceProxy>
+  </ProxyGroup>
+</ServerManagerConfiguration>

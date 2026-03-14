@@ -1,0 +1,15 @@
+NAME
+  vtkFTLEFilter
+DESCRIPTION
+  "Compute Finite-Time Lyapunov Exponent (FTLE) field from velocity."
+GROUPS
+  Meshing
+DEPENDS
+  VTK::FiltersCore
+  VTK::FiltersFlowPaths
+  VTK::FiltersGeneral
+PRIVATE_DEPENDS
+  VTK::CommonCore
+  VTK::CommonDataModel
+  VTK::CommonExecutionModel
+  VTK::CommonMath

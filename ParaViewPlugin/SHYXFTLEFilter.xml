@@ -1,0 +1,63 @@
+<ServerManagerConfiguration>
+  <ProxyGroup name="filters">
+    <SourceProxy name="SHYXFTLEFilter" class="vtkFTLEFilter" label="SHYX FTLE Filter">
+      <Documentation
+          long_help="Compute Finite-Time Lyapunov Exponent (FTLE) field from a velocity field. FTLE is used to identify Lagrangian coherent structures in flow fields."
+          short_help="Compute FTLE field from velocity field."/>
+
+      <InputProperty name="Input" command="SetInputConnection">
+        <ProxyGroupDomain name="groups">
+          <Group name="sources"/>
+          <Group name="filters"/>
+        </ProxyGroupDomain>
+        <DataTypeDomain name="input_type">
+          <DataType value="vtkDataSet"/>
+        </DataTypeDomain>
+      </InputProperty>
+
+      <DoubleVectorProperty name="IntegrationTime" label="Integration Time" command="SetIntegrationTime"
+          number_of_elements="1" animateable="1" default_values="1.0">
+        <DoubleRangeDomain name="range" min="-100.0" max="100.0" />
+      </DoubleVectorProperty>
+
+      <DoubleVectorProperty name="StepSize" label="Step Size" command="SetStepSize"
+          number_of_elements="1" animateable="0" default_values="0.1">
+        <DoubleRangeDomain name="range" min="0.0001" max="1.0" />
+      </DoubleVectorProperty>
+
+      <DoubleVectorProperty name="StartTime" label="Start Time" command="SetStartTime"
+          number_of_elements="1" animateable="0" default_values="0.0">
+        <DoubleRangeDomain name="range" min="-1000.0" max="1000.0" />
+      </DoubleVectorProperty>
+
+      <StringVectorProperty name="VelocityArrayName" label="Velocity Array" command="SetVelocityArrayName"
+          number_of_elements="1" animateable="0">
+        <ArrayListDomain name="array_list" attribute_type="Vectors" input_domain_name="inputs_array">
+          <RequiredProperties>
+            <Property name="Input" function="Input" />
+          </RequiredProperties>
+        </ArrayListDomain>
+      </StringVectorProperty>
+
+      <IntVectorProperty name="IntegratorType" label="Integrator Type" command="SetIntegratorType"
+          number_of_elements="1" animateable="0" default_values="1">
+        <EnumerationDomain name="enum">
+          <Entry value="0" text="Runge-Kutta 2"/>
+          <Entry value="1" text="Runge-Kutta 4"/>
+        </EnumerationDomain>
+      </IntVectorProperty>
+
+      <IntVectorProperty name="AdvectionMode" label="Advection Mode" command="SetAdvectionMode"
+          number_of_elements="1" animateable="0" default_values="0">
+        <EnumerationDomain name="enum">
+          <Entry value="0" text="Streamline"/>
+          <Entry value="1" text="Pathline"/>
+        </EnumerationDomain>
+      </IntVectorProperty>
+
+      <Hints>
+        <ShowInMenu category="SHYX"/>
+      </Hints>
+    </SourceProxy>
+  </ProxyGroup>
+</ServerManagerConfiguration>

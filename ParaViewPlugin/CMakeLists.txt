@@ -22,6 +22,10 @@ paraview_add_plugin(VESPAPlugin
   MODULES ${vtkcgal_provided_modules}
   SERVER_MANAGER_XML
     "VESPAFilters.xml"
+    "SHYXSurfaceTipExtractor.xml"
+    "SHYXFTLEFilter.xml"
+    "SHYXGeodesicDistance.xml"
+    "SHYXVortexCriteria.xml"
      ${ALPHA_WRAPPING_SERVER_MANAGER_XML}
      ${MESH_SMOOTHING_SERVER_MANAGER_XML}
 )

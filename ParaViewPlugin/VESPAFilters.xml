@@ -114,8 +114,8 @@
 
     <!-- ================================================================== -->
     <SourceProxy class="vtkCGALDensityBasedSampler"
-                 label="VESPA Density-Based Volume Sampler"
-                 name="VESPADensityBasedVolumeSampler">
+                 label="SHYX Density-Based Volume Sampler"
+                 name="SHYXDensityBasedVolumeSampler">
       <Documentation short_help="Samples random points inside a closed mesh with density controlled by a scalar field.">
         This filter generates random sample points within the enclosed volume of
         a mesh. It accepts either a volume mesh (vtkUnstructuredGrid, e.g. .vtu)
@@ -214,7 +214,7 @@
       </IntVectorProperty>
 
       <Hints>
-        <ShowInMenu category="VESPA"/>
+        <ShowInMenu category="SHYX"/>
       </Hints>
 
     </SourceProxy>
@@ -917,8 +917,8 @@
 
     <!-- ================================================================== -->
     <SourceProxy class="vtkCGALSkeletonExtraction"
-                 label="VESPA Skeleton Extraction"
-                 name="VESPASkeletonExtraction">
+                 label="SHYX Skeleton Extraction"
+                 name="SHYXSkeletonExtraction">
       <Documentation short_help="Extracts a curve skeleton from a closed triangle mesh.">
         This filter extracts a 1D curve skeleton from a closed triangulated surface mesh
         using the CGAL Mean Curvature Flow Skeletonization algorithm.
@@ -1029,15 +1029,15 @@
       </DoubleVectorProperty>
 
       <Hints>
-        <ShowInMenu category="VESPA"/>
+        <ShowInMenu category="SHYX"/>
       </Hints>
 
     </SourceProxy>
 
     <!-- ================================================================== -->
     <SourceProxy class="vtkCGALVesselEndClipper"
-                 label="VESPA Vessel End Clipper"
-                 name="VESPAVesselEndClipper">
+                 label="SHYX Vessel End Clipper"
+                 name="SHYXVesselEndClipper">
       <Documentation short_help="Clips vessel tips flat at skeleton endpoints for CFD.">
         This filter clips the tips of a vascular surface mesh at the leaf
         endpoints of its centerline skeleton. A cutting plane perpendicular
@@ -1168,7 +1168,7 @@
       </IntVectorProperty>
 
       <Hints>
-        <ShowInMenu category="VESPA"/>
+        <ShowInMenu category="SHYX"/>
       </Hints>
 
     </SourceProxy>

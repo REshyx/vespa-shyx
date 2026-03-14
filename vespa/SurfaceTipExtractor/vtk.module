@@ -1,0 +1,13 @@
+NAME
+  vtkSurfaceTipExtractor
+DESCRIPTION
+  "Surface tip / sharpness extractor for polygonal meshes."
+GROUPS
+  Meshing
+DEPENDS
+  VTK::FiltersCore
+PRIVATE_DEPENDS
+  VTK::CommonCore
+  VTK::CommonDataModel
+  VTK::CommonExecutionModel
+  VTK::CommonMath

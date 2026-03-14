@@ -1,0 +1,14 @@
+NAME
+  vtkVortexCriteriaFilter
+DESCRIPTION
+  "Compute vortex identification criteria and flow quantities from velocity."
+GROUPS
+  Meshing
+DEPENDS
+  VTK::FiltersCore
+  VTK::FiltersGeneral
+PRIVATE_DEPENDS
+  VTK::CommonCore
+  VTK::CommonDataModel
+  VTK::CommonExecutionModel
+  VTK::CommonMath
