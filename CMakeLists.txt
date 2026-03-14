@@ -11,6 +11,12 @@ endif()
 
 set(CMAKE_CXX_STANDARD 11)
 
+
+set(Boost_DIR "C:/local/boost_1_74_0/lib64-msvc-14.2/cmake/Boost-1.74.0")
+set(CGAL_DIR C:/SoftWare/CGAL-6.1.1)
+set(ParaView_DIR C:/Users/18490/Documents/GitHub/ParaView/install/lib/cmake/paraview-6.0)
+
+
 include(GNUInstallDirs)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/${CMAKE_INSTALL_BINDIR}")
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/${CMAKE_INSTALL_LIBDIR}")
@@ -24,7 +30,7 @@ if (NOT CMAKE_BUILD_TYPE AND NOT generator_is_multi_config)
 endif ()
 
 option(BUILD_SHARED_LIBS "Build shared library" ON)
-set(VESPA_BUILD_PV_PLUGIN OFF CACHE BOOL "Build VESPA ParaView plugin")
+set(VESPA_BUILD_PV_PLUGIN ON CACHE BOOL "Build VESPA ParaView plugin")
 
 include(CTest)
 
@@ -81,7 +87,7 @@ else ()
   set(FORCE_STATIC_MODULES_STRING)
 endif()
 
-option(BUILD_PYTHON_WRAPPERS "Build python wrapping" ON)
+option(BUILD_PYTHON_WRAPPERS "Build python wrapping" OFF)
 if(BUILD_PYTHON_WRAPPERS)
   vtk_module_python_default_destination(python_destination)
 endif()
@@ -89,11 +95,17 @@ endif()
 ## Module build
 vtk_module_find_modules(vtkcgal_module_files "${CMAKE_CURRENT_SOURCE_DIR}/vespa")
 
+if(BUILD_TESTING)
+  set(_vespa_enable_tests "ON")
+else()
+  set(_vespa_enable_tests "OFF")
+endif()
+
 vtk_module_scan(
   MODULE_FILES     ${vtkcgal_module_files}
   PROVIDES_MODULES vtkcgal_provided_modules
   WANT_BY_DEFAULT  ON
-  ENABLE_TESTS     ${BUILD_TESTING})
+  ENABLE_TESTS     ${_vespa_enable_tests})
 
 vtk_module_build(
   MODULES         ${vtkcgal_provided_modules}

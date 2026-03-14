@@ -16,6 +16,7 @@
 
 // CGAL related includes
 #include <CGAL/AABB_face_graph_triangle_primitive.h>
+#include <CGAL/AABB_traits_3.h>
 #include <CGAL/AABB_tree.h>
 #include <CGAL/boost/graph/helpers.h>
 #include <CGAL/Side_of_triangle_mesh.h>
@@ -23,7 +24,7 @@
 using Point                 = CGAL_Kernel::Point_3;
 using Side_of_triangle_mesh = CGAL::Side_of_triangle_mesh<CGAL_Surface, CGAL_Kernel>;
 using Primitive             = CGAL::AABB_face_graph_triangle_primitive<CGAL_Surface>;
-using Traits                = CGAL::AABB_traits<CGAL_Kernel, Primitive>;
+using Traits                = CGAL::AABB_traits_3<CGAL_Kernel, Primitive>;
 using Tree                  = CGAL::AABB_tree<Traits>;
 
 vtkStandardNewMacro(vtkCGALSignedDistanceFunction);

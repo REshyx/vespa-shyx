@@ -15,6 +15,8 @@
 #include <CGAL/Exact_predicates_inexact_constructions_kernel.h>
 #include <CGAL/Surface_mesh.h>
 
+#include "vtkCGALAlgorithmModule.h" // For export macro
+
 using CGAL_Kernel  = CGAL::Exact_predicates_inexact_constructions_kernel;
 using CGAL_Surface = CGAL::Surface_mesh<CGAL_Kernel::Point_3>;
 using Graph_Verts  = boost::graph_traits<CGAL_Surface>::vertex_descriptor;
@@ -54,7 +56,7 @@ struct Vespa_surface
  * in the Vespa_soup data object.
  * return true if operation was successful.
  */
-bool toCGAL(vtkPolyData* vtkMesh, Vespa_soup* cgalMesh);
+VTKCGALALGORITHM_EXPORT bool toCGAL(vtkPolyData* vtkMesh, Vespa_soup* cgalMesh);
 
 /**
  * Convert a vtkPolyData to a CGAL surface mesh.
@@ -62,20 +64,20 @@ bool toCGAL(vtkPolyData* vtkMesh, Vespa_soup* cgalMesh);
  * in the Vespa_surface data object.
  * return true if operation was successful.
  */
-bool toCGAL(vtkPolyData* vtkMesh, Vespa_surface* cgalMesh);
+VTKCGALALGORITHM_EXPORT bool toCGAL(vtkPolyData* vtkMesh, Vespa_surface* cgalMesh);
 
 /**
  * Convert a CGAL polygon soup to a vtkPolydata.
  * return true if operation was successful.
  * result may not be manifold.
  */
-bool toVTK(Vespa_soup const* cgalMesh, vtkPolyData* vtkMesh);
+VTKCGALALGORITHM_EXPORT bool toVTK(Vespa_soup const* cgalMesh, vtkPolyData* vtkMesh);
 
 /**
  * Convert a CGAL surface mesh to a vtkPolydata.
  * return true if operation was successful.
  */
-bool toVTK(Vespa_surface const* cgalMesh, vtkPolyData* vtkMesh);
+VTKCGALALGORITHM_EXPORT bool toVTK(Vespa_surface const* cgalMesh, vtkPolyData* vtkMesh);
 };
 
 #endif

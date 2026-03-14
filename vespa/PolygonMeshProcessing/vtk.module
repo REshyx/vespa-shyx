@@ -6,6 +6,7 @@ GROUPS
   Meshing
 DEPENDS
   vtkCGALAlgorithm
+  VTK::FiltersModeling
 TEST_DEPENDS
   VTK::CommonSystem
   VTK::FiltersSources

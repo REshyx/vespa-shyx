@@ -113,6 +113,113 @@
     </SourceProxy>
 
     <!-- ================================================================== -->
+    <SourceProxy class="vtkCGALDensityBasedSampler"
+                 label="VESPA Density-Based Volume Sampler"
+                 name="VESPADensityBasedVolumeSampler">
+      <Documentation short_help="Samples random points inside a closed mesh with density controlled by a scalar field.">
+        This filter generates random sample points within the enclosed volume of
+        a mesh. It accepts either a volume mesh (vtkUnstructuredGrid, e.g. .vtu)
+        or a closed surface mesh (vtkPolyData). For volume meshes the outer
+        surface is extracted automatically for the inside/outside test, and the
+        volume cells are used for accurate scalar interpolation. The spatial
+        density of the output point cloud is governed by a user-selected scalar
+        array mapped through a configurable transfer function curve.
+      </Documentation>
+
+      <InputProperty name="Input"
+                     command="SetInputConnection">
+        <ProxyGroupDomain name="groups">
+          <Group name="sources"/>
+          <Group name="filters"/>
+        </ProxyGroupDomain>
+        <DataTypeDomain name="input_type">
+          <DataType value="vtkDataSet"/>
+        </DataTypeDomain>
+        <InputArrayDomain name="point_arrays" attribute_type="point" optional="1" />
+      </InputProperty>
+
+      <StringVectorProperty command="SetDensityArrayName"
+                            name="DensityArrayName"
+                            label="Density Array"
+                            number_of_elements="1"
+                            default_values="">
+        <ArrayListDomain attribute_type="Scalars"
+                         name="array_list"
+                         none_string="(Uniform)"
+                         input_domain_name="point_arrays">
+          <RequiredProperties>
+            <Property function="Input"
+                      name="Input" />
+          </RequiredProperties>
+        </ArrayListDomain>
+        <Documentation>
+          Point-data scalar array whose values control sampling density.
+          If left empty or the array is not found, uniform sampling is used.
+        </Documentation>
+        <Hints>
+          <ArraySelectionWidget icon_type="point"/>
+        </Hints>
+      </StringVectorProperty>
+
+      <DoubleVectorProperty command="AddDensityTransferPoint"
+                           clean_command="RemoveAllDensityTransferPoints"
+                           name="DensityTransferPoints"
+                           label="Density Curve"
+                           number_of_elements_per_command="2"
+                           repeat_command="1"
+                           number_of_elements="4"
+                           default_values="0.0 0.0 1.0 1.0">
+        <DoubleRangeDomain name="range" min="0" max="1"/>
+        <Documentation>
+          Transfer function control points as (x,y) pairs.
+          X = normalised scalar [0,1], Y = sampling density [0,1].
+          Default is a linear ramp from (0,0) to (1,1).
+        </Documentation>
+      </DoubleVectorProperty>
+
+      <IntVectorProperty command="SetNumberOfPoints"
+                         name="NumberOfPoints"
+                         label="Number of Points"
+                         number_of_elements="1"
+                         default_values="1000">
+        <IntRangeDomain name="range" min="1" max="1000000"/>
+        <Documentation>
+          Target number of sample points to generate inside the volume.
+        </Documentation>
+      </IntVectorProperty>
+
+      <IntVectorProperty command="SetSeed"
+                         name="Seed"
+                         label="Random Seed"
+                         number_of_elements="1"
+                         default_values="0">
+        <Documentation>
+          Random seed for reproducible results. Change this value to
+          obtain a different point distribution.
+        </Documentation>
+      </IntVectorProperty>
+
+      <IntVectorProperty command="SetMaxIterations"
+                         name="MaxIterations"
+                         label="Max Iterations"
+                         number_of_elements="1"
+                         default_values="0"
+                         panel_visibility="advanced">
+        <IntRangeDomain name="range" min="0" max="100000000"/>
+        <Documentation>
+          Maximum number of candidate draws before giving up.
+          Set to 0 for automatic (NumberOfPoints x 100).
+          Increase this if the filter warns about reaching the limit.
+        </Documentation>
+      </IntVectorProperty>
+
+      <Hints>
+        <ShowInMenu category="VESPA"/>
+      </Hints>
+
+    </SourceProxy>
+
+    <!-- ================================================================== -->
     <SourceProxy class="vtkCGALIsotropicRemesher"
                  label="VESPA Isotropic Remesher"
                  name="VESPAIsotropicRemesher">
@@ -799,6 +906,264 @@
          <BooleanDomain name="bool"/>
          <Documentation>
            If ON, points with unoriented normals will be deleted.
+         </Documentation>
+      </IntVectorProperty>
+
+      <Hints>
+        <ShowInMenu category="VESPA"/>
+      </Hints>
+
+    </SourceProxy>
+
+    <!-- ================================================================== -->
+    <SourceProxy class="vtkCGALSkeletonExtraction"
+                 label="VESPA Skeleton Extraction"
+                 name="VESPASkeletonExtraction">
+      <Documentation short_help="Extracts a curve skeleton from a closed triangle mesh.">
+        This filter extracts a 1D curve skeleton from a closed triangulated surface mesh
+        using the CGAL Mean Curvature Flow Skeletonization algorithm.
+        The input mesh must be watertight. The output is a set of polylines
+        representing the medial skeleton of the shape.
+      </Documentation>
+
+      <InputProperty name="Input"
+                     command="SetInputConnection">
+        <ProxyGroupDomain name="groups">
+          <Group name="sources"/>
+          <Group name="filters"/>
+        </ProxyGroupDomain>
+        <DataTypeDomain name="input_type">
+          <DataType value="vtkPolyData"/>
+        </DataTypeDomain>
+      </InputProperty>
+
+      <DoubleVectorProperty command="SetMaxTriangleAngle"
+                            name="MaxTriangleAngle"
+                            label="Max Triangle Angle (deg)"
+                            number_of_elements="1"
+                            default_values="110"
+                            panel_visibility="advanced">
+        <DoubleRangeDomain name="range" min="1" max="179"/>
+        <Documentation>
+          Local remeshing parameter. Triangles with an angle larger than this value
+          may be split during contraction (CGAL max_triangle_angle). Unit is degrees.
+        </Documentation>
+      </DoubleVectorProperty>
+
+      <DoubleVectorProperty command="SetMinEdgeLength"
+                            name="MinEdgeLength"
+                            label="Min Edge Length"
+                            number_of_elements="1"
+                            default_values="0"
+                            panel_visibility="advanced">
+        <DoubleRangeDomain name="range" min="0" max="1e9"/>
+        <Documentation>
+          Local remeshing parameter. Edges shorter than this value may be collapsed
+          during contraction (CGAL min_edge_length). If set to 0, the CGAL default
+          (mesh-dependent) value is used.
+        </Documentation>
+      </DoubleVectorProperty>
+
+      <IntVectorProperty command="SetMaxIterations"
+                         name="MaxIterations"
+                         label="Max Iterations"
+                         number_of_elements="1"
+                         default_values="500">
+        <IntRangeDomain name="range" min="1" max="5000"/>
+        <Documentation>
+          Maximum number of contraction iterations.
+        </Documentation>
+      </IntVectorProperty>
+
+      <DoubleVectorProperty command="SetAreaThreshold"
+                            name="AreaThreshold"
+                            label="Area Threshold"
+                            number_of_elements="1"
+                            default_values="1e-4"
+                            panel_visibility="advanced">
+        <DoubleRangeDomain name="range" min="1e-8" max="1"/>
+        <Documentation>
+          Area variation factor controlling convergence precision.
+          Smaller values produce finer skeletons but take longer.
+        </Documentation>
+      </DoubleVectorProperty>
+
+      <DoubleVectorProperty command="SetQualitySpeedTradeoff"
+                            name="QualitySpeedTradeoff"
+                            label="Quality / Speed Tradeoff (w_H)"
+                            number_of_elements="1"
+                            default_values="0.1"
+                            panel_visibility="advanced">
+        <DoubleRangeDomain name="range" min="0" max="10"/>
+        <Documentation>
+          Controls contraction speed and approximation quality (CGAL quality_speed_tradeoff, w_H).
+          Smaller values converge faster but may reduce skeleton quality.
+        </Documentation>
+      </DoubleVectorProperty>
+
+      <IntVectorProperty command="SetMediallyCentered"
+                         name="MediallyCentered"
+                         label="Medially Centered"
+                         number_of_elements="1"
+                         default_values="1"
+                         panel_visibility="advanced">
+        <BooleanDomain name="bool"/>
+        <Documentation>
+          If ON, a medial centering step is applied to improve skeleton quality.
+          This produces better results but takes more time.
+        </Documentation>
+      </IntVectorProperty>
+
+      <DoubleVectorProperty command="SetMediallyCenteredSpeedTradeoff"
+                            name="MediallyCenteredSpeedTradeoff"
+                            label="Medial Centering Tradeoff (w_M)"
+                            number_of_elements="1"
+                            default_values="0.2"
+                            panel_visibility="advanced">
+        <DoubleRangeDomain name="range" min="0" max="10"/>
+        <Documentation>
+          Controls smoothness of medial approximation (CGAL medially_centered_speed_tradeoff, w_M).
+          Higher values move the skeleton closer to the medial axis but may slow convergence.
+          Only used if MediallyCentered is ON.
+        </Documentation>
+      </DoubleVectorProperty>
+
+      <Hints>
+        <ShowInMenu category="VESPA"/>
+      </Hints>
+
+    </SourceProxy>
+
+    <!-- ================================================================== -->
+    <SourceProxy class="vtkCGALVesselEndClipper"
+                 label="VESPA Vessel End Clipper"
+                 name="VESPAVesselEndClipper">
+      <Documentation short_help="Clips vessel tips flat at skeleton endpoints for CFD.">
+        This filter clips the tips of a vascular surface mesh at the leaf
+        endpoints of its centerline skeleton. A cutting plane perpendicular
+        to the local centerline tangent is placed at each degree-1 vertex,
+        producing flat cross-sections suitable for CFD inlet/outlet boundaries.
+
+        Inputs:
+          - Port 0 (Input): the original vessel surface mesh (vtkPolyData)
+          - Port 1 (Centerline): the extracted centerline, e.g. from
+            VESPA Skeleton Extraction (vtkPolyData with lines)
+
+        Outputs:
+          - Port 0 (Clipped Mesh): the vessel mesh with tips clipped
+          - Port 1 (Clip Planes): visualization of endpoint positions and
+            clip plane normal directions (lines + point data)
+      </Documentation>
+
+      <OutputPort name="Clipped Mesh" index="0" id="port0" />
+      <OutputPort name="Clip Planes"  index="1" id="port1" />
+
+      <InputProperty name="Input"
+                     command="SetInputConnection">
+        <ProxyGroupDomain name="groups">
+          <Group name="sources"/>
+          <Group name="filters"/>
+        </ProxyGroupDomain>
+        <DataTypeDomain name="input_type">
+          <DataType value="vtkPolyData"/>
+        </DataTypeDomain>
+        <Documentation>
+          The vessel surface mesh to clip.
+        </Documentation>
+      </InputProperty>
+
+      <InputProperty command="SetCenterlineConnection"
+                     name="Centerline">
+        <ProxyGroupDomain name="groups">
+          <Group name="sources"/>
+          <Group name="filters"/>
+        </ProxyGroupDomain>
+        <DataTypeDomain name="input_type">
+          <DataType value="vtkPolyData"/>
+        </DataTypeDomain>
+        <Documentation>
+          The centerline skeleton of the vessel (e.g. output of VESPA Skeleton Extraction).
+          Clipping planes are placed at all degree-1 (leaf) vertices.
+        </Documentation>
+      </InputProperty>
+
+      <DoubleVectorProperty command="SetClipOffset"
+                            name="ClipOffset"
+                            label="Clip Offset"
+                            number_of_elements="1"
+                            default_values="0.0">
+        <Documentation>
+          Offset distance to shift each cutting plane along the centerline tangent.
+          Positive values move the plane outward (away from vessel body),
+          negative values move it inward. Default is 0.
+        </Documentation>
+      </DoubleVectorProperty>
+
+      <IntVectorProperty command="SetTangentDepth"
+                         name="TangentDepth"
+                         label="Tangent Depth"
+                         number_of_elements="1"
+                         default_values="1">
+        <IntRangeDomain name="range" min="1" max="10" />
+        <Documentation>
+          Number of skeleton edges to walk inward from each leaf node
+          when estimating the local tangent direction for the cutting plane.
+          Larger values produce a smoother, more averaged tangent;
+          smaller values follow the skeleton more locally. Default is 1.
+        </Documentation>
+      </IntVectorProperty>
+
+      <IntVectorProperty command="SetCapEndpoints"
+                         name="CapEndpoints"
+                         label="Cap Endpoints"
+                         number_of_elements="1"
+                         default_values="1">
+        <BooleanDomain name="bool"/>
+        <Documentation>
+          If ON, the holes created by clipping are filled with flat caps
+          to produce a closed (watertight) mesh suitable for CFD meshing.
+          Requires the input vessel mesh to be closed.
+        </Documentation>
+      </IntVectorProperty>
+
+      <!-- Endpoint selection: one checkbox per discovered leaf endpoint -->
+      <StringVectorProperty name="EndpointInfo"
+                            command="GetEndpointSelection"
+                            number_of_elements_per_command="2"
+                            information_only="1"
+                            si_class="vtkSIDataArraySelectionProperty" />
+
+      <StringVectorProperty name="EndpointStatus"
+                            command="GetEndpointSelection"
+                            information_property="EndpointInfo"
+                            number_of_elements_per_command="2"
+                            element_types="2 0"
+                            repeat_command="1"
+                            si_class="vtkSIDataArraySelectionProperty"
+                            label="Endpoints to Clip">
+        <ArraySelectionDomain name="array_list">
+          <RequiredProperties>
+            <Property function="ArrayList" name="EndpointInfo" />
+          </RequiredProperties>
+        </ArraySelectionDomain>
+        <Documentation>
+          Select which endpoints to clip. Each entry corresponds to a
+          degree-1 leaf vertex of the input centerline. Only checked
+          endpoints will be clipped. Apply once first to discover
+          the endpoints from the centerline input.
+        </Documentation>
+      </StringVectorProperty>
+
+      <IntVectorProperty
+         name="UseUpdateAttributes"
+         command="SetUpdateAttributes"
+         label="Interpolate attributes"
+         number_of_elements="1"
+         default_values="1"
+         panel_visibility="advanced">
+         <BooleanDomain name="bool"/>
+         <Documentation>
+           If ON, attributes will be interpolated unto the resulting mesh.
          </Documentation>
       </IntVectorProperty>
 

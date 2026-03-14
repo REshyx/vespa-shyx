@@ -1,5 +1,6 @@
 set(vtkcgalpmp_files
   vtkCGALBooleanOperation
+  vtkCGALDensityBasedSampler
   vtkCGALIsotropicRemesher
   vtkCGALMeshChecker
   vtkCGALMeshDeformation
@@ -8,6 +9,8 @@ set(vtkcgalpmp_files
   vtkCGALRegionFairing
   vtkCGALShapeSmoothing
   vtkCGALSignedDistanceFunction
+  vtkCGALSkeletonExtraction
+  vtkCGALVesselEndClipper
 )
 
 if (${CGAL_VERSION} VERSION_GREATER_EQUAL 5.5)
