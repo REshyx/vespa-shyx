@@ -6,8 +6,7 @@
  * e.g. .vtu) or a closed surface mesh (vtkPolyData) and generates random
  * sample points within the enclosed volume. The spatial density of the
  * output point cloud is governed by a user-selected scalar array on the
- * input, mapped through a piecewise-linear transfer function whose control
- * points are editable in the ParaView property panel.
+ * input, automatically linearly mapped from its value range to 0-100%.
  *
  * The output is a vtkPolyData containing only vertices (the sampled point cloud).
  */
@@ -19,9 +18,6 @@
 
 #include "vtkCGALPMPModule.h" // For export macro
 #include <string>
-#include <vector>
-
-class vtkPiecewiseFunction;
 
 class VTKCGALPMP_EXPORT vtkCGALDensityBasedSampler : public vtkCGALPolyDataAlgorithm
 {
@@ -32,11 +28,12 @@ public:
 
     ///@{
     /**
-     * Target number of sample points to generate inside the volume.
-     * Default is 1000.
+     * Number of pre-sample grid points (Cartesian lattice).
+     * Grid resolution is derived from bounding box aspect ratio.
+     * Output count = interior points kept after density filtering.
      */
-    vtkGetMacro(NumberOfPoints, int);
-    vtkSetClampMacro(NumberOfPoints, int, 1, 10000000);
+    vtkGetMacro(PreSampleCount, int);
+    vtkSetClampMacro(PreSampleCount, int, 1, 100000000);
     ///@}
 
     ///@{
@@ -56,30 +53,6 @@ public:
     vtkSetMacro(Seed, int);
     ///@}
 
-    ///@{
-    /**
-     * Maximum number of candidate draws before giving up.
-     * Prevents infinite loops when the geometry is very thin relative
-     * to its bounding box.  Default is 0 (auto = NumberOfPoints * 100).
-     */
-    vtkGetMacro(MaxIterations, int);
-    vtkSetMacro(MaxIterations, int);
-    ///@}
-
-    ///@{
-    /**
-     * Add a control point (x, y) to the density transfer curve.
-     * x = normalised scalar [0,1], y = sampling density [0,1].
-     * Called by ParaView via repeat_command for each (x,y) pair.
-     */
-    void AddDensityTransferPoint(double x, double y);
-    /**
-     * Remove all control points. Called by ParaView's clean_command
-     * before re-pushing the full set of points.
-     */
-    void RemoveAllDensityTransferPoints();
-    ///@}
-
 protected:
     vtkCGALDensityBasedSampler();
     ~vtkCGALDensityBasedSampler() override = default;
@@ -87,12 +60,9 @@ protected:
     int FillInputPortInformation(int port, vtkInformation* info) override;
     int RequestData(vtkInformation*, vtkInformationVector**, vtkInformationVector*) override;
 
-    int         NumberOfPoints   = 1000;
+    int         PreSampleCount   = 100000;
     std::string DensityArrayName;
     int         Seed             = 0;
-    int         MaxIterations    = 0;
-
-    std::vector<double> TransferPoints;
 
 private:
     vtkCGALDensityBasedSampler(const vtkCGALDensityBasedSampler&) = delete;

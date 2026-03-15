@@ -1,0 +1,12 @@
+NAME
+  vtkArrayCurveMapper
+DESCRIPTION
+  "Map a scalar array through an interactive piecewise curve to a new range."
+GROUPS
+  Meshing
+DEPENDS
+  VTK::FiltersCore
+PRIVATE_DEPENDS
+  VTK::CommonCore
+  VTK::CommonDataModel
+  VTK::CommonExecutionModel

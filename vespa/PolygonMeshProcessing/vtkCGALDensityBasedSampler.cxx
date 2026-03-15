@@ -12,14 +12,15 @@
 #include <vtkMinimalStandardRandomSequence.h>
 #include <vtkNew.h>
 #include <vtkObjectFactory.h>
-#include <vtkPiecewiseFunction.h>
 #include <vtkPointData.h>
 #include <vtkPoints.h>
 #include <vtkPolyData.h>
 #include <vtkUnstructuredGrid.h>
 
 #include <algorithm>
+#include <array>
 #include <cmath>
+#include <vector>
 
 vtkStandardNewMacro(vtkCGALDensityBasedSampler);
 
@@ -28,26 +29,6 @@ vtkCGALDensityBasedSampler::vtkCGALDensityBasedSampler()
 {
     this->SetNumberOfInputPorts(1);
     this->SetNumberOfOutputPorts(1);
-
-    this->TransferPoints = { 0.0, 0.0, 1.0, 1.0 };
-}
-
-//------------------------------------------------------------------------------
-void vtkCGALDensityBasedSampler::AddDensityTransferPoint(double x, double y)
-{
-    this->TransferPoints.push_back(x);
-    this->TransferPoints.push_back(y);
-    this->Modified();
-}
-
-//------------------------------------------------------------------------------
-void vtkCGALDensityBasedSampler::RemoveAllDensityTransferPoints()
-{
-    if (!this->TransferPoints.empty())
-    {
-        this->TransferPoints.clear();
-        this->Modified();
-    }
 }
 
 //------------------------------------------------------------------------------
@@ -64,11 +45,9 @@ int vtkCGALDensityBasedSampler::FillInputPortInformation(int port, vtkInformatio
 //------------------------------------------------------------------------------
 void vtkCGALDensityBasedSampler::PrintSelf(ostream& os, vtkIndent indent)
 {
-    os << indent << "NumberOfPoints: " << this->NumberOfPoints << std::endl;
+    os << indent << "PreSampleCount: " << this->PreSampleCount << std::endl;
     os << indent << "DensityArrayName: " << this->DensityArrayName << std::endl;
     os << indent << "Seed: " << this->Seed << std::endl;
-    os << indent << "MaxIterations: " << this->MaxIterations << std::endl;
-    os << indent << "TransferPoints: " << this->TransferPoints.size() / 2 << " point(s)" << std::endl;
     this->Superclass::PrintSelf(os, indent);
 }
 
@@ -149,18 +128,6 @@ int vtkCGALDensityBasedSampler::RequestData(
         return 0;
     }
 
-    // --- Build transfer function from control points -------------------------
-    vtkNew<vtkPiecewiseFunction> transferFunc;
-    for (size_t i = 0; i + 1 < this->TransferPoints.size(); i += 2)
-    {
-        transferFunc->AddPoint(this->TransferPoints[i], this->TransferPoints[i + 1]);
-    }
-    if (transferFunc->GetSize() < 2)
-    {
-        transferFunc->AddPoint(0.0, 0.0);
-        transferFunc->AddPoint(1.0, 1.0);
-    }
-
     // --- Determine whether we have a volume or surface mesh ------------------
     bool isVolumeMesh = (vtkUnstructuredGrid::SafeDownCast(input) != nullptr);
 
@@ -208,10 +175,6 @@ int vtkCGALDensityBasedSampler::RequestData(
     if (!uniformMode && densityArray)
     {
         densityArray->GetRange(scalarRange);
-        if (std::abs(scalarRange[1] - scalarRange[0]) < 1e-15)
-        {
-            uniformMode = true;
-        }
     }
 
     // --- Build spatial structures --------------------------------------------
@@ -229,7 +192,54 @@ int vtkCGALDensityBasedSampler::RequestData(
     double dy = bounds[3] - bounds[2];
     double dz = bounds[5] - bounds[4];
 
-    // --- Random number generator ---------------------------------------------
+    if (dx < 1e-12 || dy < 1e-12 || dz < 1e-12)
+    {
+        vtkErrorMacro("Degenerate bounding box.");
+        return 0;
+    }
+
+    // --- Cartesian grid: pre-sample points by aspect ratio -------------------
+    vtkIdType preSample = static_cast<vtkIdType>(this->PreSampleCount);
+
+    double vol = dx * dy * dz;
+    double scale = std::cbrt(static_cast<double>(preSample) / vol);
+    int nx = std::max(1, static_cast<int>(scale * dx));
+    int ny = std::max(1, static_cast<int>(scale * dy));
+    int nz = std::max(1, static_cast<int>(scale * dz));
+
+    double sx = (nx > 1) ? dx / (nx - 1) : 0.0;
+    double sy = (ny > 1) ? dy / (ny - 1) : 0.0;
+    double sz = (nz > 1) ? dz / (nz - 1) : 0.0;
+
+    // --- Collect interior points ---------------------------------------------
+    std::vector<std::array<double, 3>> interiorPts;
+    interiorPts.reserve(std::min(preSample, vtkIdType(nx) * ny * nz));
+
+    for (int k = 0; k < nz; ++k)
+    {
+        double pz = bounds[4] + (nz > 1 ? k * sz : dz * 0.5);
+        for (int j = 0; j < ny; ++j)
+        {
+            double py = bounds[2] + (ny > 1 ? j * sy : dy * 0.5);
+            for (int i = 0; i < nx; ++i)
+            {
+                double px = bounds[0] + (nx > 1 ? i * sx : dx * 0.5);
+                double pt[3] = { px, py, pz };
+                if (implicitDist->EvaluateFunction(pt) <= 0.0)
+                {
+                    interiorPts.push_back({ { pt[0], pt[1], pt[2] } });
+                }
+            }
+        }
+    }
+
+    if (interiorPts.empty())
+    {
+        vtkWarningMacro("No interior points found. Check that the input mesh is closed.");
+        return 1;
+    }
+
+    // --- Random number generator (for density probability) -------------------
     vtkNew<vtkMinimalStandardRandomSequence> rng;
     rng->SetSeed(this->Seed);
 
@@ -239,65 +249,38 @@ int vtkCGALDensityBasedSampler::RequestData(
         return rng->GetValue();
     };
 
-    // --- Rejection sampling --------------------------------------------------
-    vtkIdType target = static_cast<vtkIdType>(this->NumberOfPoints);
-    vtkIdType maxIter = static_cast<vtkIdType>(
-        this->MaxIterations > 0 ? this->MaxIterations : this->NumberOfPoints * 100);
-
+    // --- Output: uniform = all interior; density = probability filter ---------
     vtkNew<vtkPoints> outputPoints;
     outputPoints->SetDataTypeToDouble();
 
     vtkNew<vtkCellArray> outputVerts;
 
-    vtkIdType accepted = 0;
-    vtkIdType iter = 0;
-
-    while (accepted < target && iter < maxIter)
+    if (uniformMode)
     {
-        ++iter;
-
-        double pt[3];
-        pt[0] = bounds[0] + nextRand() * dx;
-        pt[1] = bounds[2] + nextRand() * dy;
-        pt[2] = bounds[4] + nextRand() * dz;
-
-        if (implicitDist->EvaluateFunction(pt) > 0.0)
+        for (const auto& pt : interiorPts)
         {
-            continue;
-        }
-
-        if (uniformMode)
-        {
-            vtkIdType pid = outputPoints->InsertNextPoint(pt);
+            vtkIdType pid = outputPoints->InsertNextPoint(pt.data());
             outputVerts->InsertNextCell(1, &pid);
-            ++accepted;
-            continue;
-        }
-
-        double rawValue = InterpolateScalarAtPoint(
-            locator, input, densityArray, pt);
-
-        double normalized = (rawValue - scalarRange[0]) / (scalarRange[1] - scalarRange[0]);
-        normalized = std::max(0.0, std::min(1.0, normalized));
-
-        double density = transferFunc->GetValue(normalized);
-        density = std::max(0.0, std::min(1.0, density));
-
-        if (nextRand() < density)
-        {
-            vtkIdType pid = outputPoints->InsertNextPoint(pt);
-            outputVerts->InsertNextCell(1, &pid);
-            ++accepted;
         }
     }
-
-    if (accepted < target)
+    else
     {
-        vtkWarningMacro(
-            "Reached maximum iterations (" << maxIter
-            << "). Only " << accepted << " of " << target
-            << " points were generated. Consider increasing MaxIterations or "
-               "checking that the input mesh is closed.");
+        double rangeSpan = scalarRange[1] - scalarRange[0];
+        for (const auto& ptArr : interiorPts)
+        {
+            const double* pt = ptArr.data();
+            double rawValue = InterpolateScalarAtPoint(locator, input, densityArray, pt);
+            // Automatic linear map: value range -> [0, 100%]
+            double density =
+                (rangeSpan > 1e-15) ? (rawValue - scalarRange[0]) / rangeSpan : 0.5;
+            density = std::max(0.0, std::min(1.0, density));
+
+            if (nextRand() < density)
+            {
+                vtkIdType pid = outputPoints->InsertNextPoint(pt);
+                outputVerts->InsertNextCell(1, &pid);
+            }
+        }
     }
 
     output->SetPoints(outputPoints);

@@ -14,6 +14,13 @@ if (${VESPA_SHOW_CGAL_LICENSE_ON_LOAD})
   set(VESPA_CGAL_LICENSE "${CMAKE_SOURCE_DIR}/Data/Resources/CGAL_LICENSE.GPL")
 endif()
 
+paraview_plugin_add_property_widget(
+  KIND GROUP_WIDGET
+  TYPE "array_curve_mapper_panel"
+  CLASS_NAME pqArrayCurveMapperPanel
+  INTERFACES acm_interfaces
+  SOURCES acm_sources)
+
 paraview_add_plugin(VESPAPlugin
   VERSION "${PROJECT_VERSION}"
   EULA ${VESPA_CGAL_LICENSE}
@@ -26,8 +33,13 @@ paraview_add_plugin(VESPAPlugin
     "SHYXFTLEFilter.xml"
     "SHYXGeodesicDistance.xml"
     "SHYXVortexCriteria.xml"
+    "SHYXArrayCurveMapper.xml"
      ${ALPHA_WRAPPING_SERVER_MANAGER_XML}
      ${MESH_SMOOTHING_SERVER_MANAGER_XML}
+  UI_INTERFACES ${acm_interfaces}
+  SOURCES ${acm_sources}
+    pqArrayCurveMapperPanel.cxx
+    pqArrayCurveMapperPanel.h
 )
 
 target_link_libraries(VESPAPlugin

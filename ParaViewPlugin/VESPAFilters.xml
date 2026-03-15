@@ -123,7 +123,7 @@
         surface is extracted automatically for the inside/outside test, and the
         volume cells are used for accurate scalar interpolation. The spatial
         density of the output point cloud is governed by a user-selected scalar
-        array mapped through a configurable transfer function curve.
+        array, automatically linearly mapped from its value range to 0-100%.
       </Documentation>
 
       <InputProperty name="Input"
@@ -161,30 +161,15 @@
         </Hints>
       </StringVectorProperty>
 
-      <DoubleVectorProperty command="AddDensityTransferPoint"
-                           clean_command="RemoveAllDensityTransferPoints"
-                           name="DensityTransferPoints"
-                           label="Density Curve"
-                           number_of_elements_per_command="2"
-                           repeat_command="1"
-                           number_of_elements="4"
-                           default_values="0.0 0.0 1.0 1.0">
-        <DoubleRangeDomain name="range" min="0" max="1"/>
-        <Documentation>
-          Transfer function control points as (x,y) pairs.
-          X = normalised scalar [0,1], Y = sampling density [0,1].
-          Default is a linear ramp from (0,0) to (1,1).
-        </Documentation>
-      </DoubleVectorProperty>
-
-      <IntVectorProperty command="SetNumberOfPoints"
-                         name="NumberOfPoints"
-                         label="Number of Points"
+      <IntVectorProperty command="SetPreSampleCount"
+                         name="PreSampleCount"
+                         label="Pre-Sample Count"
                          number_of_elements="1"
-                         default_values="1000">
-        <IntRangeDomain name="range" min="1" max="1000000"/>
+                         default_values="100000">
+        <IntRangeDomain name="range" min="1" max="100000000"/>
         <Documentation>
-          Target number of sample points to generate inside the volume.
+          Number of Cartesian grid points to pre-sample. Output = interior points
+          kept after density filtering.
         </Documentation>
       </IntVectorProperty>
 
@@ -196,20 +181,6 @@
         <Documentation>
           Random seed for reproducible results. Change this value to
           obtain a different point distribution.
-        </Documentation>
-      </IntVectorProperty>
-
-      <IntVectorProperty command="SetMaxIterations"
-                         name="MaxIterations"
-                         label="Max Iterations"
-                         number_of_elements="1"
-                         default_values="0"
-                         panel_visibility="advanced">
-        <IntRangeDomain name="range" min="0" max="100000000"/>
-        <Documentation>
-          Maximum number of candidate draws before giving up.
-          Set to 0 for automatic (NumberOfPoints x 100).
-          Increase this if the filter warns about reaching the limit.
         </Documentation>
       </IntVectorProperty>
 

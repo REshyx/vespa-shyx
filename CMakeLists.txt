@@ -14,7 +14,8 @@ set(CMAKE_CXX_STANDARD 11)
 
 set(Boost_DIR "C:/local/boost_1_74_0/lib64-msvc-14.2/cmake/Boost-1.74.0")
 set(CGAL_DIR C:/SoftWare/CGAL-6.1.1)
-set(ParaView_DIR C:/Users/18490/Documents/GitHub/ParaView/install/lib/cmake/paraview-6.0)
+set(ParaView_DIR C:/Users/18490/Documents/GitHub/ParaView/install-qt6/lib/cmake/paraview-6.0)
+set(Qt6_DIR C:/Qt/6.9.0/msvc2022_64/lib/cmake/Qt6)
 
 
 include(GNUInstallDirs)

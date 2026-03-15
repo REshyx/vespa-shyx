@@ -1,0 +1,111 @@
+<ServerManagerConfiguration>
+  <ProxyGroup name="filters">
+    <SourceProxy name="SHYXArrayCurveMapper"
+                 class="vtkArrayCurveMapper"
+                 label="SHYX Array Curve Mapper">
+      <Documentation
+          long_help="Map an array (scalar or vector) through an adjustable piecewise-linear curve to a new scalar range. For vector arrays the magnitude is used. Select an input array, specify input and output ranges, edit the transfer curve, and the result is a new scalar point-data array."
+          short_help="Map array values through an editable curve to a target scalar range."/>
+
+      <InputProperty name="Input" command="SetInputConnection">
+        <ProxyGroupDomain name="groups">
+          <Group name="sources"/>
+          <Group name="filters"/>
+        </ProxyGroupDomain>
+        <DataTypeDomain name="input_type">
+          <DataType value="vtkDataSet"/>
+        </DataTypeDomain>
+        <InputArrayDomain name="point_arrays" attribute_type="point" optional="0"/>
+      </InputProperty>
+
+      <StringVectorProperty command="SetInputArrayName"
+                            name="InputArrayName"
+                            label="Input Array"
+                            number_of_elements="1"
+                            default_values="">
+        <ArrayListDomain name="array_list"
+                         input_domain_name="point_arrays">
+          <RequiredProperties>
+            <Property function="Input" name="Input"/>
+          </RequiredProperties>
+        </ArrayListDomain>
+        <Documentation>
+          The point-data array to map. For vector arrays, the magnitude is used.
+        </Documentation>
+        <Hints>
+          <ArraySelectionWidget icon_type="point"/>
+        </Hints>
+      </StringVectorProperty>
+
+      <StringVectorProperty command="SetOutputArrayName"
+                            name="OutputArrayName"
+                            label="Output Array Name"
+                            number_of_elements="1"
+                            default_values="MappedArray">
+        <Documentation>
+          Name of the new scalar array that will be added to the output.
+        </Documentation>
+      </StringVectorProperty>
+
+      <DoubleVectorProperty command="SetInputRangeMin"
+                            name="InputRangeMin"
+                            label="Input Range Min"
+                            number_of_elements="1"
+                            default_values="0.0">
+        <Documentation>Minimum of the input value range.</Documentation>
+      </DoubleVectorProperty>
+
+      <DoubleVectorProperty command="SetInputRangeMax"
+                            name="InputRangeMax"
+                            label="Input Range Max"
+                            number_of_elements="1"
+                            default_values="1.0">
+        <Documentation>Maximum of the input value range.</Documentation>
+      </DoubleVectorProperty>
+
+      <DoubleVectorProperty command="SetOutputRangeMin"
+                            name="OutputRangeMin"
+                            label="Output Range Min"
+                            number_of_elements="1"
+                            default_values="0.0">
+        <Documentation>Minimum value of the output mapped range.</Documentation>
+      </DoubleVectorProperty>
+
+      <DoubleVectorProperty command="SetOutputRangeMax"
+                            name="OutputRangeMax"
+                            label="Output Range Max"
+                            number_of_elements="1"
+                            default_values="1.0">
+        <Documentation>Maximum value of the output mapped range.</Documentation>
+      </DoubleVectorProperty>
+
+      <ProxyProperty command="SetCurveTransferFunction"
+                     name="CurveTransferFunction"
+                     label="Transfer Curve">
+        <Documentation>
+          Drag control points to shape the transfer curve.
+          X = normalised input [0,1], Y = normalised output [0,1].
+        </Documentation>
+        <ProxyGroupDomain name="groups">
+          <Group name="piecewise_functions"/>
+        </ProxyGroupDomain>
+        <ProxyListDomain name="proxy_list">
+          <Proxy group="piecewise_functions" name="PiecewiseFunction"/>
+        </ProxyListDomain>
+      </ProxyProperty>
+
+      <PropertyGroup label="Curve Mapping"
+                     panel_widget="array_curve_mapper_panel">
+        <Property name="InputRangeMin"/>
+        <Property name="InputRangeMax"/>
+        <Property name="OutputRangeMin"/>
+        <Property name="OutputRangeMax"/>
+        <Property name="CurveTransferFunction"/>
+      </PropertyGroup>
+
+      <Hints>
+        <ShowInMenu category="SHYX"/>
+      </Hints>
+    </SourceProxy>
+  </ProxyGroup>
+</ServerManagerConfiguration>
