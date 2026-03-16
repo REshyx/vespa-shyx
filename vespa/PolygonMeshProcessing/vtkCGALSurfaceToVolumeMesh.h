@@ -72,6 +72,38 @@ public:
     vtkSetClampMacro(CellSize, double, 0.0, 1e6);
     ///@}
 
+    ///@{
+    /**
+     * When ON, detects sharp feature edges and corners from the input mesh.
+     * Edges with dihedral angle >= FeatureAngle are treated as features.
+     * Feature points (corners) are auto-detected at feature edge junctions.
+     * Default ON. Turn OFF for smooth surfaces to skip feature protection.
+     */
+    vtkGetMacro(DetectFeatures, bool);
+    vtkSetMacro(DetectFeatures, bool);
+    vtkBooleanMacro(DetectFeatures, bool);
+    ///@}
+
+    ///@{
+    /**
+     * Feature detection angle (degrees). Edges where adjacent face normals
+     * differ by >= this angle are marked as feature edges. Default 60.
+     * Only used when DetectFeatures is ON.
+     */
+    vtkGetMacro(FeatureAngle, double);
+    vtkSetClampMacro(FeatureAngle, double, 1.0, 180.0);
+    ///@}
+
+    ///@{
+    /**
+     * Upper bound on length of segments along feature edges. Smaller values
+     * give denser sampling on sharp edges. Default 0.0 means no explicit
+     * bound (driven by facet criteria). Only used when DetectFeatures is ON.
+     */
+    vtkGetMacro(EdgeSize, double);
+    vtkSetClampMacro(EdgeSize, double, 0.0, 1e6);
+    ///@}
+
 protected:
     vtkCGALSurfaceToVolumeMesh();
     ~vtkCGALSurfaceToVolumeMesh() override = default;
@@ -85,6 +117,9 @@ protected:
     double FacetDistance      = 0.008;
     double CellRadiusEdgeRatio = 3.0;
     double CellSize           = 0.0;
+    bool   DetectFeatures     = true;
+    double FeatureAngle       = 60.0;
+    double EdgeSize           = 0.0;
 
 private:
     vtkCGALSurfaceToVolumeMesh(const vtkCGALSurfaceToVolumeMesh&) = delete;

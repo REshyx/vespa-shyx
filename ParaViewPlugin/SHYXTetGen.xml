@@ -1,0 +1,118 @@
+<ServerManagerConfiguration>
+  <ProxyGroup name="filters">
+    <SourceProxy class="vtkSHYXTetGen"
+                 label="SHYX TetGen"
+                 name="SHYXTetGen">
+      <Documentation
+          short_help="Generate tetrahedral volume mesh from a closed surface using TetGen."
+          long_help="This filter takes a closed triangulated surface mesh (vtkPolyData) and generates a tetrahedral volume mesh (vtkUnstructuredGrid) that fills the interior. It uses the TetGen library for constrained Delaunay tetrahedralization. The input surface must be closed (watertight), manifold, and composed of triangles only."/>
+
+      <InputProperty name="Input"
+                     command="SetInputConnection">
+        <ProxyGroupDomain name="groups">
+          <Group name="sources"/>
+          <Group name="filters"/>
+        </ProxyGroupDomain>
+        <DataTypeDomain name="input_type">
+          <DataType value="vtkPolyData"/>
+        </DataTypeDomain>
+      </InputProperty>
+
+      <DoubleVectorProperty command="SetMaxVolume"
+                           name="MaxVolume"
+                           label="Max Volume"
+                           number_of_elements="1"
+                           default_values="0">
+        <DoubleRangeDomain name="range" min="0" max="1e6"/>
+        <Documentation>
+          Maximum tetrahedron volume constraint. TetGen refines tets larger than this. Set to 0 to disable.
+        </Documentation>
+      </DoubleVectorProperty>
+
+      <DoubleVectorProperty command="SetMaxRadiusEdgeRatio"
+                           name="MaxRadiusEdgeRatio"
+                           label="Max Radius-Edge Ratio"
+                           number_of_elements="1"
+                           default_values="1.8">
+        <DoubleRangeDomain name="range" min="0" max="10"/>
+        <Documentation>
+          Maximum radius-edge ratio for quality meshing (TetGen -q). Default 1.8. When > 0, must be >= 1.2. Set to 0 for no limit on radius ratio (but quality meshing still enabled if Min Dihedral Angle > 0).
+        </Documentation>
+      </DoubleVectorProperty>
+
+      <DoubleVectorProperty command="SetMinDihedralAngle"
+                           name="MinDihedralAngle"
+                           label="Min Dihedral Angle"
+                           number_of_elements="1"
+                           default_values="0">
+        <DoubleRangeDomain name="range" min="0" max="89"/>
+        <Documentation>
+          Minimum dihedral angle (degrees) for quality meshing (TetGen -q). Default 0 (no limit on dihedral angle). When > 0, enables quality mesh generation with this constraint. Set to 0 for no limit on dihedral angle.
+        </Documentation>
+      </DoubleVectorProperty>
+
+      <IntVectorProperty command="SetNobisect"
+                         name="Nobisect"
+                         label="Preserve Surface"
+                         number_of_elements="1"
+                         default_values="1">
+        <BooleanDomain name="bool"/>
+        <Documentation>
+          When ON, TetGen does not insert Steiner points on the boundary (-Y). The input surface mesh is preserved without modification. Incompatible with CDT.
+        </Documentation>
+      </IntVectorProperty>
+
+      <IntVectorProperty command="SetDoCheck"
+                         name="DoCheck"
+                         label="Check Mesh"
+                         number_of_elements="1"
+                         default_values="0"
+                         panel_visibility="advanced">
+        <BooleanDomain name="bool"/>
+        <Documentation>
+          Check consistency of the final mesh (-C).
+        </Documentation>
+      </IntVectorProperty>
+
+      <IntVectorProperty command="SetUseCDT"
+                         name="UseCDT"
+                         label="Use CDT"
+                         number_of_elements="1"
+                         default_values="0"
+                         panel_visibility="advanced">
+        <BooleanDomain name="bool"/>
+        <Documentation>
+          Use constrained Delaunay refinement (-D). Incompatible with Preserve Surface.
+        </Documentation>
+      </IntVectorProperty>
+
+      <IntVectorProperty command="SetCDTRefine"
+                         name="CDTRefine"
+                         label="CDT Refine Level"
+                         number_of_elements="1"
+                         default_values="7"
+                         panel_visibility="advanced">
+        <IntRangeDomain name="range" min="1" max="7"/>
+        <Documentation>
+          CDT refinement scheme 1-7 (-D#). Only used when Use CDT is ON.
+        </Documentation>
+      </IntVectorProperty>
+
+      <DoubleVectorProperty command="SetEpsilon"
+                           name="Epsilon"
+                           label="Epsilon"
+                           number_of_elements="1"
+                           default_values="1e-8"
+                           panel_visibility="advanced">
+        <DoubleRangeDomain name="range" min="1e-16" max="1e-2"/>
+        <Documentation>
+          Tolerance for coplanar test (-T).
+        </Documentation>
+      </DoubleVectorProperty>
+
+      <Hints>
+        <ShowInMenu category="SHYX"/>
+      </Hints>
+    </SourceProxy>
+  </ProxyGroup>
+</ServerManagerConfiguration>

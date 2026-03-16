@@ -73,6 +73,39 @@
         </Documentation>
       </DoubleVectorProperty>
 
+      <IntVectorProperty command="SetDetectFeatures"
+                         name="DetectFeatures"
+                         label="Detect Features"
+                         number_of_elements="1"
+                         default_values="1">
+        <BooleanDomain name="bool"/>
+        <Documentation>
+          When ON, detects sharp feature edges and corners. Edges with dihedral angle &gt;= Feature Angle are protected. Turn OFF for smooth surfaces.
+        </Documentation>
+      </IntVectorProperty>
+
+      <DoubleVectorProperty command="SetFeatureAngle"
+                           name="FeatureAngle"
+                           label="Feature Angle"
+                           number_of_elements="1"
+                           default_values="60">
+        <DoubleRangeDomain name="range" min="1" max="180"/>
+        <Documentation>
+          Angle (degrees) for feature edge detection. Edges where adjacent face normals differ by &gt;= this are sharp features.
+        </Documentation>
+      </DoubleVectorProperty>
+
+      <DoubleVectorProperty command="SetEdgeSize"
+                           name="EdgeSize"
+                           label="Edge Size"
+                           number_of_elements="1"
+                           default_values="0">
+        <DoubleRangeDomain name="range" min="0" max="1e6"/>
+        <Documentation>
+          Upper bound on segment length along feature edges. 0 = no explicit bound. Set &gt; 0 for denser sampling on sharp edges.
+        </Documentation>
+      </DoubleVectorProperty>
+
       <Hints>
         <ShowInMenu category="SHYX"/>
       </Hints>

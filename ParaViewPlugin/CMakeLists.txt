@@ -31,6 +31,7 @@ paraview_add_plugin(VESPAPlugin
     "VESPAFilters.xml"
     "SHYXSurfaceTipExtractor.xml"
     "SHYXSurfaceToVolumeMesh.xml"
+    "SHYXTetGen.xml"
     "SHYXFTLEFilter.xml"
     "SHYXGeodesicDistance.xml"
     "SHYXVortexCriteria.xml"

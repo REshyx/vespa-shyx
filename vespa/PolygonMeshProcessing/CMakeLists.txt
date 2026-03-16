@@ -2,6 +2,7 @@ set(vtkcgalpmp_files
   vtkCGALBooleanOperation
   vtkCGALDensityBasedSampler
   vtkCGALSurfaceToVolumeMesh
+  vtkSHYXTetGen
   vtkCGALIsotropicRemesher
   vtkCGALMeshChecker
   vtkCGALMeshDeformation
@@ -40,7 +41,8 @@ vtk_module_add_module(vtkCGALPMP
   CLASSES ${vtkcgalpmp_files}
 )
 
-vtk_module_link(vtkCGALPMP PRIVATE CGAL::Eigen3_support)
+vtk_module_link(vtkCGALPMP PRIVATE CGAL::Eigen3_support tet)
+target_include_directories(vtkCGALPMP PRIVATE ${CMAKE_SOURCE_DIR}/TetGen-1.6.0)
 
 if (VESPA_USE_SMP)
   target_compile_definitions(vtkCGALPMP PRIVATE VESPA_USE_SMP)

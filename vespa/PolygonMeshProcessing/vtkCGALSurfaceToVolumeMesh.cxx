@@ -14,7 +14,7 @@
 #include <CGAL/Mesh_complex_3_in_triangulation_3.h>
 #include <CGAL/Mesh_criteria_3.h>
 #include <CGAL/Mesh_triangulation_3.h>
-#include <CGAL/Polyhedral_mesh_domain_3.h>
+#include <CGAL/Polyhedral_mesh_domain_with_features_3.h>
 #include <CGAL/make_mesh_3.h>
 #include <CGAL/number_utils.h>
 
@@ -25,17 +25,17 @@
 vtkStandardNewMacro(vtkCGALSurfaceToVolumeMesh);
 
 // CGAL Mesh_3 types (matching vtkCGALHelper kernel and surface)
-// CGAL 6.x requires: Polyhedral_mesh_domain_3<Polyhedron, K> with explicit Kernel
+// Polyhedral_mesh_domain_with_features_3 supports detect_features() for sharp edges/corners
 using CGAL_Kernel   = CGAL::Exact_predicates_inexact_constructions_kernel;
 using Polyhedron    = CGAL::Surface_mesh<CGAL_Kernel::Point_3>;
-using Mesh_domain   = CGAL::Polyhedral_mesh_domain_3<Polyhedron, CGAL_Kernel>;
+using Mesh_domain   = CGAL::Polyhedral_mesh_domain_with_features_3<CGAL_Kernel, Polyhedron>;
 #ifdef CGAL_CONCURRENT_MESH_3
 using Concurrency_tag = CGAL::Parallel_tag;
 #else
 using Concurrency_tag = CGAL::Sequential_tag;
 #endif
 using Tr            = CGAL::Mesh_triangulation_3<Mesh_domain, CGAL::Default, Concurrency_tag>::type;
-using C3t3          = CGAL::Mesh_complex_3_in_triangulation_3<Tr>;
+using C3t3          = CGAL::Mesh_complex_3_in_triangulation_3<Tr, typename Mesh_domain::Corner_index, typename Mesh_domain::Curve_index>;
 using Mesh_criteria = CGAL::Mesh_criteria_3<Tr>;
 
 namespace params = CGAL::parameters;
@@ -77,6 +77,9 @@ void vtkCGALSurfaceToVolumeMesh::PrintSelf(ostream& os, vtkIndent indent)
     os << indent << "FacetDistance: " << this->FacetDistance << std::endl;
     os << indent << "CellRadiusEdgeRatio: " << this->CellRadiusEdgeRatio << std::endl;
     os << indent << "CellSize: " << this->CellSize << std::endl;
+    os << indent << "DetectFeatures: " << (this->DetectFeatures ? "ON" : "OFF") << std::endl;
+    os << indent << "FeatureAngle: " << this->FeatureAngle << std::endl;
+    os << indent << "EdgeSize: " << this->EdgeSize << std::endl;
     this->Superclass::PrintSelf(os, indent);
 }
 
@@ -135,20 +138,45 @@ int vtkCGALSurfaceToVolumeMesh::RequestData(
     // Create domain
     Mesh_domain domain(polyhedron);
 
+    // Detect sharp feature edges and corners (optional)
+    // Feature edges: dihedral angle >= FeatureAngle (degrees). Corners: auto at edge junctions.
+    if (this->DetectFeatures)
+    {
+        domain.detect_features(static_cast<CGAL_Kernel::FT>(this->FeatureAngle));
+    }
+
     // Mesh criteria (Mesh_criteria_3 has deleted assignment, must construct in one go)
+    const bool useCellSize = (this->CellSize > 0.0);
+    const bool useEdgeSize = (this->DetectFeatures && this->EdgeSize > 0.0);
+
     Mesh_criteria criteria =
-        (this->CellSize > 0.0)
+        (useEdgeSize && useCellSize)
             ? Mesh_criteria(
-                  params::facet_angle(this->FacetAngle)
+                  params::edge_size(this->EdgeSize)
+                      .facet_angle(this->FacetAngle)
                       .facet_size(this->FacetSize)
                       .facet_distance(this->FacetDistance)
                       .cell_radius_edge_ratio(this->CellRadiusEdgeRatio)
                       .cell_size(this->CellSize))
-            : Mesh_criteria(
-                  params::facet_angle(this->FacetAngle)
-                      .facet_size(this->FacetSize)
-                      .facet_distance(this->FacetDistance)
-                      .cell_radius_edge_ratio(this->CellRadiusEdgeRatio));
+            : (useEdgeSize)
+                  ? Mesh_criteria(
+                        params::edge_size(this->EdgeSize)
+                            .facet_angle(this->FacetAngle)
+                            .facet_size(this->FacetSize)
+                            .facet_distance(this->FacetDistance)
+                            .cell_radius_edge_ratio(this->CellRadiusEdgeRatio))
+                  : (useCellSize)
+                        ? Mesh_criteria(
+                              params::facet_angle(this->FacetAngle)
+                                  .facet_size(this->FacetSize)
+                                  .facet_distance(this->FacetDistance)
+                                  .cell_radius_edge_ratio(this->CellRadiusEdgeRatio)
+                                  .cell_size(this->CellSize))
+                        : Mesh_criteria(
+                              params::facet_angle(this->FacetAngle)
+                                  .facet_size(this->FacetSize)
+                                  .facet_distance(this->FacetDistance)
+                                  .cell_radius_edge_ratio(this->CellRadiusEdgeRatio));
 
     // Generate mesh
     C3t3 c3t3;

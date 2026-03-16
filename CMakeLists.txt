@@ -72,6 +72,15 @@ else()
   message(STATUS "CGAL TBB parallel support: disabled (TBB not found)")
 endif()
 
+# TetGen library for tetrahedral meshing (SHYX TetGen filter)
+add_subdirectory(${CMAKE_SOURCE_DIR}/TetGen-1.6.0 ${CMAKE_BINARY_DIR}/TetGen-1.6.0)
+message(STATUS "TetGen: enabled for SHYX surface-to-volume meshing")
+# tet must be in export set since vtkCGALPMP (exported) links to it
+install(TARGETS tet EXPORT vespa
+  ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+  COMPONENT development
+)
+
 ## VTK Module
 ## ----------
 
