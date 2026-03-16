@@ -5,7 +5,6 @@
 #include <vtkDataArray.h>
 #include <vtkDataSet.h>
 #include <vtkDataSetSurfaceFilter.h>
-#include <vtkGenericCell.h>
 #include <vtkImplicitPolyDataDistance.h>
 #include <vtkInformation.h>
 #include <vtkInformationVector.h>
@@ -16,6 +15,10 @@
 #include <vtkPoints.h>
 #include <vtkPolyData.h>
 #include <vtkUnstructuredGrid.h>
+#ifdef VESPA_USE_SMP
+#include <vtkSMPTools.h>
+#include <vtkSMPThreadLocal.h>
+#endif
 
 #include <algorithm>
 #include <array>
@@ -213,8 +216,37 @@ int vtkCGALDensityBasedSampler::RequestData(
 
     // --- Collect interior points ---------------------------------------------
     std::vector<std::array<double, 3>> interiorPts;
+#ifdef VESPA_USE_SMP
+    const vtkIdType totalGridPts = static_cast<vtkIdType>(nx) * ny * nz;
+    vtkSMPThreadLocal<std::vector<std::array<double, 3>>> threadLocalInteriorPts;
+    vtkSMPTools::For(
+        0, totalGridPts,
+        [&](vtkIdType begin, vtkIdType end)
+        {
+            auto& localPts = threadLocalInteriorPts.Local();
+            localPts.reserve(std::min(static_cast<size_t>(end - begin) / 2,
+                static_cast<size_t>(preSample)));
+            for (vtkIdType idx = begin; idx < end; ++idx)
+            {
+                const int k = static_cast<int>(idx / (nx * ny));
+                const int j = static_cast<int>((idx % (nx * ny)) / nx);
+                const int i = static_cast<int>(idx % nx);
+                const double pz = bounds[4] + (nz > 1 ? k * sz : dz * 0.5);
+                const double py = bounds[2] + (ny > 1 ? j * sy : dy * 0.5);
+                const double px = bounds[0] + (nx > 1 ? i * sx : dx * 0.5);
+                double pt[3] = { px, py, pz };
+                if (implicitDist->EvaluateFunction(pt) <= 0.0)
+                {
+                    localPts.push_back({ { pt[0], pt[1], pt[2] } });
+                }
+            }
+        });
+    for (auto it = threadLocalInteriorPts.begin(); it != threadLocalInteriorPts.end(); ++it)
+    {
+        interiorPts.insert(interiorPts.end(), it->begin(), it->end());
+    }
+#else
     interiorPts.reserve(std::min(preSample, vtkIdType(nx) * ny * nz));
-
     for (int k = 0; k < nz; ++k)
     {
         double pz = bounds[4] + (nz > 1 ? k * sz : dz * 0.5);
@@ -232,6 +264,7 @@ int vtkCGALDensityBasedSampler::RequestData(
             }
         }
     }
+#endif
 
     if (interiorPts.empty())
     {
@@ -249,34 +282,71 @@ int vtkCGALDensityBasedSampler::RequestData(
         return rng->GetValue();
     };
 
-    // --- Output: uniform = all interior; density = probability filter ---------
+    // --- Output: uniform = all interior; density = probability filter --------
     vtkNew<vtkPoints> outputPoints;
     outputPoints->SetDataTypeToDouble();
-
     vtkNew<vtkCellArray> outputVerts;
 
     if (uniformMode)
     {
+        const vtkIdType numInteriorU = static_cast<vtkIdType>(interiorPts.size());
+#ifdef VESPA_USE_SMP
+        outputPoints->SetNumberOfPoints(numInteriorU);
+        vtkSMPTools::For(
+            0, numInteriorU,
+            [&](vtkIdType begin, vtkIdType end)
+            {
+                for (vtkIdType i = begin; i < end; ++i)
+                {
+                    outputPoints->SetPoint(i, interiorPts[static_cast<size_t>(i)].data());
+                }
+            });
+        outputVerts->AllocateEstimate(numInteriorU, 1);
+        for (vtkIdType i = 0; i < numInteriorU; ++i)
+        {
+            outputVerts->InsertNextCell(1, &i);
+        }
+#else
         for (const auto& pt : interiorPts)
         {
             vtkIdType pid = outputPoints->InsertNextPoint(pt.data());
             outputVerts->InsertNextCell(1, &pid);
         }
+#endif
     }
     else
     {
         double rangeSpan = scalarRange[1] - scalarRange[0];
-        for (const auto& ptArr : interiorPts)
+        vtkIdType numInterior = static_cast<vtkIdType>(interiorPts.size());
+        std::vector<double> densityValues(static_cast<size_t>(numInterior));
+
+#ifdef VESPA_USE_SMP
+        vtkSMPTools::For(0, numInterior, [&](vtkIdType begin, vtkIdType end) {
+            for (vtkIdType i = begin; i < end; ++i)
+            {
+                const double* pt = interiorPts[static_cast<size_t>(i)].data();
+                double rawValue = InterpolateScalarAtPoint(locator, input, densityArray, pt);
+                double density =
+                    (rangeSpan > 1e-15) ? (rawValue - scalarRange[0]) / rangeSpan : 0.5;
+                densityValues[static_cast<size_t>(i)] = std::max(0.0, std::min(1.0, density));
+            }
+        });
+#else
+        for (vtkIdType i = 0; i < numInterior; ++i)
         {
-            const double* pt = ptArr.data();
+            const double* pt = interiorPts[static_cast<size_t>(i)].data();
             double rawValue = InterpolateScalarAtPoint(locator, input, densityArray, pt);
-            // Automatic linear map: value range -> [0, 100%]
             double density =
                 (rangeSpan > 1e-15) ? (rawValue - scalarRange[0]) / rangeSpan : 0.5;
-            density = std::max(0.0, std::min(1.0, density));
+            densityValues[static_cast<size_t>(i)] = std::max(0.0, std::min(1.0, density));
+        }
+#endif
 
-            if (nextRand() < density)
+        for (vtkIdType i = 0; i < numInterior; ++i)
+        {
+            if (nextRand() < densityValues[static_cast<size_t>(i)])
             {
+                const double* pt = interiorPts[static_cast<size_t>(i)].data();
                 vtkIdType pid = outputPoints->InsertNextPoint(pt);
                 outputVerts->InsertNextCell(1, &pid);
             }

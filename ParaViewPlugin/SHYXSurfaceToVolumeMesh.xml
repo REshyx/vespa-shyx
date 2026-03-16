@@ -1,0 +1,81 @@
+<ServerManagerConfiguration>
+  <ProxyGroup name="filters">
+    <SourceProxy class="vtkCGALSurfaceToVolumeMesh"
+                 label="SHYX Surface to Volume Mesh"
+                 name="SHYXSurfaceToVolumeMesh">
+      <Documentation
+          short_help="Generate tetrahedral volume mesh from a closed surface using CGAL Mesh_3."
+          long_help="This filter takes a closed triangulated surface mesh (vtkPolyData) and generates a tetrahedral volume mesh (vtkUnstructuredGrid) that fills the interior. It uses CGAL's Mesh_3 package with Polyhedral_mesh_domain_3 and Delaunay refinement. The input surface must be closed (watertight), manifold, composed of triangles only, and free of self-intersections."/>
+
+      <InputProperty name="Input"
+                     command="SetInputConnection">
+        <ProxyGroupDomain name="groups">
+          <Group name="sources"/>
+          <Group name="filters"/>
+        </ProxyGroupDomain>
+        <DataTypeDomain name="input_type">
+          <DataType value="vtkPolyData"/>
+        </DataTypeDomain>
+      </InputProperty>
+
+      <DoubleVectorProperty command="SetFacetAngle"
+                           name="FacetAngle"
+                           label="Facet Angle"
+                           number_of_elements="1"
+                           default_values="25">
+        <DoubleRangeDomain name="range" min="1" max="90"/>
+        <Documentation>
+          Lower bound for angles of surface facets (degrees). Smaller values give finer surface approximation.
+        </Documentation>
+      </DoubleVectorProperty>
+
+      <DoubleVectorProperty command="SetFacetSize"
+                           name="FacetSize"
+                           label="Facet Size"
+                           number_of_elements="1"
+                           default_values="0.15">
+        <DoubleRangeDomain name="range" min="1e-6" max="1e6"/>
+        <Documentation>
+          Upper bound for radii of surface Delaunay balls. Smaller values give finer surface mesh.
+        </Documentation>
+      </DoubleVectorProperty>
+
+      <DoubleVectorProperty command="SetFacetDistance"
+                           name="FacetDistance"
+                           label="Facet Distance"
+                           number_of_elements="1"
+                           default_values="0.008">
+        <DoubleRangeDomain name="range" min="1e-9" max="1"/>
+        <Documentation>
+          Upper bound for distance between circumcenter of surface facet and its Delaunay ball center. Smaller values give more accurate surface approximation.
+        </Documentation>
+      </DoubleVectorProperty>
+
+      <DoubleVectorProperty command="SetCellRadiusEdgeRatio"
+                           name="CellRadiusEdgeRatio"
+                           label="Cell Radius-Edge Ratio"
+                           number_of_elements="1"
+                           default_values="3">
+        <DoubleRangeDomain name="range" min="2.01" max="10"/>
+        <Documentation>
+          Upper bound for ratio of circumradius to shortest edge of tetrahedra. Must be &gt; 2.
+        </Documentation>
+      </DoubleVectorProperty>
+
+      <DoubleVectorProperty command="SetCellSize"
+                           name="CellSize"
+                           label="Cell Size"
+                           number_of_elements="1"
+                           default_values="0">
+        <DoubleRangeDomain name="range" min="0" max="1e6"/>
+        <Documentation>
+          Upper bound on circumradii of tetrahedra. 0 means no explicit bound (driven by surface criteria). Set &gt; 0 for coarser volume mesh.
+        </Documentation>
+      </DoubleVectorProperty>
+
+      <Hints>
+        <ShowInMenu category="SHYX"/>
+      </Hints>
+    </SourceProxy>
+  </ProxyGroup>
+</ServerManagerConfiguration>

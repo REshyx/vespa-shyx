@@ -14,8 +14,9 @@ set(CMAKE_CXX_STANDARD 11)
 
 set(Boost_DIR "C:/local/boost_1_74_0/lib64-msvc-14.2/cmake/Boost-1.74.0")
 set(CGAL_DIR C:/SoftWare/CGAL-6.1.1)
-set(ParaView_DIR C:/Users/18490/Documents/GitHub/ParaView/install-qt6/lib/cmake/paraview-6.0)
+set(ParaView_DIR C:/Users/18490/Documents/GitHub/ParaView/install-qt6-tbb/lib/cmake/paraview-6.0)
 set(Qt6_DIR C:/Qt/6.9.0/msvc2022_64/lib/cmake/Qt6)
+set(TBB_DIR "C:/SoftWare/oneapi-tbb-2021.12.0/lib/cmake/tbb")
 
 
 include(GNUInstallDirs)
@@ -32,6 +33,13 @@ endif ()
 
 option(BUILD_SHARED_LIBS "Build shared library" ON)
 set(VESPA_BUILD_PV_PLUGIN ON CACHE BOOL "Build VESPA ParaView plugin")
+# SMP in vtkCGALDensityBasedSampler: ON for TBB ParaView, OFF for official ParaView (avoids crash)
+if(ParaView_DIR MATCHES "tbb")
+  set(VESPA_USE_SMP_DEFAULT ON)
+else()
+  set(VESPA_USE_SMP_DEFAULT OFF)
+endif()
+option(VESPA_USE_SMP "Use VTK SMP in DensityBasedSampler (disable if plugin crashes with official ParaView)" ${VESPA_USE_SMP_DEFAULT})
 
 # Plugin 模式下将 vespa 模块全部编译为静态库并链接进 VESPAPlugin.dll，无需再配置 build\bin\Release 到 PATH
 if (VESPA_BUILD_PV_PLUGIN)
@@ -55,6 +63,14 @@ message(STATUS "Found Eigen3 ${Eigen3_VERSION}")
 find_package(CGAL 5.3.0 REQUIRED)
 message(STATUS "Found CGAL ${CGAL_VERSION}")
 include(CGAL_Eigen3_support)
+# CGAL TBB parallel support (for pca_estimate_normals etc.)
+find_package(TBB QUIET)
+include(CGAL_TBB_support)
+if(TARGET CGAL::TBB_support)
+  message(STATUS "CGAL TBB parallel support: ENABLED")
+else()
+  message(STATUS "CGAL TBB parallel support: disabled (TBB not found)")
+endif()
 
 ## VTK Module
 ## ----------

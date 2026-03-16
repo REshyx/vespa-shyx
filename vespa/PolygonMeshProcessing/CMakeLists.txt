@@ -1,6 +1,7 @@
 set(vtkcgalpmp_files
   vtkCGALBooleanOperation
   vtkCGALDensityBasedSampler
+  vtkCGALSurfaceToVolumeMesh
   vtkCGALIsotropicRemesher
   vtkCGALMeshChecker
   vtkCGALMeshDeformation
@@ -40,6 +41,13 @@ vtk_module_add_module(vtkCGALPMP
 )
 
 vtk_module_link(vtkCGALPMP PRIVATE CGAL::Eigen3_support)
+
+if (VESPA_USE_SMP)
+  target_compile_definitions(vtkCGALPMP PRIVATE VESPA_USE_SMP)
+  message(STATUS "vtkCGALDensityBasedSampler: SMP optimization ENABLED")
+else()
+  message(STATUS "vtkCGALDensityBasedSampler: SMP optimization disabled (for official ParaView compatibility)")
+endif()
 
 # ensure correct link of module
 # OPTIONAL_DEPENDS does not work here for an unknown reason
