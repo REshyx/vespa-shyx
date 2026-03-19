@@ -1,0 +1,12 @@
+NAME
+  vtkSHYXDisconnectedRegionFuse
+DESCRIPTION
+  "Merge disconnected regions of a surface mesh by fusing nearby vertices across regions."
+GROUPS
+  Meshing
+DEPENDS
+  VTK::CommonCore
+  VTK::CommonDataModel
+  VTK::CommonExecutionModel
+  VTK::FiltersCore
+  VTK::FiltersExtraction

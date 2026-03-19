@@ -1,0 +1,71 @@
+<ServerManagerConfiguration>
+  <ProxyGroup name="filters">
+    <SourceProxy name="SHYXClebschMapFilter"
+                 class="vtkSHYXClebschMapFilter"
+                 label="SHYX Clebsch Map Filter">
+      <Documentation
+          long_help="Inside Fluids: Clebsch Maps for visualization (SIGGRAPH 2017). Maps velocity field to S3 wave function for vortex tube visualization. Requires tetrahedral mesh with PointData vector array (e.g. Velocity)."
+          short_help="Map velocity to Clebsch S3 wave function for vortex visualization."/>
+
+      <InputProperty name="Input" command="SetInputConnection">
+        <ProxyGroupDomain name="groups">
+          <Group name="sources"/>
+          <Group name="filters"/>
+        </ProxyGroupDomain>
+        <DataTypeDomain name="input_type">
+          <DataType value="vtkDataSet"/>
+        </DataTypeDomain>
+      </InputProperty>
+
+      <StringVectorProperty name="VelocityArrayName" label="Velocity Array" command="SetVelocityArrayName"
+          number_of_elements="1" animateable="0">
+        <ArrayListDomain name="array_list" attribute_type="Vectors" input_domain_name="inputs_array">
+          <RequiredProperties>
+            <Property name="Input" function="Input" />
+          </RequiredProperties>
+        </ArrayListDomain>
+      </StringVectorProperty>
+
+      <DoubleVectorProperty name="Hbar" label="Hbar" command="SetHbar"
+          number_of_elements="1" animateable="0" default_values="0.1">
+        <Documentation>Quantum constant. Smaller = more detail, higher aliasing risk.</Documentation>
+      </DoubleVectorProperty>
+
+      <IntVectorProperty name="AutoHbar" label="Auto Hbar" command="SetAutoHbar"
+          number_of_elements="1" animateable="0" default_values="1">
+        <BooleanDomain name="bool"/>
+        <Documentation>Auto-compute Hbar from mesh resolution and velocity.</Documentation>
+      </IntVectorProperty>
+
+      <DoubleVectorProperty name="DeltaT" label="Delta T" command="SetDeltaT"
+          number_of_elements="1" animateable="0" default_values="1.0">
+        <Documentation>Implicit gradient descent step size.</Documentation>
+      </DoubleVectorProperty>
+
+      <IntVectorProperty name="MaxIterations" label="Max Iterations" command="SetMaxIterations"
+          number_of_elements="1" animateable="0" default_values="20">
+        <IntRangeDomain name="range" min="1" max="500" />
+      </IntVectorProperty>
+
+      <IntVectorProperty name="OuterLoops" label="Outer Loops" command="SetOuterLoops"
+          number_of_elements="1" animateable="0" default_values="5">
+        <IntRangeDomain name="range" min="1" max="10" />
+      </IntVectorProperty>
+
+      <IntVectorProperty name="RandomSeed" label="Random Seed" command="SetRandomSeed"
+          number_of_elements="1" animateable="0" default_values="42">
+        <Documentation>S3 initialization random seed for temporal coherence.</Documentation>
+      </IntVectorProperty>
+
+      <IntVectorProperty name="UseMKL" label="Use MKL" command="SetUseMKL"
+          number_of_elements="1" animateable="0" default_values="0">
+        <BooleanDomain name="bool"/>
+        <Documentation>Use Intel MKL Pardiso direct solver (requires build with VESPA_USE_MKL=ON). When OFF, use iterative CG.</Documentation>
+      </IntVectorProperty>
+
+      <Hints>
+        <ShowInMenu category="SHYX"/>
+      </Hints>
+    </SourceProxy>
+  </ProxyGroup>
+</ServerManagerConfiguration>

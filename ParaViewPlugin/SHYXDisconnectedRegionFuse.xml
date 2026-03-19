@@ -1,0 +1,33 @@
+<ServerManagerConfiguration>
+  <ProxyGroup name="filters">
+    <SourceProxy name="SHYXDisconnectedRegionFuse"
+                 class="vtkSHYXDisconnectedRegionFuse"
+                 label="SHYX Disconnected Region Fuse">
+      <Documentation
+          long_help="Merge multiple disconnected regions of a surface mesh by fusing nearby vertices across different regions. For each vertex in one region, finds the closest vertex in each other region; if within the threshold, they are fused. Vertices within the same connected region are never merged."
+          short_help="Merge disconnected mesh regions by fusing nearby vertices across regions."/>
+
+      <InputProperty name="Input" command="SetInputConnection">
+        <ProxyGroupDomain name="groups">
+          <Group name="sources"/>
+          <Group name="filters"/>
+        </ProxyGroupDomain>
+        <DataTypeDomain name="input_type">
+          <DataType value="vtkPolyData"/>
+        </DataTypeDomain>
+      </InputProperty>
+
+      <DoubleVectorProperty name="FuseThreshold" label="Fuse Threshold" command="SetFuseThreshold"
+          number_of_elements="1" default_values="0.01" animateable="0">
+        <Documentation>
+          Distance threshold for vertex fusion. Vertices from different connected regions
+          that are within this distance will be merged. Vertices farther apart are ignored.
+        </Documentation>
+      </DoubleVectorProperty>
+
+      <Hints>
+        <ShowInMenu category="SHYX"/>
+      </Hints>
+    </SourceProxy>
+  </ProxyGroup>
+</ServerManagerConfiguration>

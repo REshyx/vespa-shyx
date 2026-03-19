@@ -1,0 +1,12 @@
+NAME
+  vtkSHYXClebschMapFilter
+DESCRIPTION
+  "Inside Fluids: Clebsch Maps for visualization (SIGGRAPH 2017). Maps velocity field to S3 wave function."
+GROUPS
+  Meshing
+DEPENDS
+  VTK::CommonCore
+  VTK::CommonDataModel
+  VTK::CommonExecutionModel
+  VTK::CommonMath
+  VTK::FiltersCore
