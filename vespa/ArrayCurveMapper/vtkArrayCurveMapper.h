@@ -27,6 +27,13 @@ VTK_ABI_NAMESPACE_BEGIN
 class VTKARRAYCURVEMAPPER_EXPORT vtkArrayCurveMapper : public vtkDataSetAlgorithm
 {
 public:
+    enum RepresentationModeType
+    {
+        REPRESENTATION_SURFACE = 0,
+        REPRESENTATION_VOLUME = 1,
+        REPRESENTATION_POINT_GAUSSIAN = 2
+    };
+
     static vtkArrayCurveMapper* New();
     vtkTypeMacro(vtkArrayCurveMapper, vtkDataSetAlgorithm);
     void PrintSelf(ostream& os, vtkIndent indent) override;
@@ -49,6 +56,39 @@ public:
     vtkGetMacro(OutputRangeMax, double);
     vtkSetMacro(OutputRangeMax, double);
 
+    vtkGetMacro(RepresentationMode, int);
+    vtkSetMacro(RepresentationMode, int);
+
+    vtkGetMacro(IntegrationScale, double);
+    vtkSetMacro(IntegrationScale, double);
+
+    vtkGetMacro(TimeScale, double);
+    vtkSetMacro(TimeScale, double);
+
+    vtkGetMacro(Opacity, double);
+    vtkSetMacro(Opacity, double);
+
+    vtkGetMacro(Trunc, double);
+    vtkSetMacro(Trunc, double);
+
+    vtkGetMacro(Pow, double);
+    vtkSetMacro(Pow, double);
+
+    vtkGetMacro(Time, double);
+    vtkSetMacro(Time, double);
+
+    vtkGetMacro(AnimationArrayName, std::string);
+    vtkSetMacro(AnimationArrayName, std::string);
+
+    vtkGetMacro(AnimatedOpacityArrayName, std::string);
+    vtkSetMacro(AnimatedOpacityArrayName, std::string);
+
+    vtkGetMacro(PointGaussianRadiusArrayName, std::string);
+    vtkSetMacro(PointGaussianRadiusArrayName, std::string);
+
+    vtkGetMacro(VolumeDensityArrayName, std::string);
+    vtkSetMacro(VolumeDensityArrayName, std::string);
+
     virtual void SetCurveTransferFunction(vtkPiecewiseFunction* pwf);
     vtkGetObjectMacro(CurveTransferFunction, vtkPiecewiseFunction);
 
@@ -65,6 +105,17 @@ protected:
     double      InputRangeMax  = 1.0;
     double      OutputRangeMin = 0.0;
     double      OutputRangeMax = 1.0;
+    int         RepresentationMode = REPRESENTATION_SURFACE;
+    double      IntegrationScale = 20.0;
+    double      TimeScale = 0.15;
+    double      Opacity = 0.8;
+    double      Trunc = 1.2;
+    double      Pow = 1.5;
+    double      Time = 0.0;
+    std::string AnimationArrayName = "IntegrationTime";
+    std::string AnimatedOpacityArrayName = "AnimatedOpacity";
+    std::string PointGaussianRadiusArrayName = "AnimatedPointRadius";
+    std::string VolumeDensityArrayName = "AnimatedVolumeDensity";
 
     vtkPiecewiseFunction* CurveTransferFunction;
     vtkCallbackCommand*   CurveObserverCommand = nullptr;

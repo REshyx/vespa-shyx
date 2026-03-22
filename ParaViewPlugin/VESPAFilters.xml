@@ -190,6 +190,185 @@
 
     </SourceProxy>
 
+    <!-- Probability cull: scalar = literal keep probability, clamped to [0, 1] -->
+    <SourceProxy class="vtkSHYXArrayProbabilityPointCull"
+                 label="SHYX Array Probability Point Cull"
+                 name="SHYXArrayProbabilityPointCull">
+      <Documentation short_help="Subsample point cloud: keep each point with probability = clamp(scalar, 0, 1).">
+        Each point-data scalar is interpreted as the keep probability for that point. Values outside
+        [0, 1] are clamped; there is no rescaling by the array's min/max (e.g. data in [0.1, 0.5] gives
+        10%–50% keep rates). No volumetric interpolation. Input may be any vtkDataSet; coordinates use
+        vtkDataSet::GetPoint. Output is a vertex-only vtkPolyData point cloud. Empty weight array or
+        (Uniform) keeps all points.
+      </Documentation>
+
+      <InputProperty name="Input"
+                     command="SetInputConnection">
+        <ProxyGroupDomain name="groups">
+          <Group name="sources"/>
+          <Group name="filters"/>
+        </ProxyGroupDomain>
+        <DataTypeDomain name="input_type">
+          <DataType value="vtkDataSet"/>
+        </DataTypeDomain>
+        <InputArrayDomain name="point_arrays" attribute_type="point" optional="1" />
+      </InputProperty>
+
+      <StringVectorProperty command="SetWeightArrayName"
+                            name="WeightArrayName"
+                            label="Weight Array"
+                            number_of_elements="1"
+                            default_values="">
+        <ArrayListDomain attribute_type="Scalars"
+                         name="array_list"
+                         none_string="(Uniform)"
+                         input_domain_name="point_arrays">
+          <RequiredProperties>
+            <Property function="Input"
+                      name="Input" />
+          </RequiredProperties>
+        </ArrayListDomain>
+        <Documentation>
+          Point-data scalar used as keep probability; each value is clamped to [0, 1] only.
+          Leave empty or choose (Uniform) to keep every point.
+        </Documentation>
+        <Hints>
+          <ArraySelectionWidget icon_type="point"/>
+        </Hints>
+      </StringVectorProperty>
+
+      <IntVectorProperty command="SetSeed"
+                         name="Seed"
+                         label="Random Seed"
+                         number_of_elements="1"
+                         default_values="0">
+        <Documentation>
+          Seed for vtkMinimalStandardRandomSequence (reproducible subsampling).
+        </Documentation>
+      </IntVectorProperty>
+
+      <Hints>
+        <ShowInMenu category="SHYX"/>
+      </Hints>
+
+    </SourceProxy>
+
+    <!-- Bidirectional streamlines: merge same SeedIds, reverse backward branch, vtkGenerateIds -->
+    <SourceProxy class="vtkSHYXBidirectionalStreamlineMerge"
+                 label="SHYX Bidirectional Streamline Merge"
+                 name="SHYXBidirectionalStreamlineMerge">
+      <Documentation short_help="Merge bidirectional streamlines per SeedIds; optional point ids and along-line sum.">
+        Groups VTK_LINE / VTK_POLY_LINE cells by SeedIds. For each seed with two segments (typical bidirectional
+        trace), the first polyline in input order is kept, the second is reversed and concatenated; the shared
+        seed vertex is not duplicated when point ids match. Single-segment seeds are copied unchanged. When
+        Generate Point Ids is on, vtkGenerateIds adds a point-data index array (0 .. N-1) using PointIdsArrayName.
+        Optional along-line sum: cumulative 0.5*(f_i+f_{i+1}) per segment along vertex order (not multiplied by
+        segment length). Multi-component arrays use magnitude at each vertex.
+      </Documentation>
+
+      <InputProperty name="Input"
+                     command="SetInputConnection">
+        <ProxyGroupDomain name="groups">
+          <Group name="sources"/>
+          <Group name="filters"/>
+        </ProxyGroupDomain>
+        <DataTypeDomain name="input_type">
+          <DataType value="vtkPolyData"/>
+        </DataTypeDomain>
+        <InputArrayDomain name="cell_arrays" attribute_type="cell" optional="1" />
+        <InputArrayDomain name="point_arrays" attribute_type="point" optional="1" />
+      </InputProperty>
+
+      <StringVectorProperty command="SetSeedIdsArrayName"
+                            name="SeedIdsArrayName"
+                            label="SeedIds Array"
+                            number_of_elements="1"
+                            default_values="SeedIds">
+        <Documentation>
+          Cell-data (default) or point-data array used to group polylines. Same value = same seed.
+        </Documentation>
+      </StringVectorProperty>
+
+      <IntVectorProperty command="SetSeedIdsOnCells"
+                         name="SeedIdsOnCells"
+                         label="SeedIds on cells"
+                         number_of_elements="1"
+                         default_values="1">
+        <BooleanDomain name="bool"/>
+        <Documentation>
+          If on, read SeedIds from each polyline cell. If off, use the first point of each polyline (point data).
+        </Documentation>
+      </IntVectorProperty>
+
+      <IntVectorProperty command="SetGeneratePointIdArray"
+                         name="GeneratePointIdArray"
+                         label="Generate point ids"
+                         number_of_elements="1"
+                         default_values="1">
+        <BooleanDomain name="bool"/>
+        <Documentation>
+          Run vtkGenerateIds to append a point-data array of output point indices.
+        </Documentation>
+      </IntVectorProperty>
+
+      <StringVectorProperty command="SetPointIdsArrayName"
+                            name="PointIdsArrayName"
+                            label="Point ids array name"
+                            number_of_elements="1"
+                            default_values="PointIds">
+        <Documentation>
+          Name of the point-data array created by vtkGenerateIds (0 .. numPoints-1).
+        </Documentation>
+      </StringVectorProperty>
+
+      <IntVectorProperty command="SetComputeArcLengthIntegral"
+                         name="ComputeArcLengthIntegral"
+                         label="Along-line integral"
+                         number_of_elements="1"
+                         default_values="0">
+        <BooleanDomain name="bool"/>
+        <Documentation>
+          When on, append cumulative sum along each merged polyline: each edge adds 0.5*(f_i+f_{i+1}) in vertex
+          order (no multiplication by geometric edge length). Vectors use magnitude.
+        </Documentation>
+      </IntVectorProperty>
+
+      <StringVectorProperty command="SetIntegrandArrayName"
+                            name="IntegrandArrayName"
+                            label="Integral integrand"
+                            number_of_elements="1"
+                            default_values="">
+        <ArrayListDomain name="integral_array_list"
+                         attribute_type="point"
+                         input_domain_name="point_arrays">
+          <RequiredProperties>
+            <Property function="Input" name="Input" />
+          </RequiredProperties>
+        </ArrayListDomain>
+        <Documentation>
+          Input point-data array used when along-line integral is on (scalar or vector).
+        </Documentation>
+        <Hints>
+          <ArraySelectionWidget icon_type="point"/>
+        </Hints>
+      </StringVectorProperty>
+
+      <StringVectorProperty command="SetIntegralArrayName"
+                            name="IntegralArrayName"
+                            label="Integral output name"
+                            number_of_elements="1"
+                            default_values="StreamlineIntegral">
+        <Documentation>
+          Name of the output point-data scalar for the cumulative integral along each merged line.
+        </Documentation>
+      </StringVectorProperty>
+
+      <Hints>
+        <ShowInMenu category="SHYX"/>
+      </Hints>
+
+    </SourceProxy>
+
     <!-- ================================================================== -->
     <SourceProxy class="vtkCGALIsotropicRemesher"
                  label="VESPA Isotropic Remesher"

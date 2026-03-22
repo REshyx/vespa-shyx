@@ -225,6 +225,21 @@
 | **Pre-Sample Count** | int | 100000 | 预采样网格点数，输出为经密度筛选后的内部点。 |
 | **Random Seed** | int | 0 | 随机种子，用于可重复结果。 |
 
+#### 17a. SHYX Array Probability Point Cull（数组概率点剔除）
+
+**功能**：对**已有** `vtkDataSet` 的每个点，用**点标量直接当作保留概率**（只做 **clamp 到 [0,1]**，**不做**按数组 min/max 的线性放缩）。例如标量在 **0.1～0.5** 之间，则保留概率在 **10%～50%**；若区间为 **−1～3**，则小于 0 的当作 0、大于 1 的当作 1。对每个点独立伯努利抽样。标量从**点数据**读取；坐标使用 `vtkDataSet::GetPoint`。
+
+| 参数 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| **Weight Array** | string | (Uniform) | 每点保留概率（标量值 clamp 到 [0,1]）；留空或 (Uniform) 表示保留全部点。 |
+| **Random Seed** | int | 0 | 随机种子。 |
+
+**输出**：仅含 **vertex** 的点云及拷贝的点数据（非原始网格拓扑）。
+
+开启工程选项 **VESPA_USE_SMP** 时，筛选与写点使用 **VTK SMP** 并行；加权模式下随机数为由 (Seed, 点索引) 确定的 **SplitMix64**（与未开 SMP 时 VTK 序列不同，固定 Seed 仍可复现）。
+
+**说明**：与 **SHYX Density-Based Volume Sampler** 的密度场逻辑不同——后者会将标量**按全场范围**映射到 0–100%；本滤镜**只用 clamp**。
+
 ---
 
 ### 18. SHYX Surface to Volume Mesh

@@ -1,6 +1,8 @@
 set(vtkcgalpmp_files
   vtkCGALBooleanOperation
   vtkCGALDensityBasedSampler
+  vtkSHYXArrayProbabilityPointCull
+  vtkSHYXBidirectionalStreamlineMerge
   vtkCGALSurfaceToVolumeMesh
   vtkSHYXTetGen
   vtkCGALIsotropicRemesher
@@ -46,9 +48,9 @@ target_include_directories(vtkCGALPMP PRIVATE ${CMAKE_SOURCE_DIR}/TetGen-1.6.0)
 
 if (VESPA_USE_SMP)
   target_compile_definitions(vtkCGALPMP PRIVATE VESPA_USE_SMP)
-  message(STATUS "vtkCGALDensityBasedSampler: SMP optimization ENABLED")
+  message(STATUS "vtkCGALPMP (DensityBasedSampler, ArrayProbabilityPointCull): SMP optimization ENABLED")
 else()
-  message(STATUS "vtkCGALDensityBasedSampler: SMP optimization disabled (for official ParaView compatibility)")
+  message(STATUS "vtkCGALPMP (DensityBasedSampler, ArrayProbabilityPointCull): SMP optimization disabled (for official ParaView compatibility)")
 endif()
 
 # ensure correct link of module
