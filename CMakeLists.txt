@@ -141,6 +141,12 @@ endif()
 
 ## Module build
 vtk_module_find_modules(vtkcgal_module_files "${CMAKE_CURRENT_SOURCE_DIR}/vespa")
+# ParaView-only: vtkGlyph3DRepresentation / RemotingViews (skip when building VTK-only)
+if (VESPA_BUILD_PV_PLUGIN)
+  list(APPEND vtkcgal_module_files
+    "${CMAKE_CURRENT_SOURCE_DIR}/ParaViewPlugin/PulseGlyphRepresentation/vtk.module"
+    "${CMAKE_CURRENT_SOURCE_DIR}/ParaViewPlugin/AnimatedStreamlineRepresentation/vtk.module")
+endif ()
 
 if(BUILD_TESTING)
   set(_vespa_enable_tests "ON")

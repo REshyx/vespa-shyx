@@ -1,0 +1,13 @@
+NAME
+  vtkAnimatedStreamlineRepresentation
+DESCRIPTION
+  "GPU animated streamline-like representation with custom shader uniforms each frame."
+GROUPS
+  ParaView
+DEPENDS
+  ParaView::RemotingViews
+PRIVATE_DEPENDS
+  VTK::CommonCore
+  VTK::CommonSystem
+  VTK::RenderingCore
+  VTK::RenderingOpenGL2

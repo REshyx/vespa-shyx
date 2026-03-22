@@ -21,6 +21,36 @@ paraview_plugin_add_property_widget(
   INTERFACES acm_interfaces
   SOURCES acm_sources)
 
+set(vespa_plugin_qt_auto_interfaces)
+set(vespa_plugin_qt_auto_sources)
+if (PARAVIEW_USE_QT)
+  paraview_plugin_add_auto_start(
+    CLASS_NAME "pqPulseGlyphAnimationManager"
+    STARTUP onStartup
+    SHUTDOWN onShutdown
+    INTERFACES pulse_glyph_autostart_interfaces
+    SOURCES pulse_glyph_autostart_sources)
+
+  list(APPEND vespa_plugin_qt_auto_interfaces ${pulse_glyph_autostart_interfaces})
+  list(APPEND vespa_plugin_qt_auto_sources
+    ${pulse_glyph_autostart_sources}
+    pqPulseGlyphAnimationManager.cxx
+    pqPulseGlyphAnimationManager.h)
+
+  paraview_plugin_add_auto_start(
+    CLASS_NAME "pqAnimatedStreamlineAnimationManager"
+    STARTUP onStartup
+    SHUTDOWN onShutdown
+    INTERFACES animated_streamline_autostart_interfaces
+    SOURCES animated_streamline_autostart_sources)
+
+  list(APPEND vespa_plugin_qt_auto_interfaces ${animated_streamline_autostart_interfaces})
+  list(APPEND vespa_plugin_qt_auto_sources
+    ${animated_streamline_autostart_sources}
+    pqAnimatedStreamlineAnimationManager.cxx
+    pqAnimatedStreamlineAnimationManager.h)
+endif ()
+
 paraview_add_plugin(VESPAPlugin
   VERSION "${PROJECT_VERSION}"
   EULA ${VESPA_CGAL_LICENSE}
@@ -38,18 +68,27 @@ paraview_add_plugin(VESPAPlugin
     "SHYXClebschMapFilter.xml"
     "SHYXVortexCriteria.xml"
     "SHYXArrayCurveMapper.xml"
+    "PulseGlyphRepresentation.xml"
+    "AnimatedStreamlineRepresentation.xml"
      ${ALPHA_WRAPPING_SERVER_MANAGER_XML}
      ${MESH_SMOOTHING_SERVER_MANAGER_XML}
-  UI_INTERFACES ${acm_interfaces}
+  UI_INTERFACES ${acm_interfaces} ${vespa_plugin_qt_auto_interfaces}
   SOURCES ${acm_sources}
     pqArrayCurveMapperPanel.cxx
     pqArrayCurveMapperPanel.h
+    ${vespa_plugin_qt_auto_sources}
 )
 
 target_link_libraries(VESPAPlugin
   PRIVATE
     vtkCGALDelaunay
     vtkCGALPMP)
+
+if (PARAVIEW_USE_QT)
+  target_link_libraries(VESPAPlugin
+    PRIVATE
+      ParaView::RemotingViews)
+endif ()
 
 if (BUILD_TESTING AND BUILD_SHARED_LIBS)
   add_subdirectory(Testing)

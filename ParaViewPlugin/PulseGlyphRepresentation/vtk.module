@@ -1,0 +1,12 @@
+NAME
+  vtkPulseGlyphRepresentation
+DESCRIPTION
+  "Glyph representation with GPU-instanced pulse scaling (Animated Streamline formula)."
+GROUPS
+  ParaView
+DEPENDS
+  ParaView::RemotingViews
+PRIVATE_DEPENDS
+  VTK::CommonCore
+  VTK::CommonSystem
+  VTK::RenderingCore
