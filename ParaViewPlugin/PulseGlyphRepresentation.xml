@@ -6,10 +6,11 @@
                          base_proxygroup="representations"
                          base_proxyname="Glyph3DRepresentation">
       <Documentation>
-        3D Glyphs with a time-varying pulse scale on the GPU instancing path: each frame the
-        PulseGlyphScale point array is filled from the same formula as Animated Streamline
-        (integration/time phase and trunc/pow), and vtkGlyph3DMapper uses it as the magnitude
-        scale for each instance.
+        3D Glyphs with a time-varying pulse on the GPU instancing path: each frame,
+        PulseGlyphScale and/or PulseGlyphOrientation are filled from the same envelope as Animated
+        Streamline (integration/time phase and trunc/pow). Scale and rotation can be enabled
+        together; optional Shuffle uses render-frame×TimeScale (not wall time) in mixValue, then
+        std::minstd_rand seeded only from mixValue (four sequential draws for scale and rotation).
       </Documentation>
 
       <IntVectorProperty name="Animate"
@@ -75,6 +76,55 @@
           </RequiredProperties>
         </RepresentedArrayListDomain>
       </StringVectorProperty>
+
+      <IntVectorProperty name="PulseAffectsScale"
+                         command="SetPulseAffectsScale"
+                         default_values="1"
+                         label="Pulse affects scale"
+                         number_of_elements="1">
+        <BooleanDomain name="bool" />
+        <Documentation>
+          Map the pulse envelope to PulseGlyphScale (uniform scale magnitude). Can be combined
+          with Pulse affects rotation.
+        </Documentation>
+      </IntVectorProperty>
+
+      <IntVectorProperty name="PulseAffectsRotation"
+                         command="SetPulseAffectsRotation"
+                         default_values="0"
+                         label="Pulse affects rotation"
+                         number_of_elements="1">
+        <BooleanDomain name="bool" />
+        <Documentation>
+          Map the pulse to Euler angles (degrees) in PulseGlyphOrientation for vtkGlyph3DMapper
+          ROTATION mode (X, Y, Z components). Rotation sweep sets max angle per axis.
+        </Documentation>
+      </IntVectorProperty>
+
+      <IntVectorProperty name="Shuffle"
+                         command="SetShuffle"
+                         default_values="0"
+                         label="Shuffle"
+                         number_of_elements="1">
+        <BooleanDomain name="bool" />
+        <Documentation>
+          mixValue uses anim×IntegrationScale + renderFrame×TimeScale (increments once per render
+          when Animate is on), not elapsed wall time. RNG is std::minstd_rand seeded only from
+          mixValue; four sequential uniform [0,1) draws drive scale then X/Y/Z rotation phases.
+        </Documentation>
+      </IntVectorProperty>
+
+      <DoubleVectorProperty name="RotationSweep"
+                            command="SetRotationSweep"
+                            default_values="360 360 360"
+                            label="Rotation sweep XYZ (deg)"
+                            number_of_elements="3">
+        <Documentation>
+          Maximum Euler angles (degrees) per axis: envelope (or shuffled value) maps to 0–each
+          component (vtkProp3D / vtkGlyph3DMapper ROTATION convention).
+        </Documentation>
+        <DoubleRangeDomain name="range" min="0" max="1440" />
+      </DoubleVectorProperty>
     </RepresentationProxy>
 
     <Extension name="GeometryRepresentation">
@@ -115,6 +165,10 @@
             <Property name="Trunc" exposed_name="PG_Trunc" />
             <Property name="Pow" exposed_name="PG_Pow" />
             <Property name="AnimationCoordinateArray" exposed_name="PG_AnimationCoordinateArray" />
+            <Property name="PulseAffectsScale" exposed_name="PG_PulseAffectsScale" />
+            <Property name="PulseAffectsRotation" exposed_name="PG_PulseAffectsRotation" />
+            <Property name="Shuffle" exposed_name="PG_Shuffle" />
+            <Property name="RotationSweep" exposed_name="PG_RotationSweep" />
             <Hints>
               <PropertyWidgetDecorator type="GenericDecorator"
                                        mode="visibility"
@@ -164,6 +218,10 @@
             <Property name="Trunc" exposed_name="PG_Trunc" />
             <Property name="Pow" exposed_name="PG_Pow" />
             <Property name="AnimationCoordinateArray" exposed_name="PG_AnimationCoordinateArray" />
+            <Property name="PulseAffectsScale" exposed_name="PG_PulseAffectsScale" />
+            <Property name="PulseAffectsRotation" exposed_name="PG_PulseAffectsRotation" />
+            <Property name="Shuffle" exposed_name="PG_Shuffle" />
+            <Property name="RotationSweep" exposed_name="PG_RotationSweep" />
             <Hints>
               <PropertyWidgetDecorator type="GenericDecorator"
                                        mode="visibility"
@@ -213,6 +271,10 @@
             <Property name="Trunc" exposed_name="PG_Trunc" />
             <Property name="Pow" exposed_name="PG_Pow" />
             <Property name="AnimationCoordinateArray" exposed_name="PG_AnimationCoordinateArray" />
+            <Property name="PulseAffectsScale" exposed_name="PG_PulseAffectsScale" />
+            <Property name="PulseAffectsRotation" exposed_name="PG_PulseAffectsRotation" />
+            <Property name="Shuffle" exposed_name="PG_Shuffle" />
+            <Property name="RotationSweep" exposed_name="PG_RotationSweep" />
             <Hints>
               <PropertyWidgetDecorator type="GenericDecorator"
                                        mode="visibility"
@@ -262,6 +324,10 @@
             <Property name="Trunc" exposed_name="PG_Trunc" />
             <Property name="Pow" exposed_name="PG_Pow" />
             <Property name="AnimationCoordinateArray" exposed_name="PG_AnimationCoordinateArray" />
+            <Property name="PulseAffectsScale" exposed_name="PG_PulseAffectsScale" />
+            <Property name="PulseAffectsRotation" exposed_name="PG_PulseAffectsRotation" />
+            <Property name="Shuffle" exposed_name="PG_Shuffle" />
+            <Property name="RotationSweep" exposed_name="PG_RotationSweep" />
             <Hints>
               <PropertyWidgetDecorator type="GenericDecorator"
                                        mode="visibility"

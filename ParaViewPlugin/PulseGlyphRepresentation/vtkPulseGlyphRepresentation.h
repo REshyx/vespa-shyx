@@ -10,11 +10,12 @@
 class vtkDataObject;
 
 /**
- * Glyph representation that drives vtkGlyph3DMapper scaling with a time-varying pulse computed
- * from a point array (default: IntegrationTime) using the same formula as Animated
- * Streamline, evaluated each frame into the \c PulseGlyphScale point array. VTK's OpenGL glyph
- * path then applies that scale in the instancing matrices (GPU instancing), which is equivalent
- * to uniformly scaling each glyph template in the vertex stage.
+ * Glyph representation that drives vtkGlyph3DMapper with a time-varying pulse from a point array
+ * (default: IntegrationTime), same envelope as Animated Streamline. Optionally applies the pulse
+ * to uniform scale (\c PulseGlyphScale), to Euler rotation in degrees (\c PulseGlyphOrientation,
+ * vtkGlyph3DMapper ROTATION mode), or both. \c Shuffle maps phase via \c std::minstd_rand seeded
+ * only from \c mixValue (same mixValue → same four draws); with Shuffle, the time-like term is
+ * render-frame × TimeScale (not wall time).
  */
 class VTKPULSEGLYPHREPRESENTATION_EXPORT vtkPulseGlyphRepresentation : public vtkGlyph3DRepresentation
 {
@@ -39,12 +40,27 @@ public:
   vtkSetMacro(Pow, double);
   vtkGetMacro(Pow, double);
 
-  /** Uniform multiplier applied to the pulse value written to \c PulseGlyphScale (after 0-1 envelope). */
+  /** Uniform multiplier on the pulse-driven scale (after 0–1 envelope) when scale pulse is on. */
   vtkSetMacro(PulseOverallScale, double);
   vtkGetMacro(PulseOverallScale, double);
 
   vtkSetStringMacro(AnimationCoordinateArray);
   vtkGetStringMacro(AnimationCoordinateArray);
+
+  vtkSetMacro(PulseAffectsScale, bool);
+  vtkGetMacro(PulseAffectsScale, bool);
+  vtkBooleanMacro(PulseAffectsScale, bool);
+
+  vtkSetMacro(PulseAffectsRotation, bool);
+  vtkGetMacro(PulseAffectsRotation, bool);
+  vtkBooleanMacro(PulseAffectsRotation, bool);
+
+  vtkSetMacro(Shuffle, bool);
+  vtkGetMacro(Shuffle, bool);
+  vtkBooleanMacro(Shuffle, bool);
+
+  vtkSetVector3Macro(RotationSweep, double);
+  vtkGetVectorMacro(RotationSweep, double, 3);
 
 protected:
   vtkPulseGlyphRepresentation();
@@ -57,7 +73,14 @@ protected:
   void FillPolyDataPulseArray(vtkPolyData* pd);
 
   char* AnimationCoordinateArray = nullptr;
+  bool PulseAffectsScale = true;
+  bool PulseAffectsRotation = false;
+  bool Shuffle = false;
+  double RotationSweep[3] = { 360.0, 360.0, 360.0 };
+
   bool Animate = true;
+  /** Increments once per render when Shuffle+Animate; drives mixValue time term instead of wall time. */
+  unsigned long RenderFrame = 0;
   double StartTime = 0.0;
   double TimeScale = 0.4;
   double IntegrationScale = 50.0;
