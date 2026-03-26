@@ -39,6 +39,16 @@ const char* EffectiveAnimationCoordinateArray(const char* s)
   return s;
 }
 
+/** nullptr means do not modulate scale by a second array. */
+const char* EffectiveExtraScaleArrayName(const char* s)
+{
+  if (!s || !s[0] || strcmp(s, "None") == 0)
+  {
+    return nullptr;
+  }
+  return s;
+}
+
 double AnimationCoordScalar(const double* tuple, int numComp)
 {
   if (numComp <= 1)
@@ -49,6 +59,16 @@ double AnimationCoordScalar(const double* tuple, int numComp)
   const double y = tuple[1];
   const double z = (numComp >= 3) ? tuple[2] : 0.0;
   return std::sqrt(x * x + y * y + z * z);
+}
+
+/** Scalar: absolute value; multi-component: Euclidean norm (same as animation magnitude). */
+double ExtraScaleMagnitude(const double* tuple, int numComp)
+{
+  if (numComp <= 1)
+  {
+    return std::fabs(tuple[0]);
+  }
+  return AnimationCoordScalar(tuple, numComp);
 }
 
 /** Seed \c std::minstd_rand from \c mixValue bits only (same mixValue → same seed). */
@@ -76,6 +96,46 @@ void PulseShufflePhasesFromMixValue(float mixValue, float phases[4])
   phases[2] = dist(gen);
   phases[3] = dist(gen);
 }
+
+void ApplyPulseScaleToMapper(vtkGlyph3DMapper* m)
+{
+  if (!m)
+  {
+    return;
+  }
+  m->SetScaling(true);
+  m->SetScaleMode(vtkGlyph3DMapper::SCALE_BY_MAGNITUDE);
+  m->SetScaleArray("PulseGlyphScale");
+}
+
+void ApplyPulseRotationToMapper(vtkGlyph3DMapper* m)
+{
+  if (!m)
+  {
+    return;
+  }
+  m->SetOrient(true);
+  m->SetOrientationMode(vtkGlyph3DMapper::ROTATION);
+  m->SetOrientationArray("PulseGlyphOrientation");
+}
+
+vtkFloatArray* GetOrCreatePulseGlyphScale(vtkPolyData* pd, vtkIdType n)
+{
+  vtkFloatArray* pulse = vtkFloatArray::SafeDownCast(pd->GetPointData()->GetArray("PulseGlyphScale"));
+  if (!pulse)
+  {
+    vtkNew<vtkFloatArray> neu;
+    neu->SetName("PulseGlyphScale");
+    neu->SetNumberOfComponents(1);
+    pd->GetPointData()->AddArray(neu);
+    pulse = vtkFloatArray::SafeDownCast(pd->GetPointData()->GetArray("PulseGlyphScale"));
+  }
+  if (pulse)
+  {
+    pulse->SetNumberOfTuples(n);
+  }
+  return pulse;
+}
 } // namespace
 
 vtkStandardNewMacro(vtkPulseGlyphRepresentation);
@@ -91,6 +151,8 @@ vtkPulseGlyphRepresentation::vtkPulseGlyphRepresentation()
   this->PulseOverallScale = 1.0;
   this->StartTime = vtkTimerLog::GetUniversalTime();
   this->SetAnimationCoordinateArray("IntegrationTime");
+  this->ArrayAffectScale = true;
+  this->ArrayAffectScaleRatio = 1.0;
   this->PulseAffectsScale = true;
   this->PulseAffectsRotation = false;
   this->Shuffle = false;
@@ -98,19 +160,19 @@ vtkPulseGlyphRepresentation::vtkPulseGlyphRepresentation()
   this->RotationSweep[1] = 360.0;
   this->RotationSweep[2] = 360.0;
 
-  this->GlyphMapper->SetScaling(true);
-  this->GlyphMapper->SetScaleMode(vtkGlyph3DMapper::SCALE_BY_MAGNITUDE);
-  this->GlyphMapper->SetScaleArray("PulseGlyphScale");
-
-  this->LODGlyphMapper->SetScaling(true);
-  this->LODGlyphMapper->SetScaleMode(vtkGlyph3DMapper::SCALE_BY_MAGNITUDE);
-  this->LODGlyphMapper->SetScaleArray("PulseGlyphScale");
+  if (this->PulseAffectsScale ||
+    (this->ArrayAffectScale && EffectiveExtraScaleArrayName(this->ExtraScaleArray)))
+  {
+    ApplyPulseScaleToMapper(this->GlyphMapper);
+    ApplyPulseScaleToMapper(this->LODGlyphMapper);
+  }
 }
 
 //------------------------------------------------------------------------------
 vtkPulseGlyphRepresentation::~vtkPulseGlyphRepresentation()
 {
   this->SetAnimationCoordinateArray(nullptr);
+  this->SetExtraScaleArray(nullptr);
 }
 
 //------------------------------------------------------------------------------
@@ -124,30 +186,52 @@ void vtkPulseGlyphRepresentation::FillPolyDataPulseArray(vtkPolyData* pd)
   const vtkIdType n = pd->GetNumberOfPoints();
   const char* aname = EffectiveAnimationCoordinateArray(this->AnimationCoordinateArray);
   vtkDataArray* acArr = pd->GetPointData()->GetArray(aname);
+  const char* exName = EffectiveExtraScaleArrayName(this->ExtraScaleArray);
+  vtkDataArray* exArr = exName ? pd->GetPointData()->GetArray(exName) : nullptr;
 
-  vtkFloatArray* pulse = vtkFloatArray::SafeDownCast(pd->GetPointData()->GetArray("PulseGlyphScale"));
-  if (!pulse)
-  {
-    vtkNew<vtkFloatArray> neu;
-    neu->SetName("PulseGlyphScale");
-    neu->SetNumberOfComponents(1);
-    pd->GetPointData()->AddArray(neu);
-    pulse = vtkFloatArray::SafeDownCast(pd->GetPointData()->GetArray("PulseGlyphScale"));
-  }
-  if (!pulse)
+  // PulseGlyphScale = Overall × (envTerm + arrTerm): envTerm is envelope(ph) if PulseAffectsScale,
+  // else 0; arrTerm is |extra array|×ratio if useExtraScaleArray, else 0. Rotation uses the same
+  // envelope in PulseGlyphOrientation when PulseAffectsRotation. Extra array: one completeness
+  // check (tuples >= n).
+  const bool pulseAffectRotate = this->PulseAffectsRotation;
+  const bool pulseAffectScale = this->PulseAffectsScale;
+  const bool arrayAffectScale = this->ArrayAffectScale;
+  const bool useExtraScaleArray =
+    arrayAffectScale && exArr != nullptr && exArr->GetNumberOfTuples() >= n;
+  const int exEnc = useExtraScaleArray ? exArr->GetNumberOfComponents() : 0;
+
+  // Nothing to write: no pulse-on-scale, no rotation pulse, no per-point extra array.
+  if (!pulseAffectScale && !pulseAffectRotate && !useExtraScaleArray)
   {
     return;
   }
-  pulse->SetNumberOfTuples(n);
 
-  const bool userWantsRot = this->PulseAffectsRotation;
-  const bool userWantsScale = this->PulseAffectsScale;
-  const bool affectRot = userWantsRot;
-  // If both toggles are off, keep driving scale only (same as scale-only).
-  const bool affectScale = userWantsScale || (!userWantsScale && !userWantsRot);
+  // Only extra array (no pulse envelope, no rotation): PulseGlyphScale = Overall × (0 + array×ratio).
+  if (!pulseAffectScale && !pulseAffectRotate)
+  {
+    vtkFloatArray* pulse = GetOrCreatePulseGlyphScale(pd, n);
+    if (!pulse)
+    {
+      return;
+    }
+    const float overall = static_cast<float>(this->PulseOverallScale);
+    vtkSMPTools::For(0, n, [&](vtkIdType start, vtkIdType end) {
+      std::vector<double> tuple(16);
+      for (vtkIdType i = start; i < end; ++i)
+      {
+        exArr->GetTuple(i, tuple.data());
+        const float arrTerm = static_cast<float>(
+          ExtraScaleMagnitude(tuple.data(), exEnc) * this->ArrayAffectScaleRatio);
+        pulse->SetValue(i, overall * arrTerm);
+      }
+    });
+    pulse->Modified();
+    pd->GetPointData()->Modified();
+    return;
+  }
 
   vtkFloatArray* orient = nullptr;
-  if (affectRot)
+  if (pulseAffectRotate)
   {
     orient = vtkFloatArray::SafeDownCast(pd->GetPointData()->GetArray("PulseGlyphOrientation"));
     if (!orient)
@@ -161,6 +245,17 @@ void vtkPulseGlyphRepresentation::FillPolyDataPulseArray(vtkPolyData* pd)
     if (orient)
     {
       orient->SetNumberOfTuples(n);
+    }
+  }
+
+  const bool writePulseGlyphScale = pulseAffectScale || useExtraScaleArray;
+  vtkFloatArray* pulse = nullptr;
+  if (writePulseGlyphScale)
+  {
+    pulse = GetOrCreatePulseGlyphScale(pd, n);
+    if (!pulse)
+    {
+      return;
     }
   }
 
@@ -225,18 +320,20 @@ void vtkPulseGlyphRepresentation::FillPolyDataPulseArray(vtkPolyData* pd)
         ph0 = ph1 = ph2 = ph3 = ph;
       }
 
-      float scaleMag;
-      if (affectScale)
+      const float envTerm = pulseAffectScale ? envelopeFromPhase(ph0) : 0.f;
+      float arrTerm = 0.f;
+      if (useExtraScaleArray)
       {
-        scaleMag = envelopeFromPhase(ph0) * overall;
+        exArr->GetTuple(i, tuple.data());
+        arrTerm = static_cast<float>(
+          ExtraScaleMagnitude(tuple.data(), exEnc) * this->ArrayAffectScaleRatio);
       }
-      else
+      if (pulse)
       {
-        scaleMag = overall;
+        pulse->SetValue(i, overall * (envTerm + arrTerm));
       }
-      pulse->SetValue(i, scaleMag);
 
-      if (affectRot && orient)
+      if (pulseAffectRotate && orient)
       {
         float rx, ry, rz;
         if (!shuffle)
@@ -257,7 +354,10 @@ void vtkPulseGlyphRepresentation::FillPolyDataPulseArray(vtkPolyData* pd)
     }
   });
 
-  pulse->Modified();
+  if (pulse)
+  {
+    pulse->Modified();
+  }
   if (orient)
   {
     orient->Modified();
@@ -324,31 +424,29 @@ int vtkPulseGlyphRepresentation::ProcessViewRequest(
 
   if (request_type == vtkPVView::REQUEST_RENDER())
   {
-    // Glyph3DRepresentation XML defaults Scaling=0; SM proxy sync turns scaling off and ignores
-    // PulseGlyphScale. Re-assert every render. Also bump mapper MTime so instance matrices
-    // rebuild when only nested point arrays change (composite top-level MTime may not move).
-    this->GlyphMapper->SetScaling(true);
-    this->GlyphMapper->SetScaleMode(vtkGlyph3DMapper::SCALE_BY_MAGNITUDE);
-    this->GlyphMapper->SetScaleArray("PulseGlyphScale");
-    this->LODGlyphMapper->SetScaling(true);
-    this->LODGlyphMapper->SetScaleMode(vtkGlyph3DMapper::SCALE_BY_MAGNITUDE);
-    this->LODGlyphMapper->SetScaleArray("PulseGlyphScale");
-
-    const bool affectRot = this->PulseAffectsRotation;
-    if (affectRot)
+    // Drive PulseGlyphScale on the mapper only when pulse-on-scale or array-driven scale is
+    // active (dual to applying PulseGlyphOrientation only when PulseAffectsRotation). Otherwise
+    // leave scale mode/array to the superclass / SM (e.g. Glyph Scale Array).
+    const bool usePulseGlyphScaleMapper = this->PulseAffectsScale ||
+      (this->ArrayAffectScale && EffectiveExtraScaleArrayName(this->ExtraScaleArray));
+    if (usePulseGlyphScaleMapper)
     {
-      this->GlyphMapper->SetOrient(true);
-      this->GlyphMapper->SetOrientationMode(vtkGlyph3DMapper::ROTATION);
-      this->GlyphMapper->SetOrientationArray("PulseGlyphOrientation");
-      this->LODGlyphMapper->SetOrient(true);
-      this->LODGlyphMapper->SetOrientationMode(vtkGlyph3DMapper::ROTATION);
-      this->LODGlyphMapper->SetOrientationArray("PulseGlyphOrientation");
+      ApplyPulseScaleToMapper(this->GlyphMapper);
+      ApplyPulseScaleToMapper(this->LODGlyphMapper);
+    }
+    if (this->PulseAffectsRotation)
+    {
+      ApplyPulseRotationToMapper(this->GlyphMapper);
+      ApplyPulseRotationToMapper(this->LODGlyphMapper);
     }
 
     // Do not call GlyphMapper->Update() here: vtkOpenGLGlyph3DMapper port 0 only accepts
     // vtkDataSet / vtkCompositeDataSet; ParaView may deliver vtkPartitionedDataSet etc. on
     // the geometry pipeline, and mapper Update() would fail type checks. Update the same
     // piece producers the superclass connects and fill arrays on that output.
+    const bool touchPulseFields = this->PulseAffectsScale || this->PulseAffectsRotation ||
+      (this->ArrayAffectScale && EffectiveExtraScaleArrayName(this->ExtraScaleArray));
+
     vtkAlgorithmOutput* producerPort = vtkPVRenderView::GetPieceProducer(inInfo, this, 0);
     vtkAlgorithmOutput* producerPortLOD = vtkPVRenderView::GetPieceProducerLOD(inInfo, this, 0);
 
@@ -358,13 +456,16 @@ int vtkPulseGlyphRepresentation::ProcessViewRequest(
     {
       producerPort->GetProducer()->Update();
       mainPiece = producerPort->GetProducer()->GetOutputDataObject(producerPort->GetIndex());
-      this->UpdatePulseScaleArrays(mainPiece);
+      if (touchPulseFields)
+      {
+        this->UpdatePulseScaleArrays(mainPiece);
+      }
     }
     if (producerPortLOD && producerPortLOD->GetProducer())
     {
       producerPortLOD->GetProducer()->Update();
       lodPiece = producerPortLOD->GetProducer()->GetOutputDataObject(producerPortLOD->GetIndex());
-      if (lodPiece != mainPiece)
+      if (touchPulseFields && lodPiece != mainPiece)
       {
         this->UpdatePulseScaleArrays(lodPiece);
       }
@@ -401,6 +502,10 @@ void vtkPulseGlyphRepresentation::PrintSelf(ostream& os, vtkIndent indent)
   os << indent << "PulseOverallScale: " << this->PulseOverallScale << "\n";
   os << indent << "AnimationCoordinateArray: "
      << (this->AnimationCoordinateArray ? this->AnimationCoordinateArray : "(null)") << "\n";
+  os << indent << "ExtraScaleArray: " << (this->ExtraScaleArray ? this->ExtraScaleArray : "(null)")
+     << "\n";
+  os << indent << "ArrayAffectScale: " << this->ArrayAffectScale << "\n";
+  os << indent << "ArrayAffectScaleRatio: " << this->ArrayAffectScaleRatio << "\n";
   os << indent << "PulseAffectsScale: " << this->PulseAffectsScale << "\n";
   os << indent << "PulseAffectsRotation: " << this->PulseAffectsRotation << "\n";
   os << indent << "Shuffle: " << this->Shuffle << "\n";

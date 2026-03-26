@@ -11,11 +11,13 @@ class vtkDataObject;
 
 /**
  * Glyph representation that drives vtkGlyph3DMapper with a time-varying pulse from a point array
- * (default: IntegrationTime), same envelope as Animated Streamline. Optionally applies the pulse
- * to uniform scale (\c PulseGlyphScale), to Euler rotation in degrees (\c PulseGlyphOrientation,
- * vtkGlyph3DMapper ROTATION mode), or both. \c Shuffle maps phase via \c std::minstd_rand seeded
- * only from \c mixValue (same mixValue → same four draws); with Shuffle, the time-like term is
- * render-frame × TimeScale (not wall time).
+ * (default: IntegrationTime), same envelope as Animated Streamline. \c PulseAffectsScale gates
+ * applying that envelope to \c PulseGlyphScale; \c PulseAffectsRotation gates Euler angles in
+ * \c PulseGlyphOrientation (\c vtkGlyph3DMapper ROTATION mode). \c ArrayAffectScale gates whether
+ * \c PulseGlyphScale uses Overall×(envelope + extra-array magnitude×\c ArrayAffectScaleRatio) when
+ * those terms apply; \c ArrayAffectScale gates the array term.
+ * \c Shuffle maps phase via \c std::minstd_rand seeded only from \c mixValue; with Shuffle, the
+ * time-like term is render-frame × TimeScale (not wall time).
  */
 class VTKPULSEGLYPHREPRESENTATION_EXPORT vtkPulseGlyphRepresentation : public vtkGlyph3DRepresentation
 {
@@ -40,12 +42,24 @@ public:
   vtkSetMacro(Pow, double);
   vtkGetMacro(Pow, double);
 
-  /** Uniform multiplier on the pulse-driven scale (after 0–1 envelope) when scale pulse is on. */
+  /** Multiplies (envelope + array term) for \c PulseGlyphScale: Overall×(E + |array|×ratio). */
   vtkSetMacro(PulseOverallScale, double);
   vtkGetMacro(PulseOverallScale, double);
 
   vtkSetStringMacro(AnimationCoordinateArray);
   vtkGetStringMacro(AnimationCoordinateArray);
+
+  /** Point array: magnitude×ratio added to envelope for \c PulseGlyphScale when \c ArrayAffectScale
+   * is on (None disables). */
+  vtkSetStringMacro(ExtraScaleArray);
+  vtkGetStringMacro(ExtraScaleArray);
+
+  vtkSetMacro(ArrayAffectScale, bool);
+  vtkGetMacro(ArrayAffectScale, bool);
+  vtkBooleanMacro(ArrayAffectScale, bool);
+
+  vtkSetMacro(ArrayAffectScaleRatio, double);
+  vtkGetMacro(ArrayAffectScaleRatio, double);
 
   vtkSetMacro(PulseAffectsScale, bool);
   vtkGetMacro(PulseAffectsScale, bool);
@@ -73,6 +87,9 @@ protected:
   void FillPolyDataPulseArray(vtkPolyData* pd);
 
   char* AnimationCoordinateArray = nullptr;
+  char* ExtraScaleArray = nullptr;
+  bool ArrayAffectScale = true;
+  double ArrayAffectScaleRatio = 1.0;
   bool PulseAffectsScale = true;
   bool PulseAffectsRotation = false;
   bool Shuffle = false;

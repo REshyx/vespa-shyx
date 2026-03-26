@@ -6,11 +6,11 @@
                          base_proxygroup="representations"
                          base_proxyname="Glyph3DRepresentation">
       <Documentation>
-        3D Glyphs with a time-varying pulse on the GPU instancing path: each frame,
-        PulseGlyphScale and/or PulseGlyphOrientation are filled from the same envelope as Animated
-        Streamline (integration/time phase and trunc/pow). Scale and rotation can be enabled
-        together; optional Shuffle uses render-frame×TimeScale (not wall time) in mixValue, then
-        std::minstd_rand seeded only from mixValue (four sequential draws for scale and rotation).
+        3D Glyphs with a time-varying pulse on the GPU instancing path: PulseGlyphScale is
+        Overall×(envelope + optional array magnitude×ratio), with the same trunc/pow envelope as
+        Animated Streamline; PulseGlyphOrientation uses the same envelope for rotation. Optional
+        Shuffle uses render-frame×TimeScale (not wall time) in mixValue, then std::minstd_rand
+        seeded only from mixValue (four sequential draws for scale and rotation).
       </Documentation>
 
       <IntVectorProperty name="Animate"
@@ -55,8 +55,9 @@
                             number_of_elements="1">
         <DoubleRangeDomain name="range" min="0" max="100" />
         <Documentation>
-          Uniform multiplier applied to the pulse value written to PulseGlyphScale (after the
-          0–1 envelope from trunc/pow).
+          Uniform multiplier on PulseGlyphScale: Overall × (pulse envelope + array magnitude × ratio).
+          The envelope comes from trunc/pow when Pulse affects scale is on; the array term is zero
+          when Array affects scale is off or no valid extra array.
         </Documentation>
       </DoubleVectorProperty>
 
@@ -77,6 +78,48 @@
         </RepresentedArrayListDomain>
       </StringVectorProperty>
 
+      <StringVectorProperty name="ExtraScaleArray"
+                            command="SetExtraScaleArray"
+                            default_values="None"
+                            label="Extra scale by array"
+                            number_of_elements="1">
+        <Documentation>
+          When Array affects scale is on, its magnitude (scalar: absolute value; vectors: norm),
+          times Array affect scale ratio, is added to the pulse envelope before multiplying by
+          Overall for PulseGlyphScale. None if unused.
+        </Documentation>
+        <RepresentedArrayListDomain name="extra_scale_array_list"
+                                    input_domain_name="input_array_any">
+          <RequiredProperties>
+            <Property function="Input" name="Input" />
+          </RequiredProperties>
+        </RepresentedArrayListDomain>
+      </StringVectorProperty>
+
+      <IntVectorProperty name="ArrayAffectScale"
+                         command="SetArrayAffectScale"
+                         default_values="1"
+                         label="Array affects scale"
+                         number_of_elements="1">
+        <BooleanDomain name="bool" />
+        <Documentation>
+          When on, add (Extra scale by array magnitude × Array affect scale ratio) to the envelope
+          term per point for PulseGlyphScale. When off, that array is ignored for scaling.
+        </Documentation>
+      </IntVectorProperty>
+
+      <DoubleVectorProperty name="ArrayAffectScaleRatio"
+                            command="SetArrayAffectScaleRatio"
+                            default_values="1"
+                            label="Array affect scale ratio"
+                            number_of_elements="1">
+        <DoubleRangeDomain name="range" min="0" max="1e6" />
+        <Documentation>
+          Multiplier on the extra-array magnitude before it is added to the envelope term (only when
+          Array affects scale is on).
+        </Documentation>
+      </DoubleVectorProperty>
+
       <IntVectorProperty name="PulseAffectsScale"
                          command="SetPulseAffectsScale"
                          default_values="1"
@@ -84,8 +127,11 @@
                          number_of_elements="1">
         <BooleanDomain name="bool" />
         <Documentation>
-          Map the pulse envelope to PulseGlyphScale (uniform scale magnitude). Can be combined
-          with Pulse affects rotation.
+          When on, the mapper uses PulseGlyphScale and the time-varying envelope E is included as
+          PulseGlyphScale = Overall × (E + array term). When off, E is zero; the mapper falls back
+          to standard Glyph scale unless Array affects scale supplies a non-zero array term (then
+          PulseGlyphScale = Overall × array term). Rotation can still use the pulse if Pulse affects
+          rotation is on.
         </Documentation>
       </IntVectorProperty>
 
@@ -156,6 +202,9 @@
             <Property name="Trunc" exposed_name="PG_Trunc" />
             <Property name="Pow" exposed_name="PG_Pow" />
             <Property name="AnimationCoordinateArray" exposed_name="PG_AnimationCoordinateArray" />
+            <Property name="ExtraScaleArray" exposed_name="PG_ExtraScaleArray" />
+            <Property name="ArrayAffectScale" exposed_name="PG_ArrayAffectScale" />
+            <Property name="ArrayAffectScaleRatio" exposed_name="PG_ArrayAffectScaleRatio" />
             <Property name="PulseAffectsScale" exposed_name="PG_PulseAffectsScale" />
             <Property name="PulseAffectsRotation" exposed_name="PG_PulseAffectsRotation" />
             <Property name="Shuffle" exposed_name="PG_Shuffle" />
@@ -200,6 +249,9 @@
             <Property name="Trunc" exposed_name="PG_Trunc" />
             <Property name="Pow" exposed_name="PG_Pow" />
             <Property name="AnimationCoordinateArray" exposed_name="PG_AnimationCoordinateArray" />
+            <Property name="ExtraScaleArray" exposed_name="PG_ExtraScaleArray" />
+            <Property name="ArrayAffectScale" exposed_name="PG_ArrayAffectScale" />
+            <Property name="ArrayAffectScaleRatio" exposed_name="PG_ArrayAffectScaleRatio" />
             <Property name="PulseAffectsScale" exposed_name="PG_PulseAffectsScale" />
             <Property name="PulseAffectsRotation" exposed_name="PG_PulseAffectsRotation" />
             <Property name="Shuffle" exposed_name="PG_Shuffle" />
@@ -244,6 +296,9 @@
             <Property name="Trunc" exposed_name="PG_Trunc" />
             <Property name="Pow" exposed_name="PG_Pow" />
             <Property name="AnimationCoordinateArray" exposed_name="PG_AnimationCoordinateArray" />
+            <Property name="ExtraScaleArray" exposed_name="PG_ExtraScaleArray" />
+            <Property name="ArrayAffectScale" exposed_name="PG_ArrayAffectScale" />
+            <Property name="ArrayAffectScaleRatio" exposed_name="PG_ArrayAffectScaleRatio" />
             <Property name="PulseAffectsScale" exposed_name="PG_PulseAffectsScale" />
             <Property name="PulseAffectsRotation" exposed_name="PG_PulseAffectsRotation" />
             <Property name="Shuffle" exposed_name="PG_Shuffle" />
@@ -288,6 +343,9 @@
             <Property name="Trunc" exposed_name="PG_Trunc" />
             <Property name="Pow" exposed_name="PG_Pow" />
             <Property name="AnimationCoordinateArray" exposed_name="PG_AnimationCoordinateArray" />
+            <Property name="ExtraScaleArray" exposed_name="PG_ExtraScaleArray" />
+            <Property name="ArrayAffectScale" exposed_name="PG_ArrayAffectScale" />
+            <Property name="ArrayAffectScaleRatio" exposed_name="PG_ArrayAffectScaleRatio" />
             <Property name="PulseAffectsScale" exposed_name="PG_PulseAffectsScale" />
             <Property name="PulseAffectsRotation" exposed_name="PG_PulseAffectsRotation" />
             <Property name="Shuffle" exposed_name="PG_Shuffle" />
