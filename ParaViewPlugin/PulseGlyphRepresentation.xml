@@ -56,7 +56,7 @@
         <DoubleRangeDomain name="range" min="0" max="100" />
         <Documentation>
           Uniform multiplier applied to the pulse value written to PulseGlyphScale (after the
-          0–1 envelope from trunc/pow). The standard Glyph Scale Factor still multiplies on top.
+          0–1 envelope from trunc/pow).
         </Documentation>
       </DoubleVectorProperty>
 
@@ -143,14 +143,6 @@
         <ExposedProperties>
           <PropertyGroup label="Pulse Glyphs">
             <Property name="PulseOverallScale" exposed_name="PG_OverallScale" />
-            <!-- Same subproxy properties as Glyph Parameters; unique exposed_name avoids clash with
-                 Glyph3DRepresentation (vtkSMProxy duplicate exposed property warning). -->
-            <Property name="Orient" exposed_name="PulseGlyph_Orient" panel_visibility="advanced" />
-            <Property name="OrientationMode" exposed_name="PulseGlyph_OrientationMode" panel_visibility="advanced" />
-            <Property name="SelectOrientationVectors" exposed_name="PulseGlyph_SelectOrientationVectors" panel_visibility="advanced" />
-            <Property name="Scaling" exposed_name="PulseGlyph_Scaling" panel_visibility="advanced" />
-            <Property name="ScaleFactor" exposed_name="PulseGlyph_ScaleFactor" panel_visibility="advanced" />
-            <Property name="SelectScaleArray" exposed_name="PulseGlyph_SelectScaleArray" panel_visibility="advanced" />
             <Property name="GlyphType" exposed_name="PulseGlyph_GlyphType" label="Glyph Type" panel_visibility="default" />
             <Property name="UseGlyphTable" exposed_name="PulseGlyph_UseGlyphTable" panel_visibility="advanced" />
             <Property name="GlyphTableIndexArray" exposed_name="PulseGlyph_GlyphTableIndexArray" panel_visibility="advanced" />
@@ -195,14 +187,6 @@
         <ExposedProperties>
           <PropertyGroup label="Pulse Glyphs">
             <Property name="PulseOverallScale" exposed_name="PG_OverallScale" />
-            <!-- Same subproxy properties as Glyph Parameters; unique exposed_name avoids clash with
-                 Glyph3DRepresentation (vtkSMProxy duplicate exposed property warning). -->
-            <Property name="Orient" exposed_name="PulseGlyph_Orient" panel_visibility="advanced" />
-            <Property name="OrientationMode" exposed_name="PulseGlyph_OrientationMode" panel_visibility="advanced" />
-            <Property name="SelectOrientationVectors" exposed_name="PulseGlyph_SelectOrientationVectors" panel_visibility="advanced" />
-            <Property name="Scaling" exposed_name="PulseGlyph_Scaling" panel_visibility="advanced" />
-            <Property name="ScaleFactor" exposed_name="PulseGlyph_ScaleFactor" panel_visibility="advanced" />
-            <Property name="SelectScaleArray" exposed_name="PulseGlyph_SelectScaleArray" panel_visibility="advanced" />
             <Property name="GlyphType" exposed_name="PulseGlyph_GlyphType" label="Glyph Type" panel_visibility="default" />
             <Property name="UseGlyphTable" exposed_name="PulseGlyph_UseGlyphTable" panel_visibility="advanced" />
             <Property name="GlyphTableIndexArray" exposed_name="PulseGlyph_GlyphTableIndexArray" panel_visibility="advanced" />
@@ -247,14 +231,6 @@
         <ExposedProperties>
           <PropertyGroup label="Pulse Glyphs">
             <Property name="PulseOverallScale" exposed_name="PG_OverallScale" />
-            <!-- Same subproxy properties as Glyph Parameters; unique exposed_name avoids clash with
-                 Glyph3DRepresentation (vtkSMProxy duplicate exposed property warning). -->
-            <Property name="Orient" exposed_name="PulseGlyph_Orient" panel_visibility="advanced" />
-            <Property name="OrientationMode" exposed_name="PulseGlyph_OrientationMode" panel_visibility="advanced" />
-            <Property name="SelectOrientationVectors" exposed_name="PulseGlyph_SelectOrientationVectors" panel_visibility="advanced" />
-            <Property name="Scaling" exposed_name="PulseGlyph_Scaling" panel_visibility="advanced" />
-            <Property name="ScaleFactor" exposed_name="PulseGlyph_ScaleFactor" panel_visibility="advanced" />
-            <Property name="SelectScaleArray" exposed_name="PulseGlyph_SelectScaleArray" panel_visibility="advanced" />
             <Property name="GlyphType" exposed_name="PulseGlyph_GlyphType" label="Glyph Type" panel_visibility="default" />
             <Property name="UseGlyphTable" exposed_name="PulseGlyph_UseGlyphTable" panel_visibility="advanced" />
             <Property name="GlyphTableIndexArray" exposed_name="PulseGlyph_GlyphTableIndexArray" panel_visibility="advanced" />
@@ -299,14 +275,6 @@
         <ExposedProperties>
           <PropertyGroup label="Pulse Glyphs">
             <Property name="PulseOverallScale" exposed_name="PG_OverallScale" />
-            <!-- Same subproxy properties as Glyph Parameters; unique exposed_name avoids clash with
-                 Glyph3DRepresentation (vtkSMProxy duplicate exposed property warning). -->
-            <Property name="Orient" exposed_name="PulseGlyph_Orient" panel_visibility="advanced" />
-            <Property name="OrientationMode" exposed_name="PulseGlyph_OrientationMode" panel_visibility="advanced" />
-            <Property name="SelectOrientationVectors" exposed_name="PulseGlyph_SelectOrientationVectors" panel_visibility="advanced" />
-            <Property name="Scaling" exposed_name="PulseGlyph_Scaling" panel_visibility="advanced" />
-            <Property name="ScaleFactor" exposed_name="PulseGlyph_ScaleFactor" panel_visibility="advanced" />
-            <Property name="SelectScaleArray" exposed_name="PulseGlyph_SelectScaleArray" panel_visibility="advanced" />
             <Property name="GlyphType" exposed_name="PulseGlyph_GlyphType" label="Glyph Type" panel_visibility="default" />
             <Property name="UseGlyphTable" exposed_name="PulseGlyph_UseGlyphTable" panel_visibility="advanced" />
             <Property name="GlyphTableIndexArray" exposed_name="PulseGlyph_GlyphTableIndexArray" panel_visibility="advanced" />
