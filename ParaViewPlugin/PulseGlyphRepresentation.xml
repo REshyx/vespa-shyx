@@ -149,7 +149,6 @@
             <Property name="OrientationMode" exposed_name="PulseGlyph_OrientationMode" panel_visibility="advanced" />
             <Property name="SelectOrientationVectors" exposed_name="PulseGlyph_SelectOrientationVectors" panel_visibility="advanced" />
             <Property name="Scaling" exposed_name="PulseGlyph_Scaling" panel_visibility="advanced" />
-            <Property name="ScaleMode" exposed_name="PulseGlyph_ScaleMode" panel_visibility="advanced" />
             <Property name="ScaleFactor" exposed_name="PulseGlyph_ScaleFactor" panel_visibility="advanced" />
             <Property name="SelectScaleArray" exposed_name="PulseGlyph_SelectScaleArray" panel_visibility="advanced" />
             <Property name="GlyphType" exposed_name="PulseGlyph_GlyphType" label="Glyph Type" panel_visibility="default" />
@@ -202,7 +201,6 @@
             <Property name="OrientationMode" exposed_name="PulseGlyph_OrientationMode" panel_visibility="advanced" />
             <Property name="SelectOrientationVectors" exposed_name="PulseGlyph_SelectOrientationVectors" panel_visibility="advanced" />
             <Property name="Scaling" exposed_name="PulseGlyph_Scaling" panel_visibility="advanced" />
-            <Property name="ScaleMode" exposed_name="PulseGlyph_ScaleMode" panel_visibility="advanced" />
             <Property name="ScaleFactor" exposed_name="PulseGlyph_ScaleFactor" panel_visibility="advanced" />
             <Property name="SelectScaleArray" exposed_name="PulseGlyph_SelectScaleArray" panel_visibility="advanced" />
             <Property name="GlyphType" exposed_name="PulseGlyph_GlyphType" label="Glyph Type" panel_visibility="default" />
@@ -255,7 +253,6 @@
             <Property name="OrientationMode" exposed_name="PulseGlyph_OrientationMode" panel_visibility="advanced" />
             <Property name="SelectOrientationVectors" exposed_name="PulseGlyph_SelectOrientationVectors" panel_visibility="advanced" />
             <Property name="Scaling" exposed_name="PulseGlyph_Scaling" panel_visibility="advanced" />
-            <Property name="ScaleMode" exposed_name="PulseGlyph_ScaleMode" panel_visibility="advanced" />
             <Property name="ScaleFactor" exposed_name="PulseGlyph_ScaleFactor" panel_visibility="advanced" />
             <Property name="SelectScaleArray" exposed_name="PulseGlyph_SelectScaleArray" panel_visibility="advanced" />
             <Property name="GlyphType" exposed_name="PulseGlyph_GlyphType" label="Glyph Type" panel_visibility="default" />
@@ -308,7 +305,6 @@
             <Property name="OrientationMode" exposed_name="PulseGlyph_OrientationMode" panel_visibility="advanced" />
             <Property name="SelectOrientationVectors" exposed_name="PulseGlyph_SelectOrientationVectors" panel_visibility="advanced" />
             <Property name="Scaling" exposed_name="PulseGlyph_Scaling" panel_visibility="advanced" />
-            <Property name="ScaleMode" exposed_name="PulseGlyph_ScaleMode" panel_visibility="advanced" />
             <Property name="ScaleFactor" exposed_name="PulseGlyph_ScaleFactor" panel_visibility="advanced" />
             <Property name="SelectScaleArray" exposed_name="PulseGlyph_SelectScaleArray" panel_visibility="advanced" />
             <Property name="GlyphType" exposed_name="PulseGlyph_GlyphType" label="Glyph Type" panel_visibility="default" />
