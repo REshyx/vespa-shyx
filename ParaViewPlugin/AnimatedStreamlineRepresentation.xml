@@ -54,7 +54,7 @@
       <StringVectorProperty name="AnimationCoordinateArray"
                             command="SetAnimationCoordinateArray"
                             default_values="IntegrationTime"
-                            label="Animation coordinate (tcoord.x)"
+                            label="Animation coordinate X (tcoord.x, animCoordx)"
                             number_of_elements="1">
         <Documentation>
           Point data array driving mesh tcoord.x for the GPU alpha pulse (batched OpenGL path):
@@ -63,6 +63,26 @@
         </Documentation>
         <RepresentedArrayListDomain name="array_list"
                                     input_domain_name="input_array_any">
+          <RequiredProperties>
+            <Property function="Input" name="Input" />
+          </RequiredProperties>
+        </RepresentedArrayListDomain>
+      </StringVectorProperty>
+
+      <StringVectorProperty name="AnimationCoordinateYArray"
+                            command="SetAnimationCoordinateYArray"
+                            default_values="None"
+                            label="Animation coordinate Y (tcoord.y, divisor)"
+                            number_of_elements="1">
+        <Documentation>
+          Optional point data array for mesh tcoord.y / animCoordy in
+          mixValue = animCoordx * integrationScale + time * timeScale / animCoordy.
+          Pick None for a uniform divisor (animCoordy = 1). The value (Uniform) is accepted as the
+          same meaning (same convention as other VESPA array pickers in this plugin).
+        </Documentation>
+        <RepresentedArrayListDomain name="array_list"
+                                    input_domain_name="input_array_any"
+                                    none_string="None">
           <RequiredProperties>
             <Property function="Input" name="Input" />
           </RequiredProperties>
@@ -91,6 +111,7 @@
             <Property name="Trunc" exposed_name="AS_Trunc" />
             <Property name="Pow" exposed_name="AS_Pow" />
             <Property name="AnimationCoordinateArray" exposed_name="AS_AnimationCoordinateArray" />
+            <Property name="AnimationCoordinateYArray" exposed_name="AS_AnimationCoordinateYArray" />
             <Hints>
               <PropertyWidgetDecorator type="GenericDecorator"
                                        mode="visibility"
@@ -123,6 +144,7 @@
             <Property name="Trunc" exposed_name="AS_Trunc" />
             <Property name="Pow" exposed_name="AS_Pow" />
             <Property name="AnimationCoordinateArray" exposed_name="AS_AnimationCoordinateArray" />
+            <Property name="AnimationCoordinateYArray" exposed_name="AS_AnimationCoordinateYArray" />
             <Hints>
               <PropertyWidgetDecorator type="GenericDecorator"
                                        mode="visibility"
@@ -155,6 +177,7 @@
             <Property name="Trunc" exposed_name="AS_Trunc" />
             <Property name="Pow" exposed_name="AS_Pow" />
             <Property name="AnimationCoordinateArray" exposed_name="AS_AnimationCoordinateArray" />
+            <Property name="AnimationCoordinateYArray" exposed_name="AS_AnimationCoordinateYArray" />
             <Hints>
               <PropertyWidgetDecorator type="GenericDecorator"
                                        mode="visibility"
@@ -187,6 +210,7 @@
             <Property name="Trunc" exposed_name="AS_Trunc" />
             <Property name="Pow" exposed_name="AS_Pow" />
             <Property name="AnimationCoordinateArray" exposed_name="AS_AnimationCoordinateArray" />
+            <Property name="AnimationCoordinateYArray" exposed_name="AS_AnimationCoordinateYArray" />
             <Hints>
               <PropertyWidgetDecorator type="GenericDecorator"
                                        mode="visibility"

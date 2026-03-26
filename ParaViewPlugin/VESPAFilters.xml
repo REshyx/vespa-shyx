@@ -257,13 +257,16 @@
     <SourceProxy class="vtkSHYXBidirectionalStreamlineMerge"
                  label="SHYX Bidirectional Streamline Merge"
                  name="SHYXBidirectionalStreamlineMerge">
-      <Documentation short_help="Merge bidirectional streamlines per SeedIds; optional point ids and along-line sum.">
+      <Documentation short_help="Merge bidirectional streamlines per SeedIds; optional ids, integral, delta, random offset.">
         Groups VTK_LINE / VTK_POLY_LINE cells by SeedIds. For each seed with two segments (typical bidirectional
         trace), the first polyline in input order is kept, the second is reversed and concatenated; the shared
-        seed vertex is not duplicated when point ids match. Single-segment seeds are copied unchanged. When
+        seed vertex is merged to one point when point ids match or when the two junction points have identical
+        coordinates (strict equality). Single-segment seeds are copied unchanged. When
         Generate Point Ids is on, vtkGenerateIds adds a point-data index array (0 .. N-1) using PointIdsArrayName.
         Optional along-line sum: cumulative 0.5*(f_i+f_{i+1}) per segment along vertex order (not multiplied by
-        segment length). Multi-component arrays use magnitude at each vertex.
+        segment length). Multi-component arrays use magnitude at each vertex for that sum. Optional backward
+        difference f_i-f_{i-1} per component along vertex order (first vertex NaN); no arc-length scaling.
+        Optional per-streamline uniform random offset in [0, n] added to a chosen point array (same offset on that line).
       </Documentation>
 
       <InputProperty name="Input"
@@ -346,7 +349,7 @@
           </RequiredProperties>
         </ArrayListDomain>
         <Documentation>
-          Input point-data array used when along-line integral is on (scalar or vector).
+          Input point-data array used when along-line integral and/or integrand delta is on (scalar or vector).
         </Documentation>
         <Hints>
           <ArraySelectionWidget icon_type="point"/>
@@ -362,6 +365,83 @@
           Name of the output point-data scalar for the cumulative integral along each merged line.
         </Documentation>
       </StringVectorProperty>
+
+      <IntVectorProperty command="SetComputeIntegrandDelta"
+                         name="ComputeIntegrandDelta"
+                         label="Along-line integrand delta"
+                         number_of_elements="1"
+                         default_values="0">
+        <BooleanDomain name="bool"/>
+        <Documentation>
+          When on, append backward difference along each merged polyline: f_i-f_{i-1} at each vertex in order
+          (same IntegrandArrayName), per component for vectors; first vertex NaN. No multiplication by edge length.
+        </Documentation>
+      </IntVectorProperty>
+
+      <StringVectorProperty command="SetDeltaArrayName"
+                            name="DeltaArrayName"
+                            label="Delta output name"
+                            number_of_elements="1"
+                            default_values="StreamlineIntegrandDelta">
+        <Documentation>
+          Name of the output point-data array for the along-line backward difference (same number of components
+          as the integrand).
+        </Documentation>
+      </StringVectorProperty>
+
+      <IntVectorProperty command="SetEnablePerStreamlineRandomOffset"
+                         name="EnablePerStreamlineRandomOffset"
+                         label="Per-streamline random offset"
+                         number_of_elements="1"
+                         default_values="0">
+        <BooleanDomain name="bool"/>
+        <Documentation>
+          When on, each merged streamline draws one uniform random value in [0, RandomOffsetRangeMax] and adds it
+          to every component of every tuple of RandomOffsetArrayName on that line only. Different streamlines use
+          different draws.
+        </Documentation>
+      </IntVectorProperty>
+
+      <StringVectorProperty command="SetRandomOffsetArrayName"
+                            name="RandomOffsetArrayName"
+                            label="Random offset array"
+                            number_of_elements="1"
+                            default_values="">
+        <ArrayListDomain name="random_offset_array_list"
+                         attribute_type="point"
+                         input_domain_name="point_arrays">
+          <RequiredProperties>
+            <Property function="Input" name="Input" />
+          </RequiredProperties>
+        </ArrayListDomain>
+        <Documentation>
+          Point-data array to modify (must exist on input). The same random offset is added to all points of each
+          merged streamline.
+        </Documentation>
+        <Hints>
+          <ArraySelectionWidget icon_type="point"/>
+        </Hints>
+      </StringVectorProperty>
+
+      <DoubleVectorProperty command="SetRandomOffsetRangeMax"
+                            name="RandomOffsetRangeMax"
+                            label="Random range max (n)"
+                            number_of_elements="1"
+                            default_values="1">
+        <Documentation>
+          Upper bound n for uniform random offsets in [0, n]. If n &lt;= 0, the added offset is 0 on every line.
+        </Documentation>
+      </DoubleVectorProperty>
+
+      <IntVectorProperty command="SetRandomOffsetSeed"
+                         name="RandomOffsetSeed"
+                         label="Random offset seed"
+                         number_of_elements="1"
+                         default_values="0">
+        <Documentation>
+          Seed for the random number generator (reproducible when unchanged).
+        </Documentation>
+      </IntVectorProperty>
 
       <Hints>
         <ShowInMenu category="SHYX"/>

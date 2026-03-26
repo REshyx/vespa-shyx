@@ -97,6 +97,7 @@ vtkAnimatedStreamlineRepresentation::vtkAnimatedStreamlineRepresentation()
 vtkAnimatedStreamlineRepresentation::~vtkAnimatedStreamlineRepresentation()
 {
   this->SetAnimationCoordinateArray(nullptr);
+  this->SetAnimationCoordinateYArray(nullptr);
   if (this->ShaderObserver)
   {
     this->ShaderObserver->Delete();
@@ -139,12 +140,19 @@ int vtkAnimatedStreamlineRepresentation::ProcessViewRequest(
 void vtkAnimatedStreamlineRepresentation::SyncAnimatedMapperAnimationCoordinateArray()
 {
   const char* n = this->GetAnimationCoordinateArray();
+  const char* ny = this->GetAnimationCoordinateYArray();
   vtkMapper* mappers[] = { this->Mapper, this->LODMapper, this->BackfaceMapper, this->LODBackfaceMapper };
   for (vtkMapper* mp : mappers)
   {
     if (auto* am = vtkAnimatedStreamlineCompositePolyDataMapper::SafeDownCast(mp))
     {
       am->SetAnimationCoordinateArray(n ? n : "IntegrationTime");
+      const char* yForMapper = nullptr;
+      if (ny && ny[0] && strcmp(ny, "None") != 0 && strcmp(ny, "(Uniform)") != 0)
+      {
+        yForMapper = ny;
+      }
+      am->SetAnimationCoordinateYArray(yForMapper);
     }
   }
 }
@@ -187,38 +195,46 @@ void vtkAnimatedStreamlineRepresentation::UpdateShaderReplacements()
 
   sp->ClearAllShaderReplacements();
 
-  // animCoord: scalar or |v| from the selected point array in tcoord.x (copied on CPU).
+  // animCoordx / animCoordy: X from tcoord.x when a point array exists; Y from tcoord.y only if a
+  // Y array is chosen (otherwise tcoord.y is 1.0 on CPU). No-array fallback: arc length and animCoordy=1.
   if (this->CachedUsesIntegrationTimeAttribute)
   {
     sp->AddVertexShaderReplacement(
       "//VTK::PositionVC::Dec", true,
       "//VTK::PositionVC::Dec\n"
       "in vec2 tcoord;\n"
-      "out float animCoord;\n",
+      "out float animCoordx;\n"
+      "flat out float animCoordy;\n",
       false);
     sp->AddVertexShaderReplacement(
       "//VTK::PositionVC::Impl", true,
       "//VTK::PositionVC::Impl\n"
-      "animCoord = tcoord.x;\n",
+      "animCoordx = tcoord.x;\n"
+      "animCoordy = tcoord.y;\n",
       false);
   }
   else
   {
     sp->AddVertexShaderReplacement(
       "//VTK::PositionVC::Dec", true,
-      "//VTK::PositionVC::Dec\nout float animCoord;\n",
+      "//VTK::PositionVC::Dec\n"
+      "out float animCoordx;\n"
+      "flat out float animCoordy;\n",
       false);
     sp->AddVertexShaderReplacement(
       "//VTK::PositionVC::Impl", true,
-      "//VTK::PositionVC::Impl\nanimCoord = length(vertexMC.xyz);\n",
+      "//VTK::PositionVC::Impl\n"
+      "animCoordx = length(vertexMC.xyz);\n"
+      "animCoordy = 1.0;\n",
       false);
   }
 
-  // Alpha pulse along animCoord (selected array in tcoord.x, or arc length fallback).
+  // Alpha pulse along animCoordx / animCoordy (tcoords or arc length fallback).
   sp->AddFragmentShaderReplacement(
     "//VTK::Light::Dec", true,
     "//VTK::Light::Dec\n"
-    "in float animCoord;\n"
+    "in float animCoordx;\n"
+    "flat in float animCoordy;\n"
     "uniform float time;\n"
     "uniform float integrationScale;\n"
     "uniform float timeScale;\n"
@@ -229,7 +245,7 @@ void vtkAnimatedStreamlineRepresentation::UpdateShaderReplacements()
 
   sp->AddFragmentShaderReplacement(
     "//VTK::Light::Impl", false,
-    "float mixValue = animCoord * integrationScale + time * timeScale;\n"
+    "float mixValue = animCoordx * integrationScale + time * timeScale / animCoordy;\n"
     "float phase = fract(mixValue);\n"
     "float pulse = 1.0 - pow(clamp(truncValue * phase, 0.0, 1.0), powValue);\n"
     "gl_FragData[0].a = gl_FragData[0].a * opacityScale * pulse;\n"
@@ -296,5 +312,7 @@ void vtkAnimatedStreamlineRepresentation::PrintSelf(ostream& os, vtkIndent inden
   os << indent << "Pow: " << this->Pow << "\n";
   os << indent << "AnimationCoordinateArray: "
      << (this->GetAnimationCoordinateArray() ? this->GetAnimationCoordinateArray() : "(null)") << "\n";
+  os << indent << "AnimationCoordinateYArray: "
+     << (this->GetAnimationCoordinateYArray() ? this->GetAnimationCoordinateYArray() : "(null)") << "\n";
 }
 

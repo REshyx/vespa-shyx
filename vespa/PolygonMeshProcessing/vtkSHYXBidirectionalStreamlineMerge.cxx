@@ -23,6 +23,7 @@
 #include <array>
 #include <cmath>
 #include <map>
+#include <random>
 #include <vector>
 
 vtkStandardNewMacro(vtkSHYXBidirectionalStreamlineMerge);
@@ -43,6 +44,28 @@ vtkIdType ReadSeedId(vtkDataArray* a, vtkIdType tupleIdx)
   return static_cast<vtkIdType>(a->GetTuple1(tupleIdx));
 }
 
+/** True if junction endpoints are the same point: equal ids, or identical coordinates (strict per-component ==). */
+bool JunctionPointsCoincide(vtkPolyData* pd, vtkIdType idFwdFirst, vtkIdType idBwdAtJunction)
+{
+  if (!pd || idFwdFirst < 0 || idBwdAtJunction < 0)
+  {
+    return false;
+  }
+  if (idFwdFirst == idBwdAtJunction)
+  {
+    return true;
+  }
+  vtkPoints* pts = pd->GetPoints();
+  if (!pts)
+  {
+    return false;
+  }
+  double p0[3], p1[3];
+  pts->GetPoint(idFwdFirst, p0);
+  pts->GetPoint(idBwdAtJunction, p1);
+  return p0[0] == p1[0] && p0[1] == p1[1] && p0[2] == p1[2];
+}
+
 void BuildMergedIds(vtkPolyData* pd, vtkIdType cellFwd, vtkIdType cellBwd, std::vector<vtkIdType>* merged)
 {
   vtkNew<vtkIdList> fwd;
@@ -61,13 +84,33 @@ void BuildMergedIds(vtkPolyData* pd, vtkIdType cellFwd, vtkIdType cellBwd, std::
 
   const vtkIdType na = fwd->GetNumberOfIds();
   vtkIdType skipFirst = 0;
-  if (na > 0 && !merged->empty() && fwd->GetId(0) == merged->back())
+  if (na > 0 && !merged->empty())
   {
-    skipFirst = 1;
+    if (JunctionPointsCoincide(pd, fwd->GetId(0), merged->back()))
+    {
+      skipFirst = 1;
+    }
   }
   for (vtkIdType i = skipFirst; i < na; ++i)
   {
     merged->push_back(fwd->GetId(i));
+  }
+}
+
+void AddScalarToArrayRange(vtkDataArray* arr, vtkIdType outStart, vtkIdType nPts, double offset)
+{
+  if (!arr || nPts <= 0)
+  {
+    return;
+  }
+  const int nc = arr->GetNumberOfComponents();
+  for (vtkIdType i = 0; i < nPts; ++i)
+  {
+    const vtkIdType idx = outStart + i;
+    for (int c = 0; c < nc; ++c)
+    {
+      arr->SetComponent(idx, c, arr->GetComponent(idx, c) + offset);
+    }
   }
 }
 
@@ -124,6 +167,43 @@ void IntegrateOneMergedLine(const std::vector<vtkIdType>& srcIds, vtkIdType outS
     outIntegral->SetTuple1(ob, prev + seg);
   }
 }
+
+/** Backward difference along vertex index: delta[i] = f_i - f_{i-1} (per component); first vertex NaN. */
+void DeltaOneMergedLine(const std::vector<vtkIdType>& srcIds, vtkIdType outStart, vtkDataArray* integrand,
+  vtkDoubleArray* outDelta)
+{
+  const vtkIdType n = static_cast<vtkIdType>(srcIds.size());
+  if (n <= 0)
+  {
+    return;
+  }
+  const int nc = integrand->GetNumberOfComponents();
+  if (nc <= 0)
+  {
+    return;
+  }
+  const double qnan = vtkMath::Nan();
+  std::vector<double> va(static_cast<size_t>(nc));
+  std::vector<double> vb(static_cast<size_t>(nc));
+  for (vtkIdType i = 0; i < n; ++i)
+  {
+    const vtkIdType oidx = outStart + i;
+    if (i == 0)
+    {
+      for (int c = 0; c < nc; ++c)
+      {
+        outDelta->SetComponent(oidx, c, qnan);
+      }
+      continue;
+    }
+    integrand->GetTuple(srcIds[static_cast<size_t>(i - 1)], va.data());
+    integrand->GetTuple(srcIds[static_cast<size_t>(i)], vb.data());
+    for (int c = 0; c < nc; ++c)
+    {
+      outDelta->SetComponent(oidx, c, vb[static_cast<size_t>(c)] - va[static_cast<size_t>(c)]);
+    }
+  }
+}
 } // namespace
 
 //------------------------------------------------------------------------------
@@ -166,6 +246,12 @@ void vtkSHYXBidirectionalStreamlineMerge::PrintSelf(ostream& os, vtkIndent inden
   os << indent << "ComputeArcLengthIntegral: " << this->ComputeArcLengthIntegral << "\n";
   os << indent << "IntegrandArrayName: " << this->IntegrandArrayName << "\n";
   os << indent << "IntegralArrayName: " << this->IntegralArrayName << "\n";
+  os << indent << "ComputeIntegrandDelta: " << this->ComputeIntegrandDelta << "\n";
+  os << indent << "DeltaArrayName: " << this->DeltaArrayName << "\n";
+  os << indent << "EnablePerStreamlineRandomOffset: " << this->EnablePerStreamlineRandomOffset << "\n";
+  os << indent << "RandomOffsetArrayName: " << this->RandomOffsetArrayName << "\n";
+  os << indent << "RandomOffsetRangeMax: " << this->RandomOffsetRangeMax << "\n";
+  os << indent << "RandomOffsetSeed: " << this->RandomOffsetSeed << "\n";
 }
 
 //------------------------------------------------------------------------------
@@ -363,11 +449,50 @@ int vtkSHYXBidirectionalStreamlineMerge::RequestData(vtkInformation* vtkNotUsed(
     }
   }
 
-  if (this->ComputeArcLengthIntegral)
+  if (this->EnablePerStreamlineRandomOffset)
+  {
+    if (this->RandomOffsetArrayName.empty())
+    {
+      vtkWarningMacro(<< "EnablePerStreamlineRandomOffset is on but RandomOffsetArrayName is empty; skipping.");
+    }
+    else
+    {
+      vtkDataArray* randArr = output->GetPointData()->GetArray(this->RandomOffsetArrayName.c_str());
+      if (!randArr)
+      {
+        vtkErrorMacro(<< "Random offset array '" << this->RandomOffsetArrayName << "' not found on output.");
+        return 0;
+      }
+      double rMax = this->RandomOffsetRangeMax;
+      if (rMax < 0.0)
+      {
+        vtkWarningMacro(<< "RandomOffsetRangeMax is negative; using 0.");
+        rMax = 0.0;
+      }
+      std::mt19937 rng(static_cast<std::mt19937::result_type>(this->RandomOffsetSeed));
+      vtkIdType acc = 0;
+      for (size_t li = 0; li < prepared.size(); ++li)
+      {
+        const vtkIdType outStart = acc;
+        const vtkIdType nLine = static_cast<vtkIdType>(prepared[li].srcPointIds.size());
+        double offset = 0.0;
+        if (rMax > 0.0)
+        {
+          std::uniform_real_distribution<double> uni(0.0, rMax);
+          offset = uni(rng);
+        }
+        AddScalarToArrayRange(randArr, outStart, nLine, offset);
+        acc += nLine;
+      }
+    }
+  }
+
+  if (this->ComputeArcLengthIntegral || this->ComputeIntegrandDelta)
   {
     if (this->IntegrandArrayName.empty())
     {
-      vtkWarningMacro(<< "ComputeArcLengthIntegral is on but IntegrandArrayName is empty; skipping integral.");
+      vtkWarningMacro(<< "Along-line integral and/or integrand delta is on but IntegrandArrayName is empty; "
+                         "skipping those arrays.");
     }
     else
     {
@@ -377,17 +502,8 @@ int vtkSHYXBidirectionalStreamlineMerge::RequestData(vtkInformation* vtkNotUsed(
         vtkErrorMacro(<< "Integrand array '" << this->IntegrandArrayName << "' not found.");
         return 0;
       }
-      const vtkIdType nOutPts = outPts->GetNumberOfPoints();
-      vtkNew<vtkDoubleArray> intArr;
-      intArr->SetName(this->IntegralArrayName.c_str());
-      intArr->SetNumberOfComponents(1);
-      intArr->SetNumberOfTuples(nOutPts);
-      const double qnan = vtkMath::Nan();
-      for (vtkIdType i = 0; i < nOutPts; ++i)
-      {
-        intArr->SetTuple1(i, qnan);
-      }
 
+      const vtkIdType nOutPts = outPts->GetNumberOfPoints();
       std::vector<vtkIdType> outStarts(prepared.size());
       vtkIdType acc = 0;
       for (size_t li = 0; li < prepared.size(); ++li)
@@ -396,23 +512,80 @@ int vtkSHYXBidirectionalStreamlineMerge::RequestData(vtkInformation* vtkNotUsed(
         acc += static_cast<vtkIdType>(prepared[li].srcPointIds.size());
       }
 
-#ifdef VESPA_USE_SMP
-      vtkSMPTools::For(0, static_cast<vtkIdType>(prepared.size()),
-        [&](vtkIdType begin, vtkIdType end)
-        {
-          for (vtkIdType li = begin; li < end; ++li)
-          {
-            IntegrateOneMergedLine(
-              prepared[static_cast<size_t>(li)].srcPointIds, outStarts[static_cast<size_t>(li)], integrand, intArr);
-          }
-        });
-#else
-      for (size_t li = 0; li < prepared.size(); ++li)
+      if (this->ComputeArcLengthIntegral)
       {
-        IntegrateOneMergedLine(prepared[li].srcPointIds, outStarts[li], integrand, intArr);
-      }
+        vtkNew<vtkDoubleArray> intArr;
+        intArr->SetName(this->IntegralArrayName.c_str());
+        intArr->SetNumberOfComponents(1);
+        intArr->SetNumberOfTuples(nOutPts);
+        const double qnan = vtkMath::Nan();
+        for (vtkIdType i = 0; i < nOutPts; ++i)
+        {
+          intArr->SetTuple1(i, qnan);
+        }
+
+#ifdef VESPA_USE_SMP
+        vtkSMPTools::For(0, static_cast<vtkIdType>(prepared.size()),
+          [&](vtkIdType begin, vtkIdType end)
+          {
+            for (vtkIdType li = begin; li < end; ++li)
+            {
+              IntegrateOneMergedLine(
+                prepared[static_cast<size_t>(li)].srcPointIds, outStarts[static_cast<size_t>(li)], integrand,
+                intArr);
+            }
+          });
+#else
+        for (size_t li = 0; li < prepared.size(); ++li)
+        {
+          IntegrateOneMergedLine(prepared[li].srcPointIds, outStarts[li], integrand, intArr);
+        }
 #endif
-      output->GetPointData()->AddArray(intArr);
+        output->GetPointData()->AddArray(intArr);
+      }
+
+      if (this->ComputeIntegrandDelta)
+      {
+        const int nc = integrand->GetNumberOfComponents();
+        if (nc <= 0)
+        {
+          vtkWarningMacro(<< "Integrand has zero components; skipping integrand delta.");
+        }
+        else
+        {
+          vtkNew<vtkDoubleArray> deltaArr;
+          deltaArr->SetName(this->DeltaArrayName.c_str());
+          deltaArr->SetNumberOfComponents(nc);
+          deltaArr->SetNumberOfTuples(nOutPts);
+          const double qnan = vtkMath::Nan();
+          for (vtkIdType i = 0; i < nOutPts; ++i)
+          {
+            for (int c = 0; c < nc; ++c)
+            {
+              deltaArr->SetComponent(i, c, qnan);
+            }
+          }
+
+#ifdef VESPA_USE_SMP
+          vtkSMPTools::For(0, static_cast<vtkIdType>(prepared.size()),
+            [&](vtkIdType begin, vtkIdType end)
+            {
+              for (vtkIdType li = begin; li < end; ++li)
+              {
+                DeltaOneMergedLine(
+                  prepared[static_cast<size_t>(li)].srcPointIds, outStarts[static_cast<size_t>(li)], integrand,
+                  deltaArr);
+              }
+            });
+#else
+          for (size_t li = 0; li < prepared.size(); ++li)
+          {
+            DeltaOneMergedLine(prepared[li].srcPointIds, outStarts[li], integrand, deltaArr);
+          }
+#endif
+          output->GetPointData()->AddArray(deltaArr);
+        }
+      }
     }
   }
 

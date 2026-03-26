@@ -27,7 +27,7 @@ constexpr const char kLegacyNormArray[] = "ASR_IntegrationTimeNorm";
 
 bool IsNoneOrEmpty(const char* s)
 {
-  return !s || !s[0] || strcmp(s, "None") == 0;
+  return !s || !s[0] || strcmp(s, "None") == 0 || strcmp(s, "(Uniform)") == 0;
 }
 
 /** Scalar for animation: 1 component = raw value; 2+ = one sqrt(x*x+y*y+z*z) (z=0 if only 2). */
@@ -106,6 +106,7 @@ vtkAnimatedStreamlineCompositePolyDataMapper::vtkAnimatedStreamlineCompositePoly
 vtkAnimatedStreamlineCompositePolyDataMapper::~vtkAnimatedStreamlineCompositePolyDataMapper()
 {
   this->SetAnimationCoordinateArray(nullptr);
+  this->SetAnimationCoordinateYArray(nullptr);
 }
 
 void vtkAnimatedStreamlineCompositePolyDataMapper::PrintSelf(ostream& os, vtkIndent indent)
@@ -113,6 +114,8 @@ void vtkAnimatedStreamlineCompositePolyDataMapper::PrintSelf(ostream& os, vtkInd
   this->Superclass::PrintSelf(os, indent);
   os << indent << "AnimationCoordinateArray: "
      << (this->AnimationCoordinateArray ? this->AnimationCoordinateArray : "(null)") << "\n";
+  os << indent << "AnimationCoordinateYArray: "
+     << (this->AnimationCoordinateYArray ? this->AnimationCoordinateYArray : "(null)") << "\n";
   os << indent << "LastInputHadAnimationCoordinateArray: " << this->LastInputHadAnimationCoordinateArray
      << "\n";
   os << indent << "LastAnimationSourceArrayMTime: " << this->LastAnimationSourceArrayMTime << "\n";
@@ -171,35 +174,68 @@ void vtkAnimatedStreamlineCompositePolyDataMapper::RemoveLegacyAnimatedStreamlin
 }
 
 void vtkAnimatedStreamlineCompositePolyDataMapper::FillPointArrayAsTextureCoordinates(
-  vtkDataObject* dobj, const char* arrayName)
+  vtkDataObject* dobj, const char* xArrayName, const char* yArrayName)
 {
-  if (!dobj || IsNoneOrEmpty(arrayName))
+  if (!dobj || IsNoneOrEmpty(xArrayName))
   {
     return;
   }
   if (auto* pd = vtkPolyData::SafeDownCast(dobj))
   {
-    vtkDataArray* src = pd->GetPointData()->GetArray(arrayName);
-    if (!src || src->GetNumberOfTuples() < 1)
+    vtkDataArray* srcX = pd->GetPointData()->GetArray(xArrayName);
+    if (!srcX || srcX->GetNumberOfTuples() < 1)
     {
       return;
     }
-    const int numComp = src->GetNumberOfComponents();
-    if (numComp < 1)
+    const int numCompX = srcX->GetNumberOfComponents();
+    if (numCompX < 1)
     {
       return;
     }
-    const vtkIdType n = src->GetNumberOfTuples();
+    vtkDataArray* srcY = nullptr;
+    int numCompY = 0;
+    if (!IsNoneOrEmpty(yArrayName))
+    {
+      srcY = pd->GetPointData()->GetArray(yArrayName);
+      if (srcY && srcY->GetNumberOfTuples() >= 1)
+      {
+        numCompY = srcY->GetNumberOfComponents();
+        if (numCompY < 1)
+        {
+          srcY = nullptr;
+          numCompY = 0;
+        }
+      }
+      else
+      {
+        srcY = nullptr;
+      }
+    }
+
+    const vtkIdType nX = srcX->GetNumberOfTuples();
+    const vtkIdType nY = srcY ? srcY->GetNumberOfTuples() : nX;
+    const vtkIdType nUse = std::min(nX, nY);
 
     vtkNew<vtkFloatArray> tc;
     tc->SetNumberOfComponents(2);
-    tc->SetNumberOfTuples(n);
-    std::vector<double> tuple(static_cast<size_t>(numComp));
-    for (vtkIdType i = 0; i < n; ++i)
+    tc->SetNumberOfTuples(nUse);
+    std::vector<double> tupleX(static_cast<size_t>(numCompX));
+    std::vector<double> tupleY;
+    if (numCompY > 0)
     {
-      src->GetTuple(i, tuple.data());
-      const double v = AnimationCoordScalar(tuple.data(), numComp);
-      tc->SetTuple2(i, static_cast<float>(v), 0.0f);
+      tupleY.resize(static_cast<size_t>(numCompY));
+    }
+    for (vtkIdType i = 0; i < nUse; ++i)
+    {
+      srcX->GetTuple(i, tupleX.data());
+      const double vx = AnimationCoordScalar(tupleX.data(), numCompX);
+      float vy = 1.0f;
+      if (srcY && numCompY > 0)
+      {
+        srcY->GetTuple(i, tupleY.data());
+        vy = static_cast<float>(AnimationCoordScalar(tupleY.data(), numCompY));
+      }
+      tc->SetTuple2(i, static_cast<float>(vx), vy);
     }
     pd->GetPointData()->SetTCoords(tc);
     pd->GetPointData()->Modified();
@@ -211,7 +247,8 @@ void vtkAnimatedStreamlineCompositePolyDataMapper::FillPointArrayAsTextureCoordi
     using Opts = vtk::DataObjectTreeOptions;
     for (vtkDataObject* child : vtk::Range(tree, Opts::SkipEmptyNodes))
     {
-      vtkAnimatedStreamlineCompositePolyDataMapper::FillPointArrayAsTextureCoordinates(child, arrayName);
+      vtkAnimatedStreamlineCompositePolyDataMapper::FillPointArrayAsTextureCoordinates(
+        child, xArrayName, yArrayName);
     }
   }
 }
@@ -231,9 +268,13 @@ void vtkAnimatedStreamlineCompositePolyDataMapper::PreRender(
   {
     aname = "IntegrationTime";
   }
+  const char* yname = this->GetAnimationCoordinateYArray();
 
-  const std::string arrayKey(aname);
-  const vtkMTimeType srcM = input ? TreeMaxPointArrayMTime(input, aname) : 0;
+  const std::string arrayKey(std::string(aname) + "|" + (yname ? yname : ""));
+  const vtkMTimeType srcMX = input ? TreeMaxPointArrayMTime(input, aname) : 0;
+  const vtkMTimeType srcMY =
+    (input && !IsNoneOrEmpty(yname)) ? TreeMaxPointArrayMTime(input, yname) : 0;
+  const vtkMTimeType srcM = std::max(srcMX, srcMY);
   const vtkMTimeType ptsM = input ? TreeMaxPointsMTime(input) : 0;
   // Do not use input->GetMTime(): writing tcoords bumps dataset time and causes per-frame rebuilds.
   const bool textureCoordsNeedUpdate =
@@ -245,10 +286,11 @@ void vtkAnimatedStreamlineCompositePolyDataMapper::PreRender(
     vtkAnimatedStreamlineCompositePolyDataMapper::RemoveLegacyAnimatedStreamlineArrays(input);
     if (vtkAnimatedStreamlineCompositePolyDataMapper::DatasetTreeHasPointArray(input, aname))
     {
-      vtkAnimatedStreamlineCompositePolyDataMapper::FillPointArrayAsTextureCoordinates(input, aname);
+      vtkAnimatedStreamlineCompositePolyDataMapper::FillPointArrayAsTextureCoordinates(
+        input, aname, yname);
     }
     this->LastTextureCoordArrayKey = arrayKey;
-    this->LastAnimationSourceArrayMTime = TreeMaxPointArrayMTime(input, aname);
+    this->LastAnimationSourceArrayMTime = srcM;
     this->LastAnimationPointsMTime = TreeMaxPointsMTime(input);
   }
 

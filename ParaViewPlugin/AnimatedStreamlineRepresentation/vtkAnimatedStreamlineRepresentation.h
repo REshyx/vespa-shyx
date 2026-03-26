@@ -41,6 +41,9 @@ public:
   vtkSetStringMacro(AnimationCoordinateArray);
   vtkGetStringMacro(AnimationCoordinateArray);
 
+  vtkSetStringMacro(AnimationCoordinateYArray);
+  vtkGetStringMacro(AnimationCoordinateYArray);
+
 protected:
   vtkAnimatedStreamlineRepresentation();
   ~vtkAnimatedStreamlineRepresentation() override;
@@ -69,6 +72,12 @@ protected:
 
   /** Point array copied to tcoord.x for the pulse (default IntegrationTime). */
   char* AnimationCoordinateArray = nullptr;
+
+  /**
+   * Optional point array for tcoord.y / mixValue denominator. Default is unset (no array):
+   * animCoordy is identically 1 (mapper writes tcoord.y = 1, or vertex path sets 1.0).
+   */
+  char* AnimationCoordinateYArray = nullptr;
 
   /**
    * True when the selected point array exists on the input; animCoord is scalar value or vector magnitude in tcoord.x.

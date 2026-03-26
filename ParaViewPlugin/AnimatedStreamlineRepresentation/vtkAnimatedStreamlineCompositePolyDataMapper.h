@@ -32,14 +32,19 @@ public:
   static void RemoveLegacyAnimatedStreamlineArrays(vtkDataObject* dobj);
 
   /**
-   * Copy a scalar animation coordinate from \a arrayName into mesh tcoords (x, 0): single-component
-   * arrays use the value as-is; multi-component arrays use \c sqrt(x*x+y*y+z*z) once per point
-   * (z=0 when the array has only two components).
+   * Copy animation coordinates from \a xArrayName and optional \a yArrayName into mesh tcoords
+   * (x, y). If \a yArrayName is null, empty, \c "None", or \c "(Uniform)" (VESPA convention), y is 1.0.
+   * Single-component arrays use the value as-is; multi-component arrays use \c sqrt(x*x+y*y+z*z)
+   * per point (z=0 when the array has only two components).
    */
-  static void FillPointArrayAsTextureCoordinates(vtkDataObject* dobj, const char* arrayName);
+  static void FillPointArrayAsTextureCoordinates(
+    vtkDataObject* dobj, const char* xArrayName, const char* yArrayName);
 
   vtkSetStringMacro(AnimationCoordinateArray);
   vtkGetStringMacro(AnimationCoordinateArray);
+
+  vtkSetStringMacro(AnimationCoordinateYArray);
+  vtkGetStringMacro(AnimationCoordinateYArray);
 
   /**
    * Last render pass found the selected animation coordinate array on at least one polydata leaf.
@@ -58,6 +63,7 @@ protected:
 
   bool LastInputHadAnimationCoordinateArray = false;
   char* AnimationCoordinateArray = nullptr;
+  char* AnimationCoordinateYArray = nullptr;
 
   /** Max \c vtkDataArray::GetMTime() for the selected animation array over polydata leaves (not input tree MTime). */
   vtkMTimeType LastAnimationSourceArrayMTime = 0;
