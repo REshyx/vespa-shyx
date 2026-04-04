@@ -1,0 +1,200 @@
+<ServerManagerConfiguration>
+  <ProxyGroup name="filters">
+    <SourceProxy name="SHYXVectorFieldTopology"
+                 class="vtkVectorFieldTopology"
+                 label="SHYX Vector Field Topology">
+      <Documentation long_help="Extract critical points, separatrix lines and optional surfaces, and boundary-switch structures using VTK vtkVectorFieldTopology (steady vector fields on vtkImageData, vtkUnstructuredGrid, or vtkUniformGridAMR)."
+                     short_help="Vector field topology (critical points and separatrices).">
+        Computes the topological skeleton of a vector field: critical points, 1D separatrices, optional 2D separatrices in 3D, and boundary-switch seeds when enabled. Integration options follow vtkStreamTracer units (length or cell length).
+      </Documentation>
+
+      <OutputPort index="0" name="CriticalPoints" />
+      <OutputPort index="1" name="SeparatingLines" />
+      <OutputPort index="2" name="SeparatingSurfaces" />
+      <OutputPort index="3" name="BoundarySwitchPoints" />
+      <OutputPort index="4" name="BoundarySwitchSeparatrix" />
+
+      <InputProperty command="SetInputConnection"
+                     name="Input">
+        <ProxyGroupDomain name="groups">
+          <Group name="sources"/>
+          <Group name="filters"/>
+        </ProxyGroupDomain>
+        <DataTypeDomain composite_data_supported="1"
+                        name="input_type">
+          <DataType value="vtkDataSet"/>
+        </DataTypeDomain>
+        <InputArrayDomain name="input_array1"
+                          number_of_components="3"
+                          optional="0"/>
+        <Documentation>
+          vtkImageData, vtkUnstructuredGrid, or composite/AMR containing uniform grids. Point-centered 3-component vectors.
+        </Documentation>
+      </InputProperty>
+
+      <StringVectorProperty name="SelectInputVectors"
+                            command="SetInputArrayToProcess"
+                            number_of_elements="5"
+                            element_types="0 0 0 0 2"
+                            label="Vectors">
+        <ArrayListDomain name="array_list" attribute_type="Vectors"
+                         input_domain_name="input_array1">
+          <RequiredProperties>
+            <Property name="Input" function="Input"/>
+          </RequiredProperties>
+        </ArrayListDomain>
+        <Documentation>
+          Vector array used for topology extraction.
+        </Documentation>
+      </StringVectorProperty>
+
+      <IntVectorProperty command="SetIntegrationStepUnit"
+                         default_values="2"
+                         label="Integration Step Unit"
+                         name="IntegrationStepUnit"
+                         number_of_elements="1"
+                         panel_visibility="advanced">
+        <EnumerationDomain name="enum">
+          <Entry text="Length" value="1"/>
+          <Entry text="Cell Length" value="2"/>
+        </EnumerationDomain>
+        <Documentation>
+          Unit for integration step size and separatrix offset (vtkStreamTracer LENGTH_UNIT / CELL_LENGTH_UNIT).
+        </Documentation>
+      </IntVectorProperty>
+
+      <DoubleVectorProperty command="SetIntegrationStepSize"
+                            default_values="1"
+                            label="Integration Step Size"
+                            name="IntegrationStepSize"
+                            number_of_elements="1"
+                            panel_visibility="advanced">
+        <DoubleRangeDomain name="range"/>
+        <Documentation>
+          Step size for line/surface integration, in the chosen integration step unit.
+        </Documentation>
+      </DoubleVectorProperty>
+
+      <IntVectorProperty command="SetMaxNumSteps"
+                         default_values="100"
+                         label="Maximum Number of Steps"
+                         name="MaxNumSteps"
+                         number_of_elements="1"
+                         panel_visibility="advanced">
+        <IntRangeDomain name="range"/>
+        <Documentation>
+          Maximum integration steps for stream-based separatrix computation.
+        </Documentation>
+      </IntVectorProperty>
+
+      <DoubleVectorProperty command="SetSeparatrixDistance"
+                            default_values="1"
+                            label="Separatrix Distance"
+                            name="SeparatrixDistance"
+                            number_of_elements="1"
+                            panel_visibility="advanced">
+        <DoubleRangeDomain name="range"/>
+        <Documentation>
+          Offset from saddles (and related seeds) when seeding separatrices, in the integration step unit.
+        </Documentation>
+      </DoubleVectorProperty>
+
+      <IntVectorProperty command="SetUseIterativeSeeding"
+                         default_values="0"
+                         name="UseIterativeSeeding"
+                         number_of_elements="1"
+                         panel_visibility="advanced">
+        <BooleanDomain name="bool"/>
+        <Documentation>
+          Use iterative (more accurate) surface seeding instead of the fast approximation.
+        </Documentation>
+      </IntVectorProperty>
+
+      <IntVectorProperty command="SetComputeSurfaces"
+                         default_values="0"
+                         name="ComputeSurfaces"
+                         number_of_elements="1">
+        <BooleanDomain name="bool"/>
+        <Documentation>
+          For 3D data, compute separating surfaces (2D separatrices) in addition to lines.
+        </Documentation>
+      </IntVectorProperty>
+
+      <IntVectorProperty command="SetExcludeBoundary"
+                         default_values="0"
+                         name="ExcludeBoundary"
+                         number_of_elements="1"
+                         panel_visibility="advanced">
+        <BooleanDomain name="bool"/>
+        <Documentation>
+          Remove cells that touch the domain boundary before analysis (e.g. no-slip walls).
+        </Documentation>
+      </IntVectorProperty>
+
+      <IntVectorProperty command="SetUseBoundarySwitchPoints"
+                         default_values="0"
+                         name="UseBoundarySwitchPoints"
+                         number_of_elements="1"
+                         panel_visibility="advanced">
+        <BooleanDomain name="bool"/>
+        <Documentation>
+          Seed separatrices from boundary switch points (2D) or lines (3D). Not supported for AMR in VTK.
+        </Documentation>
+      </IntVectorProperty>
+
+      <DoubleVectorProperty command="SetVectorAngleThreshold"
+                            default_values="1"
+                            label="Vector Angle Threshold"
+                            name="VectorAngleThreshold"
+                            number_of_elements="1"
+                            panel_visibility="advanced">
+        <DoubleRangeDomain max="1" min="0" name="range"/>
+        <Documentation>
+          Boundary switch noise filter: ignore when |dot(unit v0, unit v1)| exceeds this threshold (0–1).
+        </Documentation>
+      </DoubleVectorProperty>
+
+      <DoubleVectorProperty command="SetOffsetAwayFromBoundary"
+                            default_values="0.001"
+                            label="Offset Away From Boundary"
+                            name="OffsetAwayFromBoundary"
+                            number_of_elements="1"
+                            panel_visibility="advanced">
+        <DoubleRangeDomain name="range"/>
+        <Documentation>
+          Inward shift of seeds relative to SeparatrixDistance (see VTK header).
+        </Documentation>
+      </DoubleVectorProperty>
+
+      <DoubleVectorProperty command="SetEpsilonCriticalPoint"
+                            default_values="1e-10"
+                            label="Epsilon (Critical Point)"
+                            name="EpsilonCriticalPoint"
+                            number_of_elements="1"
+                            panel_visibility="advanced">
+        <DoubleRangeDomain name="range"/>
+        <Documentation>
+          Tolerance for classifying critical points from Jacobian eigenvalues.
+        </Documentation>
+      </DoubleVectorProperty>
+
+      <IntVectorProperty command="SetInterpolatorType"
+                         default_values="0"
+                         name="InterpolatorType"
+                         number_of_elements="1"
+                         panel_visibility="advanced">
+        <EnumerationDomain name="enum">
+          <Entry text="Interpolator with Point Locator" value="0"/>
+          <Entry text="Interpolator with Cell Locator" value="1"/>
+        </EnumerationDomain>
+        <Documentation>
+          Velocity interpolator for integration: point locator (faster) or cell locator (more robust).
+        </Documentation>
+      </IntVectorProperty>
+
+      <Hints>
+        <ShowInMenu category="SHYX"/>
+      </Hints>
+    </SourceProxy>
+  </ProxyGroup>
+</ServerManagerConfiguration>

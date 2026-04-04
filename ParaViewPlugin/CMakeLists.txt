@@ -67,6 +67,8 @@ paraview_add_plugin(VESPAPlugin
     "SHYXDisconnectedRegionFuse.xml"
     "SHYXClebschMapFilter.xml"
     "SHYXVortexCriteria.xml"
+    "SHYXVortexCoreTest.xml"
+    "SHYXVectorFieldTopology.xml"
     "SHYXArrayCurveMapper.xml"
     "PulseGlyphRepresentation.xml"
     "AnimatedStreamlineRepresentation.xml"

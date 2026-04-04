@@ -1,0 +1,15 @@
+NAME
+  vtkVortexCoreTest
+DESCRIPTION
+  "Vortex core lines via parallel vectors (same as VTK vtkVortexCore); VESPA plugin build."
+GROUPS
+  Meshing
+DEPENDS
+  VTK::CommonExecutionModel
+  VTK::FiltersCore
+PRIVATE_DEPENDS
+  VTK::CommonCore
+  VTK::CommonDataModel
+  VTK::FiltersGeneral
+  VTK::FiltersFlowPaths
+  VTK::eigen

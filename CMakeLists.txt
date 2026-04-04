@@ -12,12 +12,13 @@ endif()
 set(CMAKE_CXX_STANDARD 11)
 
 
-set(Boost_DIR "C:/local/boost_1_74_0/lib64-msvc-14.2/cmake/Boost-1.74.0")
+set(Boost_DIR "C:/SoftWare/boost_1_82_0/lib64-msvc-14.2/cmake/Boost-1.82.0")
 set(CGAL_DIR C:/SoftWare/CGAL-6.1.1)
-set(ParaView_DIR C:/Users/18490/Documents/GitHub/ParaView/install-qt6-tbb/lib/cmake/paraview-6.0)
-set(Qt6_DIR C:/Qt/6.9.0/msvc2022_64/lib/cmake/Qt6)
+set(ParaView_DIR C:/SoftWare/Paraview/install-qt6-tbb/lib/cmake/paraview-6.0)
+set(Qt6_DIR C:/SoftWare/QT/msvc2022_64/lib/cmake/Qt6)
 set(TBB_DIR "C:/SoftWare/oneapi-tbb-2021.12.0/lib/cmake/tbb")
 set(MKL_DIR "C:/Program Files (x86)/Intel/oneAPI/mkl/2025.3/lib/cmake/mkl")
+set(Eigen3_DIR C:/SoftWare/eigen-3.4.0/install/x64-Release/share/eigen3/cmake)
 
 
 include(GNUInstallDirs)
@@ -63,9 +64,18 @@ find_package(Eigen3 3.2.0 REQUIRED)
 message(STATUS "Found Eigen3 ${Eigen3_VERSION}")
 
 option(VESPA_USE_MKL "Use Intel MKL for Clebsch Map Filter (Eigen BLAS/LAPACK + Pardiso)" ON)
+# MKL 默认线程层为 intel_thread（依赖 libiomp5md）。设为 tbb_thread 则与 oneTBB 链接，需 TBB_DIR 可被 find_package(TBB CONFIG) 找到。
+option(VESPA_MKL_THREADING_TBB "Use oneTBB as Intel MKL threading layer (avoids Intel OpenMP runtime for MKL)" ON)
 if (VESPA_USE_MKL)
   set(MKL_LINK "static" CACHE STRING "MKL link type: static, dynamic, or sdl")
   set(MKL_INTERFACE "lp64" CACHE STRING "MKL interface: lp64 or ilp64")
+  if (VESPA_MKL_THREADING_TBB)
+    set(MKL_THREADING "tbb_thread" CACHE STRING "oneMKL threading: intel_thread, gnu_thread, tbb_thread, sequential" FORCE)
+    message(STATUS "VESPA: MKL threading layer set to tbb_thread (oneTBB)")
+  else ()
+    set(MKL_THREADING "intel_thread" CACHE STRING "oneMKL threading: intel_thread, gnu_thread, tbb_thread, sequential" FORCE)
+    message(STATUS "VESPA: MKL threading layer set to intel_thread (Intel OpenMP)")
+  endif ()
   find_package(MKL CONFIG QUIET PATHS ${MKL_DIR})
   if (MKL_FOUND)
     message(STATUS "VESPA_USE_MKL: Intel MKL found, Clebsch filter will use MKL acceleration")
@@ -105,6 +115,18 @@ if (VESPA_BUILD_PV_PLUGIN)
     # old VTK_DIR
     unset(VTK_DIR CACHE)
   endif()
+  # Qt6 不再提供 xmlpatterns；ParaView 6 生成插件帮助文档时仍需要 Qt5 的 xmlpatterns.exe。
+  # 见 ParaView 安装树中 ParaViewClient.cmake（paraview_client_documentation）。
+  # 须为「Qt5 根目录」：ParaView 会在 ${hint}/msvc2017_64/bin 等路径下查找 xmlpatterns。
+  set(_vespa_qt5_xmlpatterns_root "C:/SoftWare/QT")
+  if (EXISTS "${_vespa_qt5_xmlpatterns_root}/msvc2017_64/bin/xmlpatterns.exe")
+    set(ParaView_QT5_XMLPATTERNS_HINT "${_vespa_qt5_xmlpatterns_root}" CACHE PATH
+      "Qt5 安装根目录（其下 msvc*_64/bin 含 xmlpatterns.exe，供 Qt6 版 ParaView 的插件文档生成使用）" FORCE)
+  elseif (NOT DEFINED ParaView_QT5_XMLPATTERNS_HINT)
+    set(ParaView_QT5_XMLPATTERNS_HINT "${_vespa_qt5_xmlpatterns_root}" CACHE PATH
+      "Qt5 安装根目录（其下 msvc*_64/bin 含 xmlpatterns.exe，供 Qt6 版 ParaView 的插件文档生成使用）")
+  endif()
+  unset(_vespa_qt5_xmlpatterns_root)
   find_package(ParaView REQUIRED)
   message(STATUS "Found ParaView ${ParaView_VERSION}")
 else()

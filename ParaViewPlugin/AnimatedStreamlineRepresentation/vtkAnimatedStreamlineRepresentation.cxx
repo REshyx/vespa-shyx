@@ -5,6 +5,7 @@
 
 #include "vtkAnimatedStreamlineCompositePolyDataMapper.h"
 
+#include "vtkActor.h"
 #include "vtkCallbackCommand.h"
 #include "vtkCommand.h"
 #include "vtkCompositePolyDataMapper.h"
@@ -88,6 +89,19 @@ vtkAnimatedStreamlineRepresentation::vtkAnimatedStreamlineRepresentation()
   ReplaceWithAnimatedStreamlineMapper(this->LODMapper, this->Actor, false);
   ReplaceWithAnimatedStreamlineMapper(this->BackfaceMapper, this->BackfaceActor, true);
   ReplaceWithAnimatedStreamlineMapper(this->LODBackfaceMapper, this->BackfaceActor, false);
+
+  // Alpha comes from the custom fragment shader (pulse * OpacityScale), not from vtkProperty
+  // opacity. Without forcing translucent rendering, VTK treats the actor as opaque and leaves
+  // depth writes on while fragments can be semi-transparent. Force the translucent pass so
+  // vtkOpenGLActor uses depth mask GL_FALSE and normal alpha blending (no extra sorting here).
+  if (this->Actor)
+  {
+    this->Actor->SetForceTranslucent(true);
+  }
+  if (this->BackfaceActor)
+  {
+    this->BackfaceActor->SetForceTranslucent(true);
+  }
 
   this->SyncAnimatedMapperAnimationCoordinateArray();
   this->UpdateShaderReplacements();
