@@ -10,6 +10,7 @@ set(vtkcgalpmp_files
   vtkCGALMeshDeformation
   vtkCGALMeshSubdivision
   vtkCGALPatchFilling
+  vtkCGALPointCloudSurfaceSignedDistance
   vtkCGALRegionFairing
   vtkCGALShapeSmoothing
   vtkCGALSignedDistanceFunction

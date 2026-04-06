@@ -113,6 +113,52 @@
     </SourceProxy>
 
     <!-- ================================================================== -->
+    <SourceProxy class="vtkCGALPointCloudSurfaceSignedDistance"
+                 label="SHYX Point Cloud Surface SDF"
+                 name="SHYXPointCloudSurfaceSDF">
+      <Documentation short_help="Signed distance from point cloud to a surface (VTK ImplicitPolyDataDistance).">
+        For each point in the first input (vtkPolyData point cloud), evaluates signed distance to the
+        second input using vtkImplicitPolyDataDistance (internal clean + triangulation, vtkCellLocator,
+        angle-weighted pseudonormals). Open surfaces are allowed. The scalar array is named SDF.
+      </Documentation>
+
+      <InputProperty name="PointCloud"
+                     label="Point Cloud"
+                     command="SetInputConnection">
+        <ProxyGroupDomain name="groups">
+          <Group name="sources"/>
+          <Group name="filters"/>
+        </ProxyGroupDomain>
+        <DataTypeDomain name="input_type">
+          <DataType value="vtkPolyData"/>
+        </DataTypeDomain>
+        <Documentation>
+          Point cloud (vtkPolyData points; optional vertex cells are preserved).
+        </Documentation>
+      </InputProperty>
+
+      <InputProperty name="ReferenceSurface"
+                     label="Reference Surface"
+                     command="SetSourceConnection">
+        <ProxyGroupDomain name="groups">
+          <Group name="sources"/>
+          <Group name="filters"/>
+        </ProxyGroupDomain>
+        <DataTypeDomain name="input_type">
+          <DataType value="vtkPolyData"/>
+        </DataTypeDomain>
+        <Documentation>
+          Reference surface (triangulated; non-closed meshes are allowed).
+        </Documentation>
+      </InputProperty>
+
+      <Hints>
+        <ShowInMenu category="SHYX"/>
+      </Hints>
+
+    </SourceProxy>
+
+    <!-- ================================================================== -->
     <SourceProxy class="vtkCGALDensityBasedSampler"
                  label="SHYX Density-Based Volume Sampler"
                  name="SHYXDensityBasedVolumeSampler">
