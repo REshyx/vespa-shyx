@@ -12,7 +12,7 @@
 | **`VESPA_ALPHA_WRAPPING`** | 为 ON 时额外注册 **VESPA Alpha Wrapping** 滤镜。 |
 | **`VESPA_MESH_SMOOTHING`** | 为 ON 时额外注册 **VESPA Mesh Smoothing** 滤镜。 |
 | **`VESPA_USE_MKL`** | 构建含 MKL 时，**SHYX Clebsch Map Filter** 中可选用 MKL 直接法求解器。 |
-| **`VESPA_USE_SMP`** | 影响部分滤镜内部并行（如数组概率点剔除等），与 ParaView 插件注册列表无关。 |
+| **`VESPA_USE_SMP`** | 影响部分 CGAL 相关滤镜内部并行（如数组概率点剔除等）；**SHYX Radius Neighbor Count** 使用 VTK 自带的 **vtkSMPTools**，不依赖此开关。 |
 
 客户端若使用 Qt 版 ParaView，插件还可注册 **Pulse Glyph** / **Animated Streamline** 相关的自动启动管理器与自定义面板（如数组曲线映射面板）；表示类型仍可在显示面板中选择。
 
@@ -60,6 +60,8 @@
 | SHYX Surface to Volume Mesh |
 | SHYX TetGen |
 | SHYX Geodesic Distance |
+| SHYX Point Cloud Surface SDF |
+| SHYX Radius Neighbor Count |
 | SHYX FTLE Filter |
 | SHYX Vortex Criteria |
 | SHYX Vortex Core (Test) |
@@ -403,6 +405,35 @@
 
 ---
 
+### 22a. SHYX Radius Neighbor Count
+
+**功能**：对 **vtkPolyData** 上每个点，统计**欧氏距离不超过给定搜索半径**的输入点个数（闭球，包含边界）。实现仅依赖 VTK：先用 **vtkStaticPointLocator** 建空间索引，再用 **vtkSMPTools** 对查询并行。输出为输入的浅拷贝，并增加点数据数组 **NeighborsInRadius**（`vtkIdTypeArray`）。**每个点的计数包含其自身**（中心点到自身距离为 0，恒在半径内）；若需“仅其它邻点”数量，可在后处理中对数组整体减 1。
+
+| 参数 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| **Search Radius** | double | 1.0 | 搜索半径，须为有限正数。 |
+
+**输入**：`vtkPolyData`（含顶点即可，不要求面片）。
+
+---
+
+### 22b. SHYX Point Cloud Surface SDF
+
+**功能**：对**第一个输入**中的每个点，计算其到**第二个输入**参考曲面的**有符号距离**，写入点数据数组 **SDF**（`float`）。实现为 VTK **`vtkImplicitPolyDataDistance`**（内部对曲面做清理与三角化，使用 **`vtkCellLocator`** 与角加权伪法向定号），**不要求曲面封闭**。与 CGAL 模块中针对**封闭网格**在规则体素上输出 **`vtkImageData`** 的 **`vtkCGALSignedDistanceFunction`** 用途不同。
+
+**输入**（属性面板标签 / 内部属性名）：
+
+| 界面标签 | 内部名（Python / trace） | 说明 |
+|----------|--------------------------|------|
+| **Point Cloud** | PointCloud | 点云 `vtkPolyData`（仅需点；若有顶点单元会保留）。 |
+| **Reference Surface** | ReferenceSurface | 参考曲面 `vtkPolyData`；可为开放网格，面片会被三角化。 |
+
+**输出**：与点云同拓扑的 `vtkPolyData`，在点数据上增加（或覆盖）**SDF**。
+
+**并行**：点循环使用 **`vtkSMPTools::For`**；`vtkImplicitPolyDataDistance` 内部使用线程局部对象，多线程调用 `EvaluateFunction` 安全。
+
+---
+
 ### 23. SHYX FTLE Filter
 
 **功能**：从速度场计算**有限时间李雅普诺夫指数（FTLE）**场，用于识别流场中的拉格朗日相干结构（LCS）。
@@ -549,5 +580,7 @@
 - **SHYX Bidirectional Streamline Merge** 适用于 **Stream Tracer** 等产生的双向折线，需正确设置 **SeedIds** 数组（单元或点数据）。
 - **SHYX Vector Field Topology**、**SHYX Vortex Core (Test)**、**SHYX Vortex Criteria**、**SHYX FTLE**、**SHYX Clebsch Map** 等流场工具对数据类型与数组名要求不同，请以各节说明与 ParaView 属性面板为准。
 - **SHYX Disconnected Region Fuse** 用于将多个不连通表面（如断裂的网格）通过近距离顶点融合合并为一个整体；需根据模型尺度调整 Fuse Threshold。
+- **SHYX Point Cloud Surface SDF** 在**点云**上写 **SDF**；若要在**规则体素网格**上对**封闭**三角网格求有符号距离场（`vtkImageData`），应使用 CGAL 管线中的 **`vtkCGALSignedDistanceFunction`**（见 CGAL / PMP 模块文档或源码），二者勿混淆。
+- **SHYX Radius Neighbor Count** 用于点云或网格顶点上的**局部密度/邻域规模**分析；半径需与点间距尺度匹配。并行行为由 VTK SMP 后端决定（如与 ParaView 一同构建的 TBB 等）。
 
 以上参数与行为基于当前 VESPA 源码与 `ParaViewPlugin` 下 Server Manager XML 整理，若与界面标签略有差异以 ParaView 界面为准；更底层算法说明见 [CGAL 文档](https://doc.cgal.org/) 与对应 VTK 类文档。

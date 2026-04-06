@@ -1,0 +1,13 @@
+NAME
+  vtkSHYXRadiusNeighborCount
+DESCRIPTION
+  "Parallel count of points within a fixed search radius of each point (VTK-only)."
+GROUPS
+  Meshing
+DEPENDS
+  VTK::FiltersCore
+  VTK::FiltersGeneral
+PRIVATE_DEPENDS
+  VTK::CommonCore
+  VTK::CommonDataModel
+  VTK::CommonExecutionModel

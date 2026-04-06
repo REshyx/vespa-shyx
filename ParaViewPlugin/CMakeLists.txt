@@ -64,6 +64,7 @@ paraview_add_plugin(VESPAPlugin
     "SHYXTetGen.xml"
     "SHYXFTLEFilter.xml"
     "SHYXGeodesicDistance.xml"
+    "SHYXRadiusNeighborCount.xml"
     "SHYXDisconnectedRegionFuse.xml"
     "SHYXClebschMapFilter.xml"
     "SHYXVortexCriteria.xml"

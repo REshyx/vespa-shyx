@@ -1,0 +1,36 @@
+<ServerManagerConfiguration>
+  <ProxyGroup name="filters">
+    <SourceProxy name="SHYXRadiusNeighborCount"
+                 class="vtkSHYXRadiusNeighborCount"
+                 label="SHYX Radius Neighbor Count">
+      <Documentation short_help="Count points within a fixed radius of each point (parallel, VTK-only).">
+        For every point, counts how many input points lie within the given search radius (Euclidean distance).
+        The result is stored in point data as NeighborsInRadius (vtkIdTypeArray). The query point is included
+        in its own count. Uses vtkStaticPointLocator and vtkSMPTools for parallel queries.
+      </Documentation>
+
+      <InputProperty name="Input" command="SetInputConnection">
+        <ProxyGroupDomain name="groups">
+          <Group name="sources"/>
+          <Group name="filters"/>
+        </ProxyGroupDomain>
+        <DataTypeDomain name="input_type">
+          <DataType value="vtkPolyData"/>
+        </DataTypeDomain>
+      </InputProperty>
+
+      <DoubleVectorProperty name="Radius"
+                            label="Search Radius"
+                            command="SetRadius"
+                            number_of_elements="1"
+                            default_values="1.0"
+                            animateable="1">
+        <DoubleRangeDomain name="range" min="1e-12" max="1e12"/>
+      </DoubleVectorProperty>
+
+      <Hints>
+        <ShowInMenu category="SHYX"/>
+      </Hints>
+    </SourceProxy>
+  </ProxyGroup>
+</ServerManagerConfiguration>
