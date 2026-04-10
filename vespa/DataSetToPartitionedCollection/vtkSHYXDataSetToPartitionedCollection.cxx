@@ -1,6 +1,8 @@
 #include "vtkSHYXDataSetToPartitionedCollection.h"
 
+#include <vtkAbstractArray.h>
 #include <vtkCellArray.h>
+#include <vtkCellType.h>
 #include <vtkCellData.h>
 #include <vtkCompositeDataSet.h>
 #include <vtkDataAssembly.h>
@@ -64,21 +66,13 @@ void SetContiguousGlobalIds(vtkUnstructuredGrid* ug)
   ug->GetCellData()->SetGlobalIds(cg);
 }
 
-void SetContiguousGlobalIdsPolyData(vtkPolyData* pd)
+/** Side sets still need contiguous cell GlobalIds; point GlobalIds must stay volume-unique for IOSS. */
+void SetContiguousCellGlobalIdsPolyData(vtkPolyData* pd)
 {
   if (!pd)
   {
     return;
   }
-  vtkNew<vtkIdTypeArray> pg;
-  const vtkIdType np = pd->GetNumberOfPoints();
-  pg->SetNumberOfTuples(np);
-  for (vtkIdType i = 0; i < np; ++i)
-  {
-    pg->SetValue(i, i + 1);
-  }
-  pd->GetPointData()->SetGlobalIds(pg);
-
   vtkNew<vtkIdTypeArray> cg;
   const vtkIdType nc = pd->GetNumberOfCells();
   cg->SetNumberOfTuples(nc);
@@ -87,6 +81,41 @@ void SetContiguousGlobalIdsPolyData(vtkPolyData* pd)
     cg->SetValue(i, i + 1);
   }
   pd->GetCellData()->SetGlobalIds(cg);
+}
+
+void RestoreSurfacePointGlobalIdsFromVolume(vtkPolyData* surf, vtkUnstructuredGrid* tetVol)
+{
+  if (!surf || !tetVol)
+  {
+    return;
+  }
+  auto* origPt = vtkIdTypeArray::SafeDownCast(surf->GetPointData()->GetArray("vtkOriginalPointIds"));
+  auto* volPtG = vtkIdTypeArray::SafeDownCast(tetVol->GetPointData()->GetGlobalIds());
+  if (!origPt || !volPtG)
+  {
+    return;
+  }
+  const vtkIdType np = surf->GetNumberOfPoints();
+  vtkNew<vtkIdTypeArray> pg;
+  pg->SetNumberOfTuples(np);
+  for (vtkIdType p = 0; p < np; ++p)
+  {
+    pg->SetValue(p, volPtG->GetValue(origPt->GetValue(p)));
+  }
+  surf->GetPointData()->SetGlobalIds(pg);
+}
+
+void AssignStandalonePatchPointGlobalIds(vtkPolyData* pd, vtkIdType& nextGid)
+{
+  const vtkIdType npt = pd->GetNumberOfPoints();
+  vtkNew<vtkIdTypeArray> pg;
+  pg->SetNumberOfTuples(npt);
+  for (vtkIdType p = 0; p < npt; ++p)
+  {
+    pg->SetValue(p, nextGid + p);
+  }
+  nextGid += npt;
+  pd->GetPointData()->SetGlobalIds(pg);
 }
 
 void AddCellObjectId(vtkDataSet* ds, int objectId)
@@ -140,12 +169,7 @@ int FindTetFaceIndexForTriangle(vtkUnstructuredGrid* tet, vtkIdType tetCellId, v
   return -1;
 }
 
-/**
- * vtkIOSSWriter: side sets need cell data "element_side" (2 x int: element global id 1..N,
- * Exodus/Ioss local tet face number 1..4). VTK vtkTetra face indices are 0..3 and match Exodus
- * sides under the same node ordering; IOSS stores face ids 1-based (see vtkIOSSReader path that
- * applies offset -1 to element_side_raw). Requires vtkDataSetSurfaceFilter PassThrough ids.
- */
+/** Side-set cell array element_side: (volume cell GlobalId, Exodus tet face 1..4). PassThrough ids. */
 void PrepareTetBoundarySurfaceForIoss(vtkUnstructuredGrid* tetVol, vtkPolyData* surf)
 {
   if (!tetVol || !surf || surf->GetNumberOfCells() == 0)
@@ -174,7 +198,7 @@ void PrepareTetBoundarySurfaceForIoss(vtkUnstructuredGrid* tetVol, vtkPolyData* 
     const vtkIdType ocid = origCell->GetValue(fi);
     const vtkIdType globalElem = volCellG->GetValue(ocid);
     surf->GetCellPoints(fi, cpts);
-    int exodusFace = 1; // IOSS/Exodus tet faces are 1..4; use 1 if geometry match fails
+    int exodusFace = 1;
     if (cpts->GetNumberOfIds() == 3)
     {
       const vtkIdType s0 = origPt->GetValue(cpts->GetId(0));
@@ -189,32 +213,13 @@ void PrepareTetBoundarySurfaceForIoss(vtkUnstructuredGrid* tetVol, vtkPolyData* 
     es->SetTuple2(fi, static_cast<int>(globalElem), exodusFace);
   }
   surf->GetCellData()->AddArray(es);
-
-  vtkNew<vtkIdTypeArray> surfPtGlob;
-  surfPtGlob->SetNumberOfTuples(surf->GetNumberOfPoints());
-  for (vtkIdType p = 0; p < surf->GetNumberOfPoints(); ++p)
-  {
-    const vtkIdType vpid = origPt->GetValue(p);
-    surfPtGlob->SetValue(p, volPtG->GetValue(vpid));
-  }
-  surf->GetPointData()->SetGlobalIds(surfPtGlob);
-
-  vtkNew<vtkIdTypeArray> surfCellGlob;
-  surfCellGlob->SetNumberOfTuples(nf);
-  for (vtkIdType i = 0; i < nf; ++i)
-  {
-    surfCellGlob->SetValue(i, i + 1);
-  }
-  surf->GetCellData()->SetGlobalIds(surfCellGlob);
-  // Downstream connectivity may produce non-contiguous subsets; side blocks are renumbered later.
 }
 
-/** Node-set style polydata: same points as side patch, one vtkVertex per point. */
-vtkSmartPointer<vtkPolyData> BuildNodeSetPolyData(vtkPolyData* sidePatch)
+vtkSmartPointer<vtkPolyData> BuildNodeSetPolyData(vtkPolyData* sideSurface)
 {
   vtkSmartPointer<vtkPolyData> out = vtkSmartPointer<vtkPolyData>::New();
   vtkNew<vtkPoints> pts;
-  pts->DeepCopy(sidePatch->GetPoints());
+  pts->DeepCopy(sideSurface->GetPoints());
   out->SetPoints(pts);
   vtkNew<vtkCellArray> verts;
   const vtkIdType n = pts->GetNumberOfPoints();
@@ -223,10 +228,171 @@ vtkSmartPointer<vtkPolyData> BuildNodeSetPolyData(vtkPolyData* sidePatch)
     verts->InsertNextCell(1, &p);
   }
   out->SetVerts(verts);
-  out->GetPointData()->DeepCopy(sidePatch->GetPointData());
+  out->GetPointData()->DeepCopy(sideSurface->GetPointData());
   out->GetCellData()->Initialize();
-  SetContiguousGlobalIdsPolyData(out);
+  SetContiguousCellGlobalIdsPolyData(out);
   return out;
+}
+
+/**
+ * vtkPolyDataConnectivityFilter often keeps the full input point list; only some points are
+ * referenced by extracted cells. Drop unreferenced points and remap connectivity so each side{i} /
+ * node{i} contains only vertices used by that patch's cells.
+ */
+void StripUnreferencedPoints(vtkPolyData* pd)
+{
+  if (!pd || pd->GetNumberOfPoints() == 0 || pd->GetNumberOfCells() == 0)
+  {
+    return;
+  }
+
+  pd->BuildCells();
+  const vtkIdType np = pd->GetNumberOfPoints();
+  std::vector<unsigned char> used(static_cast<size_t>(np), 0);
+  vtkNew<vtkIdList> cpts;
+
+  for (vtkIdType cid = 0; cid < pd->GetNumberOfCells(); ++cid)
+  {
+    pd->GetCellPoints(cid, cpts);
+    for (vtkIdType i = 0; i < cpts->GetNumberOfIds(); ++i)
+    {
+      const vtkIdType pid = cpts->GetId(i);
+      if (pid >= 0 && pid < np)
+      {
+        used[static_cast<size_t>(pid)] = 1;
+      }
+    }
+  }
+
+  vtkIdType nUsed = 0;
+  for (vtkIdType p = 0; p < np; ++p)
+  {
+    if (used[static_cast<size_t>(p)])
+    {
+      ++nUsed;
+    }
+  }
+
+  if (nUsed == np)
+  {
+    return;
+  }
+
+  std::vector<vtkIdType> oldToNew(static_cast<size_t>(np), -1);
+  vtkIdType newIx = 0;
+  for (vtkIdType p = 0; p < np; ++p)
+  {
+    if (used[static_cast<size_t>(p)])
+    {
+      oldToNew[static_cast<size_t>(p)] = newIx++;
+    }
+  }
+
+  vtkNew<vtkPoints> newPts;
+  newPts->SetNumberOfPoints(nUsed);
+  for (vtkIdType p = 0; p < np; ++p)
+  {
+    if (!used[static_cast<size_t>(p)])
+    {
+      continue;
+    }
+    double x[3];
+    pd->GetPoint(p, x);
+    newPts->SetPoint(oldToNew[static_cast<size_t>(p)], x);
+  }
+
+  vtkPointData* ipd = pd->GetPointData();
+  vtkNew<vtkPointData> opd;
+  for (int ai = 0; ai < ipd->GetNumberOfArrays(); ++ai)
+  {
+    vtkAbstractArray* arr = ipd->GetAbstractArray(ai);
+    if (!arr || static_cast<vtkIdType>(arr->GetNumberOfTuples()) != np)
+    {
+      continue;
+    }
+    vtkAbstractArray* na = arr->NewInstance();
+    na->SetName(arr->GetName());
+    na->SetNumberOfComponents(arr->GetNumberOfComponents());
+    na->SetNumberOfTuples(nUsed);
+    for (vtkIdType p = 0; p < np; ++p)
+    {
+      if (used[static_cast<size_t>(p)])
+      {
+        na->SetTuple(oldToNew[static_cast<size_t>(p)], p, arr);
+      }
+    }
+    opd->AddArray(na);
+    na->Delete();
+  }
+
+  vtkNew<vtkCellArray> newVerts;
+  vtkNew<vtkCellArray> newLines;
+  vtkNew<vtkCellArray> newPolys;
+  vtkNew<vtkCellArray> newStrips;
+
+  for (vtkIdType cid = 0; cid < pd->GetNumberOfCells(); ++cid)
+  {
+    const int ct = pd->GetCellType(cid);
+    pd->GetCellPoints(cid, cpts);
+    const int ncp = cpts->GetNumberOfIds();
+    std::vector<vtkIdType> mapped(static_cast<size_t>(ncp));
+    for (vtkIdType i = 0; i < ncp; ++i)
+    {
+      mapped[static_cast<size_t>(i)] = oldToNew[static_cast<size_t>(cpts->GetId(i))];
+    }
+
+    switch (ct)
+    {
+      case VTK_VERTEX:
+      case VTK_POLY_VERTEX:
+        newVerts->InsertNextCell(ncp, mapped.data());
+        break;
+      case VTK_LINE:
+      case VTK_POLY_LINE:
+        newLines->InsertNextCell(ncp, mapped.data());
+        break;
+      case VTK_TRIANGLE:
+      case VTK_QUAD:
+      case VTK_POLYGON:
+      case VTK_PIXEL:
+        newPolys->InsertNextCell(ncp, mapped.data());
+        break;
+      case VTK_TRIANGLE_STRIP:
+        newStrips->InsertNextCell(ncp, mapped.data());
+        break;
+      default:
+        if (ncp == 1)
+        {
+          newVerts->InsertNextCell(1, mapped.data());
+        }
+        else if (ncp == 2)
+        {
+          newLines->InsertNextCell(2, mapped.data());
+        }
+        else if (ncp >= 3)
+        {
+          newPolys->InsertNextCell(ncp, mapped.data());
+        }
+        break;
+    }
+  }
+
+  pd->SetPoints(newPts);
+  pd->SetVerts(newVerts);
+  pd->SetLines(newLines);
+  pd->SetPolys(newPolys);
+  pd->SetStrips(newStrips);
+  vtkPointData* outp = pd->GetPointData();
+  outp->ShallowCopy(opd);
+  if (vtkIdTypeArray* g = vtkIdTypeArray::SafeDownCast(outp->GetAbstractArray("GlobalIds")))
+  {
+    outp->SetGlobalIds(g);
+  }
+  if (vtkDataArray* nrm = outp->GetArray("Normals"))
+  {
+    outp->SetNormals(nrm);
+  }
+  pd->Modified();
 }
 
 void CollectCuspConnectedSurfacePieces(vtkPolyData* surface, double featureAngle,
@@ -277,6 +443,7 @@ void CollectCuspConnectedSurfacePieces(vtkPolyData* surface, double featureAngle
     }
     vtkSmartPointer<vtkPolyData> copy = vtkSmartPointer<vtkPolyData>::New();
     copy->DeepCopy(out);
+    StripUnreferencedPoints(copy);
     outPieces->push_back(copy);
   }
 }
@@ -293,6 +460,16 @@ void SetIossBlockMeta(
   }
   meta->Set(vtkCompositeDataSet::NAME(), name);
   meta->Set(vtkIOSSReader::ENTITY_ID(), entityId);
+}
+
+void AppendPdcBlock(vtkPartitionedDataSetCollection* coll, unsigned int& blockIndex, vtkDataSet* ds,
+  const char* iossName, int entityId)
+{
+  vtkNew<vtkPartitionedDataSet> pds;
+  pds->SetPartition(0, ds);
+  coll->SetPartitionedDataSet(blockIndex, pds);
+  SetIossBlockMeta(coll, blockIndex, iossName, entityId);
+  ++blockIndex;
 }
 
 void BuildIossAssembly(vtkPartitionedDataSetCollection* coll, bool hasTet,
@@ -398,7 +575,7 @@ int vtkSHYXDataSetToPartitionedCollection::RequestData(vtkInformation* vtkNotUse
   vtkNew<vtkPartitionedDataSetCollection> result;
   unsigned int blockIndex = 0;
   int nextSurfaceObjectId = 1;
-  bool hasTet = false;
+  vtkSmartPointer<vtkUnstructuredGrid> volumeGridForIoss;
 
   vtkUnstructuredGrid* ug = vtkUnstructuredGrid::SafeDownCast(input);
   vtkNew<vtkPolyData> surfaceWork;
@@ -425,26 +602,21 @@ int vtkSHYXDataSetToPartitionedCollection::RequestData(vtkInformation* vtkNotUse
       vtkUnstructuredGrid* tetOut = exTet->GetOutput();
       if (tetOut && tetOut->GetNumberOfCells() > 0)
       {
-        vtkNew<vtkUnstructuredGrid> tetCopy;
-        tetCopy->DeepCopy(tetOut);
-        SetContiguousGlobalIds(tetCopy);
+        volumeGridForIoss = vtkSmartPointer<vtkUnstructuredGrid>::New();
+        volumeGridForIoss->DeepCopy(tetOut);
+        SetContiguousGlobalIds(volumeGridForIoss);
 
         // Boundary of tet-only mesh; pass-through ids for vtkIOSSWriter (GlobalIds + element_side).
         vtkNew<vtkDataSetSurfaceFilter> surf;
-        surf->SetInputData(tetCopy);
+        surf->SetInputData(volumeGridForIoss);
         surf->PassThroughCellIdsOn();
         surf->PassThroughPointIdsOn();
         surf->Update();
         surfaceWork->DeepCopy(surf->GetOutput());
-        PrepareTetBoundarySurfaceForIoss(tetCopy, surfaceWork.GetPointer());
+        PrepareTetBoundarySurfaceForIoss(volumeGridForIoss, surfaceWork.GetPointer());
 
-        AddCellObjectId(tetCopy, 1);
-        vtkNew<vtkPartitionedDataSet> tetBlock;
-        tetBlock->SetPartition(0, tetCopy);
-        const unsigned int tetIdx = blockIndex++;
-        result->SetPartitionedDataSet(tetIdx, tetBlock);
-        SetIossBlockMeta(result, tetIdx, "tetrahedra", 1);
-        hasTet = true;
+        AddCellObjectId(volumeGridForIoss, 1);
+        AppendPdcBlock(result, blockIndex, volumeGridForIoss, "tetrahedra", 1);
         nextSurfaceObjectId = 2;
       }
     }
@@ -467,6 +639,7 @@ int vtkSHYXDataSetToPartitionedCollection::RequestData(vtkInformation* vtkNotUse
   const unsigned int nPairs = static_cast<unsigned int>(sidePieces.size());
   int sideOid = nextSurfaceObjectId;
   int nodeOid = nextSurfaceObjectId + static_cast<int>(nPairs);
+  vtkIdType nextStandaloneSurfacePointGid = 1;
 
   for (unsigned int i = 0; i < nPairs; ++i)
   {
@@ -474,30 +647,26 @@ int vtkSHYXDataSetToPartitionedCollection::RequestData(vtkInformation* vtkNotUse
 
     vtkNew<vtkPolyData> sideCopy;
     sideCopy->DeepCopy(sidePatch);
-    SetContiguousGlobalIdsPolyData(sideCopy);
+    if (volumeGridForIoss)
+    {
+      RestoreSurfacePointGlobalIdsFromVolume(sideCopy, volumeGridForIoss);
+    }
+    else
+    {
+      AssignStandalonePatchPointGlobalIds(sideCopy, nextStandaloneSurfacePointGid);
+    }
+    SetContiguousCellGlobalIdsPolyData(sideCopy);
     AddCellObjectId(sideCopy, sideOid++);
-    vtkNew<vtkPartitionedDataSet> pdsSide;
-    pdsSide->SetPartition(0, sideCopy);
-    result->SetPartitionedDataSet(blockIndex, pdsSide);
-    {
-      const std::string sideName = "side" + std::to_string(i);
-      SetIossBlockMeta(result, blockIndex, sideName.c_str(), static_cast<int>(i) + 1);
-    }
-    ++blockIndex;
+    const std::string sideName = "side" + std::to_string(i);
+    AppendPdcBlock(result, blockIndex, sideCopy, sideName.c_str(), static_cast<int>(i) + 1);
 
-    vtkSmartPointer<vtkPolyData> nodePd = BuildNodeSetPolyData(sidePatch);
+    vtkSmartPointer<vtkPolyData> nodePd = BuildNodeSetPolyData(sideCopy);
     AddCellObjectId(nodePd, nodeOid++);
-    vtkNew<vtkPartitionedDataSet> pdsNode;
-    pdsNode->SetPartition(0, nodePd);
-    result->SetPartitionedDataSet(blockIndex, pdsNode);
-    {
-      const std::string nodeName = "node" + std::to_string(i);
-      SetIossBlockMeta(result, blockIndex, nodeName.c_str(), static_cast<int>(i) + 1);
-    }
-    ++blockIndex;
+    const std::string nodeName = "node" + std::to_string(i);
+    AppendPdcBlock(result, blockIndex, nodePd, nodeName.c_str(), static_cast<int>(i) + 1);
   }
 
-  BuildIossAssembly(result, hasTet, nPairs);
+  BuildIossAssembly(result, volumeGridForIoss != nullptr, nPairs);
 
   output->ShallowCopy(result);
 
