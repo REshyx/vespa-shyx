@@ -1,0 +1,33 @@
+<ServerManagerConfiguration>
+  <ProxyGroup name="filters">
+    <SourceProxy name="SHYXDataSetToPartitionedCollection"
+                 class="vtkSHYXDataSetToPartitionedCollection"
+                 label="SHYX DataSet To Partitioned Collection">
+      <Documentation
+          short_help="Split dataset into tet volume (object_id=1) and surface partitions by sharp edges and connectivity."
+          long_help="Tetrahedra (if any) are extracted and become the first top-level block under vtkDataAssembly IOSS/element_blocks/tetrahedra with object_id=1 and contiguous GlobalIds (1..N) for IOSS writers. The surface for side/node sets is vtkDataSetSurfaceFilter applied only to that tet-only submesh (not the full mixed grid), with element_side for Exodus side sets. That surface is split by feature angle and connectivity; for each region i: side{i} then node{i}. Non-unstructured or no-tet inputs: polydata as-is, or surface of the whole dataset. Block metadata sets NAME and vtkIOSSReader ENTITY_ID only."/>
+
+      <InputProperty name="Input" command="SetInputConnection">
+        <ProxyGroupDomain name="groups">
+          <Group name="sources"/>
+          <Group name="filters"/>
+        </ProxyGroupDomain>
+        <DataTypeDomain name="input_type">
+          <DataType value="vtkDataSet"/>
+        </DataTypeDomain>
+      </InputProperty>
+
+      <DoubleVectorProperty name="FeatureAngle" label="Feature angle (deg)" command="SetFeatureAngle"
+          number_of_elements="1" default_values="70.0" animateable="0">
+        <DoubleRangeDomain name="range" min="0.0" max="180.0"/>
+        <Documentation>
+          Dihedral angle threshold for vtkPolyDataNormals splitting (cusp / sharp edge split). Larger values merge more smooth neighborhoods; smaller values split more aggressively.
+        </Documentation>
+      </DoubleVectorProperty>
+
+      <Hints>
+        <ShowInMenu category="SHYX"/>
+      </Hints>
+    </SourceProxy>
+  </ProxyGroup>
+</ServerManagerConfiguration>

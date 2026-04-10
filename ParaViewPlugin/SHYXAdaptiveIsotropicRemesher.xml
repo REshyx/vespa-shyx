@@ -1,0 +1,107 @@
+<?xml version="1.0" ?>
+<ServerManagerConfiguration>
+  <ProxyGroup name="filters">
+    <SourceProxy class="vtkSHYXAdaptiveIsotropicRemesher"
+                 label="SHYX Adaptive Isotropic Remesher"
+                 name="SHYXAdaptiveIsotropicRemesher">
+      <Documentation short_help="Curvature-aware CGAL remesh with min/max edge length.">
+        Adaptive isotropic remeshing using CGAL Adaptive_sizing_field (discrete curvature).
+        Edge lengths are limited by Min/Max Edge Length; AdaptiveTolerance controls fineness
+        together with curvature. Requires CGAL 6.0+.
+      </Documentation>
+
+      <InputProperty name="Input"
+                     command="SetInputConnection">
+        <ProxyGroupDomain name="groups">
+          <Group name="sources"/>
+          <Group name="filters"/>
+        </ProxyGroupDomain>
+        <DataTypeDomain name="input_type">
+          <DataType value="vtkPolyData"/>
+        </DataTypeDomain>
+      </InputProperty>
+
+      <DoubleVectorProperty command="SetMinEdgeLength"
+                            name="MinEdgeLength"
+                            label="Min Edge Length"
+                            number_of_elements="1"
+                            default_values="0">
+        <Documentation>
+          Minimum edge length. Use 0 or negative for automatic (0.5% of bounding-box diagonal).
+        </Documentation>
+      </DoubleVectorProperty>
+
+      <DoubleVectorProperty command="SetMaxEdgeLength"
+                            name="MaxEdgeLength"
+                            label="Max Edge Length"
+                            number_of_elements="1"
+                            default_values="0">
+        <Documentation>
+          Maximum edge length. Use 0 or negative for automatic (5% of bounding-box diagonal).
+        </Documentation>
+      </DoubleVectorProperty>
+
+      <Property name="RefreshSuggestedEdgeLengthsFromBounds"
+                command="RefreshSuggestedEdgeLengthsFromBounds"
+                label="Refresh min/max (0.5% / 5% diagonal)"
+                panel_widget="command_button"
+                animateable="0">
+        <Documentation>
+          Fill Min/Max Edge Length from the current input using 0.5% and 5% of the bounding-box
+          diagonal (same as automatic mode when min/max are unset).
+        </Documentation>
+      </Property>
+
+      <DoubleVectorProperty command="SetAdaptiveTolerance"
+                            name="AdaptiveTolerance"
+                            label="Adaptive Tolerance (tol)"
+                            number_of_elements="1"
+                            default_values="0.001">
+        <Documentation>
+          CGAL adaptive sizing tolerance; smaller values tend to refine more within min/max bounds.
+        </Documentation>
+      </DoubleVectorProperty>
+
+      <IntVectorProperty command="SetNumberOfIterations"
+                         name="NumberOfIterations"
+                         label="Number Of Iterations"
+                         number_of_elements="1"
+                         default_values="3">
+        <IntRangeDomain name="range" min="1" max="20"/>
+        <Documentation>
+          Number of remeshing iterations.
+        </Documentation>
+      </IntVectorProperty>
+
+      <DoubleVectorProperty command="SetProtectAngle"
+                            name="ProtectAngle"
+                            label="Protection Angle"
+                            number_of_elements="1"
+                            default_values="45"
+                            panel_visibility="advanced">
+        <DoubleRangeDomain name="range" min="0" max="180"/>
+        <Documentation>
+          Feature edge angle threshold in degrees.
+        </Documentation>
+      </DoubleVectorProperty>
+
+      <IntVectorProperty
+         name="UseUpdateAttributes"
+         command="SetUpdateAttributes"
+         label="Interpolate attributes"
+         number_of_elements="1"
+         default_values="1"
+         panel_visibility="advanced">
+         <BooleanDomain name="bool"/>
+         <Documentation>
+           If ON, point/cell data are interpolated onto the new mesh.
+         </Documentation>
+      </IntVectorProperty>
+
+      <Hints>
+        <ShowInMenu category="SHYX"/>
+      </Hints>
+
+    </SourceProxy>
+  </ProxyGroup>
+</ServerManagerConfiguration>

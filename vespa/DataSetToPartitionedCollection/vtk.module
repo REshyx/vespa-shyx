@@ -1,0 +1,14 @@
+NAME
+  vtkSHYXDataSetToPartitionedCollection
+DESCRIPTION
+  "Split vtkDataSet into a vtkPartitionedDataSetCollection: tetrahedra (object_id=1), then surface with feature-angle splitting and connectivity partitions (object_id increments)."
+GROUPS
+  Meshing
+DEPENDS
+  VTK::CommonCore
+  VTK::CommonDataModel
+  VTK::CommonExecutionModel
+  VTK::FiltersCore
+  VTK::FiltersExtraction
+  VTK::FiltersGeometry
+  VTK::IOIOSS

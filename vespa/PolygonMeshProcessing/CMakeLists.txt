@@ -29,6 +29,14 @@ else()
   set(VESPA_ALPHA_WRAPPING OFF CACHE INTERNAL "vtkCGALAlphaWrapping state" FORCE)
 endif()
 
+if (${CGAL_VERSION} VERSION_GREATER_EQUAL 6.0)
+  list(APPEND vtkcgalpmp_files vtkSHYXAdaptiveIsotropicRemesher)
+  set(VESPA_ADAPTIVE_REMESHING ON CACHE INTERNAL "vtkSHYXAdaptiveIsotropicRemesher state" FORCE)
+else()
+  message(STATUS "CGAL Version lower than 6.0 (${CGAL_VERSION}), SHYX Adaptive Isotropic Remesher is disabled.")
+  set(VESPA_ADAPTIVE_REMESHING OFF CACHE INTERNAL "vtkSHYXAdaptiveIsotropicRemesher state" FORCE)
+endif()
+
 if (${USE_CERES})
   list(APPEND vtkcgalpmp_files
     vtkCGALMeshSmoothing

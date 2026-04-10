@@ -8,6 +8,10 @@ if (${VESPA_MESH_SMOOTHING})
   set(MESH_SMOOTHING_SERVER_MANAGER_XML "VESPAMeshSmoothingFilter.xml")
 endif()
 
+if (${VESPA_ADAPTIVE_REMESHING})
+  set(ADAPTIVE_REMESHING_SERVER_MANAGER_XML "SHYXAdaptiveIsotropicRemesher.xml")
+endif()
+
 option(VESPA_SHOW_CGAL_LICENSE_ON_LOAD "Show CGAL License when loading plugin" OFF)
 mark_as_advanced(VESPA_SHOW_CGAL_LICENSE_ON_LOAD)
 if (${VESPA_SHOW_CGAL_LICENSE_ON_LOAD})
@@ -66,6 +70,7 @@ paraview_add_plugin(VESPAPlugin
     "SHYXGeodesicDistance.xml"
     "SHYXRadiusNeighborCount.xml"
     "SHYXDisconnectedRegionFuse.xml"
+    "SHYXDataSetToPartitionedCollection.xml"
     "SHYXClebschMapFilter.xml"
     "SHYXVortexCriteria.xml"
     "SHYXVortexCoreTest.xml"
@@ -75,6 +80,7 @@ paraview_add_plugin(VESPAPlugin
     "AnimatedStreamlineRepresentation.xml"
      ${ALPHA_WRAPPING_SERVER_MANAGER_XML}
      ${MESH_SMOOTHING_SERVER_MANAGER_XML}
+     ${ADAPTIVE_REMESHING_SERVER_MANAGER_XML}
   UI_INTERFACES ${acm_interfaces} ${vespa_plugin_qt_auto_interfaces}
   SOURCES ${acm_sources}
     pqArrayCurveMapperPanel.cxx
