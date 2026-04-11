@@ -13,6 +13,7 @@
 | **`VESPA_MESH_SMOOTHING`** | 为 ON 时额外注册 **VESPA Mesh Smoothing** 滤镜。 |
 | **`VESPA_USE_MKL`** | 构建含 MKL 时，**SHYX Clebsch Map Filter** 中可选用 MKL 直接法求解器。 |
 | **`VESPA_USE_SMP`** | 影响部分 CGAL 相关滤镜内部并行（如数组概率点剔除等）；**SHYX Radius Neighbor Count** 使用 VTK 自带的 **vtkSMPTools**，不依赖此开关。 |
+| **（CGAL 版本）** | **CGAL ≥ 6.0** 时构建系统会包含 **SHYX Adaptive Isotropic Remesher**（`vtkSHYXAdaptiveIsotropicRemesher`）；低于 6.0 时不编译该类，ParaView 插件中亦无对应滤镜。 |
 
 客户端若使用 Qt 版 ParaView，插件还可注册 **Pulse Glyph** / **Animated Streamline** 相关的自动启动管理器与自定义面板（如数组曲线映射面板）；表示类型仍可在显示面板中选择。
 
@@ -59,6 +60,8 @@
 | SHYX Surface Tip Extractor |
 | SHYX Surface to Volume Mesh |
 | SHYX TetGen |
+| SHYX DataSet To Partitioned Collection |
+| SHYX Adaptive Isotropic Remesher（需 CGAL ≥ 6.0） |
 | SHYX Geodesic Distance |
 | SHYX Point Cloud Surface SDF |
 | SHYX Radius Neighbor Count |
@@ -551,6 +554,44 @@
 
 ---
 
+### 30. SHYX DataSet To Partitioned Collection（`vtkSHYXDataSetToPartitionedCollection`）
+
+**功能**：将 **`vtkDataSet`** 转为 **`vtkPartitionedDataSetCollection`**，便于配合 **vtkIOSSWriter** 等写出带 **IOSS 装配（assembly）** 的 Exodus/IOSS 结构：四面体体网格块、按特征角与连通性划分的表面片，以及对应的 side / node 集合元数据。
+
+**管线概要**：
+
+1. 若输入为 **`vtkUnstructuredGrid` 且含 `VTK_TETRA`**：抽出全部四面体为**单一**体分区，并为其点、单元写入**连续**的 **GlobalIds**（1…N），便于 IOSS 的 `element_blocks` / `tetrahedra`（`object_id = 1` 等约定以插件实现为准）。
+2. 仅对该四面体子网格做 **`vtkDataSetSurfaceFilter`**（而非对整个混合网格），得到边界表面；可传递单元/点 ID，并在边界单元数据上写入 **`element_side`**（体网格全局单元 ID + Exodus 四面体面序号 1…4），供 **side sets** 使用。
+3. 对表面用 **`vtkPolyDataNormals`** 按 **Feature angle** 分裂，再用 **`vtkPolyDataConnectivityFilter`** 分成多个连通区域；每个区域 **i** 对应 **`side{i}`** 与 **`node{i}`**（节点集与侧面点一致，表面点 **GlobalIds** 与体网格节点 ID 对齐，便于合并后的 Exodus 节点块解析）。
+
+**非体网格或非四面体输入**：若为 **`vtkPolyData`** 则原样放入集合；否则对整体数据集取表面后再参与上述分裂（与 XML 长说明一致）。
+
+| 参数 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| **Feature angle (deg)** | double | 70.0 | 表面分裂用的二面角阈值（`vtkPolyDataNormals`）。**较大**时更多光滑邻域被合并；**较小**时在尖棱/折边处切分更细。 |
+
+**输出**：`vtkPartitionedDataSetCollection`；块元数据会设置 **NAME** 及与 **vtkIOSSReader** 的 **ENTITY_ID** 等兼容字段（以当前实现为准）。
+
+---
+
+### 31. SHYX Adaptive Isotropic Remesher（`vtkSHYXAdaptiveIsotropicRemesher`，CGAL ≥ 6.0）
+
+**功能**：在 **CGAL 6.0+** 上使用 **`Adaptive_sizing_field`（离散曲率）** 与各向同性重网格（`isotropic_remeshing`）：高曲率处倾向更细三角形，边长限制在 **[Min, Max]** 区间内；特征边按角度阈值保护，行为类似 **VESPA Isotropic Remesher** 中的特征保护思路。输入须为三角 **`vtkPolyData`**。
+
+| 参数 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| **Min Edge Length** | double | 0 | 最小边长。**≤ 0** 表示自动：包围盒对角线长度的 **0.5%**。 |
+| **Max Edge Length** | double | 0 | 最大边长。**≤ 0** 表示自动：对角线长度的 **5%**。 |
+| **Refresh min/max (0.5% / 5% diagonal)** | 按钮 | — | 根据当前输入将 Min/Max 设为与上述自动规则相同的数值（ParaView **command_button**）。 |
+| **Adaptive Tolerance (tol)** | double | 0.001 | CGAL 自适应尺寸场容差；**更小**时在 Min/Max 范围内往往更细。 |
+| **Number Of Iterations** | int | 3 | 重网格迭代次数（1–20）。 |
+| **Protection Angle**（高级） | double | 45 | 特征边二面角阈值（度），重网格时予以保护。 |
+| **Interpolate attributes**（高级） | bool | true | 是否将点/单元数据插值到新网格。 |
+
+**说明**：若工程使用的 **CGAL 低于 6.0**，该滤镜不会出现在插件中（见上文「构建与可选组件」）。与 **VESPA Isotropic Remesher**（固定目标边长）相比，本滤镜为**曲率自适应**且通过 Min/Max 约束边长范围。
+
+---
+
 ## 三、表示（Representations）
 
 以下项不在 **Filters** 菜单中，而在管线对象的 **Display / 表示** 中选择（具体条目名称以 ParaView 版本界面为准）。
@@ -582,5 +623,7 @@
 - **SHYX Disconnected Region Fuse** 用于将多个不连通表面（如断裂的网格）通过近距离顶点融合合并为一个整体；需根据模型尺度调整 Fuse Threshold。
 - **SHYX Point Cloud Surface SDF** 在**点云**上写 **SDF**；若要在**规则体素网格**上对**封闭**三角网格求有符号距离场（`vtkImageData`），应使用 CGAL 管线中的 **`vtkCGALSignedDistanceFunction`**（见 CGAL / PMP 模块文档或源码），二者勿混淆。
 - **SHYX Radius Neighbor Count** 用于点云或网格顶点上的**局部密度/邻域规模**分析；半径需与点间距尺度匹配。并行行为由 VTK SMP 后端决定（如与 ParaView 一同构建的 TBB 等）。
+- **SHYX DataSet To Partitioned Collection** 面向 **IOSS/Exodus** 写出：从含四面体的体网格提取体块与边界表面分区，并维护 **GlobalIds** / **element_side** 等；若仅需可视化拆分表面，也可在普通网格上试用，但设计目标是 Writer 侧装配与集合语义。
+- **SHYX Adaptive Isotropic Remesher**（CGAL ≥ 6.0）适合需要在**曲率大处加密**、同时用 Min/Max 控制尺度的情况；均匀尺度需求可继续用 **VESPA Isotropic Remesher**。
 
 以上参数与行为基于当前 VESPA 源码与 `ParaViewPlugin` 下 Server Manager XML 整理，若与界面标签略有差异以 ParaView 界面为准；更底层算法说明见 [CGAL 文档](https://doc.cgal.org/) 与对应 VTK 类文档。
