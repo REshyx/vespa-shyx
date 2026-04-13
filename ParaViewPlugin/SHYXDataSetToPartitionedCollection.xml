@@ -4,8 +4,8 @@
                  class="vtkSHYXDataSetToPartitionedCollection"
                  label="SHYX DataSet To Partitioned Collection">
       <Documentation
-          short_help="Split dataset into tet volume (object_id=1) and surface partitions by sharp edges and connectivity."
-          long_help="Tetrahedra (if any) are extracted and become the first top-level block under vtkDataAssembly IOSS/element_blocks/tetrahedra with object_id=1 and contiguous GlobalIds (1..N) for IOSS writers. The surface for side/node sets is vtkDataSetSurfaceFilter applied only to that tet-only submesh (not the full mixed grid), with element_side for Exodus side sets. That surface is split by feature angle and connectivity; for each region i: side{i} then node{i}. Non-unstructured or no-tet inputs: polydata as-is, or surface of the whole dataset. Block metadata sets NAME and vtkIOSSReader ENTITY_ID only."/>
+          short_help="Split dataset into tet volume, then node sets, then side sets."
+          long_help="Tetrahedra (if any) are extracted first under vtkDataAssembly IOSS/element_blocks/tetrahedra with contiguous GlobalIds (1..N) for IOSS writers. PartitionedDataSetCollection block order is then all node{i} blocks (node_sets), then all side{i} blocks (side_sets). Surface for sets comes from vtkDataSetSurfaceFilter on the tet-only submesh when tets exist (with element_side for Exodus side sets), else polydata or full-dataset surface; split by feature angle and vtkPolyDataConnectivityFilter regions. Block metadata sets NAME and vtkIOSSReader ENTITY_ID: one ascending id per block in output order (tet block if present, then each node set, then each side set), so ids do not repeat across those groups."/>
 
       <InputProperty name="Input" command="SetInputConnection">
         <ProxyGroupDomain name="groups">

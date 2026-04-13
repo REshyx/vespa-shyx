@@ -2,16 +2,15 @@
  * @class   vtkSHYXDataSetToPartitionedCollection
  * @brief   Build a vtkPartitionedDataSetCollection from vtkDataSet: tet block + surface partitions.
  *
- * Pipeline: (1) extract VTK_TETRA cells into one vtkUnstructuredGrid partition with object_id = 1
- * and contiguous point/cell GlobalIds (1..N) for vtkIOSSWriter; (2) vtkDataSetSurfaceFilter on
+ * Pipeline: (1) extract VTK_TETRA cells into one vtkUnstructuredGrid partition with contiguous
+ * point/cell GlobalIds (1..N) for vtkIOSSWriter; (2) vtkDataSetSurfaceFilter on
  * the tet-only mesh with PassThroughCellIds/PointIds; (3) boundary cell data element_side (volume
  * global cell id, Exodus tet face 1..4); (4) vtkPolyDataNormals splitting by feature angle; (5)
  * vtkPolyDataConnectivityFilter into regions; unreferenced points are stripped per region so
  * side{i} / node{i} only contain points used by that patch. node{i} matches side{i} (1:1 by point
  * id) with one vtkVertex per point. Surface point GlobalIds duplicate the volume mesh node ids so
  * vtkIOSSWriter NodeSet ids resolve to correct coordinates in the merged Exodus node block.
- * assembly IOSS / element_blocks, side_sets, node_sets.
- * object_id: tetra = 1; sides and nodes follow.
+ * vtkDataAssembly IOSS / element_blocks, node_sets (all node{i}), then side_sets (all side{i}).
  *
  * @sa
  * vtkDataSetSurfaceFilter, vtkPolyDataNormals, vtkPolyDataConnectivityFilter
