@@ -1,0 +1,15 @@
+NAME
+  vtkSHYXDensityBasedSampler
+DESCRIPTION
+  "Density-based random sampling inside a closed mesh volume."
+GROUPS
+  Meshing
+DEPENDS
+  vtkCGALAlgorithm
+  VTK::FiltersCore
+PRIVATE_DEPENDS
+  VTK::CommonCore
+  VTK::CommonDataModel
+  VTK::CommonExecutionModel
+  VTK::FiltersExtraction
+  VTK::FiltersGeometry

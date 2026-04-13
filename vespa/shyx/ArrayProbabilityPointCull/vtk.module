@@ -1,0 +1,12 @@
+NAME
+  vtkSHYXArrayProbabilityPointCull
+DESCRIPTION
+  "Probabilistic point subsampling using per-point keep probabilities (VTK only)."
+GROUPS
+  Meshing
+DEPENDS
+  VTK::FiltersCore
+PRIVATE_DEPENDS
+  VTK::CommonCore
+  VTK::CommonDataModel
+  VTK::CommonExecutionModel

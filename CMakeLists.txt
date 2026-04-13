@@ -163,6 +163,13 @@ endif()
 
 ## Module build
 vtk_module_find_modules(vtkcgal_module_files "${CMAKE_CURRENT_SOURCE_DIR}/vespa")
+# CGAL 6.0+ required for Adaptive Isotropic Remesher; exclude its module on older CGAL
+if (NOT CGAL_VERSION VERSION_GREATER_EQUAL 6.0)
+  list(FILTER vtkcgal_module_files EXCLUDE REGEX "AdaptiveIsotropicRemesher")
+  set(VESPA_ADAPTIVE_REMESHING OFF CACHE INTERNAL "vtkSHYXAdaptiveIsotropicRemesher state" FORCE)
+else()
+  set(VESPA_ADAPTIVE_REMESHING ON CACHE INTERNAL "vtkSHYXAdaptiveIsotropicRemesher state" FORCE)
+endif()
 # ParaView-only: vtkGlyph3DRepresentation / RemotingViews (skip when building VTK-only)
 if (VESPA_BUILD_PV_PLUGIN)
   list(APPEND vtkcgal_module_files

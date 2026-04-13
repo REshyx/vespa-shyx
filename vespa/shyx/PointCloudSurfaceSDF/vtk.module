@@ -1,0 +1,12 @@
+NAME
+  vtkSHYXPointCloudSurfaceSDF
+DESCRIPTION
+  "Signed distance from point cloud to a reference surface (VTK only, vtkImplicitPolyDataDistance)."
+GROUPS
+  Meshing
+DEPENDS
+  VTK::FiltersCore
+PRIVATE_DEPENDS
+  VTK::CommonCore
+  VTK::CommonDataModel
+  VTK::CommonExecutionModel

@@ -1,0 +1,16 @@
+NAME
+  vtkSHYXVesselEndClipper
+DESCRIPTION
+  "Clip vessel tips at skeleton endpoints to create flat CFD cross-sections."
+GROUPS
+  Meshing
+DEPENDS
+  vtkCGALAlgorithm
+  VTK::FiltersCore
+PRIVATE_DEPENDS
+  VTK::CommonCore
+  VTK::CommonDataModel
+  VTK::CommonExecutionModel
+  VTK::FiltersExtraction
+  VTK::FiltersGeometry
+  VTK::FiltersModeling

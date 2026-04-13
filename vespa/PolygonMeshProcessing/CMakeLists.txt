@@ -1,25 +1,16 @@
 set(vtkcgalpmp_files
   vtkCGALBooleanOperation
-  vtkCGALDensityBasedSampler
-  vtkSHYXArrayProbabilityPointCull
-  vtkSHYXBidirectionalStreamlineMerge
-  vtkCGALSurfaceToVolumeMesh
-  vtkSHYXTetGen
   vtkCGALIsotropicRemesher
   vtkCGALMeshChecker
   vtkCGALMeshDeformation
   vtkCGALMeshSubdivision
   vtkCGALPatchFilling
-  vtkCGALPointCloudSurfaceSignedDistance
   vtkCGALRegionFairing
   vtkCGALShapeSmoothing
   vtkCGALSignedDistanceFunction
-  vtkCGALSkeletonExtraction
-  vtkCGALVesselEndClipper
 )
 
 if (${CGAL_VERSION} VERSION_GREATER_EQUAL 5.5)
-  # Alpha wrapping module has been introduced in CGAL 5.5
   list(APPEND vtkcgalpmp_files
     vtkCGALAlphaWrapping
   )
@@ -27,14 +18,6 @@ if (${CGAL_VERSION} VERSION_GREATER_EQUAL 5.5)
 else()
   message(STATUS "CGAL Version lower than 5.5 (${CGAL_VERSION}), Alpha Wrapping is disabled.")
   set(VESPA_ALPHA_WRAPPING OFF CACHE INTERNAL "vtkCGALAlphaWrapping state" FORCE)
-endif()
-
-if (${CGAL_VERSION} VERSION_GREATER_EQUAL 6.0)
-  list(APPEND vtkcgalpmp_files vtkSHYXAdaptiveIsotropicRemesher)
-  set(VESPA_ADAPTIVE_REMESHING ON CACHE INTERNAL "vtkSHYXAdaptiveIsotropicRemesher state" FORCE)
-else()
-  message(STATUS "CGAL Version lower than 6.0 (${CGAL_VERSION}), SHYX Adaptive Isotropic Remesher is disabled.")
-  set(VESPA_ADAPTIVE_REMESHING OFF CACHE INTERNAL "vtkSHYXAdaptiveIsotropicRemesher state" FORCE)
 endif()
 
 if (${USE_CERES})
@@ -52,15 +35,7 @@ vtk_module_add_module(vtkCGALPMP
   CLASSES ${vtkcgalpmp_files}
 )
 
-vtk_module_link(vtkCGALPMP PRIVATE CGAL::Eigen3_support tet)
-target_include_directories(vtkCGALPMP PRIVATE ${CMAKE_SOURCE_DIR}/TetGen-1.6.0)
-
-if (VESPA_USE_SMP)
-  target_compile_definitions(vtkCGALPMP PRIVATE VESPA_USE_SMP)
-  message(STATUS "vtkCGALPMP (DensityBasedSampler, ArrayProbabilityPointCull): SMP optimization ENABLED")
-else()
-  message(STATUS "vtkCGALPMP (DensityBasedSampler, ArrayProbabilityPointCull): SMP optimization disabled (for official ParaView compatibility)")
-endif()
+vtk_module_link(vtkCGALPMP PRIVATE CGAL::Eigen3_support)
 
 # ensure correct link of module
 # OPTIONAL_DEPENDS does not work here for an unknown reason

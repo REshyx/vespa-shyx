@@ -1,0 +1,14 @@
+NAME
+  vtkSHYXSurfaceToVolumeMesh
+DESCRIPTION
+  "Tetrahedral volume meshing from a closed surface using CGAL Mesh_3."
+GROUPS
+  Meshing
+DEPENDS
+  vtkCGALAlgorithm
+  VTK::FiltersCore
+PRIVATE_DEPENDS
+  VTK::CommonCore
+  VTK::CommonDataModel
+  VTK::CommonExecutionModel
+  VTK::FiltersGeometry

@@ -26,12 +26,12 @@
 #ifndef vtkSHYXBidirectionalStreamlineMerge_h
 #define vtkSHYXBidirectionalStreamlineMerge_h
 
-#include "vtkCGALPMPModule.h"
+#include "vtkSHYXBidirectionalStreamlineMergeModule.h"
 #include "vtkPolyDataAlgorithm.h"
 
 #include <string>
 
-class VTKCGALPMP_EXPORT vtkSHYXBidirectionalStreamlineMerge : public vtkPolyDataAlgorithm
+class VTKSHYXBIDIRECTIONALSTREAMLINEMERGE_EXPORT vtkSHYXBidirectionalStreamlineMerge : public vtkPolyDataAlgorithm
 {
 public:
   static vtkSHYXBidirectionalStreamlineMerge* New();

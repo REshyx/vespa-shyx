@@ -1,0 +1,13 @@
+NAME
+  vtkSHYXSkeletonExtraction
+DESCRIPTION
+  "Mean curvature flow curve skeleton extraction from a closed triangle mesh."
+GROUPS
+  Meshing
+DEPENDS
+  vtkCGALAlgorithm
+  VTK::FiltersCore
+PRIVATE_DEPENDS
+  VTK::CommonCore
+  VTK::CommonDataModel
+  VTK::CommonExecutionModel

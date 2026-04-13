@@ -21,12 +21,12 @@
 #ifndef vtkSHYXArrayProbabilityPointCull_h
 #define vtkSHYXArrayProbabilityPointCull_h
 
-#include "vtkCGALPMPModule.h"
+#include "vtkSHYXArrayProbabilityPointCullModule.h"
 #include "vtkDataSetAlgorithm.h"
 
 #include <string>
 
-class VTKCGALPMP_EXPORT vtkSHYXArrayProbabilityPointCull : public vtkDataSetAlgorithm
+class VTKSHYXARRAYPROBABILITYPOINTCULL_EXPORT vtkSHYXArrayProbabilityPointCull : public vtkDataSetAlgorithm
 {
 public:
     static vtkSHYXArrayProbabilityPointCull* New();

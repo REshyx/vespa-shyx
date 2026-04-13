@@ -16,10 +16,10 @@
 #ifndef vtkCGALSurfaceToVolumeMesh_h
 #define vtkCGALSurfaceToVolumeMesh_h
 
-#include "vtkCGALPMPModule.h" // For export macro
+#include "vtkSHYXSurfaceToVolumeMeshModule.h" // For export macro
 #include "vtkDataSetAlgorithm.h"
 
-class VTKCGALPMP_EXPORT vtkCGALSurfaceToVolumeMesh : public vtkDataSetAlgorithm
+class VTKSHYXSURFACETOVOLUMEMESH_EXPORT vtkCGALSurfaceToVolumeMesh : public vtkDataSetAlgorithm
 {
 public:
     static vtkCGALSurfaceToVolumeMesh* New();

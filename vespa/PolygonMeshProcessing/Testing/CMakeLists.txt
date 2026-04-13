@@ -45,7 +45,6 @@ vtk_add_test_cxx(vtkCGALPMPCxxTests no_data_tests
   TestPMPMeshCheckerExecution.cxx
   TestPMPMeshSubdivisionExecution.cxx
   TestPMPSignedDistanceFunction.cxx
-  TestPMPPointCloudSurfaceSignedDistance.cxx
   TestPMPSmoothingExecution.cxx
 
   ${PROJECT_SOURCE_DIR}/Data/Testing/

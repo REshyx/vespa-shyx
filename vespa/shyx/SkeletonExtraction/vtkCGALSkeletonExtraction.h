@@ -12,9 +12,9 @@
 
 #include "vtkCGALPolyDataAlgorithm.h"
 
-#include "vtkCGALPMPModule.h" // For export macro
+#include "vtkSHYXSkeletonExtractionModule.h" // For export macro
 
-class VTKCGALPMP_EXPORT vtkCGALSkeletonExtraction : public vtkCGALPolyDataAlgorithm
+class VTKSHYXSKELETONEXTRACTION_EXPORT vtkCGALSkeletonExtraction : public vtkCGALPolyDataAlgorithm
 {
 public:
     static vtkCGALSkeletonExtraction* New();

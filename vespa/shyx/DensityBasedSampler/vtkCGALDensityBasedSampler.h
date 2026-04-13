@@ -16,10 +16,10 @@
 
 #include "vtkCGALPolyDataAlgorithm.h"
 
-#include "vtkCGALPMPModule.h" // For export macro
+#include "vtkSHYXDensityBasedSamplerModule.h" // For export macro
 #include <string>
 
-class VTKCGALPMP_EXPORT vtkCGALDensityBasedSampler : public vtkCGALPolyDataAlgorithm
+class VTKSHYXDENSITYBASEDSAMPLER_EXPORT vtkCGALDensityBasedSampler : public vtkCGALPolyDataAlgorithm
 {
 public:
     static vtkCGALDensityBasedSampler* New();

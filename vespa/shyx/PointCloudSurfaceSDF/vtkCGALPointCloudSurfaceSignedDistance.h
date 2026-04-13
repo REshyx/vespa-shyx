@@ -14,9 +14,9 @@
 
 #include "vtkPolyDataAlgorithm.h"
 
-#include "vtkCGALPMPModule.h" // For export macro
+#include "vtkSHYXPointCloudSurfaceSDFModule.h" // For export macro
 
-class VTKCGALPMP_EXPORT vtkCGALPointCloudSurfaceSignedDistance : public vtkPolyDataAlgorithm
+class VTKSHYXPOINTCLOUDSURFACESDF_EXPORT vtkCGALPointCloudSurfaceSignedDistance : public vtkPolyDataAlgorithm
 {
 public:
   static vtkCGALPointCloudSurfaceSignedDistance* New();

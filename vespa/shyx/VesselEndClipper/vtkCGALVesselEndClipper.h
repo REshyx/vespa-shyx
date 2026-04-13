@@ -18,11 +18,11 @@
 
 #include "vtkCGALPolyDataAlgorithm.h"
 
-#include "vtkCGALPMPModule.h" // For export macro
+#include "vtkSHYXVesselEndClipperModule.h" // For export macro
 #include <vtkDataArraySelection.h>
 #include <vtkSmartPointer.h>
 
-class VTKCGALPMP_EXPORT vtkCGALVesselEndClipper : public vtkCGALPolyDataAlgorithm
+class VTKSHYXVESSELENDCLIPPER_EXPORT vtkCGALVesselEndClipper : public vtkCGALPolyDataAlgorithm
 {
 public:
     static vtkCGALVesselEndClipper* New();

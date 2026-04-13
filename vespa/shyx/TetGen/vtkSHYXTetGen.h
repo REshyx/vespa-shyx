@@ -15,10 +15,10 @@
 #ifndef vtkSHYXTetGen_h
 #define vtkSHYXTetGen_h
 
-#include "vtkCGALPMPModule.h"
+#include "vtkSHYXTetGenModule.h"
 #include "vtkDataSetAlgorithm.h"
 
-class VTKCGALPMP_EXPORT vtkSHYXTetGen : public vtkDataSetAlgorithm
+class VTKSHYXTETGEN_EXPORT vtkSHYXTetGen : public vtkDataSetAlgorithm
 {
 public:
     static vtkSHYXTetGen* New();

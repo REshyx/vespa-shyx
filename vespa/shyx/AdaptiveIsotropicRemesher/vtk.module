@@ -1,0 +1,13 @@
+NAME
+  vtkSHYXAdaptiveIsotropicRemesher
+DESCRIPTION
+  "Curvature-aware isotropic remesh with min/max edge length (CGAL 6.0+)."
+GROUPS
+  Meshing
+DEPENDS
+  vtkCGALAlgorithm
+  VTK::FiltersCore
+PRIVATE_DEPENDS
+  VTK::CommonCore
+  VTK::CommonDataModel
+  VTK::CommonExecutionModel

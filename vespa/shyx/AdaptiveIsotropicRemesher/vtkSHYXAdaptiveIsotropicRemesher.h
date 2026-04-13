@@ -15,9 +15,9 @@
 
 #include "vtkCGALPolyDataAlgorithm.h"
 
-#include "vtkCGALPMPModule.h"
+#include "vtkSHYXAdaptiveIsotropicRemesherModule.h"
 
-class VTKCGALPMP_EXPORT vtkSHYXAdaptiveIsotropicRemesher : public vtkCGALPolyDataAlgorithm
+class VTKSHYXADAPTIVEISOTROPICREMESHER_EXPORT vtkSHYXAdaptiveIsotropicRemesher : public vtkCGALPolyDataAlgorithm
 {
 public:
   static vtkSHYXAdaptiveIsotropicRemesher* New();

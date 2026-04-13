@@ -1,0 +1,12 @@
+NAME
+  vtkSHYXTetGen
+DESCRIPTION
+  "Constrained Delaunay tetrahedralization from a closed surface using TetGen."
+GROUPS
+  Meshing
+DEPENDS
+  VTK::FiltersCore
+PRIVATE_DEPENDS
+  VTK::CommonCore
+  VTK::CommonDataModel
+  VTK::CommonExecutionModel
