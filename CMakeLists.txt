@@ -170,11 +170,9 @@ if (NOT CGAL_VERSION VERSION_GREATER_EQUAL 6.0)
 else()
   set(VESPA_ADAPTIVE_REMESHING ON CACHE INTERNAL "vtkSHYXAdaptiveIsotropicRemesher state" FORCE)
 endif()
-# ParaView-only: vtkGlyph3DRepresentation / RemotingViews (skip when building VTK-only)
-if (VESPA_BUILD_PV_PLUGIN)
-  list(APPEND vtkcgal_module_files
-    "${CMAKE_CURRENT_SOURCE_DIR}/ParaViewPlugin/PulseGlyphRepresentation/vtk.module"
-    "${CMAKE_CURRENT_SOURCE_DIR}/ParaViewPlugin/AnimatedStreamlineRepresentation/vtk.module")
+# ParaView-only: Representation modules depend on ParaView::RemotingViews (skip when building VTK-only)
+if (NOT VESPA_BUILD_PV_PLUGIN)
+  list(FILTER vtkcgal_module_files EXCLUDE REGEX "Representation")
 endif ()
 
 if(BUILD_TESTING)

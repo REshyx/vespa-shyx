@@ -38,8 +38,8 @@ if (PARAVIEW_USE_QT)
   list(APPEND vespa_plugin_qt_auto_interfaces ${pulse_glyph_autostart_interfaces})
   list(APPEND vespa_plugin_qt_auto_sources
     ${pulse_glyph_autostart_sources}
-    pqPulseGlyphAnimationManager.cxx
-    pqPulseGlyphAnimationManager.h)
+    ${CMAKE_SOURCE_DIR}/vespa/shyx/PulseGlyphRepresentation/pqPulseGlyphAnimationManager.cxx
+    ${CMAKE_SOURCE_DIR}/vespa/shyx/PulseGlyphRepresentation/pqPulseGlyphAnimationManager.h)
 
   paraview_plugin_add_auto_start(
     CLASS_NAME "pqAnimatedStreamlineAnimationManager"
@@ -51,8 +51,8 @@ if (PARAVIEW_USE_QT)
   list(APPEND vespa_plugin_qt_auto_interfaces ${animated_streamline_autostart_interfaces})
   list(APPEND vespa_plugin_qt_auto_sources
     ${animated_streamline_autostart_sources}
-    pqAnimatedStreamlineAnimationManager.cxx
-    pqAnimatedStreamlineAnimationManager.h)
+    ${CMAKE_SOURCE_DIR}/vespa/shyx/AnimatedStreamlineRepresentation/pqAnimatedStreamlineAnimationManager.cxx
+    ${CMAKE_SOURCE_DIR}/vespa/shyx/AnimatedStreamlineRepresentation/pqAnimatedStreamlineAnimationManager.h)
 endif ()
 
 paraview_add_plugin(VESPAPlugin
