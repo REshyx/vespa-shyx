@@ -107,7 +107,7 @@
       </DoubleVectorProperty>
 
       <Hints>
-        <ShowInMenu category="SHYX"/>
+        <ShowInMenu category="SHYX" icon=":/VESPA/SHYX_Surface_to_Volume_Mesh.png"/>
       </Hints>
     </SourceProxy>
   </ProxyGroup>

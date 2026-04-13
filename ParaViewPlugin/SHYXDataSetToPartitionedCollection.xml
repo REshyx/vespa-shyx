@@ -26,7 +26,7 @@
       </DoubleVectorProperty>
 
       <Hints>
-        <ShowInMenu category="SHYX"/>
+        <ShowInMenu category="SHYX" icon=":/VESPA/SHYX_DataSet_To_Partitioned_Collection.png"/>
       </Hints>
     </SourceProxy>
   </ProxyGroup>

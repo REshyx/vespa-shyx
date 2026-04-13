@@ -1,0 +1,38 @@
+<RCC>
+  <qresource prefix="/VESPA">
+    <file alias="SHYX_Adaptive_Isotropic_Remesher.png">../icon/SHYX_Adaptive_Isotropic_Remesher.png</file>
+    <file alias="SHYX_Array_Curve_Mapper.png">../icon/SHYX_Array_Curve_Mapper.png</file>
+    <file alias="SHYX_Array_Probability_Point_Cull.png">../icon/SHYX_Array_Probability_Point_Cull.png</file>
+    <file alias="SHYX_Bidirectional_Streamline_Merge.png">../icon/SHYX_Bidirectional_Streamline_Merge.png</file>
+    <file alias="SHYX_Clebsch_Map_Filter.png">../icon/SHYX_Clebsch_Map_Filter.png</file>
+    <file alias="SHYX_DataSet_To_Partitioned_Collection.png">../icon/SHYX_DataSet_To_Partitioned_Collection.png</file>
+    <file alias="SHYX_Density_Based_Volume_Sampler.png">../icon/SHYX_Density_Based_Volume_Sampler.png</file>
+    <file alias="SHYX_Disconnected_Region_Fuse.png">../icon/SHYX_Disconnected_Region_Fuse.png</file>
+    <file alias="SHYX_FTLE_Filter.png">../icon/SHYX_FTLE_Filter.png</file>
+    <file alias="SHYX_Geodesic_Distance.png">../icon/SHYX_Geodesic_Distance.png</file>
+    <file alias="SHYX_Point_Cloud_Surface_SDF.png">../icon/SHYX_Point_Cloud_Surface_SDF.png</file>
+    <file alias="SHYX_Radius_Neighbor_Count.png">../icon/SHYX_Radius_Neighbor_Count.png</file>
+    <file alias="SHYX_Skeleton_Extraction.png">../icon/SHYX_Skeleton_Extraction.png</file>
+    <file alias="SHYX_Surface_Tip_Extractor.png">../icon/SHYX_Surface_Tip_Extractor.png</file>
+    <file alias="SHYX_Surface_to_Volume_Mesh.png">../icon/SHYX_Surface_to_Volume_Mesh.png</file>
+    <file alias="SHYX_TetGen.png">../icon/SHYX_TetGen.png</file>
+    <file alias="SHYX_Vector_Field_Topology.png">../icon/SHYX_Vector_Field_Topology.png</file>
+    <file alias="SHYX_Vessel_End_Clipper.png">../icon/SHYX_Vessel_End_Clipper.png</file>
+    <file alias="SHYX_Vortex_Core_Test.png">../icon/SHYX_Vortex_Core_Test.png</file>
+    <file alias="SHYX_Vortex_Criteria.png">../icon/SHYX_Vortex_Criteria.png</file>
+    <file alias="VESPA_Advancing_Front_Surface_Reconstruction.png">../icon/VESPA_Advancing_Front_Surface_Reconstruction.png</file>
+    <file alias="VESPA_Alpha_Wrapping.png">../icon/VESPA_Alpha_Wrapping.png</file>
+    <file alias="VESPA_Boolean_Operation.png">../icon/VESPA_Boolean_Operation.png</file>
+    <file alias="VESPA_Delaunay_2D.png">../icon/VESPA_Delaunay_2D.png</file>
+    <file alias="VESPA_Hole_Filling.png">../icon/VESPA_Hole_Filling.png</file>
+    <file alias="VESPA_Isotropic_Remesher.png">../icon/VESPA_Isotropic_Remesher.png</file>
+    <file alias="VESPA_Mesh_Checker.png">../icon/VESPA_Mesh_Checker.png</file>
+    <file alias="VESPA_Mesh_Deformation.png">../icon/VESPA_Mesh_Deformation.png</file>
+    <file alias="VESPA_Mesh_Smoothing.png">../icon/VESPA_Mesh_Smoothing.png</file>
+    <file alias="VESPA_Mesh_Subdivision.png">../icon/VESPA_Mesh_Subdivision.png</file>
+    <file alias="VESPA_PCA_Estimate_Normals.png">../icon/VESPA_PCA_Estimate_Normals.png</file>
+    <file alias="VESPA_Poisson_Surface_Reconstruction.png">../icon/VESPA_Poisson_Surface_Reconstruction.png</file>
+    <file alias="VESPA_Region_Fairing.png">../icon/VESPA_Region_Fairing.png</file>
+    <file alias="VESPA_Shape_Smoothing.png">../icon/VESPA_Shape_Smoothing.png</file>
+  </qresource>
+</RCC>

@@ -64,7 +64,7 @@
       </IntVectorProperty>
 
       <Hints>
-        <ShowInMenu category="SHYX"/>
+        <ShowInMenu category="SHYX" icon=":/VESPA/SHYX_Clebsch_Map_Filter.png"/>
       </Hints>
     </SourceProxy>
   </ProxyGroup>

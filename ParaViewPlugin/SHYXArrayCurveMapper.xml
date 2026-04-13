@@ -104,7 +104,7 @@
       </PropertyGroup>
 
       <Hints>
-        <ShowInMenu category="SHYX"/>
+        <ShowInMenu category="SHYX" icon=":/VESPA/SHYX_Array_Curve_Mapper.png"/>
       </Hints>
     </SourceProxy>
   </ProxyGroup>

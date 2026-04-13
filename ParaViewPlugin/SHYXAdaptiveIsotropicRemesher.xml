@@ -99,7 +99,7 @@
       </IntVectorProperty>
 
       <Hints>
-        <ShowInMenu category="SHYX"/>
+        <ShowInMenu category="SHYX" icon=":/VESPA/SHYX_Adaptive_Isotropic_Remesher.png"/>
       </Hints>
 
     </SourceProxy>

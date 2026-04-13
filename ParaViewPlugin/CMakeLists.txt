@@ -61,6 +61,9 @@ paraview_add_plugin(VESPAPlugin
   REQUIRED_ON_CLIENT
   REQUIRED_ON_SERVER
   MODULES ${vtkcgal_provided_modules}
+  UI_RESOURCES VESPAIcons.qrc
+  INITIALIZERS vespa_qrc_init
+  EXTRA_INCLUDES "vespa_qrc_init.h"
   SERVER_MANAGER_XML
     "VESPAFilters.xml"
     "SHYXSurfaceTipExtractor.xml"
@@ -85,6 +88,8 @@ paraview_add_plugin(VESPAPlugin
   SOURCES ${acm_sources}
     pqArrayCurveMapperPanel.cxx
     pqArrayCurveMapperPanel.h
+    vespa_qrc_init.cxx
+    vespa_qrc_init.h
     ${vespa_plugin_qt_auto_sources}
 )
 

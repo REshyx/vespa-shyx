@@ -111,7 +111,7 @@
       </DoubleVectorProperty>
 
       <Hints>
-        <ShowInMenu category="SHYX"/>
+        <ShowInMenu category="SHYX" icon=":/VESPA/SHYX_TetGen.png"/>
       </Hints>
     </SourceProxy>
   </ProxyGroup>

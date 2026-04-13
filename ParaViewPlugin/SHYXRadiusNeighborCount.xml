@@ -29,7 +29,7 @@
       </DoubleVectorProperty>
 
       <Hints>
-        <ShowInMenu category="SHYX"/>
+        <ShowInMenu category="SHYX" icon=":/VESPA/SHYX_Radius_Neighbor_Count.png"/>
       </Hints>
     </SourceProxy>
   </ProxyGroup>

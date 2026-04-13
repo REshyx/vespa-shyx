@@ -40,7 +40,7 @@
       </InputProperty>
 
       <Hints>
-        <ShowInMenu category="VESPA"/>
+        <ShowInMenu category="VESPA" icon=":/VESPA/VESPA_Delaunay_2D.png"/>
       </Hints>
 
     </SourceProxy>
@@ -107,7 +107,7 @@
       </IntVectorProperty>
 
       <Hints>
-        <ShowInMenu category="VESPA"/>
+        <ShowInMenu category="VESPA" icon=":/VESPA/VESPA_Boolean_Operation.png"/>
       </Hints>
 
     </SourceProxy>
@@ -153,7 +153,7 @@
       </InputProperty>
 
       <Hints>
-        <ShowInMenu category="SHYX"/>
+        <ShowInMenu category="SHYX" icon=":/VESPA/SHYX_Point_Cloud_Surface_SDF.png"/>
       </Hints>
 
     </SourceProxy>
@@ -231,7 +231,7 @@
       </IntVectorProperty>
 
       <Hints>
-        <ShowInMenu category="SHYX"/>
+        <ShowInMenu category="SHYX" icon=":/VESPA/SHYX_Density_Based_Volume_Sampler.png"/>
       </Hints>
 
     </SourceProxy>
@@ -294,7 +294,7 @@
       </IntVectorProperty>
 
       <Hints>
-        <ShowInMenu category="SHYX"/>
+        <ShowInMenu category="SHYX" icon=":/VESPA/SHYX_Array_Probability_Point_Cull.png"/>
       </Hints>
 
     </SourceProxy>
@@ -490,7 +490,7 @@
       </IntVectorProperty>
 
       <Hints>
-        <ShowInMenu category="SHYX"/>
+        <ShowInMenu category="SHYX" icon=":/VESPA/SHYX_Bidirectional_Streamline_Merge.png"/>
       </Hints>
 
     </SourceProxy>
@@ -562,7 +562,7 @@
       </IntVectorProperty>
 
       <Hints>
-        <ShowInMenu category="VESPA"/>
+        <ShowInMenu category="VESPA" icon=":/VESPA/VESPA_Isotropic_Remesher.png"/>
       </Hints>
 
     </SourceProxy>
@@ -622,7 +622,7 @@
       </IntVectorProperty>
 
       <Hints>
-        <ShowInMenu category="VESPA"/>
+        <ShowInMenu category="VESPA" icon=":/VESPA/VESPA_Mesh_Checker.png"/>
       </Hints>
 
     </SourceProxy>
@@ -761,7 +761,7 @@
       </IntVectorProperty>
 
       <Hints>
-        <ShowInMenu category="VESPA"/>
+        <ShowInMenu category="VESPA" icon=":/VESPA/VESPA_Mesh_Deformation.png"/>
       </Hints>
 
     </SourceProxy>
@@ -830,7 +830,7 @@
       </IntVectorProperty>
 
       <Hints>
-        <ShowInMenu category="VESPA"/>
+        <ShowInMenu category="VESPA" icon=":/VESPA/VESPA_Mesh_Subdivision.png"/>
       </Hints>
 
     </SourceProxy>
@@ -886,7 +886,7 @@
       </IntVectorProperty>
 
       <Hints>
-        <ShowInMenu category="VESPA"/>
+        <ShowInMenu category="VESPA" icon=":/VESPA/VESPA_Hole_Filling.png"/>
       </Hints>
 
     </SourceProxy>
@@ -941,7 +941,7 @@
       </IntVectorProperty>
 
       <Hints>
-        <ShowInMenu category="VESPA"/>
+        <ShowInMenu category="VESPA" icon=":/VESPA/VESPA_Region_Fairing.png"/>
       </Hints>
 
     </SourceProxy>
@@ -1005,7 +1005,7 @@
       </IntVectorProperty>
 
       <Hints>
-        <ShowInMenu category="VESPA"/>
+        <ShowInMenu category="VESPA" icon=":/VESPA/VESPA_Shape_Smoothing.png"/>
       </Hints>
 
     </SourceProxy>
@@ -1076,7 +1076,7 @@
       </IntVectorProperty>
 
       <Hints>
-        <ShowInMenu category="VESPA"/>
+        <ShowInMenu category="VESPA" icon=":/VESPA/VESPA_Poisson_Surface_Reconstruction.png"/>
       </Hints>
 
     </SourceProxy>
@@ -1124,7 +1124,7 @@
       </DoubleVectorProperty>
 
       <Hints>
-        <ShowInMenu category="VESPA"/>
+        <ShowInMenu category="VESPA" icon=":/VESPA/VESPA_Advancing_Front_Surface_Reconstruction.png"/>
       </Hints>
 
     </SourceProxy>
@@ -1186,7 +1186,7 @@
       </IntVectorProperty>
 
       <Hints>
-        <ShowInMenu category="VESPA"/>
+        <ShowInMenu category="VESPA" icon=":/VESPA/VESPA_PCA_Estimate_Normals.png"/>
       </Hints>
 
     </SourceProxy>
@@ -1305,7 +1305,7 @@
       </DoubleVectorProperty>
 
       <Hints>
-        <ShowInMenu category="SHYX"/>
+        <ShowInMenu category="SHYX" icon=":/VESPA/SHYX_Skeleton_Extraction.png"/>
       </Hints>
 
     </SourceProxy>
@@ -1444,7 +1444,7 @@
       </IntVectorProperty>
 
       <Hints>
-        <ShowInMenu category="SHYX"/>
+        <ShowInMenu category="SHYX" icon=":/VESPA/SHYX_Vessel_End_Clipper.png"/>
       </Hints>
 
     </SourceProxy>

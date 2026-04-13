@@ -56,7 +56,7 @@
       </IntVectorProperty>
 
       <Hints>
-        <ShowInMenu category="SHYX"/>
+        <ShowInMenu category="SHYX" icon=":/VESPA/SHYX_FTLE_Filter.png"/>
       </Hints>
     </SourceProxy>
   </ProxyGroup>

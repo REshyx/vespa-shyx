@@ -36,7 +36,7 @@
       </DoubleVectorProperty>
 
       <Hints>
-        <ShowInMenu category="SHYX"/>
+        <ShowInMenu category="SHYX" icon=":/VESPA/SHYX_Surface_Tip_Extractor.png"/>
       </Hints>
     </SourceProxy>
   </ProxyGroup>

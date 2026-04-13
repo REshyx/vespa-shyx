@@ -71,7 +71,7 @@
        </IntVectorProperty>
 
        <Hints>
-         <ShowInMenu category="VESPA"/>
+         <ShowInMenu category="VESPA" icon=":/VESPA/VESPA_Alpha_Wrapping.png"/>
        </Hints>
 
      </SourceProxy>   <!-- ================================================================== -->

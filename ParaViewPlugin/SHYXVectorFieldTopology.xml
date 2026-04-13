@@ -193,7 +193,7 @@
       </IntVectorProperty>
 
       <Hints>
-        <ShowInMenu category="SHYX"/>
+        <ShowInMenu category="SHYX" icon=":/VESPA/SHYX_Vector_Field_Topology.png"/>
       </Hints>
     </SourceProxy>
   </ProxyGroup>

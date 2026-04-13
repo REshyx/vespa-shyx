@@ -64,7 +64,7 @@
       </IntVectorProperty>
 
       <Hints>
-        <ShowInMenu category="SHYX"/>
+        <ShowInMenu category="SHYX" icon=":/VESPA/SHYX_Vortex_Core_Test.png"/>
       </Hints>
     </SourceProxy>
   </ProxyGroup>
