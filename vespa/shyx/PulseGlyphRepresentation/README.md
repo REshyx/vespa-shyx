@@ -1,40 +1,42 @@
 # PulseGlyphRepresentation - 脉冲体素表示法 🫀
 
-当你盯着那些毫无生气的静态模型发呆时，是否想过让它们“活”过来？`PulseGlyphRepresentation` 就是你的救星！它不仅是一个 VTK/ParaView 的表示（Representation）插件，更是赋予你数据生命的“心脏起搏器”。
+## 示意图
+
+![PulseGlyphRepresentation](../../../illustrate/PulseGlyphRepresentation.png)
 
 ## 1. 目的与功能算法详细解释 🧠
 
 ### 核心目的
-本模块的主要目的是在 ParaView 中渲染具有**随时间发生脉动效果**的 3D 图元（Glyphs）。它继承自 `vtkGlyph3DRepresentation`，能够动态地驱动 `vtkGlyph3DMapper` 的缩放（Scale）和旋转（Orientation）。简而言之，就是让你的矢量或点云数据伴随着时间的流逝，像呼吸或心跳一样有节奏地放大、缩小并旋转。
+本模块旨在提供一种支持**随时间动态脉动效果**的三维图元 (Glyphs) 渲染表示 (Representation)。该模块继承自 `vtkGlyph3DRepresentation`，通过在管线中动态驱动 `vtkGlyph3DMapper` 的缩放 (Scale) 与旋转 (Orientation) 属性，使得点云或矢量场数据伴随时间或帧数呈现出周期性的脉冲动画效果。
 
 ### 工作原理与算法
-为了实现这种“赛博朋克”式的闪烁与跳动，底层使用了一套精巧的相位包络算法：
-1. **连续动画驱动**: `pqPulseGlyphAnimationManager` 作为幕后黑手，只要检测到当前视图中存在开启了 `Animate` 的脉冲图元，就会不断地踹一脚视图让其重新渲染（`view->render()`），实现永动机般的连续动画。
-2. **相位计算 (Mix Value)**: 对于每一个数据点，算法会提取 `AnimationCoordinateArray` 的幅值（如果没有就用空间坐标），乘以 `IntegrationScale` 得到基础空间相位。然后，它会将当前时间（或者是渲染帧数，如果开启了 `Shuffle`）乘以 `TimeScale` 后加上去，得到最终的混合相位（Mix Value）。
-3. **包络函数 (Envelope)**: 相位会被送入一个魔法函数：先把小数部分乘以 `Trunc` 并钳制在 `[0, 1]` 之间，最后用 `1.0 - pow(clamped, Pow)` 计算出当前的脉动强度（Envelope）。
-4. **施加变换**:
-   - **缩放**: 点的缩放值等于 `OverallScale * (Envelope + ExtraArrayMagnitude * ArrayAffectScaleRatio)`。
-   - **旋转**: 将包络值乘以 `RotationSweep` 中定义的最大欧拉角。如果开启了 `Shuffle`，各个轴还会生成独立的伪随机相位，让旋转看起来更具魔性。
+动态表现的底层逻辑基于一套相位包络 (Phase Envelope) 算法：
+1. **动画驱动器**: 借助 `pqPulseGlyphAnimationManager` 统筹管理，当视图中包含开启了 `Animate` 的脉冲图元时，管理器将连续触发视图重绘 (`view->render()`)，以生成连续的动画帧。
+2. **混合相位计算 (Mix Value)**: 针对数据集中的每个顶点，算法读取指定的 `AnimationCoordinateArray`（若未指定则采用空间坐标）的值。将其乘以空间频响系数 `IntegrationScale`，并叠加基于时间驱动项（当前时间或帧数与 `TimeScale` 的乘积），以此得到该顶点的混合相位。
+3. **包络函数 (Envelope)**: 相位数据将被传入非线性包络函数中。首先提取小数部分并根据 `Trunc` 进行区间截断和限制（钳制在 `[0, 1]` 之间），最后通过幂次运算 `1.0 - pow(clamped, Pow)` 计算出当前时刻的脉冲强度包络值。
+4. **变换映射**:
+   - **缩放 (Scale)**: 顶点的缩放系数计算为 `OverallScale * (Envelope + ExtraArrayMagnitude * ArrayAffectScaleRatio)`。
+   - **旋转 (Orientation)**: 脉冲包络值将乘上 `RotationSweep` 中设定的最大欧拉角。若启用 `Shuffle` 模式，每个轴向将生成独立的伪随机相位偏差，以表现非均匀的随机动态旋转。
 
 ---
 
 ## 2. 参数列表及其效果和含义 🎛️
 
-不要被这堆参数吓到，掌握它们你就是灯光师：
+本表示模块提供的核心配置参数如下：
 
 | 参数名称 | 类型 | 含义与效果 |
 | :--- | :---: | :--- |
-| **Animate** | `bool` | **起搏器开关**。设为 `true` 时，开启时间/帧动画，视图会疯狂连续重绘。 |
-| **TimeScale** | `double` | **岁月如梭系数**。控制脉冲动画随时间演化的快慢。 |
-| **IntegrationScale** | `double` | **空间频响**。乘在坐标或数组上，控制脉冲在空间分布上的密集程度。 |
-| **Trunc** | `double` | **截断因子**。影响脉冲包络被钳制的范围，控制图元在最大/最小状态的停留时间。 |
-| **Pow** | `double` | **平滑指数**。决定了脉冲衰减的平滑度（线性还是指数级）。 |
-| **PulseOverallScale** | `double` | **全局体型**。所有图元最终算出的缩放值都会乘以这个整体系数。 |
-| **AnimationCoordinateArray**| `string` | **相位源泉**。驱动动画的点数据数组名（默认是 `IntegrationTime`）。找不着就用 xyz 坐标硬算。 |
-| **ExtraScaleArray** | `string` | **增肌粉数组**。额外提供缩放影响的数组，让你用另一个数据维度把图元撑大。 |
-| **ArrayAffectScale** | `bool` | **增肌粉开关**。是否允许 `ExtraScaleArray` 影响最终的缩放。 |
-| **ArrayAffectScaleRatio** | `double` | **增肌粉浓度**。额外数组幅值影响缩放的比例系数。 |
-| **PulseAffectsScale** | `bool` | **缩放脉冲**。控制时间脉冲包络是否要作用在大小上（呼吸效果）。 |
-| **PulseAffectsRotation** | `bool` | **旋转脉冲**。控制时间脉冲包络是否要作用在姿态上（扭秧歌效果）。 |
-| **Shuffle** | `bool` | **群魔乱舞模式**。开启后，通过伪随机数打破时间的统一步调，让每个点各自为战地跳动和旋转。 |
-| **RotationSweep** | `double[3]`| **最大扭转角**。控制 X, Y, Z 轴上允许的最大欧拉角范围。 |
+| **Animate** | `bool` | **动画总开关**。设为 `true` 时，开启时间与帧序列演化，视图将执行连续重绘。 |
+| **TimeScale** | `double` | **时间缩放系数**。控制脉冲动画随时间演化的频率与速度。 |
+| **IntegrationScale** | `double` | **空间频响**。作为空间坐标或目标数组的乘数，控制脉冲状态在空间分布上的密集度与变化率。 |
+| **Trunc** | `double` | **截断因子**。决定脉冲包络的波形截断占比，控制图元处于极值状态的时长比例。 |
+| **Pow** | `double` | **衰减指数**。控制脉动强度衰减曲线的平滑度（线性或指数级衰减）。 |
+| **PulseOverallScale** | `double` | **全局缩放系数**。图元计算得出的最终动态缩放量都将乘以该全局系数。 |
+| **AnimationCoordinateArray**| `string` | **相位源数组**。指定用于驱动空间相位的点数据数组名称（默认值为 `IntegrationTime`）。若未找到，算法将默认使用空间坐标计算。 |
+| **ExtraScaleArray** | `string` | **附加缩放数组**。指定另一个数据数组，其数值大小将额外作用于图元的基准缩放。 |
+| **ArrayAffectScale** | `bool` | **附加缩放使能**。是否允许 `ExtraScaleArray` 参与最终的缩放计算。 |
+| **ArrayAffectScaleRatio** | `double` | **附加缩放比率**。定义额外数组的幅值影响基础缩放的权重系数。 |
+| **PulseAffectsScale** | `bool` | **缩放脉动使能**。设置时间脉冲包络是否作用于图元的尺寸变化。 |
+| **PulseAffectsRotation** | `bool` | **旋转脉动使能**。设置时间脉冲包络是否作用于图元的姿态旋转。 |
+| **Shuffle** | `bool` | **随机离散模式**。开启后，将引入伪随机偏差以打破统一的同步演化，使每个图元呈现独立的脉动和旋转状态。 |
+| **RotationSweep** | `double[3]`| **最大旋转欧拉角**。定义脉冲作用在 X, Y, Z 三轴上允许达到的最大旋转角度范围。 |
