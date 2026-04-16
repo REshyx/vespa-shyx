@@ -34,6 +34,10 @@ public:
   vtkSetMacro(FeatureAngle, double);
   vtkGetMacro(FeatureAngle, double);
 
+  vtkSetMacro(SortByArea, int);
+  vtkGetMacro(SortByArea, int);
+  vtkBooleanMacro(SortByArea, int);
+
 protected:
   vtkSHYXDataSetToPartitionedCollection();
   ~vtkSHYXDataSetToPartitionedCollection() override;
@@ -43,6 +47,8 @@ protected:
   int RequestData(vtkInformation*, vtkInformationVector**, vtkInformationVector*) override;
 
   double FeatureAngle = 70.0;
+  /** When non-zero (default), order side / node set patches by total surface area, largest first. */
+  int SortByArea = 1;
 
 private:
   vtkSHYXDataSetToPartitionedCollection(const vtkSHYXDataSetToPartitionedCollection&) = delete;

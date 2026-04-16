@@ -5,7 +5,7 @@
                  label="SHYX DataSet To Partitioned Collection">
       <Documentation
           short_help="Split dataset into tet volume, then node sets, then side sets."
-          long_help="Tetrahedra (if any) are extracted first under vtkDataAssembly IOSS/element_blocks/tetrahedra with contiguous GlobalIds (1..N) for IOSS writers. PartitionedDataSetCollection block order is then all node{i} blocks (node_sets), then all side{i} blocks (side_sets). Surface for sets comes from vtkDataSetSurfaceFilter on the tet-only submesh when tets exist (with element_side for Exodus side sets), else polydata or full-dataset surface; split by feature angle and vtkPolyDataConnectivityFilter regions. Block metadata sets NAME and vtkIOSSReader ENTITY_ID: one ascending id per block in output order (tet block if present, then each node set, then each side set), so ids do not repeat across those groups."/>
+          long_help="Tetrahedra (if any) are extracted first under vtkDataAssembly IOSS/element_blocks/tetrahedra with contiguous GlobalIds (1..N) for IOSS writers. PartitionedDataSetCollection block order is then all node{i} blocks (node_sets), then all side{i} blocks (side_sets). Surface for sets comes from vtkDataSetSurfaceFilter on the tet-only submesh when tets exist (with element_side for Exodus side sets), else polydata or full-dataset surface; split by feature angle and vtkPolyDataConnectivityFilter regions. By default Sort By Area reorders those patches so matching node{i}/side{i} pairs follow descending total patch area; turn it off to keep VTK region order. Block metadata sets NAME and vtkIOSSReader ENTITY_ID: one ascending id per block in output order (tet block if present, then each node set, then each side set), so ids do not repeat across those groups."/>
 
       <InputProperty name="Input" command="SetInputConnection">
         <ProxyGroupDomain name="groups">
@@ -24,6 +24,14 @@
           Dihedral angle threshold for vtkPolyDataNormals splitting (cusp / sharp edge split). Larger values merge more smooth neighborhoods; smaller values split more aggressively.
         </Documentation>
       </DoubleVectorProperty>
+
+      <IntVectorProperty name="SortByArea" label="Sort By Area" command="SetSortByArea"
+          number_of_elements="1" default_values="1" animateable="0">
+        <BooleanDomain name="bool"/>
+        <Documentation>
+          When enabled (default), reorder node{i} and side{i} patches by total surface area of each side patch, largest first. When disabled, patch order follows vtkPolyDataConnectivityFilter region indices only.
+        </Documentation>
+      </IntVectorProperty>
 
       <Hints>
         <ShowInMenu category="SHYX" icon=":/VESPA/SHYX_DataSet_To_Partitioned_Collection.png"/>

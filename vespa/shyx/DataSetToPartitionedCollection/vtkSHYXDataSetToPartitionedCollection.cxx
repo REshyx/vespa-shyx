@@ -16,6 +16,7 @@
 #include <vtkInformationVector.h>
 #include <vtkIntArray.h>
 #include <vtkIOSSReader.h>
+#include <vtkMath.h>
 #include <vtkNew.h>
 #include <vtkObjectFactory.h>
 #include <vtkPartitionedDataSet.h>
@@ -25,12 +26,14 @@
 #include <vtkPolyData.h>
 #include <vtkPolyDataConnectivityFilter.h>
 #include <vtkPolyDataNormals.h>
+#include <vtkPolygon.h>
 #include <vtkSmartPointer.h>
 #include <vtkTetra.h>
 #include <vtkUnstructuredGrid.h>
 
 #include <algorithm>
 #include <array>
+#include <numeric>
 #include <string>
 #include <vector>
 
@@ -387,6 +390,76 @@ void StripUnreferencedPoints(vtkPolyData* pd)
   pd->Modified();
 }
 
+double TriangleArea(const double a[3], const double b[3], const double c[3])
+{
+  double ab[3] = { b[0] - a[0], b[1] - a[1], b[2] - a[2] };
+  double ac[3] = { c[0] - a[0], c[1] - a[1], c[2] - a[2] };
+  double cp[3];
+  vtkMath::Cross(ab, ac, cp);
+  return 0.5 * vtkMath::Norm(cp);
+}
+
+/** Sum of per-cell areas (triangles via cross product; larger polygons via vtkPolygon::ComputeArea). */
+double ComputePolyDataSurfaceArea(vtkPolyData* pd)
+{
+  if (!pd || pd->GetNumberOfCells() == 0)
+  {
+    return 0.0;
+  }
+  double sum = 0.0;
+  vtkPoints* pts = pd->GetPoints();
+  vtkNew<vtkIdList> ids;
+  for (vtkIdType cid = 0; cid < pd->GetNumberOfCells(); ++cid)
+  {
+    pd->GetCellPoints(cid, ids);
+    const int n = ids->GetNumberOfIds();
+    if (n < 3 || !pts)
+    {
+      continue;
+    }
+    if (n == 3)
+    {
+      double p0[3], p1[3], p2[3];
+      pts->GetPoint(ids->GetId(0), p0);
+      pts->GetPoint(ids->GetId(1), p1);
+      pts->GetPoint(ids->GetId(2), p2);
+      sum += TriangleArea(p0, p1, p2);
+    }
+    else
+    {
+      double polyN[3];
+      sum += vtkPolygon::ComputeArea(pts, static_cast<vtkIdType>(n), ids->GetPointer(0), polyN);
+    }
+  }
+  return sum;
+}
+
+void SortSidePiecesByAreaDescending(std::vector<vtkSmartPointer<vtkPolyData>>* pieces)
+{
+  if (!pieces || pieces->size() <= 1)
+  {
+    return;
+  }
+  const size_t n = pieces->size();
+  std::vector<double> areas;
+  areas.reserve(n);
+  for (const auto& p : *pieces)
+  {
+    areas.push_back(ComputePolyDataSurfaceArea(p.GetPointer()));
+  }
+  std::vector<size_t> order(n);
+  std::iota(order.begin(), order.end(), size_t{ 0 });
+  std::stable_sort(order.begin(), order.end(),
+    [&areas](size_t a, size_t b) { return areas[a] > areas[b]; });
+  std::vector<vtkSmartPointer<vtkPolyData>> sorted;
+  sorted.reserve(n);
+  for (size_t idx : order)
+  {
+    sorted.push_back((*pieces)[idx]);
+  }
+  *pieces = std::move(sorted);
+}
+
 void CollectCuspConnectedSurfacePieces(vtkPolyData* surface, double featureAngle,
   std::vector<vtkSmartPointer<vtkPolyData>>* outPieces)
 {
@@ -521,6 +594,7 @@ void vtkSHYXDataSetToPartitionedCollection::PrintSelf(ostream& os, vtkIndent ind
 {
   this->Superclass::PrintSelf(os, indent);
   os << indent << "FeatureAngle: " << this->FeatureAngle << "\n";
+  os << indent << "SortByArea: " << this->SortByArea << "\n";
 }
 
 //------------------------------------------------------------------------------
@@ -627,6 +701,10 @@ int vtkSHYXDataSetToPartitionedCollection::RequestData(vtkInformation* vtkNotUse
 
   std::vector<vtkSmartPointer<vtkPolyData>> sidePieces;
   CollectCuspConnectedSurfacePieces(surfaceWork.GetPointer(), this->FeatureAngle, &sidePieces);
+  if (this->SortByArea)
+  {
+    SortSidePiecesByAreaDescending(&sidePieces);
+  }
 
   const unsigned int nPairs = static_cast<unsigned int>(sidePieces.size());
   vtkIdType nextStandaloneSurfacePointGid = 1;
