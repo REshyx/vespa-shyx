@@ -4,10 +4,11 @@
                  class="vtkSHYXDisconnectedRegionFuse"
                  label="SHYX Disconnected Region Fuse">
       <Documentation
-          long_help="Merge multiple disconnected regions of a surface mesh by fusing nearby vertices across different regions. For each vertex in one region, finds the closest vertex in each other region; if within the threshold, they are fused. Vertices within the same connected region are never merged."
-          short_help="Merge disconnected mesh regions by fusing nearby vertices across regions."/>
+          long_help="Fuse multiple vtkPolyData inputs (each connection on port 0 is one region). Vertices from different inputs within the distance threshold are merged; vertices from the same input are never merged, even if that mesh has several disconnected pieces. A single input is passed through unchanged."
+          short_help="Fuse nearby vertices across multiple input meshes (one region per input)."/>
 
-      <InputProperty name="Input" command="SetInputConnection">
+      <!-- Same VTK input port (0), multiple connections: must use AddInputConnection (Set replaces). -->
+      <InputProperty name="Input" command="AddInputConnection" multiple_input="1" repeatable="1">
         <ProxyGroupDomain name="groups">
           <Group name="sources"/>
           <Group name="filters"/>
@@ -15,13 +16,17 @@
         <DataTypeDomain name="input_type">
           <DataType value="vtkPolyData"/>
         </DataTypeDomain>
+        <Documentation>
+          Add each surface as its own fuse region (Pipeline: select filter, then add further inputs
+          to this property so they append as connections on port 0—not separate port indices).
+        </Documentation>
       </InputProperty>
 
       <DoubleVectorProperty name="FuseThreshold" label="Fuse Threshold" command="SetFuseThreshold"
           number_of_elements="1" default_values="0.01" animateable="0">
         <Documentation>
-          Distance threshold for vertex fusion. Vertices from different connected regions
-          that are within this distance will be merged. Vertices farther apart are ignored.
+          Distance threshold for vertex fusion. Vertices from different inputs (regions)
+          that are within this distance will be merged. Same-input vertices are never merged.
         </Documentation>
       </DoubleVectorProperty>
 

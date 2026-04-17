@@ -9,4 +9,3 @@ DEPENDS
   VTK::CommonDataModel
   VTK::CommonExecutionModel
   VTK::FiltersCore
-  VTK::FiltersExtraction

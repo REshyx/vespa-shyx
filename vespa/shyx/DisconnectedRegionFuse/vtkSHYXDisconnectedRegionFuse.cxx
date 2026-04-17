@@ -4,15 +4,12 @@
 #include <vtkCellData.h>
 #include <vtkInformation.h>
 #include <vtkInformationVector.h>
-#include <vtkMath.h>
 #include <vtkObjectFactory.h>
 #include <vtkPointData.h>
 #include <vtkStaticPointLocator.h>  // faster than vtkPointLocator
 #include <vtkPoints.h>
 #include <vtkPolyData.h>
-#include <vtkPolyDataConnectivityFilter.h>
 #include <vtkSmartPointer.h>
-#include <vtkDataArray.h>
 
 #ifdef VESPA_USE_SMP
 #include <vtkSMPThreadLocal.h>
@@ -22,6 +19,8 @@
 #include <algorithm>
 #include <array>
 #include <unordered_map>
+#include <utility>
+#include <vector>
 
 VTK_ABI_NAMESPACE_BEGIN
 
@@ -76,6 +75,7 @@ int vtkSHYXDisconnectedRegionFuse::FillInputPortInformation(int port, vtkInforma
     if (port == 0)
     {
         info->Set(vtkAlgorithm::INPUT_REQUIRED_DATA_TYPE(), "vtkPolyData");
+        info->Set(vtkAlgorithm::INPUT_IS_REPEATABLE(), 1);
         return 1;
     }
     return 0;
@@ -85,42 +85,70 @@ int vtkSHYXDisconnectedRegionFuse::FillInputPortInformation(int port, vtkInforma
 int vtkSHYXDisconnectedRegionFuse::RequestData(
     vtkInformation*, vtkInformationVector** inputVector, vtkInformationVector* outputVector)
 {
-    vtkPolyData* input = vtkPolyData::GetData(inputVector[0], 0);
+    vtkInformationVector* inVec = inputVector[0];
     vtkPolyData* output = vtkPolyData::GetData(outputVector, 0);
 
-    if (!input || input->GetNumberOfPoints() == 0) return 1;
-
-    // 1. Connectivity filter for region labeling
-    vtkSmartPointer<vtkPolyDataConnectivityFilter> conn = vtkSmartPointer<vtkPolyDataConnectivityFilter>::New();
-    conn->SetInputData(input);
-    conn->SetExtractionModeToAllRegions();
-    conn->ColorRegionsOn();  // produces "RegionId" array
-    conn->Update();
-
-    vtkPolyData* connOutput = conn->GetOutput();
-    vtkDataArray* regionIds = connOutput->GetPointData()->GetArray("RegionId");
-    int nRegions = conn->GetNumberOfExtractedRegions();
-
-    // Single region, nothing to fuse
-    if (nRegions <= 1)
+    const int nInputs = inVec->GetNumberOfInformationObjects();
+    if (nInputs < 1)
     {
+        vtkErrorMacro(<< "At least one input connection is required.");
+        return 0;
+    }
+
+    if (nInputs == 1)
+    {
+        vtkPolyData* input = vtkPolyData::GetData(inVec, 0);
+        if (!input || input->GetNumberOfPoints() == 0)
+        {
+            return 1;
+        }
         output->ShallowCopy(input);
         return 1;
     }
 
-    vtkIdType nPoints = connOutput->GetNumberOfPoints();
-    
-    // 2. Group points by RegionId (std::array copy avoids pointer invalidation)
-    std::vector<std::vector<PointInfo>> regions(nRegions);
-    for (vtkIdType i = 0; i < nPoints; ++i)
+    // 1. Each input connection is one fuse domain; global point id = prefix offsets over inputs.
+    std::vector<vtkPolyData*> pdIn(static_cast<size_t>(nInputs), nullptr);
+    std::vector<vtkIdType> ptOffset(static_cast<size_t>(nInputs) + 1, 0);
+    for (int i = 0; i < nInputs; ++i)
     {
-        int r = static_cast<int>(regionIds->GetTuple1(i));
-        double p[3];
-        connOutput->GetPoint(i, p);
-        regions[r].push_back({i, {p[0], p[1], p[2]}});
+        pdIn[static_cast<size_t>(i)] = vtkPolyData::GetData(inVec, i);
+        const vtkIdType np =
+            pdIn[static_cast<size_t>(i)] ? pdIn[static_cast<size_t>(i)]->GetNumberOfPoints() : 0;
+        ptOffset[static_cast<size_t>(i) + 1] = ptOffset[static_cast<size_t>(i)] + np;
+    }
+    const vtkIdType nPoints = ptOffset[static_cast<size_t>(nInputs)];
+    if (nPoints == 0)
+    {
+        return 1;
     }
 
-    // 3. Find cross-region merge pairs
+    std::vector<std::array<double, 3>> globalPos(static_cast<size_t>(nPoints));
+    std::vector<int> globalInputOfPoint(static_cast<size_t>(nPoints));
+    std::vector<vtkIdType> globalLocalId(static_cast<size_t>(nPoints));
+
+    const int nRegions = nInputs;
+    std::vector<std::vector<PointInfo>> regions(static_cast<size_t>(nRegions));
+    for (int i = 0; i < nInputs; ++i)
+    {
+        vtkPolyData* pd = pdIn[static_cast<size_t>(i)];
+        if (!pd)
+        {
+            continue;
+        }
+        const vtkIdType np = pd->GetNumberOfPoints();
+        for (vtkIdType j = 0; j < np; ++j)
+        {
+            const vtkIdType gid = ptOffset[static_cast<size_t>(i)] + j;
+            double p[3];
+            pd->GetPoint(j, p);
+            globalPos[static_cast<size_t>(gid)] = {p[0], p[1], p[2]};
+            globalInputOfPoint[static_cast<size_t>(gid)] = i;
+            globalLocalId[static_cast<size_t>(gid)] = j;
+            regions[static_cast<size_t>(i)].push_back({gid, {p[0], p[1], p[2]}});
+        }
+    }
+
+    // 2. Find cross-region merge pairs
     std::vector<std::pair<vtkIdType, vtkIdType>> mergePairs;
 #ifdef VESPA_USE_SMP
     vtkSMPThreadLocal<std::vector<std::pair<vtkIdType, vtkIdType>>> threadPairs;
@@ -215,8 +243,7 @@ int vtkSHYXDisconnectedRegionFuse::RequestData(
         double center[3] = {0, 0, 0};
         for (vtkIdType oldId : clusters[i])
         {
-            double p[3];
-            connOutput->GetPoint(oldId, p);
+            const auto& p = globalPos[static_cast<size_t>(oldId)];
             center[0] += p[0]; center[1] += p[1]; center[2] += p[2];
         }
         double size = static_cast<double>(clusters[i].size());
@@ -224,56 +251,100 @@ int vtkSHYXDisconnectedRegionFuse::RequestData(
         newPoints->SetPoint(i, center);
     }
 
-    // 5. Update cell topology, drop degenerate cells
+    // 5. Update cell topology from each input, drop degenerate cells
     vtkSmartPointer<vtkCellArray> newPolys = vtkSmartPointer<vtkCellArray>::New();
-    vtkCellArray* inPolys = connOutput->GetPolys();
-    
     vtkSmartPointer<vtkIdList> cellPts = vtkSmartPointer<vtkIdList>::New();
-    std::vector<vtkIdType> keptCellIds;
-    vtkIdType cellId = 0;
+    std::vector<std::pair<int, vtkIdType>> keptCellSource;
 
-    for (inPolys->InitTraversal(); inPolys->GetNextCell(cellPts); ++cellId)
+    for (int inp = 0; inp < nInputs; ++inp)
     {
-        std::vector<vtkIdType> newIds;
-        for (vtkIdType k = 0; k < cellPts->GetNumberOfIds(); ++k)
+        vtkPolyData* pd = pdIn[static_cast<size_t>(inp)];
+        if (!pd)
         {
-            vtkIdType oldId = cellPts->GetId(k);
-            vtkIdType root = uf.find(oldId);
-            vtkIdType nid = rootToNewId[root];
-            if (newIds.empty() || newIds.back() != nid)
-            {
-                newIds.push_back(nid);
-            }
+            continue;
         }
-        // closed loop check
-        if (newIds.size() > 1 && newIds.front() == newIds.back()) newIds.pop_back();
-
-        if (newIds.size() >= 3)
+        vtkCellArray* inPolys = pd->GetPolys();
+        vtkIdType localCellId = 0;
+        for (inPolys->InitTraversal(); inPolys->GetNextCell(cellPts); ++localCellId)
         {
-            newPolys->InsertNextCell(static_cast<vtkIdType>(newIds.size()), newIds.data());
-            keptCellIds.push_back(cellId);
+            std::vector<vtkIdType> newIds;
+            for (vtkIdType k = 0; k < cellPts->GetNumberOfIds(); ++k)
+            {
+                const vtkIdType oldGlobal = ptOffset[static_cast<size_t>(inp)] + cellPts->GetId(k);
+                const vtkIdType root = uf.find(oldGlobal);
+                const vtkIdType nid = rootToNewId[root];
+                if (newIds.empty() || newIds.back() != nid)
+                {
+                    newIds.push_back(nid);
+                }
+            }
+            if (newIds.size() > 1 && newIds.front() == newIds.back())
+            {
+                newIds.pop_back();
+            }
+
+            if (newIds.size() >= 3)
+            {
+                newPolys->InsertNextCell(static_cast<vtkIdType>(newIds.size()), newIds.data());
+                keptCellSource.emplace_back(inp, localCellId);
+            }
         }
     }
 
     output->SetPoints(newPoints);
     output->SetPolys(newPolys);
 
-    // 6. Map attribute data (PointData & CellData)
-    vtkPointData* inPD = connOutput->GetPointData();
-    vtkPointData* outPD = output->GetPointData();
-    outPD->CopyAllocate(inPD, newPointCount);
-    for (vtkIdType i = 0; i < newPointCount; ++i)
+    // 6. Map attribute data (PointData & CellData); schema from first non-empty input
+    vtkPolyData* templatePd = nullptr;
+    for (int i = 0; i < nInputs; ++i)
     {
-        // attribute from first point in equivalence class
-        outPD->CopyData(inPD, clusters[i][0], i);
+        if (pdIn[static_cast<size_t>(i)] && pdIn[static_cast<size_t>(i)]->GetNumberOfPoints() > 0)
+        {
+            templatePd = pdIn[static_cast<size_t>(i)];
+            break;
+        }
     }
 
-    vtkCellData* inCD = connOutput->GetCellData();
-    vtkCellData* outCD = output->GetCellData();
-    outCD->CopyAllocate(inCD, static_cast<vtkIdType>(keptCellIds.size()));
-    for (vtkIdType i = 0; i < static_cast<vtkIdType>(keptCellIds.size()); ++i)
+    vtkPointData* outPD = output->GetPointData();
+    if (templatePd)
     {
-        outCD->CopyData(inCD, keptCellIds[i], i);
+        outPD->CopyAllocate(templatePd->GetPointData(), newPointCount);
+    }
+    for (vtkIdType i = 0; i < newPointCount; ++i)
+    {
+        const vtkIdType gid = clusters[static_cast<size_t>(i)][0];
+        const int srcInp = globalInputOfPoint[static_cast<size_t>(gid)];
+        const vtkIdType srcPt = globalLocalId[static_cast<size_t>(gid)];
+        vtkPolyData* srcPd = pdIn[static_cast<size_t>(srcInp)];
+        if (srcPd)
+        {
+            outPD->CopyData(srcPd->GetPointData(), srcPt, i);
+        }
+    }
+
+    vtkCellData* outCD = output->GetCellData();
+    vtkPolyData* templateCdPd = nullptr;
+    for (int i = 0; i < nInputs; ++i)
+    {
+        if (pdIn[static_cast<size_t>(i)] && pdIn[static_cast<size_t>(i)]->GetNumberOfCells() > 0)
+        {
+            templateCdPd = pdIn[static_cast<size_t>(i)];
+            break;
+        }
+    }
+    if (templateCdPd)
+    {
+        outCD->CopyAllocate(templateCdPd->GetCellData(), static_cast<vtkIdType>(keptCellSource.size()));
+    }
+    for (vtkIdType i = 0; i < static_cast<vtkIdType>(keptCellSource.size()); ++i)
+    {
+        const int srcInp = keptCellSource[static_cast<size_t>(i)].first;
+        const vtkIdType srcCell = keptCellSource[static_cast<size_t>(i)].second;
+        vtkPolyData* srcPd = pdIn[static_cast<size_t>(srcInp)];
+        if (srcPd)
+        {
+            outCD->CopyData(srcPd->GetCellData(), srcCell, i);
+        }
     }
 
     return 1;

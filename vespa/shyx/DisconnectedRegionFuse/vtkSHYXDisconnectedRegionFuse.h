@@ -1,15 +1,15 @@
 /**
  * @class   vtkSHYXDisconnectedRegionFuse
- * @brief   Merge disconnected regions of a surface mesh by fusing nearby vertices across regions.
+ * @brief   Fuse nearby vertices across multiple input surface meshes (one mesh per region).
  *
- * vtkSHYXDisconnectedRegionFuse takes a surface mesh with multiple disconnected regions and
- * merges them by finding vertex pairs across different regions that are within a distance
- * threshold, then fusing those vertices. Vertices within the same connected region are
- * never merged. A vertex in one region may merge with multiple vertices from different
- * other regions.
+ * vtkSHYXDisconnectedRegionFuse accepts multiple vtkPolyData inputs on port 0 (repeatable).
+ * Each input is treated as one region: vertices from different inputs may be fused when
+ * within FuseThreshold, while vertices from the same input are never merged (even if that
+ * mesh has multiple disconnected pieces). A vertex may merge with multiple vertices from
+ * other inputs.
  *
  * @sa
- * vtkPolyDataConnectivityFilter, vtkCleanPolyData
+ * vtkCleanPolyData
  */
 
 #ifndef vtkSHYXDisconnectedRegionFuse_h
