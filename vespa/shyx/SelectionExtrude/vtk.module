@@ -1,0 +1,12 @@
+NAME
+  vtkSHYXSelectionExtrudeFilter
+DESCRIPTION
+  "Extrude selected surface triangles along their area-weighted average normal."
+GROUPS
+  Meshing
+DEPENDS
+  VTK::CommonCore
+  VTK::CommonDataModel
+  VTK::CommonExecutionModel
+  VTK::FiltersCore
+  VTK::FiltersExtraction

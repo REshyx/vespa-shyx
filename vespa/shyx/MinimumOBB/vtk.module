@@ -1,0 +1,13 @@
+NAME
+  vtkSHYXMinimumOBBFilter
+DESCRIPTION
+  "PCA/covariance oriented bounding box of vtkDataSet as a closed vtkPolyData box."
+GROUPS
+  Meshing
+DEPENDS
+  VTK::FiltersGeneral
+  VTK::FiltersCore
+PRIVATE_DEPENDS
+  VTK::CommonCore
+  VTK::CommonDataModel
+  VTK::CommonExecutionModel

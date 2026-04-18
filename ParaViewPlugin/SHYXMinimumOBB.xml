@@ -1,0 +1,34 @@
+<ServerManagerConfiguration>
+  <ProxyGroup name="filters">
+    <SourceProxy name="SHYXMinimumOBBFilter"
+                 class="vtkSHYXMinimumOBBFilter"
+                 label="SHYX Minimum OBB">
+      <Documentation
+          short_help="PCA/covariance oriented bounding box of a vtkDataSet as a closed vtkPolyData box."
+          long_help="Collects all points of the input vtkDataSet and builds a tight oriented bounding box using the same covariance / eigenvector method as vtkOBBTree::ComputeOBB (not the globally minimum-volume box). Output is a closed triangle mesh. Field data includes OBB.Center, OBB.HalfLengths, OBB.Axis0..2, OBB.Volume, and OBB.IsAxisAlignedFallback when a world-axis AABB fallback is used. Copy Input Points: when on (default), points are copied to a contiguous buffer (safe for all dataset types); when off, vtkPointSet inputs use their internal vtkPoints without copying."/>
+
+      <InputProperty name="Input" command="SetInputConnection">
+        <ProxyGroupDomain name="groups">
+          <Group name="sources"/>
+          <Group name="filters"/>
+        </ProxyGroupDomain>
+        <DataTypeDomain name="input_type">
+          <DataType value="vtkDataSet"/>
+        </DataTypeDomain>
+      </InputProperty>
+
+      <IntVectorProperty name="CopyInputPoints" label="Copy Input Points"
+          command="SetCopyInputPoints" number_of_elements="1" default_values="1" animateable="0">
+        <BooleanDomain name="bool"/>
+        <Documentation>
+          When on (default), copy all input points into a contiguous vtkPoints buffer before computing the OBB.
+          When off, vtkPolyData / vtkPointSet use GetPoints() directly (no copy; do not modify point coordinates elsewhere while the filter runs).
+        </Documentation>
+      </IntVectorProperty>
+
+      <Hints>
+        <ShowInMenu category="SHYX" icon=":/VESPA/SHYX_DataSet_To_Partitioned_Collection.png"/>
+      </Hints>
+    </SourceProxy>
+  </ProxyGroup>
+</ServerManagerConfiguration>
