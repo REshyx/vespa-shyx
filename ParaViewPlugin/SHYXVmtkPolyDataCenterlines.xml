@@ -1,0 +1,112 @@
+<ServerManagerConfiguration>
+  <ProxyGroup name="filters">
+    <SourceProxy name="SHYXVmtkPolyDataCenterlines"
+                 class="vtkSHYXVmtkPolyDataCenterlines"
+                 label="SHYX VMTK Centerlines">
+      <Documentation short_help="Centerlines from a tubular surface using VMTK vtkvmtkPolyDataCenterlines.">
+        Port 0 is the vessel lumen surface. Ports 1 and 2 are source/target seed vtkDataSet (only
+        points and point GlobalIds are read; topology is ignored). Each point must carry GlobalIds
+        (point GlobalIds attribute, or a point array named GlobalIds or GlobalId). The same GlobalIds
+        must exist on the surface; seed values are resolved to surface
+        point ids. Missing GlobalIds or an unknown id on the surface is an error; duplicate ids on
+        the surface are an error. The surface should be suitable for VMTK (often capped for open tubes).
+        Requires a VMTK build compatible with this ParaView's VTK.
+      </Documentation>
+
+      <InputProperty name="Input" command="SetInputConnection">
+        <ProxyGroupDomain name="groups">
+          <Group name="sources"/>
+          <Group name="filters"/>
+        </ProxyGroupDomain>
+        <DataTypeDomain name="input_type">
+          <DataType value="vtkPolyData"/>
+        </DataTypeDomain>
+        <Documentation>Surface mesh (lumen boundary) with point GlobalIds (attribute or GlobalIds/GlobalId array) on every point.</Documentation>
+      </InputProperty>
+
+      <InputProperty name="SourceSeeds" command="SetSourceSeedsConnection">
+        <ProxyGroupDomain name="groups">
+          <Group name="sources"/>
+          <Group name="filters"/>
+        </ProxyGroupDomain>
+        <DataTypeDomain name="input_type">
+          <DataType value="vtkDataSet"/>
+        </DataTypeDomain>
+        <Documentation>Any vtkDataSet with one or more points; only point GlobalIds are used (must match surface global ids).</Documentation>
+      </InputProperty>
+
+      <InputProperty name="TargetSeeds" command="SetTargetSeedsConnection">
+        <ProxyGroupDomain name="groups">
+          <Group name="sources"/>
+          <Group name="filters"/>
+        </ProxyGroupDomain>
+        <DataTypeDomain name="input_type">
+          <DataType value="vtkDataSet"/>
+        </DataTypeDomain>
+        <Documentation>Same as SourceSeeds but for target seeds (outlet side).</Documentation>
+      </InputProperty>
+
+      <IntVectorProperty name="FlipNormals"
+                         label="Flip Normals"
+                         command="SetFlipNormals"
+                         number_of_elements="1"
+                         default_values="0">
+        <BooleanDomain name="bool"/>
+      </IntVectorProperty>
+
+      <DoubleVectorProperty name="DelaunayTolerance"
+                            label="Delaunay Tolerance"
+                            command="SetDelaunayTolerance"
+                            number_of_elements="1"
+                            default_values="0.001"
+                            animateable="1">
+        <DoubleRangeDomain name="range" min="1e-12" max="1.0"/>
+      </DoubleVectorProperty>
+
+      <IntVectorProperty name="CenterlineResampling"
+                         label="Resample Centerlines"
+                         command="SetCenterlineResampling"
+                         number_of_elements="1"
+                         default_values="0">
+        <BooleanDomain name="bool"/>
+      </IntVectorProperty>
+
+      <DoubleVectorProperty name="ResamplingStepLength"
+                            label="Resampling Step Length"
+                            command="SetResamplingStepLength"
+                            number_of_elements="1"
+                            default_values="1.0"
+                            animateable="1">
+        <DoubleRangeDomain name="range" min="1e-12" max="1e6"/>
+      </DoubleVectorProperty>
+
+      <IntVectorProperty name="AppendEndPointsToCenterlines"
+                         label="Append End Points"
+                         command="SetAppendEndPointsToCenterlines"
+                         number_of_elements="1"
+                         default_values="0">
+        <BooleanDomain name="bool"/>
+      </IntVectorProperty>
+
+      <IntVectorProperty name="SimplifyVoronoi"
+                         label="Simplify Voronoi"
+                         command="SetSimplifyVoronoi"
+                         number_of_elements="1"
+                         default_values="0">
+        <BooleanDomain name="bool"/>
+      </IntVectorProperty>
+
+      <IntVectorProperty name="StopFastMarchingOnReachingTarget"
+                         label="Stop FM at Target"
+                         command="SetStopFastMarchingOnReachingTarget"
+                         number_of_elements="1"
+                         default_values="0">
+        <BooleanDomain name="bool"/>
+      </IntVectorProperty>
+
+      <Hints>
+        <ShowInMenu category="SHYX" icon=":/VESPA/SHYX_Radius_Neighbor_Count.png"/>
+      </Hints>
+    </SourceProxy>
+  </ProxyGroup>
+</ServerManagerConfiguration>

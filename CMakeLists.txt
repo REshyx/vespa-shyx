@@ -43,6 +43,10 @@ else()
 endif()
 option(VESPA_USE_SMP "Use VTK SMP in DensityBasedSampler (disable if plugin crashes with official ParaView)" ${VESPA_USE_SMP_DEFAULT})
 
+option(VESPA_USE_VMTK "Build SHYX VMTK centerline filter (VMTK must match ParaView VTK)" ON)
+set(VMTK_DIR "C:/SoftWare/vmtk-install" CACHE PATH
+  "VMTK install prefix: include/vmtk and lib (e.g. vtkvmtk*.lib) live beneath this directory")
+
 # Plugin 模式下将 vespa 模块全部编译为静态库并链接进 VESPAPlugin.dll，无需再配置 build\bin\Release 到 PATH
 if (VESPA_BUILD_PV_PLUGIN)
     set(BUILD_SHARED_LIBS OFF CACHE BOOL "Build shared libraries; OFF when building ParaView plugin so all modules are linked into VESPAPlugin.dll" FORCE)
@@ -163,6 +167,12 @@ endif()
 
 ## Module build
 vtk_module_find_modules(vtkcgal_module_files "${CMAKE_CURRENT_SOURCE_DIR}/vespa")
+if(NOT VESPA_USE_VMTK)
+  list(FILTER vtkcgal_module_files EXCLUDE REGEX "VmtkPolyDataCenterlines")
+endif()
+if(VESPA_USE_VMTK)
+  message(STATUS "VESPA: VMTK centerlines enabled (VMTK_DIR=${VMTK_DIR})")
+endif()
 # CGAL 6.0+ required for Adaptive Isotropic Remesher; exclude its module on older CGAL
 if (NOT CGAL_VERSION VERSION_GREATER_EQUAL 6.0)
   list(FILTER vtkcgal_module_files EXCLUDE REGEX "AdaptiveIsotropicRemesher")

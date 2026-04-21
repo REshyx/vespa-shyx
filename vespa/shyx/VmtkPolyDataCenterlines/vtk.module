@@ -1,0 +1,12 @@
+NAME
+  vtkSHYXVmtkPolyDataCenterlines
+DESCRIPTION
+  "Vessel centerlines via VMTK vtkvmtkPolyDataCenterlines (optional VMTK dependency)."
+GROUPS
+  Meshing
+DEPENDS
+  VTK::FiltersCore
+  VTK::CommonDataModel
+PRIVATE_DEPENDS
+  VTK::CommonCore
+  VTK::CommonExecutionModel

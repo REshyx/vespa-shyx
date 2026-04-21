@@ -12,6 +12,10 @@ if (${VESPA_ADAPTIVE_REMESHING})
   set(ADAPTIVE_REMESHING_SERVER_MANAGER_XML "SHYXAdaptiveIsotropicRemesher.xml")
 endif()
 
+if(VESPA_USE_VMTK)
+  set(VMTK_CENTERLINES_SERVER_MANAGER_XML "SHYXVmtkPolyDataCenterlines.xml")
+endif()
+
 option(VESPA_SHOW_CGAL_LICENSE_ON_LOAD "Show CGAL License when loading plugin" OFF)
 mark_as_advanced(VESPA_SHOW_CGAL_LICENSE_ON_LOAD)
 if (${VESPA_SHOW_CGAL_LICENSE_ON_LOAD})
@@ -96,6 +100,7 @@ paraview_add_plugin(VESPAPlugin
      ${ALPHA_WRAPPING_SERVER_MANAGER_XML}
      ${MESH_SMOOTHING_SERVER_MANAGER_XML}
      ${ADAPTIVE_REMESHING_SERVER_MANAGER_XML}
+     ${VMTK_CENTERLINES_SERVER_MANAGER_XML}
   UI_INTERFACES ${acm_interfaces} ${vespa_obb_box_interfaces} ${vespa_plugin_qt_auto_interfaces}
   SOURCES ${acm_sources} ${vespa_obb_box_sources}
     pqArrayCurveMapperPanel.cxx
