@@ -1,0 +1,16 @@
+NAME
+  vtkSHYXSelectionOBBSubtractFilter
+DESCRIPTION
+  "OBB from selection, CGAL boolean subtract from closed surface; OBB on second output port."
+GROUPS
+  Meshing
+DEPENDS
+  vtkSHYXMinimumOBBFilter
+  vtkCGALPMP
+  VTK::FiltersExtraction
+PRIVATE_DEPENDS
+  VTK::CommonCore
+  VTK::CommonDataModel
+  VTK::CommonExecutionModel
+  VTK::FiltersCore
+  VTK::FiltersGeneral

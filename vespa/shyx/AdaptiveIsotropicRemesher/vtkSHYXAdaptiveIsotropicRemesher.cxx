@@ -65,22 +65,14 @@ int vtkSHYXAdaptiveIsotropicRemesher::RequestData(
     return 0;
   }
 
-  double minLen = this->MinEdgeLength;
-  double maxLen = this->MaxEdgeLength;
-  if (minLen <= 0.0)
-  {
-    minLen = 0.005 * L;
-  }
-  if (maxLen <= 0.0)
-  {
-    maxLen = 0.05 * L;
-  }
+  const double minLen = this->MinEdgeLength;
+  const double maxLen = this->MaxEdgeLength;
   if (!(minLen > 0.0 && maxLen > minLen))
   {
-    vtkErrorMacro(
-      "Need 0 < MinEdgeLength < MaxEdgeLength (or leave min/max <= 0 for automatic bounds). "
-      "Current effective min/max: "
-      << minLen << " / " << maxLen);
+    vtkErrorMacro("Need 0 < MinEdgeLength < MaxEdgeLength (got "
+      << minLen << " / " << maxLen
+      << "). In ParaView use scale/Reset on Min and Max Edge Length "
+         "(BoundsDomain); non-ParaView callers must set positive lengths explicitly.");
     return 0;
   }
 

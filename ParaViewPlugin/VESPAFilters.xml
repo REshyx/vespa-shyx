@@ -1233,14 +1233,14 @@
                             default_values="0"
                             panel_visibility="advanced">
         <!-- vtkSMBoundsDomain scaled_extent: same convention as many ParaView filters (slider + scale + reset). -->
-        <BoundsDomain mode="scaled_extent" name="bounds" scale_factor="0.001">
+        <BoundsDomain mode="scaled_extent" name="bounds" scale_factor="0.002">
           <RequiredProperties>
             <Property function="Input" name="Input" />
           </RequiredProperties>
         </BoundsDomain>
         <Documentation>
           Local remeshing parameter. Edges shorter than this value may be collapsed
-          during contraction (CGAL min_edge_length). Automatic length is 0.001 times the
+          during contraction (CGAL min_edge_length). Automatic length is 0.002 times the
           longest side of the input axis-aligned bounding box (matches ParaView BoundsDomain
           scaled_extent). The property&apos;s initial value is 0 for that rule; values &lt;= 0
           use it as well. The panel shows scale and reset controls when a BoundsDomain is present.
@@ -1403,9 +1403,22 @@
                          default_values="1">
         <BooleanDomain name="bool"/>
         <Documentation>
-          If ON, the holes created by clipping are filled with flat caps
-          to produce a closed (watertight) mesh suitable for CFD meshing.
-          Requires the input vessel mesh to be closed.
+          If ON, the holes created by clipping are filled using CGAL
+          polygon mesh processing to produce a closed (watertight) mesh
+          suitable for CFD meshing. Requires the input vessel mesh to be closed.
+        </Documentation>
+      </IntVectorProperty>
+
+      <IntVectorProperty command="SetFairingContinuity"
+                         name="FairingContinuity"
+                         label="Capping Fairing Continuity"
+                         number_of_elements="1"
+                         default_values="0">
+        <IntRangeDomain name="range" min="0" max="2" />
+        <Documentation>
+          When Cap Endpoints is ON, controls the tangential continuity of
+          the filled patches (CGAL fairing_continuity): 0 for C0 (planar-style),
+          1 for C1, 2 for C2. Default is 0.
         </Documentation>
       </IntVectorProperty>
 

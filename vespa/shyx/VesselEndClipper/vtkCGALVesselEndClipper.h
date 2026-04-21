@@ -62,13 +62,25 @@ public:
     ///@{
     /**
      * If true, the resulting holes from clipping are capped (filled)
-     * to produce a closed, watertight mesh suitable for CFD.
+     * with CGAL PMP to produce a closed, watertight mesh suitable for CFD.
+     * Patch smoothness is controlled by FairingContinuity.
      * Requires the input vessel mesh to be closed.
      * Default is true.
      */
     vtkGetMacro(CapEndpoints, bool);
     vtkSetMacro(CapEndpoints, bool);
     vtkBooleanMacro(CapEndpoints, bool);
+    ///@}
+
+    ///@{
+    /**
+     * Tangential continuity of CGAL hole patches when CapEndpoints is on.
+     * Passed to CGAL::Polygon_mesh_processing::triangulate_refine_and_fair_hole
+     * as fairing_continuity: 0 (C0, planar-style fill), 1 (C1), or 2 (C2).
+     * Default is 0.
+     */
+    vtkGetMacro(FairingContinuity, int);
+    vtkSetClampMacro(FairingContinuity, int, 0, 2);
     ///@}
 
     /**
@@ -90,6 +102,7 @@ protected:
     double ClipOffset   = 0.0;
     int    TangentDepth = 1;
     bool   CapEndpoints = true;
+    int    FairingContinuity = 0;
 
     vtkSmartPointer<vtkDataArraySelection> EndpointSelection;
 

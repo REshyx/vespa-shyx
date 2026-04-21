@@ -1,0 +1,14 @@
+NAME
+  vtkPointLabelRepresentation
+DESCRIPTION
+  "Surface representation with optional point labels from a point-data array (formatted as text)."
+GROUPS
+  ParaView
+DEPENDS
+  ParaView::RemotingViews
+  VTK::FiltersCore
+  VTK::FiltersParallel
+PRIVATE_DEPENDS
+  VTK::CommonCore
+  VTK::RenderingCore
+  VTK::RenderingLabel

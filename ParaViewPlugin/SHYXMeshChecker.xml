@@ -1,0 +1,88 @@
+<ServerManagerConfiguration>
+  <ProxyGroup name="filters">
+    <SourceProxy name="SHYXMeshChecker"
+                 class="vtkSHYXMeshChecker"
+                 label="SHYX Mesh Checker">
+      <Documentation short_help="Mark non-manifold soup edges, boundary cycles, and self-intersecting triangles.">
+        Outputs diagnostic geometry on a single vtkPolyData: VTK_LINE cells for polygon-soup edges incident to
+        more than two faces (SHYX_CheckReason=1), VTK_POLY_LINE cells for mesh boundary / hole cycles (reason=2),
+        and VTK_TRIANGLE cells for faces reported by CGAL PMP::self_intersections (reason=3). Cell array
+        SHYX_CheckReason encodes the category. Boundary and self-intersection checks require a CGAL-valid
+        polygon mesh from the soup; pure triangle mesh is required for self-intersection enumeration.
+      </Documentation>
+
+      <InputProperty name="Input" command="SetInputConnection">
+        <ProxyGroupDomain name="groups">
+          <Group name="sources"/>
+          <Group name="filters"/>
+        </ProxyGroupDomain>
+        <DataTypeDomain name="input_type">
+          <DataType value="vtkPolyData"/>
+        </DataTypeDomain>
+      </InputProperty>
+
+      <IntVectorProperty name="CheckSoupEdges"
+                         label="Check soup (>2 faces / edge)"
+                         command="SetCheckSoupEdges"
+                         number_of_elements="1"
+                         default_values="1">
+        <BooleanDomain name="bool"/>
+      </IntVectorProperty>
+
+      <IntVectorProperty name="CheckBoundary"
+                         label="Check boundary (holes)"
+                         command="SetCheckBoundary"
+                         number_of_elements="1"
+                         default_values="1">
+        <BooleanDomain name="bool"/>
+      </IntVectorProperty>
+
+      <IntVectorProperty name="CheckSelfIntersection"
+                         label="Check self-intersection"
+                         command="SetCheckSelfIntersection"
+                         number_of_elements="1"
+                         default_values="1">
+        <BooleanDomain name="bool"/>
+      </IntVectorProperty>
+
+      <IntVectorProperty name="CheckOrient"
+                         label="Check / unify orientation (orient_polygon_soup)"
+                         command="SetCheckOrient"
+                         number_of_elements="1"
+                         default_values="1">
+        <BooleanDomain name="bool"/>
+        <Documentation>
+          When on, runs CGAL orient_polygon_soup on the polygon soup before the combinatorial mesh test.
+        </Documentation>
+      </IntVectorProperty>
+
+      <IntVectorProperty name="AttemptOrientRepair"
+                         label="Attempt soup repair (repair_polygon_soup)"
+                         command="SetAttemptOrientRepair"
+                         number_of_elements="1"
+                         default_values="1">
+        <BooleanDomain name="bool"/>
+        <Documentation>
+          When on, runs CGAL repair_polygon_soup after optional orient (splits non-manifold vertices, etc.)
+          to improve chances that polygon_soup_to_polygon_mesh succeeds.
+        </Documentation>
+      </IntVectorProperty>
+
+      <IntVectorProperty name="LogSteps"
+                         label="Log steps (Output Messages)"
+                         command="SetLogSteps"
+                         number_of_elements="1"
+                         default_values="1"
+                         panel_visibility="advanced">
+        <BooleanDomain name="bool"/>
+        <Documentation>
+          When on, prints per-step diagnostics to the ParaView Output Messages window (vtkWarningMacro).
+        </Documentation>
+      </IntVectorProperty>
+
+      <Hints>
+        <ShowInMenu category="SHYX" icon=":/VESPA/VESPA_Mesh_Checker.png"/>
+      </Hints>
+    </SourceProxy>
+  </ProxyGroup>
+</ServerManagerConfiguration>

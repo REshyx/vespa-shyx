@@ -26,15 +26,15 @@
                             label="Min Edge Length"
                             number_of_elements="1"
                             default_values="0">
-        <BoundsDomain mode="scaled_extent" name="bounds_min" scale_factor="0.005">
+        <BoundsDomain mode="scaled_extent" name="bounds_min" scale_factor="0.001">
           <RequiredProperties>
             <Property function="Input" name="Input" />
           </RequiredProperties>
         </BoundsDomain>
         <Documentation>
-          Minimum edge length. Use 0 or negative for automatic (0.5% of AABB longest side, same
-          scale as vtkSMBoundsDomain scaled_extent 0.005). ParaView adds scale/reset controls from
-          this domain.
+          Minimum edge length; must be &gt; 0. ParaView BoundsDomain (scaled_extent 0.001)
+          suggests 0.1% of the input axis-aligned bounding box longest side; use scale/Reset
+          next to the property.
         </Documentation>
       </DoubleVectorProperty>
 
@@ -43,11 +43,15 @@
                             label="Max Edge Length"
                             number_of_elements="1"
                             default_values="0">
-        <DoubleRangeDomain name="range" min="0" max="1e9"/>
+        <BoundsDomain mode="scaled_extent" name="bounds_max" scale_factor="0.05">
+          <RequiredProperties>
+            <Property function="Input" name="Input" />
+          </RequiredProperties>
+        </BoundsDomain>
         <Documentation>
-          Maximum edge length. Use 0 or negative for automatic (5% of AABB longest side). Wide
-          numeric range here so coarse caps are not limited by a tight bounds domain; use reset
-          on Min for ParaView-suggested scale, then set Max manually or leave 0 for auto.
+          Maximum edge length; must be &gt; Min Edge Length. ParaView BoundsDomain
+          (scaled_extent 0.05) suggests 5% of the input axis-aligned bounding box longest side;
+          use scale/Reset next to the property.
         </Documentation>
       </DoubleVectorProperty>
 
@@ -55,7 +59,7 @@
                             name="AdaptiveTolerance"
                             label="Adaptive Tolerance (tol)"
                             number_of_elements="1"
-                            default_values="0.001">
+                            default_values="0.01">
         <Documentation>
           CGAL adaptive sizing tolerance; smaller values tend to refine more within min/max bounds.
         </Documentation>
@@ -76,7 +80,7 @@
                             name="ProtectAngle"
                             label="Protection Angle"
                             number_of_elements="1"
-                            default_values="45"
+                            default_values="70"
                             panel_visibility="advanced">
         <DoubleRangeDomain name="range" min="0" max="180"/>
         <Documentation>

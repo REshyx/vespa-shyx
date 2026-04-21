@@ -277,7 +277,7 @@
 | **Max Iterations** | int | 500 | 收缩的最大迭代次数。 |
 | **Area Threshold** | double | 1e-4 | 收敛阈值。面积变化小于该比例时认为收敛；值越小骨架越细，但更耗时。 |
 | **Max Triangle Angle (deg)** | double | 110 | 局部重网格参数，过大的三角形可能被拆分。 |
-| **Min Edge Length** | double | **0.001×轴对齐包围盒最长边** | 局部重网格参数，过短边可能被塌缩。自动为包围盒最长边的 **0.001** 倍（ParaView `BoundsDomain` scaled_extent，`scale_factor=0.001`；缩放 + 重置）。属性默认 `0` 表示自动。 |
+| **Min Edge Length** | double | **0.002×轴对齐包围盒最长边** | 局部重网格参数，过短边可能被塌缩。自动为包围盒最长边的 **0.002** 倍（ParaView `BoundsDomain` scaled_extent，`scale_factor=0.002`；缩放 + 重置）。属性默认 `0` 表示自动。 |
 | **Quality / Speed Tradeoff (w_H)** | double | 0.1 | 收缩速度与质量权衡。值越小收敛更快，骨架质量可能下降。 |
 | **Medially Centered** | bool | true | 是否做 medial centering，开启时骨架更接近中轴，但更耗时。 |
 | **Medial Centering Tradeoff (w_M)** | double | 0.2 | medial centering 的平滑/靠近中轴权衡。 |
@@ -580,7 +580,7 @@
 
 | 参数 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
-| **Min Edge Length** | double | 0 | 最小边长。**≤ 0** 表示自动：AABB **最长边**的 **0.5%**（与 ParaView **BoundsDomain** scaled_extent 一致）。该属性挂了 Domain，界面带缩放/重置。 |
+| **Min Edge Length** | double | 0 | 最小边长。**≤ 0** 表示自动：AABB **最长边**的 **0.1%**（与 ParaView **BoundsDomain** scaled_extent 一致）。该属性挂了 Domain，界面带缩放/重置。 |
 | **Max Edge Length** | double | 0 | 最大边长。**≤ 0** 表示自动：同一最长边的 **5%**；数值框为宽范围，便于手动设更大的粗网格上限。 |
 | **Adaptive Tolerance (tol)** | double | 0.001 | CGAL 自适应尺寸场容差；**更小**时在 Min/Max 范围内往往更细。 |
 | **Number Of Iterations** | int | 3 | 重网格迭代次数（1–20）。 |

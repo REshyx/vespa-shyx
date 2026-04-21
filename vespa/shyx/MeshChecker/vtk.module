@@ -1,15 +1,14 @@
 NAME
-  vtkSHYXVesselEndClipper
+  vtkSHYXMeshChecker
 DESCRIPTION
-  "Clip vessel tips at skeleton endpoints to create flat CFD cross-sections."
+  "SHYX mesh diagnostics: non-manifold soup edges, boundary cycles, self-intersections (CGAL PMP)."
 GROUPS
   Meshing
 DEPENDS
   vtkCGALAlgorithm
+  vtkCGALPMP
   VTK::FiltersCore
 PRIVATE_DEPENDS
   VTK::CommonCore
   VTK::CommonDataModel
   VTK::CommonExecutionModel
-  VTK::FiltersExtraction
-  VTK::FiltersGeometry

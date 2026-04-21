@@ -1,0 +1,202 @@
+<ServerManagerConfiguration>
+  <ProxyGroup name="representations">
+    <RepresentationProxy name="PointLabelRepresentation"
+                         class="vtkPointLabelRepresentation"
+                         processes="client|dataserver|renderserver"
+                         base_proxygroup="representations"
+                         base_proxyname="SurfaceRepresentation">
+      <Documentation>
+        Renders the surface like the standard Surface representation, with an optional overlay of
+        text labels at points. Choose a point-data array; values are converted to strings
+        (vtkLabeledDataMapper rules) and drawn at each point in 3D space.
+      </Documentation>
+
+      <IntVectorProperty name="ShowPointLabels"
+                         command="SetShowPointLabels"
+                         default_values="1"
+                         number_of_elements="1"
+                         label="Show point labels">
+        <BooleanDomain name="bool" />
+        <Documentation>
+          When enabled, draws labels for points using the selected array (subject to the maximum
+          label count).
+        </Documentation>
+      </IntVectorProperty>
+
+      <IntVectorProperty name="VertexOnly"
+                         command="SetVertexOnly"
+                         default_values="1"
+                         number_of_elements="1"
+                         label="Vertex only">
+        <BooleanDomain name="bool" />
+        <Documentation>
+          When enabled, labels use only points referenced by vertex cells (vtkPolyData verts or
+          VTK_VERTEX in unstructured grids), not every point of lines or surface vertices. Useful
+          when lines share points with separate vertex markers (e.g. vessel endpoint arrows).
+        </Documentation>
+      </IntVectorProperty>
+
+      <StringVectorProperty name="PointLabelArray"
+                            command="SetPointLabelArray"
+                            default_values=""
+                            label="Point label array"
+                            number_of_elements="1">
+        <Documentation>
+          Point-data array used for label text. Leave empty (default) to use the active point
+          scalars on the displayed mesh (e.g. EndpointIndex on Vessel End Clipper port 1). Choose
+          None to disable labeling by array. String arrays show each entry; numeric types use the
+          label format (or VTK defaults).
+        </Documentation>
+        <RepresentedArrayListDomain name="array_list"
+                                    input_domain_name="input_array_point"
+                                    none_string="None">
+          <RequiredProperties>
+            <Property function="Input" name="Input" />
+          </RequiredProperties>
+        </RepresentedArrayListDomain>
+      </StringVectorProperty>
+
+      <IntVectorProperty name="MaximumNumberOfLabels"
+                         command="SetMaximumNumberOfLabels"
+                         default_values="2000"
+                         number_of_elements="1"
+                         label="Maximum number of labels">
+        <IntRangeDomain name="range" min="1" max="1000000" />
+        <Documentation>
+          Subsamples points (vtkMaskPoints) when the mesh has more points than this limit.
+        </Documentation>
+      </IntVectorProperty>
+
+      <StringVectorProperty name="LabelFormat"
+                            command="SetLabelFormat"
+                            default_values=""
+                            label="Label format (printf)"
+                            number_of_elements="1">
+        <Documentation>
+          Optional printf-style format for numeric arrays (e.g. "%.3f"). Leave empty to use VTK
+          defaults. String arrays ignore this unless a custom format is needed.
+        </Documentation>
+      </StringVectorProperty>
+    </RepresentationProxy>
+
+    <Extension name="GeometryRepresentation">
+      <RepresentationType subproxy="PointLabelRepresentation"
+                          text="Point Label" />
+      <SubProxy>
+        <Proxy name="PointLabelRepresentation"
+               proxygroup="representations"
+               proxyname="PointLabelRepresentation" />
+        <ShareProperties subproxy="SurfaceRepresentation">
+          <Exception name="Input" />
+          <Exception name="Visibility" />
+          <Exception name="Representation" />
+        </ShareProperties>
+        <ExposedProperties>
+          <PropertyGroup label="Point Labels">
+            <Property name="ShowPointLabels" exposed_name="PL_ShowPointLabels" />
+            <Property name="VertexOnly" exposed_name="PL_VertexOnly" />
+            <Property name="PointLabelArray" exposed_name="PL_PointLabelArray" />
+            <Property name="MaximumNumberOfLabels" exposed_name="PL_MaximumNumberOfLabels" />
+            <Property name="LabelFormat" exposed_name="PL_LabelFormat" />
+            <Hints>
+              <PropertyWidgetDecorator type="GenericDecorator"
+                                       mode="visibility"
+                                       property="Representation"
+                                       value="Point Label" />
+            </Hints>
+          </PropertyGroup>
+        </ExposedProperties>
+      </SubProxy>
+    </Extension>
+
+    <Extension name="UnstructuredGridRepresentation">
+      <RepresentationType subproxy="PointLabelRepresentation"
+                          text="Point Label" />
+      <SubProxy>
+        <Proxy name="PointLabelRepresentation"
+               proxygroup="representations"
+               proxyname="PointLabelRepresentation" />
+        <ShareProperties subproxy="SurfaceRepresentation">
+          <Exception name="Input" />
+          <Exception name="Visibility" />
+          <Exception name="Representation" />
+        </ShareProperties>
+        <ExposedProperties>
+          <PropertyGroup label="Point Labels">
+            <Property name="ShowPointLabels" exposed_name="PL_ShowPointLabels" />
+            <Property name="VertexOnly" exposed_name="PL_VertexOnly" />
+            <Property name="PointLabelArray" exposed_name="PL_PointLabelArray" />
+            <Property name="MaximumNumberOfLabels" exposed_name="PL_MaximumNumberOfLabels" />
+            <Property name="LabelFormat" exposed_name="PL_LabelFormat" />
+            <Hints>
+              <PropertyWidgetDecorator type="GenericDecorator"
+                                       mode="visibility"
+                                       property="Representation"
+                                       value="Point Label" />
+            </Hints>
+          </PropertyGroup>
+        </ExposedProperties>
+      </SubProxy>
+    </Extension>
+
+    <Extension name="UniformGridRepresentation">
+      <RepresentationType subproxy="PointLabelRepresentation"
+                          text="Point Label" />
+      <SubProxy>
+        <Proxy name="PointLabelRepresentation"
+               proxygroup="representations"
+               proxyname="PointLabelRepresentation" />
+        <ShareProperties subproxy="SurfaceRepresentation">
+          <Exception name="Input" />
+          <Exception name="Visibility" />
+          <Exception name="Representation" />
+        </ShareProperties>
+        <ExposedProperties>
+          <PropertyGroup label="Point Labels">
+            <Property name="ShowPointLabels" exposed_name="PL_ShowPointLabels" />
+            <Property name="VertexOnly" exposed_name="PL_VertexOnly" />
+            <Property name="PointLabelArray" exposed_name="PL_PointLabelArray" />
+            <Property name="MaximumNumberOfLabels" exposed_name="PL_MaximumNumberOfLabels" />
+            <Property name="LabelFormat" exposed_name="PL_LabelFormat" />
+            <Hints>
+              <PropertyWidgetDecorator type="GenericDecorator"
+                                       mode="visibility"
+                                       property="Representation"
+                                       value="Point Label" />
+            </Hints>
+          </PropertyGroup>
+        </ExposedProperties>
+      </SubProxy>
+    </Extension>
+
+    <Extension name="StructuredGridRepresentation">
+      <RepresentationType subproxy="PointLabelRepresentation"
+                          text="Point Label" />
+      <SubProxy>
+        <Proxy name="PointLabelRepresentation"
+               proxygroup="representations"
+               proxyname="PointLabelRepresentation" />
+        <ShareProperties subproxy="SurfaceRepresentation">
+          <Exception name="Input" />
+          <Exception name="Visibility" />
+          <Exception name="Representation" />
+        </ShareProperties>
+        <ExposedProperties>
+          <PropertyGroup label="Point Labels">
+            <Property name="ShowPointLabels" exposed_name="PL_ShowPointLabels" />
+            <Property name="VertexOnly" exposed_name="PL_VertexOnly" />
+            <Property name="PointLabelArray" exposed_name="PL_PointLabelArray" />
+            <Property name="MaximumNumberOfLabels" exposed_name="PL_MaximumNumberOfLabels" />
+            <Property name="LabelFormat" exposed_name="PL_LabelFormat" />
+            <Hints>
+              <PropertyWidgetDecorator type="GenericDecorator"
+                                       mode="visibility"
+                                       property="Representation"
+                                       value="Point Label" />
+            </Hints>
+          </PropertyGroup>
+        </ExposedProperties>
+      </SubProxy>
+    </Extension>
+  </ProxyGroup>
+</ServerManagerConfiguration>

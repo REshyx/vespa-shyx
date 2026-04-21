@@ -26,10 +26,8 @@ public:
 
   //@{
   /**
-   * Minimum allowed edge length after remeshing.
-   * If <= 0, a default of 0.5% of the input axis-aligned bounding box longest side
-   * (vtkBoundingBox::GetMaxLength()) is used, matching ParaView BoundsDomain scaled_extent
-   * with scale 0.005 on this property in the Server Manager XML.
+   * Minimum allowed edge length after remeshing. Must be strictly positive.
+   * ParaView exposes BoundsDomain (scaled_extent 0.001) on this property for suggested values.
    */
   vtkGetMacro(MinEdgeLength, double);
   vtkSetMacro(MinEdgeLength, double);
@@ -37,8 +35,8 @@ public:
 
   //@{
   /**
-   * Maximum allowed edge length after remeshing.
-   * If <= 0, a default of 5% of that same longest-side length is used.
+   * Maximum allowed edge length after remeshing. Must be greater than MinEdgeLength.
+   * ParaView exposes BoundsDomain (scaled_extent 0.05) on this property for suggested values.
    */
   vtkGetMacro(MaxEdgeLength, double);
   vtkSetMacro(MaxEdgeLength, double);
@@ -57,7 +55,7 @@ public:
   //@{
   /**
    * Feature edge angle threshold (degrees); protected during remeshing.
-   * Default 45.
+   * Default 70.
    */
   vtkGetMacro(ProtectAngle, double);
   vtkSetMacro(ProtectAngle, double);
@@ -77,10 +75,10 @@ protected:
 
   int RequestData(vtkInformation*, vtkInformationVector**, vtkInformationVector*) override;
 
-  double MinEdgeLength       = -1.0;
-  double MaxEdgeLength       = -1.0;
-  double AdaptiveTolerance   = 0.001;
-  double ProtectAngle        = 45.0;
+  double MinEdgeLength       = 0.0;
+  double MaxEdgeLength       = 0.0;
+  double AdaptiveTolerance   = 0.01;
+  double ProtectAngle        = 70.0;
   int    NumberOfIterations  = 3;
 
 private:

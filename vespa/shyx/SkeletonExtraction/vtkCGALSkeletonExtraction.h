@@ -36,8 +36,8 @@ public:
      * Minimum edge length used during the local remeshing step.
      * Edges shorter than this value may be collapsed.
      *
-     * When <= 0, the filter uses 0.001 times the longest side of the input mesh AABB
-     * (same scale as ParaView vtkSMBoundsDomain mode scaled_extent with scale_factor 0.001).
+     * When <= 0, the filter uses 0.002 times the longest side of the input mesh AABB
+     * (same scale as ParaView vtkSMBoundsDomain mode scaled_extent with scale_factor 0.002).
      * The stored default is 0 (meaning use that automatic length).
      */
     vtkGetMacro(MinEdgeLength, double);

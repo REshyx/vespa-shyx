@@ -1,0 +1,134 @@
+<ServerManagerConfiguration>
+  <ProxyGroup name="filters">
+    <SourceProxy name="SHYXSelectionOBBSubtractFilter"
+                 class="vtkSHYXSelectionOBBSubtractFilter"
+                 label="SHYX Selection OBB Boolean Subtract">
+      <Documentation
+          short_help="Subtract a (transformable) OBB from a closed surface; transformed OBB on port 1."
+          long_help="Computes a PCA-style oriented bounding box from the selected region, applies Position / Rotation / Scale consistent with the ParaView Interactive Box (unit reference bounds and scale as world edge lengths along the box axes), then runs CGAL boolean difference (input minus box). Port 0 is the result; port 1 is the transformed OBB mesh. The custom box widget reads OBB field arrays from the client-side output when available and pushes Position / Rotation / Scale onto the filter proxy so the 3D widget is initialized to the fitted OBB (not only the mesh AABB). Input must be a closed triangulated surface suitable for vtkCGALBooleanOperation."/>
+
+      <OutputPort name="Difference" index="0" id="port0" />
+      <OutputPort name="OBB Box" index="1" id="port1" />
+
+      <InputProperty name="Input" command="SetInputConnection">
+        <ProxyGroupDomain name="groups">
+          <Group name="sources"/>
+          <Group name="filters"/>
+        </ProxyGroupDomain>
+        <DataTypeDomain name="input_type">
+          <DataType value="vtkPolyData"/>
+        </DataTypeDomain>
+        <Documentation>Closed triangulated surface (first operand of the difference).</Documentation>
+      </InputProperty>
+
+      <InputProperty name="Selection" label="Selection"
+                     command="SetSourceConnection">
+        <ProxyGroupDomain name="groups">
+          <Group name="sources"/>
+          <Group name="filters"/>
+        </ProxyGroupDomain>
+        <DataTypeDomain name="input_type">
+          <DataType value="vtkSelection"/>
+        </DataTypeDomain>
+        <Documentation>
+          Region used to collect points for the OBB. Use Copy Active Selection in ParaView when
+          Use Selection Input is on.
+        </Documentation>
+        <Hints>
+          <SelectionInput/>
+        </Hints>
+      </InputProperty>
+
+      <IntVectorProperty name="UseSelectionInput" label="Use Selection Input (Copy Active Selection)"
+          command="SetUseSelectionInput" number_of_elements="1" default_values="1" animateable="0">
+        <BooleanDomain name="bool"/>
+        <Documentation>
+          When on (default), the Selection port is read when connected (use Copy Active Selection to
+          push the interactive selection into this filter). When off, the Selection port is ignored
+          and only Selection Cell Array Name defines the region.
+        </Documentation>
+      </IntVectorProperty>
+
+      <IntVectorProperty name="CopyInputPointsForOBB" label="Copy Input Points For OBB"
+          command="SetCopyInputPointsForOBB" number_of_elements="1" default_values="1" animateable="0">
+        <BooleanDomain name="bool"/>
+        <Documentation>
+          Passed to SHYX Minimum OBB: when on, selected points are copied before OBB computation.
+        </Documentation>
+      </IntVectorProperty>
+
+      <IntVectorProperty name="UpdateAttributes"
+          command="SetUpdateAttributes"
+          label="Interpolate attributes"
+          number_of_elements="1"
+          default_values="1"
+          panel_visibility="advanced">
+        <BooleanDomain name="bool"/>
+        <Documentation>
+          If ON, point/cell data are interpolated onto the boolean result (CGAL pipeline).
+        </Documentation>
+      </IntVectorProperty>
+
+      <StringVectorProperty name="SelectionCellArrayName" label="Selection Cell Array Name"
+          command="SetSelectionCellArrayName" number_of_elements="1" default_values="">
+        <Documentation>
+          Optional fallback when no selection points were obtained from port 1: name of a cell
+          data array on Input; non-zero (integral) or &gt; 0.5 (float) marks selected cells. All
+          vertices of those cells contribute to the OBB point set.
+        </Documentation>
+      </StringVectorProperty>
+
+      <DoubleVectorProperty name="Position" label="Translate"
+          command="SetPosition" number_of_elements="3" default_values="0 0 0" animateable="1">
+        <Documentation>
+          World translation applied after RotateZ, RotateX, RotateY and Scale about the OBB
+          center from field data (same convention as ParaView Interactive Box).
+        </Documentation>
+      </DoubleVectorProperty>
+
+      <DoubleVectorProperty name="Rotation" label="Rotate (Degrees)"
+          command="SetRotation" number_of_elements="3" default_values="0 0 0" animateable="1">
+        <Documentation>
+          Degrees about the OBB center: RotateZ (Z), then RotateX (X), then RotateY (Y), matching
+          ParaView Interactive Box (pqBoxPropertyWidget).
+        </Documentation>
+      </DoubleVectorProperty>
+
+      <DoubleVectorProperty name="Scale" label="Scale"
+          command="SetScale" number_of_elements="3" default_values="1 1 1" animateable="1">
+        <Documentation>
+          World edge lengths of the box for a 0..1 reference range on each axis (same as Interactive Box).
+          The filter maps these onto the raw OBB mesh using the fitted half-lengths from vtkSHYXMinimumOBBFilter.
+          The XML default (1,1,1) with zero Position/Rotation is treated as not yet initialized so the
+          first pipeline update matches the raw OBB mesh; the custom box widget then sets Scale to 2*h.
+          Non-positive components are clamped for a stable boolean operation.
+        </Documentation>
+      </DoubleVectorProperty>
+
+      <IntVectorProperty name="UseReferenceBounds" label="Use Reference Bounds"
+          command="SetUseReferenceBounds" number_of_elements="1" default_values="1" animateable="0"
+          panel_visibility="never">
+        <BooleanDomain name="bool"/>
+        <Documentation>Internal: Interactive Box uses explicit reference bounds (OBB axis-aligned bounds).</Documentation>
+      </IntVectorProperty>
+
+      <DoubleVectorProperty name="ReferenceBounds" label="Reference Bounds"
+          command="SetReferenceBounds" number_of_elements="6" default_values="0 1 0 1 0 1" animateable="0"
+          panel_visibility="never">
+        <Documentation>Internal: unit box (0..1) when fitted OBB field data exists; otherwise axis-aligned bounds of the OBB mesh for placement.</Documentation>
+      </DoubleVectorProperty>
+
+      <PropertyGroup label="OBB interactive transform" panel_widget="vespa_obb_interactive_box">
+        <Property name="Position" />
+        <Property name="Rotation" />
+        <Property name="Scale" />
+        <Property name="UseReferenceBounds" />
+        <Property name="ReferenceBounds" />
+      </PropertyGroup>
+
+      <Hints>
+        <ShowInMenu category="SHYX" icon=":/VESPA/VESPA_Boolean_Operation.png"/>
+      </Hints>
+    </SourceProxy>
+  </ProxyGroup>
+</ServerManagerConfiguration>

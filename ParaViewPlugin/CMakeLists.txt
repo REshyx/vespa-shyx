@@ -25,6 +25,13 @@ paraview_plugin_add_property_widget(
   INTERFACES acm_interfaces
   SOURCES acm_sources)
 
+paraview_plugin_add_property_widget(
+  KIND GROUP_WIDGET
+  TYPE "vespa_obb_interactive_box"
+  CLASS_NAME pqVESPAOBBInteractiveBoxWidget
+  INTERFACES vespa_obb_box_interfaces
+  SOURCES vespa_obb_box_sources)
+
 set(vespa_plugin_qt_auto_interfaces)
 set(vespa_plugin_qt_auto_sources)
 if (PARAVIEW_USE_QT)
@@ -73,6 +80,9 @@ paraview_add_plugin(VESPAPlugin
     "SHYXGeodesicDistance.xml"
     "SHYXRadiusNeighborCount.xml"
     "SHYXSelectionExtrude.xml"
+    "SHYXSelectionOBBSubtract.xml"
+    "SHYXMeshChecker.xml"
+    "SHYXMinimumOBB.xml"
     "SHYXDisconnectedRegionFuse.xml"
     "SHYXDataSetToPartitionedCollection.xml"
     "SHYXClebschMapFilter.xml"
@@ -82,13 +92,16 @@ paraview_add_plugin(VESPAPlugin
     "SHYXArrayCurveMapper.xml"
     "PulseGlyphRepresentation.xml"
     "AnimatedStreamlineRepresentation.xml"
+    "PointLabelRepresentation.xml"
      ${ALPHA_WRAPPING_SERVER_MANAGER_XML}
      ${MESH_SMOOTHING_SERVER_MANAGER_XML}
      ${ADAPTIVE_REMESHING_SERVER_MANAGER_XML}
-  UI_INTERFACES ${acm_interfaces} ${vespa_plugin_qt_auto_interfaces}
-  SOURCES ${acm_sources}
+  UI_INTERFACES ${acm_interfaces} ${vespa_obb_box_interfaces} ${vespa_plugin_qt_auto_interfaces}
+  SOURCES ${acm_sources} ${vespa_obb_box_sources}
     pqArrayCurveMapperPanel.cxx
     pqArrayCurveMapperPanel.h
+    pqVESPAOBBInteractiveBoxWidget.cxx
+    pqVESPAOBBInteractiveBoxWidget.h
     vespa_qrc_init.cxx
     vespa_qrc_init.h
     ${vespa_plugin_qt_auto_sources}
@@ -97,12 +110,15 @@ paraview_add_plugin(VESPAPlugin
 target_link_libraries(VESPAPlugin
   PRIVATE
     vtkCGALDelaunay
-    vtkCGALPMP)
+    vtkCGALPMP
+    VTK::FiltersCore
+    VTK::FiltersParallel)
 
 if (PARAVIEW_USE_QT)
   target_link_libraries(VESPAPlugin
     PRIVATE
-      ParaView::RemotingViews)
+      ParaView::RemotingViews
+      ParaView::pqApplicationComponents)
 endif ()
 
 if (BUILD_TESTING AND BUILD_SHARED_LIBS)

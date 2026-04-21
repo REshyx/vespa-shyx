@@ -77,7 +77,7 @@ int vtkCGALSkeletonExtraction::RequestData(
         return 0;
     }
 
-    // <= 0: same scale as ParaView vtkSMBoundsDomain scaled_extent (0.001 * AABB longest side).
+    // <= 0: same scale as ParaView vtkSMBoundsDomain scaled_extent (0.002 * AABB longest side).
     double minEdgeLength = this->MinEdgeLength;
     if (minEdgeLength <= 0.0)
     {
@@ -91,7 +91,7 @@ int vtkCGALSkeletonExtraction::RequestData(
             vtkErrorMacro("Input mesh has zero bounding-box extent.");
             return 0;
         }
-        minEdgeLength = 0.001 * L;
+        minEdgeLength = 0.002 * L;
     }
 
     // Skeleton extraction via Mean Curvature Flow
