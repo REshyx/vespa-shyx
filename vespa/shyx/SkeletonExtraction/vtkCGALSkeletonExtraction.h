@@ -36,8 +36,9 @@ public:
      * Minimum edge length used during the local remeshing step.
      * Edges shorter than this value may be collapsed.
      *
-     * If set to <= 0, the CGAL default (mesh-dependent) value is used.
-     * Default is 0 (use CGAL default).
+     * When <= 0, the filter uses 0.001 times the longest side of the input mesh AABB
+     * (same scale as ParaView vtkSMBoundsDomain mode scaled_extent with scale_factor 0.001).
+     * The stored default is 0 (meaning use that automatic length).
      */
     vtkGetMacro(MinEdgeLength, double);
     vtkSetMacro(MinEdgeLength, double);

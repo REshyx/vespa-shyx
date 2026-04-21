@@ -1232,11 +1232,18 @@
                             number_of_elements="1"
                             default_values="0"
                             panel_visibility="advanced">
-        <DoubleRangeDomain name="range" min="0" max="1e9"/>
+        <!-- vtkSMBoundsDomain scaled_extent: same convention as many ParaView filters (slider + scale + reset). -->
+        <BoundsDomain mode="scaled_extent" name="bounds" scale_factor="0.001">
+          <RequiredProperties>
+            <Property function="Input" name="Input" />
+          </RequiredProperties>
+        </BoundsDomain>
         <Documentation>
           Local remeshing parameter. Edges shorter than this value may be collapsed
-          during contraction (CGAL min_edge_length). If set to 0, the CGAL default
-          (mesh-dependent) value is used.
+          during contraction (CGAL min_edge_length). Automatic length is 0.001 times the
+          longest side of the input axis-aligned bounding box (matches ParaView BoundsDomain
+          scaled_extent). The property&apos;s initial value is 0 for that rule; values &lt;= 0
+          use it as well. The panel shows scale and reset controls when a BoundsDomain is present.
         </Documentation>
       </DoubleVectorProperty>
 

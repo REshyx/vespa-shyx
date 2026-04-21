@@ -27,7 +27,9 @@ public:
   //@{
   /**
    * Minimum allowed edge length after remeshing.
-   * If <= 0, a default of 0.5% of the input bounding-box diagonal is used.
+   * If <= 0, a default of 0.5% of the input axis-aligned bounding box longest side
+   * (vtkBoundingBox::GetMaxLength()) is used, matching ParaView BoundsDomain scaled_extent
+   * with scale 0.005 on this property in the Server Manager XML.
    */
   vtkGetMacro(MinEdgeLength, double);
   vtkSetMacro(MinEdgeLength, double);
@@ -36,7 +38,7 @@ public:
   //@{
   /**
    * Maximum allowed edge length after remeshing.
-   * If <= 0, a default of 5% of the input bounding-box diagonal is used.
+   * If <= 0, a default of 5% of that same longest-side length is used.
    */
   vtkGetMacro(MaxEdgeLength, double);
   vtkSetMacro(MaxEdgeLength, double);
@@ -68,13 +70,6 @@ public:
   vtkGetMacro(NumberOfIterations, int);
   vtkSetMacro(NumberOfIterations, int);
   //@}
-
-  /**
-   * Set MinEdgeLength and MaxEdgeLength from the current input polydata using the same rule as
-   * automatic defaults: 0.5% and 5% of the input bounding-box diagonal (vtkPolyData::GetLength()).
-   * Intended for ParaView (command_button); updates upstream if needed so bounds are available.
-   */
-  virtual void RefreshSuggestedEdgeLengthsFromBounds();
 
 protected:
   vtkSHYXAdaptiveIsotropicRemesher() = default;

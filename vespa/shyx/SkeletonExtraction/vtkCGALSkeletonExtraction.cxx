@@ -4,12 +4,14 @@
 #include "vtkCGALHelper.h"
 
 // VTK related includes
+#include <vtkBoundingBox.h>
 #include <vtkCellArray.h>
 #include <vtkInformation.h>
 #include <vtkInformationVector.h>
 #include <vtkLine.h>
 #include <vtkObjectFactory.h>
 #include <vtkPoints.h>
+#include <vtkPolyData.h>
 #include <vtkSmartPointer.h>
 
 // CGAL related includes
@@ -75,16 +77,30 @@ int vtkCGALSkeletonExtraction::RequestData(
         return 0;
     }
 
+    // <= 0: same scale as ParaView vtkSMBoundsDomain scaled_extent (0.001 * AABB longest side).
+    double minEdgeLength = this->MinEdgeLength;
+    if (minEdgeLength <= 0.0)
+    {
+        double b[6];
+        input->GetBounds(b);
+        vtkBoundingBox box;
+        box.SetBounds(b);
+        const double L = box.GetMaxLength();
+        if (L <= 0.0)
+        {
+            vtkErrorMacro("Input mesh has zero bounding-box extent.");
+            return 0;
+        }
+        minEdgeLength = 0.001 * L;
+    }
+
     // Skeleton extraction via Mean Curvature Flow
     Skeleton skeleton;
     try
     {
         Skeletonization mcs(cgalMesh->surface);
         mcs.set_max_triangle_angle(this->MaxTriangleAngle * (CGAL_PI / 180.0));
-        if (this->MinEdgeLength > 0.0)
-        {
-            mcs.set_min_edge_length(this->MinEdgeLength);
-        }
+        mcs.set_min_edge_length(minEdgeLength);
         mcs.set_max_iterations(this->MaxIterations);
         mcs.set_area_variation_factor(this->AreaThreshold);
         mcs.set_quality_speed_tradeoff(this->QualitySpeedTradeoff);

@@ -26,8 +26,15 @@
                             label="Min Edge Length"
                             number_of_elements="1"
                             default_values="0">
+        <BoundsDomain mode="scaled_extent" name="bounds_min" scale_factor="0.005">
+          <RequiredProperties>
+            <Property function="Input" name="Input" />
+          </RequiredProperties>
+        </BoundsDomain>
         <Documentation>
-          Minimum edge length. Use 0 or negative for automatic (0.5% of bounding-box diagonal).
+          Minimum edge length. Use 0 or negative for automatic (0.5% of AABB longest side, same
+          scale as vtkSMBoundsDomain scaled_extent 0.005). ParaView adds scale/reset controls from
+          this domain.
         </Documentation>
       </DoubleVectorProperty>
 
@@ -36,21 +43,13 @@
                             label="Max Edge Length"
                             number_of_elements="1"
                             default_values="0">
+        <DoubleRangeDomain name="range" min="0" max="1e9"/>
         <Documentation>
-          Maximum edge length. Use 0 or negative for automatic (5% of bounding-box diagonal).
+          Maximum edge length. Use 0 or negative for automatic (5% of AABB longest side). Wide
+          numeric range here so coarse caps are not limited by a tight bounds domain; use reset
+          on Min for ParaView-suggested scale, then set Max manually or leave 0 for auto.
         </Documentation>
       </DoubleVectorProperty>
-
-      <Property name="RefreshSuggestedEdgeLengthsFromBounds"
-                command="RefreshSuggestedEdgeLengthsFromBounds"
-                label="Refresh min/max (0.5% / 5% diagonal)"
-                panel_widget="command_button"
-                animateable="0">
-        <Documentation>
-          Fill Min/Max Edge Length from the current input using 0.5% and 5% of the bounding-box
-          diagonal (same as automatic mode when min/max are unset).
-        </Documentation>
-      </Property>
 
       <DoubleVectorProperty command="SetAdaptiveTolerance"
                             name="AdaptiveTolerance"

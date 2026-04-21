@@ -226,7 +226,6 @@ int vtkCGALVesselEndClipper::RequestData(
     std::vector<ClipInfo> clips;
 
     const int tangentDepth = this->TangentDepth;
-    int endpointIndex = 0;
 
     for (vtkIdType i = 0; i < nPts; ++i)
     {
@@ -281,13 +280,19 @@ int vtkCGALVesselEndClipper::RequestData(
         ci.endPt[1]  = leafPt[1];
         ci.endPt[2]  = leafPt[2];
 
-        char buf[128];
-        snprintf(buf, sizeof(buf), "Endpoint %d (%.2f, %.2f, %.2f)",
-                 endpointIndex, leafPt[0], leafPt[1], leafPt[2]);
-        ci.name = buf;
-
         clips.push_back(ci);
-        ++endpointIndex;
+    }
+
+    // Fixed 5-digit zero padding so UI string sort matches numeric order.
+    {
+        const int nClips = static_cast<int>(clips.size());
+        for (int e = 0; e < nClips; ++e)
+        {
+            char buf[128];
+            std::snprintf(buf, sizeof(buf), "Endpoint %05d (%.2f, %.2f, %.2f)", e,
+                clips[e].endPt[0], clips[e].endPt[1], clips[e].endPt[2]);
+            clips[e].name = buf;
+        }
     }
 
     // ---------------------------------------------------------------

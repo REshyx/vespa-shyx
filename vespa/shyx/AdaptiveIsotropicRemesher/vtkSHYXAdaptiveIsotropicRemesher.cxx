@@ -2,9 +2,7 @@
 
 #include "vtkCGALHelper.h"
 
-#include <vtkAlgorithm.h>
-#include <vtkAlgorithmOutput.h>
-#include <vtkDataObject.h>
+#include <vtkBoundingBox.h>
 #include <vtkInformationVector.h>
 #include <vtkObjectFactory.h>
 #include <vtkPolyData.h>
@@ -20,59 +18,6 @@
 vtkStandardNewMacro(vtkSHYXAdaptiveIsotropicRemesher);
 
 namespace pmp = CGAL::Polygon_mesh_processing;
-
-//------------------------------------------------------------------------------
-void vtkSHYXAdaptiveIsotropicRemesher::RefreshSuggestedEdgeLengthsFromBounds()
-{
-  if (this->GetNumberOfInputConnections(0) < 1)
-  {
-    vtkWarningMacro("RefreshSuggestedEdgeLengthsFromBounds: no input on port 0.");
-    return;
-  }
-
-  vtkPolyData* input = nullptr;
-
-  // Prefer the producer's output port: when this method runs from ParaView InvokeCommand,
-  // GetPolyDataInput()/GetInputDataObject() are often still empty until we read from upstream.
-  vtkAlgorithmOutput* inConn = this->GetInputConnection(0, 0);
-  if (inConn)
-  {
-    vtkAlgorithm* producer = inConn->GetProducer();
-    const int outIndex     = inConn->GetIndex();
-    if (producer)
-    {
-      producer->Update(outIndex);
-      input = vtkPolyData::SafeDownCast(producer->GetOutputDataObject(outIndex));
-    }
-  }
-
-  if (!input || input->GetNumberOfPoints() == 0)
-  {
-    input = vtkPolyData::SafeDownCast(this->GetInputDataObject(0, 0));
-  }
-  if (!input || input->GetNumberOfPoints() == 0)
-  {
-    input = this->GetPolyDataInput(0);
-  }
-
-  if (!input || input->GetNumberOfPoints() == 0)
-  {
-    vtkWarningMacro(
-      "RefreshSuggestedEdgeLengthsFromBounds: could not obtain a non-empty vtkPolyData input.");
-    return;
-  }
-
-  const double diag = input->GetLength();
-  if (diag <= 0.0)
-  {
-    vtkWarningMacro("RefreshSuggestedEdgeLengthsFromBounds: input diagonal length is zero.");
-    return;
-  }
-
-  this->SetMinEdgeLength(0.005 * diag);
-  this->SetMaxEdgeLength(0.05 * diag);
-  this->Modified();
-}
 
 //------------------------------------------------------------------------------
 void vtkSHYXAdaptiveIsotropicRemesher::PrintSelf(ostream& os, vtkIndent indent)
@@ -92,6 +37,12 @@ int vtkSHYXAdaptiveIsotropicRemesher::RequestData(
   vtkPolyData* input  = vtkPolyData::GetData(inputVector[0]);
   vtkPolyData* output = vtkPolyData::GetData(outputVector);
 
+  if (!input || !output)
+  {
+    vtkErrorMacro("Missing input or output.");
+    return 0;
+  }
+
   if (this->AdaptiveTolerance <= 0.0)
   {
     vtkErrorMacro("AdaptiveTolerance must be positive, got " << this->AdaptiveTolerance);
@@ -103,16 +54,26 @@ int vtkSHYXAdaptiveIsotropicRemesher::RequestData(
     return 0;
   }
 
-  const double diag = input->GetLength();
-  double minLen     = this->MinEdgeLength;
-  double maxLen     = this->MaxEdgeLength;
+  double b[6];
+  input->GetBounds(b);
+  vtkBoundingBox box;
+  box.SetBounds(b);
+  const double L = box.GetMaxLength();
+  if (L <= 0.0)
+  {
+    vtkErrorMacro("Input has zero bounding-box extent.");
+    return 0;
+  }
+
+  double minLen = this->MinEdgeLength;
+  double maxLen = this->MaxEdgeLength;
   if (minLen <= 0.0)
   {
-    minLen = 0.005 * diag;
+    minLen = 0.005 * L;
   }
   if (maxLen <= 0.0)
   {
-    maxLen = 0.05 * diag;
+    maxLen = 0.05 * L;
   }
   if (!(minLen > 0.0 && maxLen > minLen))
   {
