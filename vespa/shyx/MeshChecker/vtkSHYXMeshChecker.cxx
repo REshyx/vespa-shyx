@@ -4,17 +4,23 @@
 
 #include <vtkCellArray.h>
 #include <vtkCellData.h>
+#include <vtkDataObject.h>
 #include <vtkInformation.h>
 #include <vtkInformationVector.h>
 #include <vtkIntArray.h>
 #include <vtkLine.h>
+#include <vtkNew.h>
 #include <vtkObjectFactory.h>
 #include <vtkPoints.h>
 #include <vtkPolyLine.h>
 #include <vtkPolyData.h>
 #include <vtkTriangle.h>
 
+#include <CGAL/version.h>
 #include <CGAL/Polygon_mesh_processing/intersection.h>
+#if CGAL_VERSION_NR >= 1060000000
+#  include <CGAL/Polygon_mesh_processing/autorefinement.h>
+#endif
 #include <CGAL/Polygon_mesh_processing/orient_polygon_soup.h>
 #include <CGAL/Polygon_mesh_processing/polygon_soup_to_polygon_mesh.h>
 #include <CGAL/Polygon_mesh_processing/repair_polygon_soup.h>
@@ -39,6 +45,23 @@
 vtkStandardNewMacro(vtkSHYXMeshChecker);
 
 namespace pmp = CGAL::Polygon_mesh_processing;
+
+//------------------------------------------------------------------------------
+vtkSHYXMeshChecker::vtkSHYXMeshChecker()
+{
+  this->SetNumberOfOutputPorts(2);
+}
+
+//------------------------------------------------------------------------------
+int vtkSHYXMeshChecker::FillOutputPortInformation(int port, vtkInformation* info)
+{
+  if (port == 0 || port == 1)
+  {
+    info->Set(vtkDataObject::DATA_TYPE_NAME(), "vtkPolyData");
+    return 1;
+  }
+  return 0;
+}
 
 namespace
 {
@@ -336,6 +359,30 @@ void append_self_intersection_triangles(const CGAL_Surface& mesh, const Graph_Co
   }
 }
 
+/** Same gate as vtkSHYXAutorefineSelfIntersectionFilter, plus self_intersections when does_self_intersect
+ *  is false but intersecting face pairs exist. */
+bool triangle_mesh_should_autorefine(const CGAL_Surface& mesh)
+{
+  if (!CGAL::is_triangle_mesh(mesh))
+  {
+    return false;
+  }
+  try
+  {
+    if (pmp::does_self_intersect(mesh))
+    {
+      return true;
+    }
+    std::vector<std::pair<Graph_Faces, Graph_Faces>> pairs;
+    (void)pmp::self_intersections(mesh, std::back_inserter(pairs));
+    return !pairs.empty();
+  }
+  catch (const std::exception&)
+  {
+    return false;
+  }
+}
+
 } // namespace
 
 //------------------------------------------------------------------------------
@@ -347,6 +394,9 @@ void vtkSHYXMeshChecker::PrintSelf(ostream& os, vtkIndent indent)
   os << indent << "CheckSelfIntersection: " << (this->CheckSelfIntersection ? "on\n" : "off\n");
   os << indent << "CheckOrient: " << (this->CheckOrient ? "on\n" : "off\n");
   os << indent << "AttemptOrientRepair: " << (this->AttemptOrientRepair ? "on\n" : "off\n");
+  os << indent << "AttemptRepairSelfIntersections: " << (this->AttemptRepairSelfIntersections ? "on\n" : "off\n");
+  os << indent << "OnlyIfSelfIntersecting: " << (this->OnlyIfSelfIntersecting ? "on\n" : "off\n");
+  os << indent << "PreserveGenus: " << (this->PreserveGenus ? "on\n" : "off\n");
   os << indent << "LogSteps: " << (this->LogSteps ? "on\n" : "off\n");
 }
 
@@ -355,10 +405,11 @@ int vtkSHYXMeshChecker::RequestData(
   vtkInformation*, vtkInformationVector** inputVector, vtkInformationVector* outputVector)
 {
   vtkPolyData* input = vtkPolyData::GetData(inputVector[0], 0);
-  vtkPolyData* output = vtkPolyData::GetData(outputVector, 0);
-  if (!input || !output)
+  vtkPolyData* outMesh = vtkPolyData::GetData(outputVector, 0);
+  vtkPolyData* outBad = vtkPolyData::GetData(outputVector, 1);
+  if (!input || !outMesh || !outBad)
   {
-    vtkErrorMacro("Missing input or output.");
+    vtkErrorMacro("Missing input or output (expect two vtkPolyData output ports).");
     return 0;
   }
 
@@ -375,9 +426,14 @@ int vtkSHYXMeshChecker::RequestData(
   if (this->LogSteps)
   {
     vtkWarningMacro(<< "[SHYXMeshChecker] Step 0: input vtkPolyData points=" << input->GetNumberOfPoints()
-                     << " cells=" << input->GetNumberOfCells() << ". Checks: soup_edges=" << this->CheckSoupEdges
-                     << " boundary=" << this->CheckBoundary << " self_intersection=" << this->CheckSelfIntersection
-                     << " check_orient=" << this->CheckOrient << " attempt_soup_repair=" << this->AttemptOrientRepair);
+                     << " cells=" << input->GetNumberOfCells()
+                     << ". Out: port0=repaired mesh, port1=diagnostics. Checks: soup_edges="
+                     << this->CheckSoupEdges << " boundary=" << this->CheckBoundary
+                     << " self_intersection=" << this->CheckSelfIntersection
+                     << " check_orient=" << this->CheckOrient << " attempt_soup_repair=" << this->AttemptOrientRepair
+                     << " attempt_intersection_repair=" << this->AttemptRepairSelfIntersections
+                     << " only_if_self_intersecting=" << this->OnlyIfSelfIntersecting
+                     << " preserve_genus=" << this->PreserveGenus);
     vtkWarningMacro(<< "[SHYXMeshChecker] Step 1: polygon soup from VTK; soup points=" << soup.points.size()
                      << " soup faces=" << soup.faces.size());
   }
@@ -536,25 +592,108 @@ int vtkSHYXMeshChecker::RequestData(
   const vtkIdType out_cells = out_lines + out_polys;
   if (this->LogSteps)
   {
-    vtkWarningMacro(<< "[SHYXMeshChecker] Step 7: output summary; points=" << out_pts << " line+polyline cells="
-                     << out_lines << " triangle cells=" << out_polys << " total cells=" << out_cells
-                     << " SHYX_CheckReason tuples=" << reason->GetNumberOfTuples());
+    vtkWarningMacro(<< "[SHYXMeshChecker] Step 7: port1 diagnostic summary; points=" << out_pts
+                     << " line+polyline cells=" << out_lines << " triangle cells=" << out_polys
+                     << " total cells=" << out_cells << " SHYX_CheckReason tuples=" << reason->GetNumberOfTuples());
     if (out_cells == 0)
     {
-      vtkWarningMacro(<< "[SHYXMeshChecker] No diagnostic geometry produced. Typical causes: (1) manifold soup "
-                         "edges (no edge with >2 incident faces); (2) closed surface (no boundary cycles); "
-                         "(3) no self-intersections; (4) soup not convertible to CGAL mesh (step 3 false); "
+      vtkWarningMacro(<< "[SHYXMeshChecker] No diagnostic geometry on port 1. Typical causes: (1) manifold soup "
+                         "edges; (2) closed surface; (3) no self-intersections; (4) soup not a polygon mesh; "
                          "(5) self-intersection check skipped for non-triangle mesh.");
     }
-    vtkWarningMacro(<< "[SHYXMeshChecker] --- update end ---");
+    vtkWarningMacro(<< "[SHYXMeshChecker] --- port 1 (diagnostics) end ---");
   }
 
-  output->Initialize();
-  output->SetPoints(pts);
-  output->SetLines(line_cells);
-  output->SetPolys(poly_cells);
-  output->GetCellData()->AddArray(reason);
-  output->GetCellData()->SetActiveScalars(reason->GetName());
+  // Output port 1: illegal / diagnostic primitives
+  outBad->Initialize();
+  outBad->SetPoints(pts);
+  outBad->SetLines(line_cells);
+  outBad->SetPolys(poly_cells);
+  outBad->GetCellData()->AddArray(reason);
+  outBad->GetCellData()->SetActiveScalars(reason->GetName());
+
+  // Output port 0: best-effort repaired surface (soup or CGAL mesh, optional autorefine)
+  outMesh->Initialize();
+  if (have_surface && surf)
+  {
+    try
+    {
+      vtkCGALHelper::Vespa_surface outSurf;
+      outSurf.surface = surf->surface;
+      outSurf.coords  = get(CGAL::vertex_point, outSurf.surface);
+      if (this->AttemptRepairSelfIntersections && CGAL::is_triangle_mesh(outSurf.surface))
+      {
+        const bool has_ix = triangle_mesh_should_autorefine(outSurf.surface);
+        const bool run = !this->OnlyIfSelfIntersecting || has_ix;
+        if (run)
+        {
+          if (this->LogSteps)
+          {
+#if CGAL_VERSION_NR >= 1060000000
+            vtkWarningMacro(<< "[SHYXMeshChecker] port 0: PMP::autorefine (same entry point as "
+                               "vtkSHYXAutorefineSelfIntersectionFilter, CGAL 6+) ...");
+#else
+            vtkWarningMacro(<< "[SHYXMeshChecker] port 0: PMP::experimental::autorefine_and_remove_self_intersections "
+                               "(same as vtkSHYXAutorefineSelfIntersectionFilter, CGAL 5) ...");
+#endif
+          }
+          try
+          {
+#if CGAL_VERSION_NR >= 1060000000
+            (void)this->PreserveGenus;
+            pmp::autorefine(outSurf.surface);
+#else
+            pmp::experimental::autorefine_and_remove_self_intersections(
+              outSurf.surface, pmp::parameters::preserve_genus(this->PreserveGenus));
+#endif
+          }
+          catch (const std::exception& e)
+          {
+            vtkWarningMacro(<< "[SHYXMeshChecker] port 0: autorefine threw: " << e.what());
+          }
+          if (this->LogSteps)
+          {
+            vtkWarningMacro(<< "[SHYXMeshChecker] port 0: after autorefine, does_self_intersect="
+                             << (pmp::does_self_intersect(outSurf.surface) ? "true" : "false"));
+          }
+        }
+        else if (this->LogSteps)
+        {
+          vtkWarningMacro(<< "[SHYXMeshChecker] port 0: autorefine skipped (OnlyIfSelfIntersecting on and no "
+                             "self-intersections reported).");
+        }
+      }
+      if (!vtkCGALHelper::toVTK(&outSurf, outMesh))
+      {
+        vtkWarningMacro(<< "[SHYXMeshChecker] port 0: toVTK(surface) failed.");
+      }
+    }
+    catch (const std::exception& e)
+    {
+      vtkWarningMacro(<< "[SHYXMeshChecker] port 0: repair/toVTK: " << e.what()
+                       << " - writing unrepaired surface mesh from soup conversion.");
+      try
+      {
+        (void)vtkCGALHelper::toVTK(surf.get(), outMesh);
+      }
+      catch (const std::exception& e2)
+      {
+        vtkWarningMacro(<< "[SHYXMeshChecker] port 0: fallback toVTK: " << e2.what());
+      }
+    }
+    this->interpolateAttributes(input, outMesh);
+  }
+  else
+  {
+    (void)vtkCGALHelper::toVTK(&soup, outMesh);
+    this->interpolateAttributes(input, outMesh);
+  }
+
+  if (this->LogSteps)
+  {
+    vtkWarningMacro(<< "[SHYXMeshChecker] port 0 (repaired mesh) points=" << outMesh->GetNumberOfPoints()
+                     << " cells=" << outMesh->GetNumberOfCells() << ". --- all outputs end ---");
+  }
 
   return 1;
 }

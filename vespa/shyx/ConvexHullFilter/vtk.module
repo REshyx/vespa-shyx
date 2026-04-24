@@ -1,0 +1,13 @@
+NAME
+  vtkSHYXConvexHullFilter
+DESCRIPTION
+  "3D convex hull of vtkPolyData points (Delaunay3D alpha=0 + surface extraction)."
+GROUPS
+  Meshing
+DEPENDS
+  VTK::FiltersCore
+  VTK::FiltersGeometry
+PRIVATE_DEPENDS
+  VTK::CommonCore
+  VTK::CommonDataModel
+  VTK::CommonExecutionModel

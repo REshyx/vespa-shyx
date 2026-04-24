@@ -1,0 +1,58 @@
+<ServerManagerConfiguration>
+  <ProxyGroup name="filters">
+    <SourceProxy name="SHYXHoleFillFilter"
+                 class="vtkSHYXHoleFillFilter"
+                 label="SHYX Hole Fill (CGAL)">
+      <Documentation short_help="Fill holes (or a selected patch) on vtkPolyData using CGAL PMP.">
+        Fills mesh boundary cycles with CGAL triangulate_refine_and_fair_hole (same pipeline as
+        vtkCGALPatchFilling). Optional Selection removes triangles or points first (e.g. to open a
+        tunnel or delete a patch). Input should be a manifold triangle mesh where possible; output
+        replaces the surface including new fill triangles.
+      </Documentation>
+
+      <InputProperty name="Input" command="SetInputConnection">
+        <ProxyGroupDomain name="groups">
+          <Group name="sources"/>
+          <Group name="filters"/>
+        </ProxyGroupDomain>
+        <DataTypeDomain name="input_type">
+          <DataType value="vtkPolyData"/>
+        </DataTypeDomain>
+      </InputProperty>
+
+      <InputProperty command="SetSourceConnection"
+                     name="Selection">
+        <ProxyGroupDomain name="groups">
+          <Group name="sources"/>
+          <Group name="filters"/>
+        </ProxyGroupDomain>
+        <DataTypeDomain name="input_type">
+          <DataType value="vtkSelection"/>
+        </DataTypeDomain>
+        <Documentation>
+          Optional selection: removed from the mesh before filling (same semantics as VESPA hole filling).
+        </Documentation>
+        <Hints>
+          <SelectionInput/>
+        </Hints>
+      </InputProperty>
+
+      <IntVectorProperty command="SetFairingContinuity"
+                         name="FairingContinuity"
+                         label="Fairing Continuity"
+                         number_of_elements="1"
+                         default_values="1"
+                         animateable="0">
+        <IntRangeDomain name="range" min="0" max="2"/>
+        <Documentation>
+          Tangential continuity of the filled patch: 0 = C0 / planar-style filling, 1 = C1, 2 = C2 (CGAL
+          fairing_continuity).
+        </Documentation>
+      </IntVectorProperty>
+
+      <Hints>
+        <ShowInMenu category="SHYX" icon=":/VESPA/VESPA_Hole_Filling.png"/>
+      </Hints>
+    </SourceProxy>
+  </ProxyGroup>
+</ServerManagerConfiguration>

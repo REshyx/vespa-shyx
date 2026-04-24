@@ -1,0 +1,14 @@
+NAME
+  vtkSHYXBooleanOperationFilter
+DESCRIPTION
+  "SHYX: CGAL PMP mesh boolean (union / intersection / difference) without strict closed / SI prechecks."
+GROUPS
+  Meshing
+DEPENDS
+  vtkCGALAlgorithm
+  vtkCGALPMP
+  VTK::FiltersCore
+PRIVATE_DEPENDS
+  VTK::CommonCore
+  VTK::CommonDataModel
+  VTK::CommonExecutionModel

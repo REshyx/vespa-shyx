@@ -8,8 +8,12 @@
 #include <vtkObjectFactory.h>
 
 // CGAL related includes
+#include <CGAL/version.h>
 #include <CGAL/Polygon_mesh_processing/corefinement.h>
 #include <CGAL/Polygon_mesh_processing/repair_polygon_soup.h>
+#if CGAL_VERSION_NR >= 1060000000
+#  include <CGAL/Polygon_mesh_processing/autorefinement.h>
+#endif
 #include <CGAL/Polygon_mesh_processing/orient_polygon_soup.h>
 #include <CGAL/Polygon_mesh_processing/polygon_soup_to_polygon_mesh.h>
 // hole fairing
@@ -154,8 +158,12 @@ int vtkCGALMeshChecker::RequestData(
         vtkWarningMacro("Self intersection detected");
         if (this->AttemptRepair)
         {
+#if CGAL_VERSION_NR >= 1060000000
+          pmp::autorefine(cgalSurface->surface);
+#else
           pmp::experimental::autorefine_and_remove_self_intersections(
             cgalSurface->surface, pmp::parameters::preserve_genus(false));
+#endif
 
           // check reparation
           intersect = CGAL::Polygon_mesh_processing::does_self_intersect(cgalSurface->surface);

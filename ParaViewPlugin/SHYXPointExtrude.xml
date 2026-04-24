@@ -1,0 +1,118 @@
+<ServerManagerConfiguration>
+  <ProxyGroup name="filters">
+    <SourceProxy name="SHYXPointExtrudeFilter"
+                 class="vtkSHYXPointExtrudeFilter"
+                 label="SHYX Point Extrude">
+      <Documentation
+          long_help="Moves every point of the input vtkPolyData along an extrusion direction by a distance. By default directions are computed point normals (vtkPolyDataNormals). Optionally use any 3-component point vector array as direction (normalized per point). Distance is ExtrusionDistance times an optional per-point scalar multiplier array. Topology and data arrays are preserved (coordinates only change)."
+          short_help="Per-point extrusion along normals or a vector array; optional scalar distance multiplier."/>
+
+      <InputProperty name="Input" command="SetInputConnection">
+        <ProxyGroupDomain name="groups">
+          <Group name="sources"/>
+          <Group name="filters"/>
+        </ProxyGroupDomain>
+        <DataTypeDomain name="input_type">
+          <DataType value="vtkPolyData"/>
+        </DataTypeDomain>
+        <InputArrayDomain name="point_arrays" attribute_type="point" optional="1"/>
+      </InputProperty>
+
+      <DoubleVectorProperty name="ExtrusionDistance"
+                            label="Extrusion Distance"
+                            command="SetExtrusionDistance"
+                            number_of_elements="1"
+                            default_values="1.0"
+                            animateable="1">
+        <DoubleRangeDomain name="range" min="-1e12" max="1e12"/>
+        <Documentation>
+          Base displacement length along the direction at each point. When a distance multiplier array
+          is enabled, the actual length is ExtrusionDistance multiplied by that scalar per point.
+        </Documentation>
+      </DoubleVectorProperty>
+
+      <IntVectorProperty name="UseNormalsForDirection"
+                         label="Use Normals For Direction"
+                         command="SetUseNormalsForDirection"
+                         number_of_elements="1"
+                         default_values="1"
+                         animateable="0">
+        <BooleanDomain name="bool"/>
+        <Documentation>
+          When on, directions come from vtkPolyDataNormals on the input mesh. Turn off to choose a
+          point vector array (see Direction Array).
+        </Documentation>
+      </IntVectorProperty>
+
+      <StringVectorProperty name="DirectionArrayName"
+                            label="Direction Array"
+                            command="SetDirectionArrayName"
+                            number_of_elements="1"
+                            default_values=""
+                            animateable="0">
+        <ArrayListDomain name="array_list"
+                         attribute_type="Vectors"
+                         input_domain_name="point_arrays">
+          <RequiredProperties>
+            <Property name="Input" function="Input"/>
+          </RequiredProperties>
+        </ArrayListDomain>
+        <Documentation>
+          3-component point vector; used when &quot;Use Normals For Direction&quot; is off (required in that mode).
+          Each tuple is normalized; extrusion distance is applied along that unit direction.
+        </Documentation>
+        <Hints>
+          <ArraySelectionWidget icon_type="point"/>
+        </Hints>
+      </StringVectorProperty>
+
+      <IntVectorProperty name="UseDistanceMultiplierArray"
+                         label="Use Distance Multiplier Array"
+                         command="SetUseDistanceMultiplierArray"
+                         number_of_elements="1"
+                         default_values="0"
+                         animateable="0">
+        <BooleanDomain name="bool"/>
+        <Documentation>
+          When on, displacement length at each point is ExtrusionDistance times the selected scalar array.
+        </Documentation>
+      </IntVectorProperty>
+
+      <StringVectorProperty name="DistanceMultiplierArrayName"
+                            label="Distance Multiplier Array"
+                            command="SetDistanceMultiplierArrayName"
+                            number_of_elements="1"
+                            default_values=""
+                            animateable="0">
+        <ArrayListDomain name="array_list"
+                         attribute_type="Scalars"
+                         input_domain_name="point_arrays">
+          <RequiredProperties>
+            <Property name="Input" function="Input"/>
+          </RequiredProperties>
+        </ArrayListDomain>
+        <Documentation>
+          Per-point scalar multiplier for ExtrusionDistance (first component used if multi-component).
+          Required when &quot;Use Distance Multiplier Array&quot; is on.
+        </Documentation>
+        <Hints>
+          <ArraySelectionWidget icon_type="point"/>
+        </Hints>
+      </StringVectorProperty>
+
+      <IntVectorProperty name="FlipDirection"
+                         label="Flip Direction"
+                         command="SetFlipDirection"
+                         number_of_elements="1"
+                         default_values="0"
+                         animateable="0">
+        <BooleanDomain name="bool"/>
+        <Documentation>Extrude in the opposite direction (negate the unit direction before scaling).</Documentation>
+      </IntVectorProperty>
+
+      <Hints>
+        <ShowInMenu category="SHYX" icon=":/VESPA/SHYX_Surface_to_Volume_Mesh.png"/>
+      </Hints>
+    </SourceProxy>
+  </ProxyGroup>
+</ServerManagerConfiguration>

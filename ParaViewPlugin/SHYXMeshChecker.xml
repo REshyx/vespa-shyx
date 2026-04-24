@@ -3,13 +3,18 @@
     <SourceProxy name="SHYXMeshChecker"
                  class="vtkSHYXMeshChecker"
                  label="SHYX Mesh Checker">
-      <Documentation short_help="Mark non-manifold soup edges, boundary cycles, and self-intersecting triangles.">
-        Outputs diagnostic geometry on a single vtkPolyData: VTK_LINE cells for polygon-soup edges incident to
-        more than two faces (SHYX_CheckReason=1), VTK_POLY_LINE cells for mesh boundary / hole cycles (reason=2),
-        and VTK_TRIANGLE cells for faces reported by CGAL PMP::self_intersections (reason=3). Cell array
-        SHYX_CheckReason encodes the category. Boundary and self-intersection checks require a CGAL-valid
-        polygon mesh from the soup; pure triangle mesh is required for self-intersection enumeration.
+      <Documentation short_help="Repaired mesh (0) and diagnostic illegal primitives (1).">
+        Port 0: vtkPolyData after combinatorial soup repair (orient + repair_polygon_soup) and, when
+        &quot;Attempt self-intersection repair&quot; is on, CGAL PMP autorefine (same entry points as
+        SHYX Autorefine Self-Intersections: CGAL 6+ autorefine, CGAL 5 experimental
+        autorefine_and_remove_self_intersections). Port 1: diagnostic geometry — VTK_LINE for polygon-soup
+        edges with more than two incident faces (SHYX_CheckReason=1), VTK_POLY_LINE for boundary / hole
+        cycles (2), VTK_TRIANGLE for self-intersection pairs (3). Boundary and self-intersection checks need
+        a valid CGAL polygon mesh; self-intersection enumeration needs a pure triangle mesh.
       </Documentation>
+
+      <OutputPort name="Repaired mesh" index="0" id="port0" />
+      <OutputPort name="Illegal primitives" index="1" id="port1" />
 
       <InputProperty name="Input" command="SetInputConnection">
         <ProxyGroupDomain name="groups">
@@ -65,6 +70,46 @@
         <Documentation>
           When on, runs CGAL repair_polygon_soup after optional orient (splits non-manifold vertices, etc.)
           to improve chances that polygon_soup_to_polygon_mesh succeeds.
+        </Documentation>
+      </IntVectorProperty>
+
+      <IntVectorProperty name="AttemptRepairSelfIntersections"
+                         label="Attempt self-intersection repair (autorefine, port 0)"
+                         command="SetAttemptRepairSelfIntersections"
+                         number_of_elements="1"
+                         default_values="0"
+                         panel_visibility="advanced">
+        <BooleanDomain name="bool"/>
+        <Documentation>
+          When on, runs CGAL PMP autorefine on the triangle mesh built for port 0 (same as
+          vtkSHYXAutorefineSelfIntersectionFilter). Can change mesh topology; default off.
+        </Documentation>
+      </IntVectorProperty>
+
+      <IntVectorProperty name="OnlyIfSelfIntersecting"
+                         label="Autorefine only if self-intersecting"
+                         command="SetOnlyIfSelfIntersecting"
+                         number_of_elements="1"
+                         default_values="1"
+                         panel_visibility="advanced"
+                         animateable="0">
+        <BooleanDomain name="bool"/>
+        <Documentation>
+          When on (default), skip autorefine unless CGAL reports self-intersections (does_self_intersect or
+          intersecting face pairs from PMP::self_intersections).
+        </Documentation>
+      </IntVectorProperty>
+
+      <IntVectorProperty name="PreserveGenus"
+                         label="Preserve Genus (CGAL 5 autorefine)"
+                         command="SetPreserveGenus"
+                         number_of_elements="1"
+                         default_values="0"
+                         panel_visibility="advanced"
+                         animateable="0">
+        <BooleanDomain name="bool"/>
+        <Documentation>
+          Before CGAL 6: forwarded as preserve_genus to experimental autorefine. Ignored on CGAL 6+.
         </Documentation>
       </IntVectorProperty>
 

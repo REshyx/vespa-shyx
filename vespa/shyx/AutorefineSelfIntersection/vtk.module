@@ -1,0 +1,14 @@
+NAME
+  vtkSHYXAutorefineSelfIntersectionFilter
+DESCRIPTION
+  "SHYX: CGAL PMP autorefine (CGAL 6+) / experimental autorefine (CGAL 5) for triangle vtkPolyData."
+GROUPS
+  Meshing
+DEPENDS
+  vtkCGALAlgorithm
+  vtkCGALPMP
+  VTK::FiltersCore
+PRIVATE_DEPENDS
+  VTK::CommonCore
+  VTK::CommonDataModel
+  VTK::CommonExecutionModel

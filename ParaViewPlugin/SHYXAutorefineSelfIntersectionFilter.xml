@@ -1,0 +1,57 @@
+<ServerManagerConfiguration>
+  <ProxyGroup name="filters">
+    <SourceProxy name="SHYXAutorefineSelfIntersectionFilter"
+                 class="vtkSHYXAutorefineSelfIntersectionFilter"
+                 label="SHYX Autorefine Self-Intersections">
+      <Documentation short_help="CGAL PMP autorefine to remove mesh self-intersections.">
+        CGAL 6+: CGAL::Polygon_mesh_processing::autorefine(); older CGAL: experimental
+        autorefine_and_remove_self_intersections. Triangle vtkPolyData as CGAL Surface_mesh (use
+        vtkTriangleFilter if needed). Optional: run only when CGAL reports self-intersections.
+        Preserve Genus applies only to CGAL versions before 6.
+      </Documentation>
+
+      <InputProperty name="Input" command="SetInputConnection">
+        <ProxyGroupDomain name="groups">
+          <Group name="sources"/>
+          <Group name="filters"/>
+        </ProxyGroupDomain>
+        <DataTypeDomain name="input_type">
+          <DataType value="vtkPolyData"/>
+        </DataTypeDomain>
+      </InputProperty>
+
+      <IntVectorProperty name="OnlyIfSelfIntersecting"
+                         label="Only If Self-Intersecting"
+                         command="SetOnlyIfSelfIntersecting"
+                         number_of_elements="1"
+                         default_values="1"
+                         animateable="0">
+        <BooleanDomain name="bool"/>
+      </IntVectorProperty>
+
+      <IntVectorProperty name="PreserveGenus"
+                         label="Preserve Genus (CGAL)"
+                         command="SetPreserveGenus"
+                         number_of_elements="1"
+                         default_values="0"
+                         panel_visibility="advanced"
+                         animateable="0">
+        <BooleanDomain name="bool"/>
+      </IntVectorProperty>
+
+      <IntVectorProperty name="UpdateAttributes"
+                         label="Interpolate Point Data"
+                         command="SetUpdateAttributes"
+                         number_of_elements="1"
+                         default_values="1"
+                         panel_visibility="advanced"
+                         animateable="0">
+        <BooleanDomain name="bool"/>
+      </IntVectorProperty>
+
+      <Hints>
+        <ShowInMenu category="SHYX" icon=":/VESPA/SHYX_Point_Cloud_Surface_SDF.png"/>
+      </Hints>
+    </SourceProxy>
+  </ProxyGroup>
+</ServerManagerConfiguration>

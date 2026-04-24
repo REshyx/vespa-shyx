@@ -1,0 +1,87 @@
+<ServerManagerConfiguration>
+  <ProxyGroup name="filters">
+    <SourceProxy name="SHYXConvexHullFilter"
+                 class="vtkSHYXConvexHullFilter"
+                 label="SHYX Convex Hull">
+      <Documentation short_help="3D convex hull surface (triangle mesh) of vtkPolyData points.">
+        Builds the convex hull of input vertex positions using vtkDelaunay3D with Alpha = 0 and
+        vtkDataSetSurfaceFilter (VTK does not provide a vtkConvexHullFilter class). Optional
+        vtkCleanPolyData merges coincident points first. Requires at least four non-degenerate points
+        after cleaning; output is a closed vtkPolyData surface.
+      </Documentation>
+
+      <InputProperty name="Input" command="SetInputConnection">
+        <ProxyGroupDomain name="groups">
+          <Group name="sources"/>
+          <Group name="filters"/>
+        </ProxyGroupDomain>
+        <DataTypeDomain name="input_type">
+          <DataType value="vtkPolyData"/>
+        </DataTypeDomain>
+      </InputProperty>
+
+      <IntVectorProperty name="CleanInputPoints"
+                         label="Clean Input Points"
+                         command="SetCleanInputPoints"
+                         number_of_elements="1"
+                         default_values="1"
+                         animateable="0">
+        <BooleanDomain name="bool"/>
+      </IntVectorProperty>
+
+      <DoubleVectorProperty name="CleanInputTolerance"
+                            label="Clean Tolerance"
+                            command="SetCleanInputTolerance"
+                            number_of_elements="1"
+                            default_values="0.0"
+                            panel_visibility="advanced"
+                            animateable="0">
+        <DoubleRangeDomain name="range" min="0.0" max="1e12"/>
+      </DoubleVectorProperty>
+
+      <IntVectorProperty name="CleanInputToleranceIsAbsolute"
+                         label="Clean Tolerance Is Absolute"
+                         command="SetCleanInputToleranceIsAbsolute"
+                         number_of_elements="1"
+                         default_values="0"
+                         panel_visibility="advanced"
+                         animateable="0">
+        <BooleanDomain name="bool"/>
+      </IntVectorProperty>
+
+      <DoubleVectorProperty name="Tolerance"
+                            label="Delaunay Tolerance"
+                            command="SetTolerance"
+                            number_of_elements="1"
+                            default_values="0.001"
+                            panel_visibility="advanced"
+                            animateable="0">
+        <DoubleRangeDomain name="range" min="0.0" max="1.0"/>
+      </DoubleVectorProperty>
+
+      <DoubleVectorProperty name="Offset"
+                            label="Delaunay Offset"
+                            command="SetOffset"
+                            number_of_elements="1"
+                            default_values="2.5"
+                            panel_visibility="advanced"
+                            animateable="0">
+        <DoubleRangeDomain name="range" min="2.5" max="1e12"/>
+      </DoubleVectorProperty>
+
+      <IntVectorProperty name="BoundingTriangulation"
+                         label="Bounding Triangulation (debug)"
+                         command="SetBoundingTriangulation"
+                         number_of_elements="1"
+                         default_values="0"
+                         panel_visibility="advanced"
+                         animateable="0">
+        <BooleanDomain name="bool"/>
+      </IntVectorProperty>
+
+      <Hints>
+        <ShowInMenu category="SHYX" icon=":/VESPA/SHYX_Point_Cloud_Surface_SDF.png"/>
+      </Hints>
+    </SourceProxy>
+  </ProxyGroup>
+</ServerManagerConfiguration>

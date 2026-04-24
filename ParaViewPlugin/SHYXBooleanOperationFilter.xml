@@ -1,0 +1,97 @@
+<ServerManagerConfiguration>
+  <ProxyGroup name="filters">
+    <SourceProxy name="SHYXBooleanOperationFilter"
+                 class="vtkSHYXBooleanOperationFilter"
+                 label="SHYX Boolean (CGAL, relaxed)">
+      <Documentation short_help="CGAL union / intersection / difference without requiring closed meshes.">
+        Wraps CGAL Polygon_mesh_processing corefinement booleans like the VESPA boolean filter, but
+        does not abort when meshes are open: it logs a warning and still calls CGAL. By default CGAL
+        is not asked to throw on self-intersection (unlike the strict VESPA filter). For badly
+        conditioned data the operation may still return failure or an empty / unexpected surface; use
+        advanced options to match VESPA-style strictness or to skip volume-orientation preprocessing.
+      </Documentation>
+
+      <InputProperty name="Input" command="SetInputConnection">
+        <ProxyGroupDomain name="groups">
+          <Group name="sources"/>
+          <Group name="filters"/>
+        </ProxyGroupDomain>
+        <DataTypeDomain name="input_type">
+          <DataType value="vtkPolyData"/>
+        </DataTypeDomain>
+      </InputProperty>
+
+      <InputProperty command="SetSourceConnection"
+                     name="Source"
+                     label="Tool mesh">
+        <ProxyGroupDomain name="groups">
+          <Group name="sources"/>
+          <Group name="filters"/>
+        </ProxyGroupDomain>
+        <DataTypeDomain name="input_type">
+          <DataType value="vtkPolyData"/>
+        </DataTypeDomain>
+        <Documentation>
+          Second surface (same role as VESPA boolean &quot;Source&quot;).
+        </Documentation>
+      </InputProperty>
+
+      <IntVectorProperty command="SetOperationType"
+                         name="OperationType"
+                         label="Operation"
+                         number_of_elements="1"
+                         default_values="0"
+                         animateable="0">
+        <EnumerationDomain name="enum">
+          <Entry text="Difference" value="0"/>
+          <Entry text="Intersection" value="1"/>
+          <Entry text="Union" value="2"/>
+        </EnumerationDomain>
+      </IntVectorProperty>
+
+      <IntVectorProperty command="SetThrowOnSelfIntersection"
+                         name="ThrowOnSelfIntersection"
+                         label="Throw on self-intersection"
+                         number_of_elements="1"
+                         default_values="0"
+                         panel_visibility="advanced"
+                         animateable="0">
+        <BooleanDomain name="bool"/>
+        <Documentation>
+          When on, CGAL uses the same strict self-intersection policy as vtkCGALBooleanOperation.
+        </Documentation>
+      </IntVectorProperty>
+
+      <IntVectorProperty command="SetOrientToBoundVolumeWhenNeeded"
+                         name="OrientToBoundVolumeWhenNeeded"
+                         label="Orient if volume unclear"
+                         number_of_elements="1"
+                         default_values="1"
+                         panel_visibility="advanced"
+                         animateable="0">
+        <BooleanDomain name="bool"/>
+        <Documentation>
+          When on, CGAL may re-orient a mesh that does not bound a volume before the boolean (same
+          optional step as the VESPA filter). Turn off to skip this preprocessing.
+        </Documentation>
+      </IntVectorProperty>
+
+      <IntVectorProperty name="UseUpdateAttributes"
+                         command="SetUpdateAttributes"
+                         label="Interpolate attributes"
+                         number_of_elements="1"
+                         default_values="1"
+                         panel_visibility="advanced"
+                         animateable="0">
+        <BooleanDomain name="bool"/>
+        <Documentation>
+          If on, point/cell data from the primary input are probed onto the result (vtkCGALPolyDataAlgorithm).
+        </Documentation>
+      </IntVectorProperty>
+
+      <Hints>
+        <ShowInMenu category="SHYX" icon=":/VESPA/VESPA_Boolean_Operation.png"/>
+      </Hints>
+    </SourceProxy>
+  </ProxyGroup>
+</ServerManagerConfiguration>

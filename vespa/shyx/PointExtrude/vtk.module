@@ -1,0 +1,12 @@
+NAME
+  vtkSHYXPointExtrudeFilter
+DESCRIPTION
+  "Displace each point of vtkPolyData along computed point normals or a named 3-component point array; distance is constant or scaled per point by a scalar array."
+GROUPS
+  Meshing
+DEPENDS
+  VTK::FiltersCore
+PRIVATE_DEPENDS
+  VTK::CommonCore
+  VTK::CommonDataModel
+  VTK::CommonExecutionModel
