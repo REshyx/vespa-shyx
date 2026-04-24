@@ -1,0 +1,97 @@
+<ServerManagerConfiguration>
+  <ProxyGroup name="filters">
+    <SourceProxy class="vtkSHYXTetGenMeshOptimize"
+                 label="SHYX TetGen Mesh Optimize"
+                 name="SHYXTetGenMeshOptimize">
+      <Documentation
+          short_help="Optimize an existing tetrahedral mesh with TetGen (no new vertices)."
+          long_help="Takes a vtkUnstructuredGrid containing tetrahedra (VTK_TETRA). Non-tetrahedral cells are ignored. TetGen reconstructs the mesh and runs mesh improvement. Refinement is capped with -S0 and boundary splits with -Y so Delaunay refinement does not add Steiner points. Target Max Aspect Ratio defaults to 20 (TetGen -o//): TetGen's internal default is 1000, which rarely marks any tet as bad, so the mesh looked unchanged—lower values make flip-based improvement actually run. Set it to 1000 to restore TetGen's loose default. Default Extra Improve Iterations is 0 (flip-only); raising it enables TetGen's smoother/Steiner-capable loop and may insert vertices. Preserve Unused Vertices (-J) avoids dropping input nodes not used by any tet."/>
+
+      <InputProperty name="Input"
+                     command="SetInputConnection">
+        <ProxyGroupDomain name="groups">
+          <Group name="sources"/>
+          <Group name="filters"/>
+        </ProxyGroupDomain>
+        <DataTypeDomain name="input_type">
+          <DataType value="vtkUnstructuredGrid"/>
+        </DataTypeDomain>
+      </InputProperty>
+
+      <IntVectorProperty command="SetOptMaxFlipLevel"
+                         name="OptMaxFlipLevel"
+                         label="Max Flip Level (-O#)"
+                         number_of_elements="1"
+                         default_values="3">
+        <IntRangeDomain name="range" min="1" max="9"/>
+        <Documentation>TetGen -O# maximum flip link level during optimization.</Documentation>
+      </IntVectorProperty>
+
+      <IntVectorProperty command="SetOptScheme"
+                         name="OptScheme"
+                         label="Optimization Scheme (-O/#)"
+                         number_of_elements="1"
+                         default_values="7">
+        <IntRangeDomain name="range" min="0" max="7"/>
+        <Documentation>TetGen -O/# bit mask for optimization operations.</Documentation>
+      </IntVectorProperty>
+
+      <DoubleVectorProperty command="SetOptMaxAspectRatio"
+                           name="OptMaxAspectRatio"
+                           label="Target Max Aspect Ratio (-o//)"
+                           number_of_elements="1"
+                           default_values="20">
+        <DoubleRangeDomain name="range" min="1.05" max="1000"/>
+        <Documentation>
+          Upper bound on tet aspect ratio for improvement (TetGen -o//). Lower = more tets treated as bad and more flip work (typical 10–40). Use 1000 for TetGen's default (usually almost no visible change).
+        </Documentation>
+      </DoubleVectorProperty>
+
+      <IntVectorProperty command="SetOptIterations"
+                         name="OptIterations"
+                         label="Extra Improve Iterations (-O//#)"
+                         number_of_elements="1"
+                         default_values="0">
+        <IntRangeDomain name="range" min="0" max="100"/>
+        <Documentation>
+          TetGen -O//#: iterations of the secondary improvement loop (smoothing and optional Steiner insertion).
+          Default 0 keeps only the flip-only pass and avoids new vertices from mesh improvement.
+          Increase only if you accept possible Steiner points from TetGen in that phase.
+        </Documentation>
+      </IntVectorProperty>
+
+      <IntVectorProperty command="SetDoCheck"
+                         name="DoCheck"
+                         label="Check Mesh (-C)"
+                         number_of_elements="1"
+                         default_values="0"
+                         panel_visibility="advanced">
+        <BooleanDomain name="bool"/>
+        <Documentation>Run TetGen consistency check on the result.</Documentation>
+      </IntVectorProperty>
+
+      <IntVectorProperty command="SetNoJettison"
+                         name="NoJettison"
+                         label="Preserve Unused Vertices (-J)"
+                         number_of_elements="1"
+                         default_values="1">
+        <BooleanDomain name="bool"/>
+        <Documentation>When ON, TetGen does not jettison unused input vertices from the output.</Documentation>
+      </IntVectorProperty>
+
+      <DoubleVectorProperty command="SetEpsilon"
+                           name="Epsilon"
+                           label="Epsilon (-T)"
+                           number_of_elements="1"
+                           default_values="1e-8"
+                           panel_visibility="advanced">
+        <DoubleRangeDomain name="range" min="1e-16" max="1e-2"/>
+        <Documentation>Coplanar/collinear tolerance for TetGen (-T).</Documentation>
+      </DoubleVectorProperty>
+
+      <Hints>
+        <ShowInMenu category="SHYX" icon=":/VESPA/SHYX_TetGen.png"/>
+      </Hints>
+    </SourceProxy>
+  </ProxyGroup>
+</ServerManagerConfiguration>

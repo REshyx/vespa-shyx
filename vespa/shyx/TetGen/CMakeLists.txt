@@ -1,5 +1,6 @@
 set(classes
-  vtkSHYXTetGen)
+  vtkSHYXTetGen
+  vtkSHYXTetGenMeshOptimize)
 vtk_module_add_module(vtkSHYXTetGen
   FORCE_STATIC
   CLASSES ${classes})

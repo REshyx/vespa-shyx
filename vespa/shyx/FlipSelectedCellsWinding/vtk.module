@@ -1,0 +1,11 @@
+NAME
+  vtkSHYXFlipSelectedCellsWindingFilter
+DESCRIPTION
+  "Reverse vertex ordering (winding) of cells selected by vtkSelection or optional cell data mask on vtkPolyData."
+GROUPS
+  Meshing
+DEPENDS
+  VTK::CommonCore
+  VTK::CommonDataModel
+  VTK::CommonExecutionModel
+  VTK::FiltersExtraction

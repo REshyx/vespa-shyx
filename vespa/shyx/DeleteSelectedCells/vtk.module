@@ -1,0 +1,12 @@
+NAME
+  vtkSHYXDeleteSelectedCellsFilter
+DESCRIPTION
+  "Remove cells indicated by a vtkSelection (or optional cell data mask) from vtkPolyData."
+GROUPS
+  Meshing
+DEPENDS
+  VTK::CommonCore
+  VTK::CommonDataModel
+  VTK::CommonExecutionModel
+  VTK::FiltersCore
+  VTK::FiltersExtraction

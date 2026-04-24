@@ -1,0 +1,150 @@
+<ServerManagerConfiguration>
+  <ProxyGroup name="filters">
+    <SourceProxy name="SHYXSelectionFillAlphaReunionFilter"
+                 class="vtkSHYXSelectionFillAlphaReunionFilter"
+                 label="SHYX Selection: Fill, Alpha Wrap, Union">
+      <Documentation short_help="Split by selection, hole-fill both, Alpha wrap selection, then CGAL union.">
+        Splits the surface into the selected and unselected regions, fills boundary holes (CGAL) on
+        each part, runs Alpha Wrapping on the selected part (CGAL 5.5+), and merges the two
+        closed-oriented surfaces with a CGAL PMP boolean union. When the unselected part is empty
+        (entire surface selected), only the selected path is output. Use Selection on port 1, or
+        a cell data mask (SelectionCellArrayName) like other SHYX selection tools.
+      </Documentation>
+
+      <InputProperty name="Input" command="SetInputConnection">
+        <ProxyGroupDomain name="groups">
+          <Group name="sources"/>
+          <Group name="filters"/>
+        </ProxyGroupDomain>
+        <DataTypeDomain name="input_type">
+          <DataType value="vtkPolyData"/>
+        </DataTypeDomain>
+      </InputProperty>
+
+      <InputProperty command="SetSourceConnection"
+                     name="Selection"
+                     label="Selection">
+        <ProxyGroupDomain name="groups">
+          <Group name="sources"/>
+          <Group name="filters"/>
+        </ProxyGroupDomain>
+        <DataTypeDomain name="input_type">
+          <DataType value="vtkSelection"/>
+        </DataTypeDomain>
+        <Documentation>
+          Cells to treat as the region that is hole-filled and Alpha-wrapped; the complement is
+          hole-filled and then unioned.
+        </Documentation>
+        <Hints>
+          <SelectionInput/>
+        </Hints>
+      </InputProperty>
+
+      <StringVectorProperty name="SelectionCellArrayName"
+                            command="SetSelectionCellArrayName"
+                            number_of_elements="1"
+                            default_values=""
+                            panel_visibility="advanced">
+        <Documentation>
+          Optional: when Selection is not connected, name of a cell data array on the mesh. Same
+          rule as SHYX Delete Selected Cells: integral non-zero or float &gt; 0.5 selects a cell.
+        </Documentation>
+      </StringVectorProperty>
+
+      <IntVectorProperty command="SetFairingContinuity"
+                         name="FairingContinuity"
+                         label="Fairing (hole fill)"
+                         number_of_elements="1"
+                         default_values="1"
+                         animateable="0">
+        <IntRangeDomain name="range" min="0" max="2"/>
+        <Documentation>
+          Continuity for CGAL hole fill on both sub-meshes (0 / 1 / 2), same as SHYX Hole Fill.
+        </Documentation>
+      </IntVectorProperty>
+
+      <IntVectorProperty command="SetSkipAlphaWrapping"
+                         name="SkipAlphaWrapping"
+                         label="Skip Alpha wrap (selected only)"
+                         number_of_elements="1"
+                         default_values="0"
+                         panel_visibility="advanced"
+                         animateable="0">
+        <BooleanDomain name="bool"/>
+        <Documentation>
+          If on, the selected part is only hole-filled (no Alpha Wrapping).
+        </Documentation>
+      </IntVectorProperty>
+
+      <IntVectorProperty command="SetAbsoluteThresholds"
+                         name="AbsoluteThresholds"
+                         label="Alpha wrap: absolute Alpha/Offset"
+                         number_of_elements="1"
+                         default_values="0"
+                         panel_visibility="advanced"
+                         animateable="0">
+        <BooleanDomain name="bool"/>
+        <Documentation>
+          If off, Alpha and Offset are percentages of the mesh length (see VESPA Alpha Wrapping).
+        </Documentation>
+      </IntVectorProperty>
+
+      <DoubleVectorProperty command="SetAlpha"
+                            name="Alpha"
+                            label="Alpha"
+                            number_of_elements="1"
+                            default_values="1.0"
+                            panel_visibility="advanced"
+                            animateable="1">
+        <Documentation>Alpha wrap parameter (maximum circumradius of faces in the result).</Documentation>
+      </DoubleVectorProperty>
+
+      <DoubleVectorProperty command="SetOffset"
+                            name="Offset"
+                            label="Offset"
+                            number_of_elements="1"
+                            default_values="0.1"
+                            panel_visibility="advanced"
+                            animateable="1">
+        <Documentation>Alpha wrap offset (dilatation / shrink factor depending on context).</Documentation>
+      </DoubleVectorProperty>
+
+      <IntVectorProperty command="SetThrowOnSelfIntersection"
+                         name="ThrowOnSelfIntersection"
+                         label="Boolean: throw on self-intersection"
+                         number_of_elements="1"
+                         default_values="0"
+                         panel_visibility="advanced"
+                         animateable="0">
+        <BooleanDomain name="bool"/>
+      </IntVectorProperty>
+
+      <IntVectorProperty command="SetOrientToBoundVolumeWhenNeeded"
+                         name="OrientToBoundVolumeWhenNeeded"
+                         label="Boolean: orient if volume unclear"
+                         number_of_elements="1"
+                         default_values="1"
+                         panel_visibility="advanced"
+                         animateable="0">
+        <BooleanDomain name="bool"/>
+      </IntVectorProperty>
+
+      <IntVectorProperty name="UseUpdateAttributes"
+                         command="SetUpdateAttributes"
+                         label="Interpolate attributes (from full input)"
+                         number_of_elements="1"
+                         default_values="1"
+                         panel_visibility="advanced"
+                         animateable="0">
+        <BooleanDomain name="bool"/>
+        <Documentation>
+          Probe the original full surface onto the merged result.
+        </Documentation>
+      </IntVectorProperty>
+
+      <Hints>
+        <ShowInMenu category="SHYX" icon=":/VESPA/VESPA_Hole_Filling.png"/>
+      </Hints>
+    </SourceProxy>
+  </ProxyGroup>
+</ServerManagerConfiguration>

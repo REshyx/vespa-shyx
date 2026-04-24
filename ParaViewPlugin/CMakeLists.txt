@@ -2,6 +2,7 @@ vtk_module_find_modules(vespa_vtk_modules "${CMAKE_SOURCE_DIR}/vespa")
 
 if (${VESPA_ALPHA_WRAPPING})
   set(ALPHA_WRAPPING_SERVER_MANAGER_XML "VESPAAlphaWrapping.xml")
+  set(SHYX_SELECTION_FILL_ALPHA_REUNION_XML "SHYXSelectionFillAlphaReunionFilter.xml")
 endif()
 
 if (${VESPA_MESH_SMOOTHING})
@@ -80,7 +81,9 @@ paraview_add_plugin(VESPAPlugin
     "SHYXSurfaceTipExtractor.xml"
     "SHYXSurfaceToVolumeMesh.xml"
     "SHYXTetGen.xml"
+    "SHYXTetGenMeshOptimize.xml"
     "SHYXFTLEFilter.xml"
+    "SHYXFlipSelectedCellsWinding.xml"
     "SHYXGeodesicDistance.xml"
     "SHYXHoleFillFilter.xml"
     "SHYXRadiusNeighborCount.xml"
@@ -88,10 +91,10 @@ paraview_add_plugin(VESPAPlugin
     "SHYXSelectionOBBSubtract.xml"
     "SHYXMeshChecker.xml"
     "SHYXMinimumOBB.xml"
-    "SHYXOppositeFaceThickness.xml"
     "SHYXPointExtrude.xml"
     "SHYXDisconnectedRegionFuse.xml"
     "SHYXDataSetToPartitionedCollection.xml"
+    "SHYXDeleteSelectedCells.xml"
     "SHYXClebschMapFilter.xml"
     "SHYXConvexHullFilter.xml"
     "SHYXVortexCriteria.xml"
@@ -104,6 +107,7 @@ paraview_add_plugin(VESPAPlugin
     "AnimatedStreamlineRepresentation.xml"
     "PointLabelRepresentation.xml"
      ${ALPHA_WRAPPING_SERVER_MANAGER_XML}
+     ${SHYX_SELECTION_FILL_ALPHA_REUNION_XML}
      ${MESH_SMOOTHING_SERVER_MANAGER_XML}
      ${ADAPTIVE_REMESHING_SERVER_MANAGER_XML}
      ${VMTK_CENTERLINES_SERVER_MANAGER_XML}

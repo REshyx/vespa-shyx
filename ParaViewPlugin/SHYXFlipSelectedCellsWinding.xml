@@ -1,0 +1,50 @@
+<ServerManagerConfiguration>
+  <ProxyGroup name="filters">
+    <SourceProxy name="SHYXFlipSelectedCellsWindingFilter"
+                 class="vtkSHYXFlipSelectedCellsWindingFilter"
+                 label="SHYX Flip Selected Cells Winding">
+      <Documentation
+          long_help="Reverses the vertex order of each cell included in the active selection (vtkSelection on the Selection port), which flips triangle/quad/polygon winding and thus the geometric normal. Uses vtkPolyData::ReverseCell per selected id; same selection resolution as SHYX Selection Extrude (vtkExtractSelection with vtkOriginalCellIds, or vtkOriginalPointIds with all incident cells). Optional Selection Cell Array Name marks cells when the selection port is unused or yields no cells (float &gt; 0.5 or integral non-zero). When nothing is selected and no array marks any cell, all cells are flipped."
+          short_help="Flip winding of selected cells; if nothing is selected, flip all cells."/>
+
+      <InputProperty name="Input" command="SetInputConnection">
+        <ProxyGroupDomain name="groups">
+          <Group name="sources"/>
+          <Group name="filters"/>
+        </ProxyGroupDomain>
+        <DataTypeDomain name="input_type">
+          <DataType value="vtkPolyData"/>
+        </DataTypeDomain>
+        <Documentation>Surface or mesh whose selected cells get reversed connectivity.</Documentation>
+      </InputProperty>
+
+      <InputProperty name="Selection" label="Selection"
+                     command="SetSourceConnection">
+        <ProxyGroupDomain name="groups">
+          <Group name="sources"/>
+          <Group name="filters"/>
+        </ProxyGroupDomain>
+        <DataTypeDomain name="input_type">
+          <DataType value="vtkSelection"/>
+        </DataTypeDomain>
+        <Documentation>
+          vtkSelection describing cells or points whose incident cells are flipped.
+        </Documentation>
+        <Hints>
+          <SelectionInput/>
+        </Hints>
+      </InputProperty>
+
+      <StringVectorProperty name="SelectionCellArrayName" label="Selection Cell Array Name"
+          command="SetSelectionCellArrayName" number_of_elements="1" default_values="">
+        <Documentation>
+          Optional mask on Input cell data: cells are flipped when value &gt; 0.5 (float) or non-zero (integer). Used when the Selection port does not designate any cells. If this is empty or no cell is marked, all cells are flipped.
+        </Documentation>
+      </StringVectorProperty>
+
+      <Hints>
+        <ShowInMenu category="SHYX" icon=":/VESPA/SHYX_Surface_to_Volume_Mesh.png"/>
+      </Hints>
+    </SourceProxy>
+  </ProxyGroup>
+</ServerManagerConfiguration>

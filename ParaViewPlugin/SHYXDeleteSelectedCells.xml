@@ -1,0 +1,50 @@
+<ServerManagerConfiguration>
+  <ProxyGroup name="filters">
+    <SourceProxy name="SHYXDeleteSelectedCellsFilter"
+                 class="vtkSHYXDeleteSelectedCellsFilter"
+                 label="SHYX Delete Selected Cells">
+      <Documentation
+          long_help="Removes cells from vtkPolyData that are included in the active selection (vtkSelection on the Selection port), matching SHYX Selection Extrude / VESPA Region Fairing conventions. vtkExtractSelection is used internally (vtkOriginalCellIds on extracted cells, or vtkOriginalPointIds with all incident cells). If there is no selection, you can instead set Selection Cell Array Name on the mesh. When nothing is selected, the filter passes the input through unchanged."
+          short_help="Delete selected cells from a surface or mesh (selection input)."/>
+
+      <InputProperty name="Input" command="SetInputConnection">
+        <ProxyGroupDomain name="groups">
+          <Group name="sources"/>
+          <Group name="filters"/>
+        </ProxyGroupDomain>
+        <DataTypeDomain name="input_type">
+          <DataType value="vtkPolyData"/>
+        </DataTypeDomain>
+        <Documentation>vtkPolyData whose selected cells are removed.</Documentation>
+      </InputProperty>
+
+      <InputProperty name="Selection" label="Selection"
+                     command="SetSourceConnection">
+        <ProxyGroupDomain name="groups">
+          <Group name="sources"/>
+          <Group name="filters"/>
+        </ProxyGroupDomain>
+        <DataTypeDomain name="input_type">
+          <DataType value="vtkSelection"/>
+        </DataTypeDomain>
+        <Documentation>
+          vtkSelection describing cells or points to remove (same convention as SHYX Selection Extrude).
+        </Documentation>
+        <Hints>
+          <SelectionInput/>
+        </Hints>
+      </InputProperty>
+
+      <StringVectorProperty name="SelectionCellArrayName" label="Selection Cell Array Name"
+          command="SetSelectionCellArrayName" number_of_elements="1" default_values="">
+        <Documentation>
+          If Selection is empty: name of a cell data array on Input. Cells are removed when value &gt; 0.5 (float) or non-zero (integer types).
+        </Documentation>
+      </StringVectorProperty>
+
+      <Hints>
+        <ShowInMenu category="SHYX" icon=":/VESPA/SHYX_Surface_to_Volume_Mesh.png"/>
+      </Hints>
+    </SourceProxy>
+  </ProxyGroup>
+</ServerManagerConfiguration>
