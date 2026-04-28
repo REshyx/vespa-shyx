@@ -46,7 +46,8 @@ bool vtkCGALHelper::toCGAL(vtkPolyData* vtkMesh, vtkCGALHelper::Vespa_soup* cgal
 }
 
 //------------------------------------------------------------------------------
-bool vtkCGALHelper::toCGAL(vtkPolyData* vtkMesh, vtkCGALHelper::Vespa_surface* cgalMesh)
+bool vtkCGALHelper::toCGAL(vtkPolyData* vtkMesh, vtkCGALHelper::Vespa_surface* cgalMesh,
+  std::vector<Graph_Faces>* vtkCellToCgalFace)
 {
   bool status = true;
 
@@ -75,6 +76,13 @@ bool vtkCGALHelper::toCGAL(vtkPolyData* vtkMesh, vtkCGALHelper::Vespa_surface* c
       cgalMesh->coords, surfaceVertices[i], CGAL_Kernel::Point_3(coords[0], coords[1], coords[2]));
   }
 
+  const vtkIdType nCells = vtkMesh->GetNumberOfCells();
+  if (vtkCellToCgalFace)
+  {
+    vtkCellToCgalFace->clear();
+    vtkCellToCgalFace->resize(static_cast<size_t>(nCells));
+  }
+
   // Cells
   auto cit = vtk::TakeSmartPointer(vtkMesh->NewCellIterator());
   for (cit->InitTraversal(); !cit->IsDoneWithTraversal(); cit->GoToNextCell())
@@ -92,6 +100,14 @@ bool vtkCGALHelper::toCGAL(vtkPolyData* vtkMesh, vtkCGALHelper::Vespa_surface* c
     // Fails on non-manifold cells
     auto newFace = CGAL::Euler::add_face(cell, cgalMesh->surface);
     status &= newFace.is_valid();
+    if (vtkCellToCgalFace)
+    {
+      const vtkIdType cid = cit->GetCellId();
+      if (cid >= 0 && cid < nCells)
+      {
+        (*vtkCellToCgalFace)[static_cast<size_t>(cid)] = newFace;
+      }
+    }
   }
 
   if (!status)

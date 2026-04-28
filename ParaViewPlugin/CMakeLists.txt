@@ -91,6 +91,7 @@ paraview_add_plugin(VESPAPlugin
     "SHYXSelectionOBBSubtract.xml"
     "SHYXMeshChecker.xml"
     "SHYXMinimumOBB.xml"
+    "SHYXOppositeFaceThickness.xml"
     "SHYXPointExtrude.xml"
     "SHYXDisconnectedRegionFuse.xml"
     "SHYXDataSetToPartitionedCollection.xml"

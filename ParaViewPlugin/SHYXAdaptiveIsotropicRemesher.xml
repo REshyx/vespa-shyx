@@ -7,7 +7,8 @@
       <Documentation short_help="Curvature-aware CGAL remesh with min/max edge length.">
         Adaptive isotropic remeshing using CGAL Adaptive_sizing_field (discrete curvature).
         Edge lengths are limited by Min/Max Edge Length; AdaptiveTolerance controls fineness
-        together with curvature. Requires CGAL 6.0+.
+        together with curvature. With a Selection (or Selection Cell Array Name), only those
+        faces are remeshed; otherwise the whole surface is remeshed. Requires CGAL 6.0+.
       </Documentation>
 
       <InputProperty name="Input"
@@ -20,6 +21,32 @@
           <DataType value="vtkPolyData"/>
         </DataTypeDomain>
       </InputProperty>
+
+      <InputProperty name="Selection" label="Selection"
+                     command="SetSourceConnection">
+        <ProxyGroupDomain name="groups">
+          <Group name="sources"/>
+          <Group name="filters"/>
+        </ProxyGroupDomain>
+        <DataTypeDomain name="input_type">
+          <DataType value="vtkSelection"/>
+        </DataTypeDomain>
+        <Documentation>
+          Optional vtkSelection (active selection). When present and non-empty, CGAL remeshing
+          is applied only to the indicated faces (same convention as SHYX Delete Selected Cells).
+        </Documentation>
+        <Hints>
+          <SelectionInput/>
+        </Hints>
+      </InputProperty>
+
+      <StringVectorProperty name="SelectionCellArrayName" label="Selection Cell Array Name"
+          command="SetSelectionCellArrayName" number_of_elements="1" default_values="">
+        <Documentation>
+          If Selection is empty: name of a cell data array on Input. Faces are remeshed when
+          value &gt; 0.5 (float) or non-zero (integer types).
+        </Documentation>
+      </StringVectorProperty>
 
       <DoubleVectorProperty command="SetMinEdgeLength"
                             name="MinEdgeLength"

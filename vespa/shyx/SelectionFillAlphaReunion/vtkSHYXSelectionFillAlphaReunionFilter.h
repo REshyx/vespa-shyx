@@ -70,7 +70,7 @@ protected:
   int FairingContinuity = 1;
   bool AbsoluteThresholds = false;
   double Alpha = 1.0;
-  double Offset = 0.1;
+  double Offset = 1.0;
   bool SkipAlphaWrapping = false;
   bool ThrowOnSelfIntersection = false;
   bool OrientToBoundVolumeWhenNeeded = true;

@@ -7,6 +7,10 @@
  * edge lengths are clamped to [MinEdgeLength, MaxEdgeLength]. Feature edges are
  * detected and protected like vtkCGALIsotropicRemesher.
  *
+ * Optional Selection (port 1) or SelectionCellArrayName on the input restricts
+ * CGAL isotropic remeshing to those faces; the rest of the surface is unchanged.
+ * With no selection, the whole surface is remeshed (previous behavior).
+ *
  * Requires CGAL 6.0 or newer.
  */
 
@@ -17,12 +21,26 @@
 
 #include "vtkSHYXAdaptiveIsotropicRemesherModule.h"
 
+class vtkAlgorithmOutput;
+class vtkInformation;
+
 class VTKSHYXADAPTIVEISOTROPICREMESHER_EXPORT vtkSHYXAdaptiveIsotropicRemesher : public vtkCGALPolyDataAlgorithm
 {
 public:
   static vtkSHYXAdaptiveIsotropicRemesher* New();
   vtkTypeMacro(vtkSHYXAdaptiveIsotropicRemesher, vtkCGALPolyDataAlgorithm);
   void PrintSelf(ostream& os, vtkIndent indent) override;
+
+  /** vtkSelection input (port 1), same pattern as SHYX Delete Selected Cells. */
+  void SetSourceConnection(vtkAlgorithmOutput* algOutput);
+
+  /**
+   * When port 1 has no usable selection: name of a cell data array on port 0.
+   * A face is included in the remesh patch if the first component is > 0.5 (float)
+   * or non-zero (integral types).
+   */
+  vtkSetStringMacro(SelectionCellArrayName);
+  vtkGetStringMacro(SelectionCellArrayName);
 
   //@{
   /**
@@ -70,10 +88,13 @@ public:
   //@}
 
 protected:
-  vtkSHYXAdaptiveIsotropicRemesher() = default;
-  ~vtkSHYXAdaptiveIsotropicRemesher() override = default;
+  vtkSHYXAdaptiveIsotropicRemesher();
+  ~vtkSHYXAdaptiveIsotropicRemesher() override;
 
   int RequestData(vtkInformation*, vtkInformationVector**, vtkInformationVector*) override;
+  int FillInputPortInformation(int port, vtkInformation* info) override;
+
+  char* SelectionCellArrayName = nullptr;
 
   double MinEdgeLength       = 0.0;
   double MaxEdgeLength       = 0.0;

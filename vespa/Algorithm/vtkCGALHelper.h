@@ -17,6 +17,8 @@
 
 #include "vtkCGALAlgorithmModule.h" // For export macro
 
+#include <vector>
+
 using CGAL_Kernel  = CGAL::Exact_predicates_inexact_constructions_kernel;
 using CGAL_Surface = CGAL::Surface_mesh<CGAL_Kernel::Point_3>;
 using Graph_Verts  = boost::graph_traits<CGAL_Surface>::vertex_descriptor;
@@ -63,8 +65,13 @@ VTKCGALALGORITHM_EXPORT bool toCGAL(vtkPolyData* vtkMesh, Vespa_soup* cgalMesh);
  * This method fills the internal surface and coords
  * in the Vespa_surface data object.
  * return true if operation was successful.
+ *
+ * If @a vtkCellToCgalFace is non-null, it is resized to the number of polydata cells
+ * (after the same vtkPolyDataNormals preprocessing as the mesh build) and
+ * (*vtkCellToCgalFace)[vtkCellId] stores the CGAL face_descriptor for that VTK cell id.
  */
-VTKCGALALGORITHM_EXPORT bool toCGAL(vtkPolyData* vtkMesh, Vespa_surface* cgalMesh);
+VTKCGALALGORITHM_EXPORT bool toCGAL(
+  vtkPolyData* vtkMesh, Vespa_surface* cgalMesh, std::vector<Graph_Faces>* vtkCellToCgalFace = nullptr);
 
 /**
  * Convert a CGAL polygon soup to a vtkPolydata.

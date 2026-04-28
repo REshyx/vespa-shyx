@@ -19,6 +19,7 @@
 #include <vtkPolyData.h>
 #include <vtkSelection.h>
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <map>
 #include <set>
@@ -65,6 +66,40 @@ void TriangleNormalArea(
         normal[0] = normal[1] = 0.0;
         normal[2] = 1.0;
         area = 0.0;
+    }
+}
+
+/** Area-weighted vertex normals from selected triangles only; key = mesh point id. */
+void AccumulatePointNormalsFromSelection(vtkPolyData* mesh, vtkPoints* pts,
+    const std::set<vtkIdType>& selected, std::map<vtkIdType, std::array<double, 3>>& sumByPoint)
+{
+    sumByPoint.clear();
+    for (vtkIdType cid : selected)
+    {
+        if (mesh->GetCellType(cid) != VTK_TRIANGLE)
+        {
+            continue;
+        }
+        vtkIdType npts;
+        const vtkIdType* pids;
+        mesh->GetCellPoints(cid, npts, pids);
+        if (npts != 3)
+        {
+            continue;
+        }
+        double n[3], area;
+        TriangleNormalArea(pts, pids[0], pids[1], pids[2], n, area);
+        const double w0 = n[0] * area;
+        const double w1 = n[1] * area;
+        const double w2 = n[2] * area;
+        for (int k = 0; k < 3; ++k)
+        {
+            const vtkIdType pid = pids[k];
+            auto& s = sumByPoint[pid];
+            s[0] += w0;
+            s[1] += w1;
+            s[2] += w2;
+        }
     }
 }
 
@@ -164,6 +199,7 @@ void vtkSHYXSelectionExtrudeFilter::PrintSelf(ostream& os, vtkIndent indent)
     this->Superclass::PrintSelf(os, indent);
     os << indent << "ExtrusionDistance: " << this->ExtrusionDistance << "\n";
     os << indent << "FlipExtrusionDirection: " << this->FlipExtrusionDirection << "\n";
+    os << indent << "AverageNormals: " << this->AverageNormals << "\n";
     os << indent << "SelectionCellArrayName: "
        << (this->SelectionCellArrayName ? this->SelectionCellArrayName : "(null)") << "\n";
     os << indent << "LastAverageNormal: (" << this->LastAverageNormal[0] << ", "
@@ -362,7 +398,41 @@ int vtkSHYXSelectionExtrudeFilter::RequestData(
         dir[2] = -dir[2];
     }
     const double d = this->ExtrusionDistance;
-    double offset[3] = { d * dir[0], d * dir[1], d * dir[2] };
+    const double uniformOffset[3] = { d * dir[0], d * dir[1], d * dir[2] };
+
+    std::map<vtkIdType, std::array<double, 3>> pointUnitDir;
+    if (!this->AverageNormals)
+    {
+        std::map<vtkIdType, std::array<double, 3>> pointSumN;
+        AccumulatePointNormalsFromSelection(mesh, inPts, selected, pointSumN);
+        for (const auto& kv : pointSumN)
+        {
+            const vtkIdType pid = kv.first;
+            const auto& s = kv.second;
+            const double sp[3] = { s[0], s[1], s[2] };
+            const double len = vtkMath::Norm(sp);
+            std::array<double, 3> u;
+            if (len < 1e-30)
+            {
+                u[0] = dir[0];
+                u[1] = dir[1];
+                u[2] = dir[2];
+            }
+            else
+            {
+                u[0] = s[0] / len;
+                u[1] = s[1] / len;
+                u[2] = s[2] / len;
+                if (this->FlipExtrusionDirection)
+                {
+                    u[0] = -u[0];
+                    u[1] = -u[1];
+                    u[2] = -u[2];
+                }
+            }
+            pointUnitDir[pid] = u;
+        }
+    }
 
     // Boundary edges of selected patch
     std::map<EdgeKey, int> edgeCount;
@@ -424,7 +494,22 @@ int vtkSHYXSelectionExtrudeFilter::RequestData(
             }
             double p[3];
             inPts->GetPoint(vid, p);
-            const vtkIdType nid = outPts->InsertNextPoint(p[0] + offset[0], p[1] + offset[1], p[2] + offset[2]);
+            double nx, ny, nz;
+            if (this->AverageNormals)
+            {
+                nx = p[0] + uniformOffset[0];
+                ny = p[1] + uniformOffset[1];
+                nz = p[2] + uniformOffset[2];
+            }
+            else
+            {
+                const auto it = pointUnitDir.find(vid);
+                const double* u = (it != pointUnitDir.end()) ? it->second.data() : dir;
+                nx = p[0] + d * u[0];
+                ny = p[1] + d * u[1];
+                nz = p[2] + d * u[2];
+            }
+            const vtkIdType nid = outPts->InsertNextPoint(nx, ny, nz);
             topMap[vid] = nid;
         }
     }

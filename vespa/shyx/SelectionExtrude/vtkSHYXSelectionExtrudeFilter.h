@@ -1,7 +1,7 @@
 /**
  * @class   vtkSHYXSelectionExtrudeFilter
- * @brief   Extrude a selected patch of a triangulated surface along the selection's area-weighted
- *          average normal.
+ * @brief   Extrude a selected patch of a triangulated surface along a single average normal or
+ *          per-vertex normals on the cap.
  *
  * Input port 0 is the full surface (vtkPolyData, triangles). Input port 1 is optional and follows
  * the same convention as vtkCGALRegionFairing: a vtkSelection wired through ParaView's selection
@@ -11,8 +11,10 @@
  *
  * Output keeps unmodified unselected cells, drops the selected triangles from their original
  * positions, adds offset copies of those triangles (top cap), and side quads along the selection
- * boundary (open shell). Field data "SHYX_SelectionExtrude_AvgNormal" stores the unit average
- * normal used for extrusion.
+ * boundary (open shell). Field data "SHYX_SelectionExtrude_AvgNormal" stores the unit
+ * area-weighted average face normal of the selection (always computed). When AverageNormals is
+ * true (default), extrusion uses that single direction; when false, each top-cap vertex moves
+ * along its own point normal (area-weighted average of incident *selected* triangle normals).
  */
 
 #ifndef vtkSHYXSelectionExtrudeFilter_h
@@ -43,6 +45,15 @@ public:
     vtkBooleanMacro(FlipExtrusionDirection, int);
 
     /**
+     * If true (default), use one area-weighted average normal for the whole selection. If false,
+     * each vertex on the top cap is displaced along its own point normal (from selected triangles
+     * incident to that vertex).
+     */
+    vtkSetMacro(AverageNormals, int);
+    vtkGetMacro(AverageNormals, int);
+    vtkBooleanMacro(AverageNormals, int);
+
+    /**
      * When no vtkSelection on port 1, optional name of a cell data array on port 0. A cell is
      * selected if the first component is > 0.5 (scalar) or != 0 (integral).
      */
@@ -61,6 +72,7 @@ protected:
 
     double ExtrusionDistance = 0.0;
     int FlipExtrusionDirection = 0;
+    int AverageNormals = 1;
     char* SelectionCellArrayName = nullptr;
     double LastAverageNormal[3];
 

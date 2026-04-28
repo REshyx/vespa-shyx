@@ -4,8 +4,8 @@
                  class="vtkSHYXSelectionExtrudeFilter"
                  label="SHYX Selection Extrude">
       <Documentation
-          long_help="Extrudes selected triangles of a triangulated surface along the area-weighted average normal of the selection. The triangles in the original location are removed; the output keeps unselected geometry, adds an offset copy of the selection (top cap), and side quads along the selection boundary (open shell). Selection follows VESPA Region Fairing (vtkSelection / SelectionInput). vtkExtractSelection is used internally (vtkOriginalCellIds on cells, or vtkOriginalPointIds with all incident triangles). Without a selection, you may set Selection Cell Array Name on the input surface. Unselected non-triangle cells are omitted. Animate Extrusion Distance for interactive-style feedback."
-          short_help="Extrude selected surface patch along its average normal (selection input)."/>
+          long_help="Extrudes selected triangles of a triangulated surface. With Average Normals on, uses one area-weighted average normal for the whole patch; with it off, each cap vertex moves along its own point normal (from selected incident triangles). The triangles in the original location are removed; the output keeps unselected geometry, adds an offset copy of the selection (top cap), and side quads along the selection boundary (open shell). Selection follows VESPA Region Fairing (vtkSelection / SelectionInput). vtkExtractSelection is used internally (vtkOriginalCellIds on cells, or vtkOriginalPointIds with all incident triangles). Without a selection, you may set Selection Cell Array Name on the input surface. Unselected non-triangle cells are omitted. Animate Extrusion Distance for interactive-style feedback."
+          short_help="Extrude selected surface patch (average or per-vertex normals; selection input)."/>
 
       <InputProperty name="Input" command="SetInputConnection">
         <ProxyGroupDomain name="groups">
@@ -44,6 +44,17 @@
           command="SetFlipExtrusionDirection" number_of_elements="1" default_values="0">
         <BooleanDomain name="bool"/>
         <Documentation>Extrude along the opposite of the computed average normal (before sign of Extrusion Distance).</Documentation>
+      </IntVectorProperty>
+
+      <IntVectorProperty name="AverageNormals" label="Average Normals (aggregate)"
+          command="SetAverageNormals" number_of_elements="1" default_values="1">
+        <BooleanDomain name="bool"/>
+        <Documentation>
+          When on (default), the whole selection uses one area-weighted average face normal. When off,
+          each top-cap vertex moves along its own point normal (area-weighted blend of normals from
+          selected triangles incident to that vertex). Field data SHYX_SelectionExtrude_AvgNormal is
+          always the patch average face normal for reference.
+        </Documentation>
       </IntVectorProperty>
 
       <StringVectorProperty name="SelectionCellArrayName" label="Selection Cell Array Name"

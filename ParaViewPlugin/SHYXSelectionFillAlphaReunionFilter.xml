@@ -103,7 +103,7 @@
                             name="Offset"
                             label="Offset"
                             number_of_elements="1"
-                            default_values="0.1"
+                            default_values="1.0"
                             panel_visibility="advanced"
                             animateable="1">
         <Documentation>Alpha wrap offset (dilatation / shrink factor depending on context).</Documentation>

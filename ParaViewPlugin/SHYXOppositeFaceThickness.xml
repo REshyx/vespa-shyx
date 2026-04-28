@@ -1,0 +1,165 @@
+<ServerManagerConfiguration>
+  <ProxyGroup name="filters">
+    <SourceProxy name="SHYXOppositeFaceThickness"
+                 class="vtkSHYXOppositeFaceThickness"
+                 label="SHYX Opposite Face Thickness">
+      <Documentation short_help="Per-point thickness along -normal; optional thin-shell recast after +normal push.">
+        For each point, casts a ray along the direction opposite the point normal (inward for an
+        outward-oriented surface), finds the first intersected triangle that does not use the query
+        vertex, and stores the Euclidean distance from the query point to the hit in point data
+        (default array name OppositeFaceThickness). With Recalculate enabled, vertices whose first
+        thickness is below ThinThicknessRecalculateThreshold are moved on the output mesh along
+        +normal by that distance, then thickness is recomputed from the new position when possible.
+        Uses vtkStaticCellLocator and vtkSMPTools. If normals are missing,
+        optional vtkPolyDataNormals can be run when AutoComputeNormals is on. No hit yields NaN in
+        the output array.
+      </Documentation>
+
+      <InputProperty name="Input" command="SetInputConnection">
+        <ProxyGroupDomain name="groups">
+          <Group name="sources"/>
+          <Group name="filters"/>
+        </ProxyGroupDomain>
+        <DataTypeDomain name="input_type">
+          <DataType value="vtkPolyData"/>
+        </DataTypeDomain>
+        <InputArrayDomain name="point_arrays" attribute_type="point" optional="1"/>
+      </InputProperty>
+
+      <IntVectorProperty name="AutoComputeNormals"
+                         label="Auto Compute Normals"
+                         command="SetAutoComputeNormals"
+                         number_of_elements="1"
+                         default_values="1"
+                         animateable="0">
+        <BooleanDomain name="bool"/>
+        <Documentation>
+          When on, point normals are computed with vtkPolyDataNormals (Normals on the pipeline output).
+          When off, choose a point vector array below.
+        </Documentation>
+      </IntVectorProperty>
+
+      <StringVectorProperty name="NormalArrayName"
+                            label="Normal Array"
+                            command="SetNormalArrayName"
+                            number_of_elements="1"
+                            default_values="Normals"
+                            animateable="0">
+        <ArrayListDomain name="array_list"
+                         attribute_type="Vectors"
+                         input_domain_name="point_arrays">
+          <RequiredProperties>
+            <Property name="Input" function="Input"/>
+          </RequiredProperties>
+        </ArrayListDomain>
+        <Documentation>
+          3-component point vectors used as outward normals when Auto Compute Normals is off.
+        </Documentation>
+        <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="visibility"
+                                   property="AutoComputeNormals"
+                                   value="0"/>
+          <ArraySelectionWidget icon_type="point"/>
+        </Hints>
+      </StringVectorProperty>
+
+      <IntVectorProperty name="ThinThicknessRecalculate"
+                         label="Recalculate If Thinner Than Threshold"
+                         command="SetThinThicknessRecalculate"
+                         number_of_elements="1"
+                         default_values="0"
+                         animateable="0">
+        <BooleanDomain name="bool"/>
+        <Documentation>
+          When on, output points are deep-copied from the input. For each vertex whose first thickness
+          is finite, non-negative, and strictly less than ThinThicknessRecalculateThreshold, the
+          output position becomes p + threshold * (+normal); thickness is then recomputed from that
+          position (same ray rules). The stored thickness uses the second pass when it is finite,
+          otherwise the first pass value. Requires a positive ThinThicknessRecalculateThreshold.
+        </Documentation>
+      </IntVectorProperty>
+
+      <DoubleVectorProperty name="ThinThicknessRecalculateThreshold"
+                            label="Recalculate threshold (compare &amp; +normal push)"
+                            command="SetThinThicknessRecalculateThreshold"
+                            number_of_elements="1"
+                            default_values="1e-3"
+                            animateable="1">
+        <DoubleRangeDomain name="range" min="0.0" max="1e12"/>
+        <Documentation>
+          Used only with Recalculate If Thinner Than Threshold: the same number is (1) the strict
+          upper bound on the first-pass thickness that triggers a second pass, and (2) the distance
+          the query point is shifted along +normal before that second ray cast. Must be &gt; 0.
+        </Documentation>
+        <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="visibility"
+                                   property="ThinThicknessRecalculate"
+                                   value="1"/>
+        </Hints>
+      </DoubleVectorProperty>
+
+      <DoubleVectorProperty name="MaxRayLength"
+                            label="Max Ray Length"
+                            command="SetMaxRayLength"
+                            number_of_elements="1"
+                            default_values="0"
+                            panel_visibility="advanced"
+                            animateable="1">
+        <DoubleRangeDomain name="range" min="0.0" max="1e12"/>
+      </DoubleVectorProperty>
+
+      <DoubleVectorProperty name="SurfaceOffset"
+                            label="Surface Offset"
+                            command="SetSurfaceOffset"
+                            number_of_elements="1"
+                            default_values="0"
+                            panel_visibility="advanced"
+                            animateable="1">
+        <DoubleRangeDomain name="range" min="0.0" max="1e12"/>
+      </DoubleVectorProperty>
+
+      <StringVectorProperty name="ThicknessArrayName"
+                            label="Thickness Array Name"
+                            command="SetThicknessArrayName"
+                            number_of_elements="1"
+                            default_values="OppositeFaceThickness"
+                            animateable="0"/>
+
+      <DoubleVectorProperty name="RayTolerance"
+                            label="Ray Tolerance"
+                            command="SetRayTolerance"
+                            number_of_elements="1"
+                            default_values="1e-12"
+                            panel_visibility="advanced"
+                            animateable="0">
+        <DoubleRangeDomain name="range" min="0.0" max="1.0"/>
+      </DoubleVectorProperty>
+
+      <DoubleVectorProperty name="RayAdvanceEpsilon"
+                            label="Ray Advance Epsilon"
+                            command="SetRayAdvanceEpsilon"
+                            number_of_elements="1"
+                            default_values="0"
+                            panel_visibility="advanced"
+                            animateable="0">
+        <DoubleRangeDomain name="range" min="0.0" max="1e12"/>
+      </DoubleVectorProperty>
+
+      <IntVectorProperty name="MaxRayIterations"
+                         label="Max Ray Iterations"
+                         command="SetMaxRayIterations"
+                         number_of_elements="1"
+                         default_values="64"
+                         panel_visibility="advanced"
+                         animateable="0">
+        <IntRangeDomain name="range" min="1" max="10000"/>
+      </IntVectorProperty>
+
+      <Hints>
+        <ShowInMenu category="SHYX" icon=":/VESPA/SHYX_Radius_Neighbor_Count.png"/>
+      </Hints>
+    </SourceProxy>
+  </ProxyGroup>
+</ServerManagerConfiguration>
