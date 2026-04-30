@@ -1463,6 +1463,36 @@
          </Documentation>
       </IntVectorProperty>
 
+      <IntVectorProperty command="SetUseInteractiveCutPlanes"
+                         name="UseInteractiveCutPlanes"
+                         label="Use Interactive Cut Planes"
+                         number_of_elements="1"
+                         default_values="0">
+        <BooleanDomain name="bool"/>
+        <Documentation>
+          When enabled, per-endpoint 3D plane widgets (yellow translucent plane)
+          override automatic centerline-based clip planes. Apply once so endpoints
+          are discovered, then adjust planes and Apply again to clip.
+        </Documentation>
+      </IntVectorProperty>
+
+      <StringVectorProperty animateable="0"
+                            command="SetInteractiveCutPackedString"
+                            name="InteractiveCutPacked"
+                            number_of_elements="1"
+                            panel_visibility="never">
+        <Documentation>
+          Internal: packed interactive state (6 whitespace-separated doubles per
+          endpoint: origin xyz, direction-handle xyz). Managed by the custom panel widget.
+        </Documentation>
+      </StringVectorProperty>
+
+      <PropertyGroup label="Interactive per-endpoint planes"
+                     panel_widget="vespa_endclipper_plane_handles">
+        <Property name="UseInteractiveCutPlanes" />
+        <Property name="InteractiveCutPacked" />
+      </PropertyGroup>
+
       <Hints>
         <ShowInMenu category="SHYX" icon=":/VESPA/SHYX_Vessel_End_Clipper.png"/>
       </Hints>

@@ -37,6 +37,13 @@ paraview_plugin_add_property_widget(
   INTERFACES vespa_obb_box_interfaces
   SOURCES vespa_obb_box_sources)
 
+paraview_plugin_add_property_widget(
+  KIND GROUP_WIDGET
+  TYPE "vespa_endclipper_plane_handles"
+  CLASS_NAME pqVESPAEndClipperPlaneHandlesWidget
+  INTERFACES vespa_endclipper_plane_interfaces
+  SOURCES vespa_endclipper_plane_sources)
+
 set(vespa_plugin_qt_auto_interfaces)
 set(vespa_plugin_qt_auto_sources)
 if (PARAVIEW_USE_QT)
@@ -112,12 +119,14 @@ paraview_add_plugin(VESPAPlugin
      ${MESH_SMOOTHING_SERVER_MANAGER_XML}
      ${ADAPTIVE_REMESHING_SERVER_MANAGER_XML}
      ${VMTK_CENTERLINES_SERVER_MANAGER_XML}
-  UI_INTERFACES ${acm_interfaces} ${vespa_obb_box_interfaces} ${vespa_plugin_qt_auto_interfaces}
-  SOURCES ${acm_sources} ${vespa_obb_box_sources}
+  UI_INTERFACES ${acm_interfaces} ${vespa_obb_box_interfaces} ${vespa_endclipper_plane_interfaces} ${vespa_plugin_qt_auto_interfaces}
+  SOURCES ${acm_sources} ${vespa_obb_box_sources} ${vespa_endclipper_plane_sources}
     pqArrayCurveMapperPanel.cxx
     pqArrayCurveMapperPanel.h
     pqVESPAOBBInteractiveBoxWidget.cxx
     pqVESPAOBBInteractiveBoxWidget.h
+    pqVESPAEndClipperPlaneHandlesWidget.cxx
+    pqVESPAEndClipperPlaneHandlesWidget.h
     vespa_qrc_init.cxx
     vespa_qrc_init.h
     ${vespa_plugin_qt_auto_sources}

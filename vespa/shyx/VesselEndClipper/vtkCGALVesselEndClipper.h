@@ -92,9 +92,27 @@ public:
 
     vtkMTimeType GetMTime() override;
 
+    ///@{
+    /**
+     * When UseInteractiveCutPlanes is true and InteractiveCutPackedString parses
+     * to exactly 6 * N doubles (N = number of discovered leaf endpoints), each
+     * endpoint i uses:
+     *   - origin = packed[6*i .. 6*i+2]
+     *   - direction handle = packed[6*i+3 .. 6*i+5]
+     *   - plane normal = normalize(direction_handle - origin)
+     * Otherwise the plane is computed from the centerline as usual.
+     * The string is whitespace-separated ASCII numbers (ParaView custom widget).
+     */
+    vtkGetStringMacro(InteractiveCutPackedString);
+    vtkSetStringMacro(InteractiveCutPackedString);
+    vtkGetMacro(UseInteractiveCutPlanes, bool);
+    vtkSetMacro(UseInteractiveCutPlanes, bool);
+    vtkBooleanMacro(UseInteractiveCutPlanes, bool);
+    ///@}
+
 protected:
     vtkCGALVesselEndClipper();
-    ~vtkCGALVesselEndClipper() override = default;
+    ~vtkCGALVesselEndClipper() override;
 
     int FillOutputPortInformation(int port, vtkInformation* info) override;
     int RequestData(vtkInformation*, vtkInformationVector**, vtkInformationVector*) override;
@@ -103,6 +121,9 @@ protected:
     int    TangentDepth = 1;
     bool   CapEndpoints = true;
     int    FairingContinuity = 0;
+
+    char* InteractiveCutPackedString = nullptr;
+    bool  UseInteractiveCutPlanes     = false;
 
     vtkSmartPointer<vtkDataArraySelection> EndpointSelection;
 

@@ -81,5 +81,6 @@ description: >-
 - 根构建与模块扫描：`CMakeLists.txt`（`vtk_module_find_modules` / `vtk_module_build` / `paraview_plugin_build` 段）
 - 插件与 XML 列表：`ParaViewPlugin/CMakeLists.txt`
 - SHYX 实现根：`vespa/shyx/*/`
+- **ParaView 上游源码（本地参考）**：`C:\SoftWare\ParaView` — 可对照 Proxy、Server Manager XML、插件 CMake、`paraview_add_plugin` 等与版本一致的实现；本路径为开发机约定，若不存在则以实际安装的 ParaView 源码目录为准。
 
 更细的 ParaView 代理 XML 域（`DataTypeDomain`、`IntVectorProperty` 等）以**已有 `SHYX*.xml`** 为模板，查阅 ParaView 版本对应文档为辅。

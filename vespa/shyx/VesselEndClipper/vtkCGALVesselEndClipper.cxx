@@ -29,6 +29,7 @@
 #include <iterator>
 #include <memory>
 #include <set>
+#include <sstream>
 #include <string>
 #include <vector>
 
@@ -40,6 +41,12 @@ vtkCGALVesselEndClipper::vtkCGALVesselEndClipper()
     this->SetNumberOfInputPorts(2);
     this->SetNumberOfOutputPorts(2);
     this->EndpointSelection = vtkSmartPointer<vtkDataArraySelection>::New();
+}
+
+//------------------------------------------------------------------------------
+vtkCGALVesselEndClipper::~vtkCGALVesselEndClipper()
+{
+    this->SetInteractiveCutPackedString(nullptr);
 }
 
 //------------------------------------------------------------------------------
@@ -60,6 +67,9 @@ void vtkCGALVesselEndClipper::PrintSelf(ostream& os, vtkIndent indent)
     os << indent << "TangentDepth: " << this->TangentDepth << std::endl;
     os << indent << "CapEndpoints: " << this->CapEndpoints << std::endl;
     os << indent << "FairingContinuity: " << this->FairingContinuity << std::endl;
+    os << indent << "UseInteractiveCutPlanes: " << (this->UseInteractiveCutPlanes ? 1 : 0) << std::endl;
+    os << indent << "InteractiveCutPackedString: "
+       << (this->InteractiveCutPackedString ? this->InteractiveCutPackedString : "") << std::endl;
     this->Superclass::PrintSelf(os, indent);
 }
 
@@ -85,6 +95,23 @@ vtkMTimeType vtkCGALVesselEndClipper::GetMTime()
         mTime = std::max(mTime, selTime);
     }
     return mTime;
+}
+
+//------------------------------------------------------------------------------
+static bool ParseInteractivePacked(const char* s, std::vector<double>& out)
+{
+    out.clear();
+    if (!s || !*s)
+    {
+        return false;
+    }
+    std::istringstream iss(s);
+    double             v = 0.0;
+    while (iss >> v)
+    {
+        out.push_back(v);
+    }
+    return !out.empty() && (out.size() % 6u) == 0u;
 }
 
 //------------------------------------------------------------------------------
@@ -301,6 +328,36 @@ int vtkCGALVesselEndClipper::RequestData(
             std::snprintf(buf, sizeof(buf), "Endpoint %05d (%.2f, %.2f, %.2f)", e,
                 clips[e].endPt[0], clips[e].endPt[1], clips[e].endPt[2]);
             clips[e].name = buf;
+        }
+    }
+
+    // ---------------------------------------------------------------
+    // 2a. Optional interactive plane overrides (ParaView custom widget).
+    // ---------------------------------------------------------------
+    if (this->UseInteractiveCutPlanes)
+    {
+        std::vector<double> packed;
+        if (ParseInteractivePacked(this->InteractiveCutPackedString, packed) &&
+            packed.size() == 6u * clips.size())
+        {
+            for (size_t i = 0; i < clips.size(); ++i)
+            {
+                const double* o = &packed[6 * i];
+                const double* d = &packed[6 * i + 3];
+                double        nx = d[0] - o[0];
+                double        ny = d[1] - o[1];
+                double        nz = d[2] - o[2];
+                const double  nn = std::sqrt(nx * nx + ny * ny + nz * nz);
+                if (nn > 1e-15)
+                {
+                    clips[i].origin[0] = o[0];
+                    clips[i].origin[1] = o[1];
+                    clips[i].origin[2] = o[2];
+                    clips[i].normal[0] = nx / nn;
+                    clips[i].normal[1] = ny / nn;
+                    clips[i].normal[2] = nz / nn;
+                }
+            }
         }
     }
 
