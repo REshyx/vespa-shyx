@@ -44,6 +44,13 @@ paraview_plugin_add_property_widget(
   INTERFACES vespa_endclipper_plane_interfaces
   SOURCES vespa_endclipper_plane_sources)
 
+paraview_plugin_add_property_widget(
+  KIND GROUP_WIDGET
+  TYPE "vespa_selection_plane_clipper"
+  CLASS_NAME pqVESPASelectionPlaneClipperWidget
+  INTERFACES vespa_selection_plane_clipper_interfaces
+  SOURCES vespa_selection_plane_clipper_sources)
+
 set(vespa_plugin_qt_auto_interfaces)
 set(vespa_plugin_qt_auto_sources)
 if (PARAVIEW_USE_QT)
@@ -95,12 +102,14 @@ paraview_add_plugin(VESPAPlugin
     "SHYXHoleFillFilter.xml"
     "SHYXRadiusNeighborCount.xml"
     "SHYXSelectionExtrude.xml"
+    "SHYXSelectionPlaneClipper.xml"
     "SHYXSelectionOBBSubtract.xml"
     "SHYXMeshChecker.xml"
     "SHYXMinimumOBB.xml"
     "SHYXOppositeFaceThickness.xml"
     "SHYXPointExtrude.xml"
     "SHYXDisconnectedRegionFuse.xml"
+    "SHYXEdgeCollapse.xml"
     "SHYXDataSetToPartitionedCollection.xml"
     "SHYXDeleteSelectedCells.xml"
     "SHYXClebschMapFilter.xml"
@@ -119,14 +128,16 @@ paraview_add_plugin(VESPAPlugin
      ${MESH_SMOOTHING_SERVER_MANAGER_XML}
      ${ADAPTIVE_REMESHING_SERVER_MANAGER_XML}
      ${VMTK_CENTERLINES_SERVER_MANAGER_XML}
-  UI_INTERFACES ${acm_interfaces} ${vespa_obb_box_interfaces} ${vespa_endclipper_plane_interfaces} ${vespa_plugin_qt_auto_interfaces}
-  SOURCES ${acm_sources} ${vespa_obb_box_sources} ${vespa_endclipper_plane_sources}
+  UI_INTERFACES ${acm_interfaces} ${vespa_obb_box_interfaces} ${vespa_endclipper_plane_interfaces} ${vespa_selection_plane_clipper_interfaces} ${vespa_plugin_qt_auto_interfaces}
+  SOURCES ${acm_sources} ${vespa_obb_box_sources} ${vespa_endclipper_plane_sources} ${vespa_selection_plane_clipper_sources}
     pqArrayCurveMapperPanel.cxx
     pqArrayCurveMapperPanel.h
     pqVESPAOBBInteractiveBoxWidget.cxx
     pqVESPAOBBInteractiveBoxWidget.h
     pqVESPAEndClipperPlaneHandlesWidget.cxx
     pqVESPAEndClipperPlaneHandlesWidget.h
+    pqVESPASelectionPlaneClipperWidget.cxx
+    pqVESPASelectionPlaneClipperWidget.h
     vespa_qrc_init.cxx
     vespa_qrc_init.h
     ${vespa_plugin_qt_auto_sources}

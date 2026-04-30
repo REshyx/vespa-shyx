@@ -8,8 +8,14 @@
         Adaptive isotropic remeshing using CGAL Adaptive_sizing_field (discrete curvature).
         Edge lengths are limited by Min/Max Edge Length; AdaptiveTolerance controls fineness
         together with curvature. With a Selection (or Selection Cell Array Name), only those
-        faces are remeshed; otherwise the whole surface is remeshed. Requires CGAL 6.0+.
+        faces are remeshed; otherwise the whole surface is remeshed. Optional post-remesh
+        smooth_shape uses the same Protection Angle to detect sharp edges and fix those vertices.
+        Port 1 outputs detected sharp features on the final mesh (VTK_LINE + VTK_VERTEX).
+        Requires CGAL 6.0+.
       </Documentation>
+
+      <OutputPort name="Remeshed surface" index="0" id="port0" />
+      <OutputPort name="Sharp features" index="1" id="port1" />
 
       <InputProperty name="Input"
                      command="SetInputConnection">
@@ -103,6 +109,39 @@
         </Documentation>
       </IntVectorProperty>
 
+      <IntVectorProperty command="SetNumberOfRelaxationSteps"
+                         name="NumberOfRelaxationSteps"
+                         label="Relaxation Steps"
+                         number_of_elements="1"
+                         default_values="3">
+        <IntRangeDomain name="range" min="0" max="20"/>
+        <Documentation>
+          CGAL vertex relocation steps per remesh iteration (higher = smoother surface; 0 = no relaxation).
+        </Documentation>
+      </IntVectorProperty>
+
+      <IntVectorProperty command="SetShapeSmoothingIterations"
+                         name="ShapeSmoothingIterations"
+                         label="Shape Smooth Iterations"
+                         number_of_elements="1"
+                         default_values="0">
+        <IntRangeDomain name="range" min="0" max="100"/>
+        <Documentation>
+          Post-remesh CGAL smooth_shape iterations. 0 disables. Sharp-edge vertices (Protection Angle) stay fixed.
+        </Documentation>
+      </IntVectorProperty>
+
+      <DoubleVectorProperty command="SetShapeSmoothingTimeStep"
+                            name="ShapeSmoothingTimeStep"
+                            label="Shape Smooth Time Step"
+                            number_of_elements="1"
+                            default_values="0.0001">
+        <DoubleRangeDomain name="range" min="1e-12" max="1"/>
+        <Documentation>
+          CGAL smooth_shape time step (smoothing speed). Typical range about 1e-6 to 1. Used only when Shape Smooth Iterations &gt; 0.
+        </Documentation>
+      </DoubleVectorProperty>
+
       <DoubleVectorProperty command="SetProtectAngle"
                             name="ProtectAngle"
                             label="Protection Angle"
@@ -114,6 +153,25 @@
           Feature edge angle threshold in degrees.
         </Documentation>
       </DoubleVectorProperty>
+
+      <IntVectorProperty command="SetSharpFeatureSideFilter"
+                         name="SharpFeatureSideFilter"
+                         label="Sharp side filter"
+                         number_of_elements="1"
+                         default_values="0"
+                         animateable="0">
+        <EnumerationDomain name="enum">
+          <Entry text="None" value="0"/>
+          <Entry text="Exclude concave (signed &lt; 0)" value="1"/>
+          <Entry text="Exclude convex (signed &gt; 0)" value="2"/>
+        </EnumerationDomain>
+        <Documentation>
+          Optional filter on interior sharp edges after CGAL detect_sharp_edges, using signed
+          dihedral angle (approximate_dihedral_angle). Excludes concave (signed &lt; 0) or convex
+          (signed &gt; 0) from remesh/shape constraints and from port 1. Boundary edges unchanged.
+          If convex/concave looks swapped, flip mesh orientation or pick the other entry.
+        </Documentation>
+      </IntVectorProperty>
 
       <IntVectorProperty
          name="UseUpdateAttributes"

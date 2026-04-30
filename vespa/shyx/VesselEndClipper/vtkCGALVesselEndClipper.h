@@ -11,6 +11,13 @@
  *
  * Each discovered endpoint appears as a checkable item in the Properties
  * panel (via vtkDataArraySelection). Only checked endpoints are clipped.
+ *
+ * Output polydata (port 0) carries cell-data array \c EndpointIndex when
+ * CapEndpoints is on: each triangle introduced by CGAL hole filling at
+ * endpoint \e k is tagged with \e k; all other triangles are \c -1.
+ * Capping runs once per successful clip so each cap is attributed to the
+ * endpoint that opened that hole. Port 1 visualization geometry also exposes
+ * point-data \c EndpointIndex for glyphs (unchanged).
  */
 
 #ifndef vtkCGALVesselEndClipper_h
@@ -61,11 +68,12 @@ public:
 
     ///@{
     /**
-     * If true, the resulting holes from clipping are capped (filled)
-     * with CGAL PMP to produce a closed, watertight mesh suitable for CFD.
-     * Patch smoothness is controlled by FairingContinuity.
-     * Requires the input vessel mesh to be closed.
-     * Default is true.
+     * If true, after each successful endpoint clip the open boundary is
+     * filled with CGAL PMP (same strategy as vtkCGALPatchFilling), so the
+     * mesh stays closed between clips. New cap triangles receive cell-data
+     * EndpointIndex equal to that endpoint's index. Patch smoothness is
+     * controlled by FairingContinuity. Requires the input vessel mesh to be
+     * closed before clipping. Default is true.
      */
     vtkGetMacro(CapEndpoints, bool);
     vtkSetMacro(CapEndpoints, bool);

@@ -1,0 +1,13 @@
+NAME
+  vtkSHYXEdgeCollapse
+DESCRIPTION
+  "SHYX: CGAL Triangulated Surface Mesh Simplification (edge_collapse) for triangle vtkPolyData."
+GROUPS
+  Meshing
+DEPENDS
+  vtkCGALAlgorithm
+  VTK::FiltersCore
+PRIVATE_DEPENDS
+  VTK::CommonCore
+  VTK::CommonDataModel
+  VTK::CommonExecutionModel

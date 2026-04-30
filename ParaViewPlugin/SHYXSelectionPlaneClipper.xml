@@ -1,0 +1,156 @@
+<ServerManagerConfiguration>
+  <ProxyGroup name="filters">
+    <SourceProxy name="SHYXSelectionPlaneClipper"
+                 class="vtkSHYXSelectionPlaneClipper"
+                 label="SHYX Selection Plane Clipper">
+      <Documentation short_help="Clip mesh with a plane from selection centroid and average normal.">
+        Port 0 input is the full triangulated surface; port 0 output is the clipped mesh. Port 1 is a vtkSelection (same convention as SHYX Selection
+        Extrude and VESPA Region Fairing): use Copy Active Selection in the Properties panel—no separate
+        Extract Selection filter is required. The filter runs vtkExtractSelection internally, computes an
+        area-weighted centroid and average face normal on the selected triangles, then clips the full mesh.
+        With Tip connectivity (default), clipping follows the same strategy as SHYX Vessel End Clipper.
+        Optional Selection Cell Array Name selects triangles on port 0 when no selection is provided.
+        Fill Holes (default ON) runs vtkFillHolesFilter on the clip boundary using an automatic maximum hole size
+        from the result bounds unless you set Fill Holes Maximum Size.
+        Field data array SHYX_SelectionPlaneClipper_PlanePacked (six values: plane origin and direction handle)
+        is attached to port 0 for the interactive plane widget and for scripting.
+      </Documentation>
+
+      <OutputPort name="Clipped Mesh" index="0" id="port0" />
+
+      <InputProperty name="Input" command="SetInputConnection">
+        <ProxyGroupDomain name="groups">
+          <Group name="sources"/>
+          <Group name="filters"/>
+        </ProxyGroupDomain>
+        <DataTypeDomain name="input_type">
+          <DataType value="vtkPolyData"/>
+        </DataTypeDomain>
+        <Documentation>Full surface mesh to clip (triangles).</Documentation>
+      </InputProperty>
+
+      <InputProperty name="Selection" label="Selection"
+                     command="SetSourceConnection">
+        <ProxyGroupDomain name="groups">
+          <Group name="sources"/>
+          <Group name="filters"/>
+        </ProxyGroupDomain>
+        <DataTypeDomain name="input_type">
+          <DataType value="vtkSelection"/>
+        </DataTypeDomain>
+        <Documentation>
+          Active selection (cells or points on Input). Use Copy Active Selection in the panel.
+        </Documentation>
+        <Hints>
+          <SelectionInput/>
+        </Hints>
+      </InputProperty>
+
+      <StringVectorProperty name="SelectionCellArrayName" label="Selection Cell Array Name"
+          command="SetSelectionCellArrayName" number_of_elements="1" default_values="">
+        <Documentation>
+          If Selection is empty: name of a cell data array on Input. Triangles are selected when value
+          is greater than 0.5 (float) or non-zero (integer types), same as SHYX Selection Extrude.
+        </Documentation>
+      </StringVectorProperty>
+
+      <DoubleVectorProperty command="SetClipOffset"
+                            name="ClipOffset"
+                            label="Clip Offset"
+                            number_of_elements="1"
+                            default_values="0.0">
+        <Documentation>Shift the plane origin along the averaged normal from the patch centroid.</Documentation>
+      </DoubleVectorProperty>
+
+      <IntVectorProperty command="SetInvertPlane"
+                         name="InvertPlane"
+                         label="Invert Plane Normal"
+                         number_of_elements="1"
+                         default_values="0">
+        <BooleanDomain name="bool"/>
+        <Documentation>Flip the averaged normal (and half-space labels) before clipping.</Documentation>
+      </IntVectorProperty>
+
+      <IntVectorProperty command="SetUseTipConnectivity"
+                         name="UseTipConnectivity"
+                         label="Tip Connectivity (Vessel End Clipper style)"
+                         number_of_elements="1"
+                         default_values="1">
+        <BooleanDomain name="bool"/>
+        <Documentation>
+          When ON (default), split the mesh by the plane and remove the smaller connected fragment
+          near the selection centroid. When OFF, remove a single half-space controlled by Remove Positive Half-Space.
+        </Documentation>
+      </IntVectorProperty>
+
+      <IntVectorProperty command="SetRemovePositiveHalfSpace"
+                         name="RemovePositiveHalfSpace"
+                         label="Remove Positive Half-Space"
+                         number_of_elements="1"
+                         default_values="1">
+        <BooleanDomain name="bool"/>
+        <Documentation>
+          Only when Tip Connectivity is OFF: if ON, delete the side where the plane implicit
+          function is positive; if OFF, delete the negative side.
+        </Documentation>
+      </IntVectorProperty>
+
+      <IntVectorProperty command="SetFillHoles"
+                         name="FillHoles"
+                         label="Fill Holes"
+                         number_of_elements="1"
+                         default_values="1">
+        <BooleanDomain name="bool"/>
+        <Documentation>
+          When ON (default), triangulate small open boundary loops after clipping (vtkFillHolesFilter),
+          suitable for closing a planar cut. Turn OFF to keep the clip as an open surface.
+        </Documentation>
+      </IntVectorProperty>
+
+      <DoubleVectorProperty command="SetFillHolesMaximumSize"
+                            name="FillHolesMaximumSize"
+                            label="Fill Holes Maximum Size"
+                            number_of_elements="1"
+                            default_values="0.0"
+                            panel_visibility="advanced">
+        <DoubleRangeDomain name="range" min="0.0" max="1e12"/>
+        <Documentation>
+          Maximum boundary edge length considered for filling (vtkFillHolesFilter hole size). Zero (default)
+          selects automatically from the clipped mesh bounding diagonal (about 35 percent).
+        </Documentation>
+      </DoubleVectorProperty>
+
+      <IntVectorProperty command="SetUseInteractiveCutPlanes"
+                         name="UseInteractiveCutPlanes"
+                         label="Use Interactive Cut Plane"
+                         number_of_elements="1"
+                         default_values="0">
+        <BooleanDomain name="bool"/>
+        <Documentation>
+          When enabled, a yellow plane widget overrides the automatic plane from the selection.
+          Apply once so port 0 is generated (including the plane hint in field data), then drag the plane and Apply again to clip.
+        </Documentation>
+      </IntVectorProperty>
+
+      <StringVectorProperty animateable="0"
+                            command="SetInteractiveCutPackedString"
+                            name="InteractiveCutPacked"
+                            number_of_elements="1"
+                            panel_visibility="never">
+        <Documentation>
+          Internal: six doubles (origin xyz, direction-handle xyz) for the implicit plane widget.
+        </Documentation>
+      </StringVectorProperty>
+
+      <PropertyGroup label="Interactive cut plane"
+                     panel_widget="vespa_selection_plane_clipper">
+        <Property name="UseInteractiveCutPlanes" />
+        <Property name="InteractiveCutPacked" />
+      </PropertyGroup>
+
+      <Hints>
+        <ShowInMenu category="SHYX" icon=":/VESPA/SHYX_Vessel_End_Clipper.png"/>
+      </Hints>
+    </SourceProxy>
+  </ProxyGroup>
+</ServerManagerConfiguration>

@@ -1,6 +1,7 @@
 /**
  * @class   vtkSHYXAdaptiveIsotropicRemesher
- * @brief   Curvature-aware isotropic remesh with min/max edge length and tolerance.
+ * @brief   Curvature-aware isotropic remesh with min/max edge length, tolerance, and configurable
+ *          relaxation steps per iteration.
  *
  * Uses CGAL::Polygon_mesh_processing::Adaptive_sizing_field (CGAL 6.0+) with
  * isotropic_remeshing. Finer triangles tend to appear in higher-curvature regions;
@@ -10,6 +11,14 @@
  * Optional Selection (port 1) or SelectionCellArrayName on the input restricts
  * CGAL isotropic remeshing to those faces; the rest of the surface is unchanged.
  * With no selection, the whole surface is remeshed (previous behavior).
+ *
+ * Optional post-remesh CGAL smooth_shape uses the same feature angle: sharp edges
+ * are re-detected on the remeshed surface and incident vertices are constrained.
+ *
+ * Output port 0: remeshed (and optionally shape-smoothed) vtkPolyData.
+ * Output port 1: detected sharp features on the final mesh as vtkPolyData with
+ * VTK_LINE cells (feature edges) and VTK_VERTEX cells (endpoints on feature edges),
+ * using the same Protection Angle and optional signed-side filter (see SharpFeatureSideFilter).
  *
  * Requires CGAL 6.0 or newer.
  */
@@ -87,12 +96,52 @@ public:
   vtkSetMacro(NumberOfIterations, int);
   //@}
 
+  //@{
+  /**
+   * Relaxation steps per CGAL isotropic remeshing iteration (vertex relocation
+   * smoothing strength). Larger values tend to produce a smoother mesh; 0 disables
+   * relaxation. Default 3.
+   */
+  vtkGetMacro(NumberOfRelaxationSteps, int);
+  vtkSetMacro(NumberOfRelaxationSteps, int);
+  //@}
+
+  //@{
+  /**
+   * Post-remesh CGAL smooth_shape iteration count. 0 disables shape smoothing.
+   * Default 0.
+   */
+  vtkGetMacro(ShapeSmoothingIterations, int);
+  vtkSetMacro(ShapeSmoothingIterations, int);
+  //@}
+
+  //@{
+  /**
+   * CGAL smooth_shape time step (smoothing speed). Used only when
+   * ShapeSmoothingIterations > 0. Typical range about 1e-6 to 1. Default 1e-4.
+   */
+  vtkGetMacro(ShapeSmoothingTimeStep, double);
+  vtkSetMacro(ShapeSmoothingTimeStep, double);
+  //@}
+
+  //@{
+  /**
+   * After detect_sharp_edges, optionally remove interior sharp edges on one side of the
+   * signed dihedral (CGAL::approximate_dihedral_angle). 0 = none; 1 = exclude concave
+   * (signed angle &lt; 0); 2 = exclude convex (signed angle &gt; 0). Boundary edges are
+   * unchanged. Sign depends on mesh face orientation; swap 1/2 if results look inverted.
+   */
+  vtkGetMacro(SharpFeatureSideFilter, int);
+  vtkSetClampMacro(SharpFeatureSideFilter, int, 0, 2);
+  //@}
+
 protected:
   vtkSHYXAdaptiveIsotropicRemesher();
   ~vtkSHYXAdaptiveIsotropicRemesher() override;
 
   int RequestData(vtkInformation*, vtkInformationVector**, vtkInformationVector*) override;
   int FillInputPortInformation(int port, vtkInformation* info) override;
+  int FillOutputPortInformation(int port, vtkInformation* info) override;
 
   char* SelectionCellArrayName = nullptr;
 
@@ -101,6 +150,10 @@ protected:
   double AdaptiveTolerance   = 0.01;
   double ProtectAngle        = 70.0;
   int    NumberOfIterations  = 3;
+  int    NumberOfRelaxationSteps = 3;
+  int    ShapeSmoothingIterations = 0;
+  double ShapeSmoothingTimeStep   = 1e-4;
+  int    SharpFeatureSideFilter   = 0;
 
 private:
   vtkSHYXAdaptiveIsotropicRemesher(const vtkSHYXAdaptiveIsotropicRemesher&) = delete;

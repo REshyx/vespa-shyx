@@ -460,6 +460,27 @@ void SortSidePiecesByAreaDescending(std::vector<vtkSmartPointer<vtkPolyData>>* p
   *pieces = std::move(sorted);
 }
 
+/** Move 3rd patch to front, 1st patch to end; order between is 2nd then old index 3..n-1. */
+void ApplyCustomPostReorder(std::vector<vtkSmartPointer<vtkPolyData>>* pieces)
+{
+  if (!pieces || pieces->size() < 3)
+  {
+    return;
+  }
+  std::vector<vtkSmartPointer<vtkPolyData>>& v = *pieces;
+  const size_t n = v.size();
+  std::vector<vtkSmartPointer<vtkPolyData>> out;
+  out.reserve(n);
+  out.push_back(v[2]);
+  out.push_back(v[1]);
+  for (size_t i = 3; i < n; ++i)
+  {
+    out.push_back(v[i]);
+  }
+  out.push_back(v[0]);
+  v = std::move(out);
+}
+
 void CollectCuspConnectedSurfacePieces(vtkPolyData* surface, double featureAngle,
   std::vector<vtkSmartPointer<vtkPolyData>>* outPieces)
 {
@@ -595,6 +616,7 @@ void vtkSHYXDataSetToPartitionedCollection::PrintSelf(ostream& os, vtkIndent ind
   this->Superclass::PrintSelf(os, indent);
   os << indent << "FeatureAngle: " << this->FeatureAngle << "\n";
   os << indent << "SortByArea: " << this->SortByArea << "\n";
+  os << indent << "CustomPostReorder: " << this->CustomPostReorder << "\n";
 }
 
 //------------------------------------------------------------------------------
@@ -704,6 +726,10 @@ int vtkSHYXDataSetToPartitionedCollection::RequestData(vtkInformation* vtkNotUse
   if (this->SortByArea)
   {
     SortSidePiecesByAreaDescending(&sidePieces);
+  }
+  if (this->CustomPostReorder)
+  {
+    ApplyCustomPostReorder(&sidePieces);
   }
 
   const unsigned int nPairs = static_cast<unsigned int>(sidePieces.size());

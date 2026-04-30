@@ -5,14 +5,19 @@
 #include <CGAL/Polygon_mesh_processing/border.h>
 #include <CGAL/Polygon_mesh_processing/triangulate_hole.h>
 
+#include <boost/graph/graph_traits.hpp>
+#include <boost/property_map/property_map.hpp>
+
 #include <vtkAppendPolyData.h>
 #include <vtkCellArray.h>
+#include <vtkCellData.h>
 #include <vtkCleanPolyData.h>
 #include <vtkClipPolyData.h>
 #include <vtkDoubleArray.h>
 #include <vtkInformation.h>
 #include <vtkInformationVector.h>
 #include <vtkIntArray.h>
+#include <vtkNew.h>
 #include <vtkObjectFactory.h>
 #include <vtkPlane.h>
 #include <vtkPointData.h>
@@ -195,6 +200,73 @@ static vtkSmartPointer<vtkPolyData> removeClosestComponent(
     }
     keep->Update();
     return keep->GetOutput();
+}
+
+//------------------------------------------------------------------------------
+static void EnsureCellEndpointIndexArray(vtkPolyData* pd, int fillValue = -1)
+{
+    if (!pd)
+        return;
+    const vtkIdType nCells = pd->GetNumberOfCells();
+    vtkIntArray* existing = vtkIntArray::SafeDownCast(pd->GetCellData()->GetArray("EndpointIndex"));
+    if (existing && existing->GetNumberOfTuples() == nCells)
+    {
+        pd->GetCellData()->SetActiveScalars("EndpointIndex");
+        return;
+    }
+    vtkNew<vtkIntArray> arr;
+    arr->SetName("EndpointIndex");
+    arr->SetNumberOfTuples(nCells);
+    arr->Fill(fillValue);
+    pd->GetCellData()->RemoveArray("EndpointIndex");
+    pd->GetCellData()->AddArray(arr);
+    pd->GetCellData()->SetActiveScalars("EndpointIndex");
+}
+
+//------------------------------------------------------------------------------
+template <typename FaceEndpointMap>
+static void ExportVespaSurfaceToVTK(
+    vtkCGALHelper::Vespa_surface const* cgalMesh, FaceEndpointMap const& endpointIndexByFace, vtkPolyData* vtkMesh)
+{
+    vtkNew<vtkPoints> pts;
+    const vtkIdType outNPts = num_vertices(cgalMesh->surface);
+    pts->Allocate(outNPts);
+    std::vector<vtkIdType> vmap(outNPts);
+
+    for (auto vertex : vertices(cgalMesh->surface))
+    {
+        const auto& p = get(cgalMesh->coords, vertex);
+        vtkIdType   id =
+            pts->InsertNextPoint(CGAL::to_double(p.x()), CGAL::to_double(p.y()), CGAL::to_double(p.z()));
+        vmap[vertex] = id;
+    }
+    pts->Squeeze();
+
+    vtkNew<vtkCellArray> cells;
+    cells->AllocateEstimate(num_faces(cgalMesh->surface), 3);
+
+    vtkNew<vtkIntArray> epCell;
+    epCell->SetName("EndpointIndex");
+    epCell->SetNumberOfComponents(1);
+
+    for (auto face : faces(cgalMesh->surface))
+    {
+        vtkNew<vtkIdList> ids;
+        ids->Allocate(3);
+        for (auto edge : halfedges_around_face(halfedge(face, cgalMesh->surface), cgalMesh->surface))
+        {
+            ids->InsertNextId(vmap[source(edge, cgalMesh->surface)]);
+        }
+        cells->InsertNextCell(ids);
+        epCell->InsertNextValue(get(endpointIndexByFace, face));
+    }
+    cells->Squeeze();
+
+    vtkMesh->Reset();
+    vtkMesh->SetPoints(pts);
+    vtkMesh->SetPolys(cells);
+    vtkMesh->GetCellData()->AddArray(epCell);
+    vtkMesh->GetCellData()->SetActiveScalars("EndpointIndex");
 }
 
 //------------------------------------------------------------------------------
@@ -455,7 +527,8 @@ int vtkCGALVesselEndClipper::RequestData(
     if (clips.empty())
     {
         vtkWarningMacro("No degree-1 endpoints found in centerline. Passing through input.");
-        output->ShallowCopy(vesselMesh);
+        output->DeepCopy(vesselMesh);
+        EnsureCellEndpointIndexArray(output, -1);
         return 1;
     }
 
@@ -469,6 +542,7 @@ int vtkCGALVesselEndClipper::RequestData(
     // ---------------------------------------------------------------
     vtkSmartPointer<vtkPolyData> currentMesh = vtkSmartPointer<vtkPolyData>::New();
     currentMesh->DeepCopy(vesselMesh);
+    EnsureCellEndpointIndexArray(currentMesh, -1);
 
     int clippedCount = 0;
     int skippedCount = 0;
@@ -560,13 +634,94 @@ int vtkCGALVesselEndClipper::RequestData(
             currentMesh->DeepCopy(cleaner->GetOutput());
         }
 
+        if (this->CapEndpoints)
+        {
+            namespace pmp = CGAL::Polygon_mesh_processing;
+            using Graph_halfedge = boost::graph_traits<CGAL_Surface>::halfedge_descriptor;
+
+            EnsureCellEndpointIndexArray(currentMesh, -1);
+
+            vtkSmartPointer<vtkTriangleFilter> tri = vtkSmartPointer<vtkTriangleFilter>::New();
+            tri->SetInputData(currentMesh);
+            tri->Update();
+            vtkPolyData* triMesh = tri->GetOutput();
+
+            std::vector<Graph_Faces> vtkCellToCgalFace;
+            std::unique_ptr<vtkCGALHelper::Vespa_surface> cgalMesh =
+                std::make_unique<vtkCGALHelper::Vespa_surface>();
+            if (!vtkCGALHelper::toCGAL(triMesh, cgalMesh.get(), &vtkCellToCgalFace))
+            {
+                vtkErrorMacro("CGAL endpoint capping at endpoint " << i
+                    << ": mesh could not be converted to a CGAL surface mesh. "
+                       "Try CapEndpoints off or repair non-manifold geometry.");
+                return 0;
+            }
+
+            auto epmap = cgalMesh->surface.add_property_map<Graph_Faces, int>("f:epidx", -1).first;
+
+            vtkIntArray* epFromVtk =
+                vtkIntArray::SafeDownCast(triMesh->GetCellData()->GetArray("EndpointIndex"));
+            const vtkIdType nTriCells = triMesh->GetNumberOfCells();
+            if (epFromVtk && epFromVtk->GetNumberOfTuples() == nTriCells &&
+                static_cast<vtkIdType>(vtkCellToCgalFace.size()) == nTriCells)
+            {
+                for (vtkIdType cid = 0; cid < nTriCells; ++cid)
+                {
+                    put(epmap, vtkCellToCgalFace[static_cast<size_t>(cid)], epFromVtk->GetValue(cid));
+                }
+            }
+
+            std::vector<Graph_Verts> patch_vertices;
+            std::vector<Graph_Faces> patch_facets;
+            bool holeOk = true;
+            try
+            {
+                std::vector<Graph_halfedge> borderCycles;
+                pmp::extract_boundary_cycles(cgalMesh->surface, std::back_inserter(borderCycles));
+                if (borderCycles.size() > 1u)
+                {
+                    vtkWarningMacro("Endpoint " << i << ": mesh has " << borderCycles.size()
+                        << " boundary cycles; all new cap triangles are tagged with EndpointIndex == "
+                        << i << ".");
+                }
+                for (Graph_halfedge h : borderCycles)
+                {
+                    holeOk &= std::get<0>(pmp::triangulate_refine_and_fair_hole(cgalMesh->surface, h,
+                        pmp::parameters::fairing_continuity(this->FairingContinuity)
+                            .face_output_iterator(std::back_inserter(patch_facets))
+                            .vertex_output_iterator(std::back_inserter(patch_vertices))));
+                }
+            }
+            catch (std::exception& e)
+            {
+                vtkErrorMacro("CGAL endpoint capping at endpoint " << i << ": " << e.what());
+                return 0;
+            }
+
+            if (!holeOk)
+            {
+                vtkWarningMacro("CGAL endpoint capping at endpoint " << i
+                    << ": one or more boundary cycles could not be filled cleanly.");
+            }
+
+            for (Graph_Faces pf : patch_facets)
+            {
+                put(epmap, pf, static_cast<int>(i));
+            }
+
+            vtkSmartPointer<vtkPolyData> capped = vtkSmartPointer<vtkPolyData>::New();
+            ExportVespaSurfaceToVTK(cgalMesh.get(), epmap, capped);
+            currentMesh->DeepCopy(capped);
+        }
+
         ++clippedCount;
     }
 
     if (clippedCount == 0)
     {
         vtkWarningMacro("No endpoints were successfully clipped. Passing through input.");
-        output->ShallowCopy(vesselMesh);
+        output->DeepCopy(vesselMesh);
+        EnsureCellEndpointIndexArray(output, -1);
         return 1;
     }
 
@@ -576,70 +731,21 @@ int vtkCGALVesselEndClipper::RequestData(
             << " endpoint clips.");
     }
 
-    // ---------------------------------------------------------------
-    // 4. Cap the holes created by clipping (if requested), using CGAL
-    //    PMP (same strategy as vtkCGALPatchFilling).
-    // ---------------------------------------------------------------
     if (this->CapEndpoints)
     {
-        namespace pmp = CGAL::Polygon_mesh_processing;
-        using Graph_halfedge = boost::graph_traits<CGAL_Surface>::halfedge_descriptor;
-
-        vtkSmartPointer<vtkTriangleFilter> tri = vtkSmartPointer<vtkTriangleFilter>::New();
-        tri->SetInputData(currentMesh);
-        tri->Update();
-        vtkPolyData* cappedInput = tri->GetOutput();
-
-        std::unique_ptr<vtkCGALHelper::Vespa_surface> cgalMesh =
-            std::make_unique<vtkCGALHelper::Vespa_surface>();
-        if (!vtkCGALHelper::toCGAL(cappedInput, cgalMesh.get()))
-        {
-            vtkErrorMacro(
-                "CGAL endpoint capping: mesh could not be converted to a CGAL surface mesh. "
-                "Try CapEndpoints off or repair the mesh (e.g. non-manifold geometry).");
-            return 0;
-        }
-
-        std::vector<Graph_Verts> patch_vertices;
-        std::vector<Graph_Faces> patch_facets;
-        bool holeOk = true;
-        try
-        {
-            std::vector<Graph_halfedge> borderCycles;
-            pmp::extract_boundary_cycles(cgalMesh->surface, std::back_inserter(borderCycles));
-            for (Graph_halfedge h : borderCycles)
-            {
-                holeOk &= std::get<0>(pmp::triangulate_refine_and_fair_hole(cgalMesh->surface, h,
-                    pmp::parameters::fairing_continuity(this->FairingContinuity)
-                        .face_output_iterator(std::back_inserter(patch_facets))
-                        .vertex_output_iterator(std::back_inserter(patch_vertices))));
-            }
-        }
-        catch (std::exception& e)
-        {
-            vtkErrorMacro("CGAL endpoint capping: " << e.what());
-            return 0;
-        }
-
-        if (!holeOk)
-        {
-            vtkWarningMacro(
-                "CGAL endpoint capping: one or more boundary cycles could not be filled cleanly.");
-        }
-
-        vtkSmartPointer<vtkPolyData> capped = vtkSmartPointer<vtkPolyData>::New();
-        vtkCGALHelper::toVTK(cgalMesh.get(), capped);
-        currentMesh->DeepCopy(capped);
+        output->ShallowCopy(currentMesh);
+        output->GetCellData()->SetActiveScalars("EndpointIndex");
     }
-
-    // ---------------------------------------------------------------
-    // 5. Final cleanup
-    // ---------------------------------------------------------------
-    vtkSmartPointer<vtkCleanPolyData> finalClean = vtkSmartPointer<vtkCleanPolyData>::New();
-    finalClean->SetInputData(currentMesh);
-    finalClean->Update();
-
-    output->ShallowCopy(finalClean->GetOutput());
+    else
+    {
+        vtkSmartPointer<vtkCleanPolyData> finalClean = vtkSmartPointer<vtkCleanPolyData>::New();
+        finalClean->SetInputData(currentMesh);
+        finalClean->Update();
+        vtkPolyData* cleaned = finalClean->GetOutput();
+        cleaned->GetCellData()->RemoveArray("EndpointIndex");
+        EnsureCellEndpointIndexArray(cleaned, -1);
+        output->ShallowCopy(cleaned);
+    }
 
     return 1;
 }

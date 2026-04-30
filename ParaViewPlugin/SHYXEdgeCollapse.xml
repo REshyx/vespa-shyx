@@ -1,0 +1,79 @@
+<?xml version="1.0" ?>
+<ServerManagerConfiguration>
+  <ProxyGroup name="filters">
+    <SourceProxy class="vtkSHYXEdgeCollapse"
+                 label="SHYX Edge Collapse (CGAL)"
+                 name="SHYXEdgeCollapse">
+      <Documentation short_help="Surface mesh simplification with CGAL edge_collapse.">
+        Triangulated surface mesh simplification using
+        CGAL::Surface_mesh_simplification::edge_collapse and
+        Edge_count_ratio_stop_predicate. Simplification stops when the ratio of
+        current to initial undirected edge count falls below Edge Count Ratio
+        (same meaning as the CGAL surface mesh simplification example). Input
+        must be a pure triangle mesh; use Triangulate upstream for mixed cells.
+        Cost strategy selects CGAL get_cost / get_placement (Lindstrom-Turk, Garland-Heckbert
+        plane QEM, or edge length with midpoint placement).
+      </Documentation>
+
+      <InputProperty name="Input"
+                     command="SetInputConnection">
+        <ProxyGroupDomain name="groups">
+          <Group name="sources"/>
+          <Group name="filters"/>
+        </ProxyGroupDomain>
+        <DataTypeDomain name="input_type">
+          <DataType value="vtkPolyData"/>
+        </DataTypeDomain>
+      </InputProperty>
+
+      <DoubleVectorProperty command="SetEdgeCountRatio"
+                            name="EdgeCountRatio"
+                            label="Edge Count Ratio (stop)"
+                            number_of_elements="1"
+                            default_values="0.5">
+        <DoubleRangeDomain name="range" min="0.0001" max="1"/>
+        <Documentation>
+          Stop when (current edges) / (initial edges) is strictly below this value.
+          Default 0.5: stop when current undirected edge count falls below half of
+          the initial count (same predicate as the CGAL example, different threshold).
+        </Documentation>
+      </DoubleVectorProperty>
+
+      <IntVectorProperty command="SetCostStrategy"
+                         name="CostStrategy"
+                         label="Cost Strategy"
+                         number_of_elements="1"
+                         default_values="0"
+                         animateable="0">
+        <EnumerationDomain name="enum">
+          <Entry text="Lindstrom-Turk (default)" value="0"/>
+          <Entry text="Garland-Heckbert plane (QEM)" value="1"/>
+          <Entry text="Edge length + midpoint" value="2"/>
+        </EnumerationDomain>
+        <Documentation>
+          CGAL edge_collapse cost/placement: Lindstrom-Turk (memoryless, CGAL default);
+          GarlandHeckbert_plane_policies (quadric error); Edge_length_cost with Midpoint_placement
+          (faster, coarser).
+        </Documentation>
+      </IntVectorProperty>
+
+      <IntVectorProperty
+         name="UseUpdateAttributes"
+         command="SetUpdateAttributes"
+         label="Interpolate attributes"
+         number_of_elements="1"
+         default_values="1"
+         panel_visibility="advanced">
+         <BooleanDomain name="bool"/>
+         <Documentation>
+           If ON, point/cell data are probed from the input onto the simplified mesh.
+         </Documentation>
+      </IntVectorProperty>
+
+      <Hints>
+        <ShowInMenu category="SHYX" icon=":/VESPA/VESPA_Mesh_Checker.png"/>
+      </Hints>
+
+    </SourceProxy>
+  </ProxyGroup>
+</ServerManagerConfiguration>

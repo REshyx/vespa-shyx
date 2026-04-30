@@ -33,6 +33,14 @@
         </Documentation>
       </IntVectorProperty>
 
+      <IntVectorProperty name="CustomPostReorder" label="Custom Post Reorder" command="SetCustomPostReorder"
+          number_of_elements="1" default_values="1" animateable="0">
+        <BooleanDomain name="bool"/>
+        <Documentation>
+          When enabled (default), after the current patch order is fixed (e.g. by Sort By Area), move the third patch to the first position and the first patch to the last position. The second patch follows the new first, then the original fourth through (n-1) in order. No effect if there are fewer than three patches.
+        </Documentation>
+      </IntVectorProperty>
+
       <Hints>
         <ShowInMenu category="SHYX" icon=":/VESPA/SHYX_DataSet_To_Partitioned_Collection.png"/>
       </Hints>

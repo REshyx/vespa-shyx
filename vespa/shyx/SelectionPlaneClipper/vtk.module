@@ -1,0 +1,14 @@
+NAME
+  vtkSHYXSelectionPlaneClipper
+DESCRIPTION
+  "Clip full vtkPolyData with a plane from selection patch centroid and average normal; optional interactive plane."
+GROUPS
+  Meshing
+DEPENDS
+  VTK::FiltersCore
+  VTK::FiltersExtraction
+  VTK::FiltersModeling
+PRIVATE_DEPENDS
+  VTK::CommonCore
+  VTK::CommonDataModel
+  VTK::CommonExecutionModel
