@@ -28,6 +28,7 @@
 
 #include <boost/property_map/property_map.hpp>
 
+#include <algorithm>
 #include <exception>
 #include <memory>
 #include <set>
@@ -237,6 +238,12 @@ void vtkSHYXAdaptiveIsotropicRemesher::PrintSelf(ostream& os, vtkIndent indent)
   os << indent << "ShapeSmoothingIterations: " << this->ShapeSmoothingIterations << std::endl;
   os << indent << "ShapeSmoothingTimeStep: " << this->ShapeSmoothingTimeStep << std::endl;
   os << indent << "SharpFeatureSideFilter: " << this->SharpFeatureSideFilter << std::endl;
+  os << indent << "RemeshProtectConstraints: " << (this->RemeshProtectConstraints ? "on" : "off") << std::endl;
+  os << indent << "RemeshCollapseConstraints: " << (this->RemeshCollapseConstraints ? "on" : "off") << std::endl;
+  os << indent << "RemeshRelaxConstraints: " << (this->RemeshRelaxConstraints ? "on" : "off") << std::endl;
+  os << indent << "RemeshDoSplit: " << (this->RemeshDoSplit ? "on" : "off") << std::endl;
+  os << indent << "RemeshDoCollapse: " << (this->RemeshDoCollapse ? "on" : "off") << std::endl;
+  os << indent << "RemeshDoFlip: " << (this->RemeshDoFlip ? "on" : "off") << std::endl;
   os << indent << "SelectionCellArrayName: "
      << (this->SelectionCellArrayName ? this->SelectionCellArrayName : "(null)") << std::endl;
   this->Superclass::PrintSelf(os, indent);
@@ -421,22 +428,29 @@ int vtkSHYXAdaptiveIsotropicRemesher::RequestData(
     pmp::detect_sharp_edges(cgalMesh->surface, this->ProtectAngle, featureEdges);
     ApplySharpFeatureSideFilter(cgalMesh->surface, featureEdges, this->SharpFeatureSideFilter);
 
-    const auto np = pmp::parameters::number_of_iterations(static_cast<unsigned int>(this->NumberOfIterations))
-                      .number_of_relaxation_steps(static_cast<unsigned int>(this->NumberOfRelaxationSteps))
-                      .protect_constraints(true)
-                      .edge_is_constrained_map(featureEdges);
+    const auto remeshNp = [&]() {
+      return pmp::parameters::number_of_iterations(static_cast<unsigned int>(this->NumberOfIterations))
+        .number_of_relaxation_steps(static_cast<unsigned int>(this->NumberOfRelaxationSteps))
+        .protect_constraints(this->RemeshProtectConstraints)
+        .collapse_constraints(this->RemeshCollapseConstraints)
+        .relax_constraints(this->RemeshRelaxConstraints)
+        .do_split(this->RemeshDoSplit)
+        .do_collapse(this->RemeshDoCollapse)
+        .do_flip(this->RemeshDoFlip)
+        .edge_is_constrained_map(featureEdges);
+    };
 
     if (patchRemesh)
     {
       pmp::Adaptive_sizing_field sizing(this->AdaptiveTolerance,
         std::make_pair(minLen, maxLen), remeshFaces, cgalMesh->surface);
-      pmp::isotropic_remeshing(remeshFaces, sizing, cgalMesh->surface, np);
+      pmp::isotropic_remeshing(remeshFaces, sizing, cgalMesh->surface, remeshNp());
     }
     else
     {
       pmp::Adaptive_sizing_field sizing(this->AdaptiveTolerance,
         std::make_pair(minLen, maxLen), cgalMesh->surface.faces(), cgalMesh->surface);
-      pmp::isotropic_remeshing(cgalMesh->surface.faces(), sizing, cgalMesh->surface, np);
+      pmp::isotropic_remeshing(cgalMesh->surface.faces(), sizing, cgalMesh->surface, remeshNp());
     }
 
     if (this->ShapeSmoothingIterations > 0)

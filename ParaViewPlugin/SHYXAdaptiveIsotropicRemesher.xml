@@ -173,6 +173,74 @@
         </Documentation>
       </IntVectorProperty>
 
+      <IntVectorProperty command="SetRemeshProtectConstraints"
+                         name="RemeshProtectConstraints"
+                         label="Remesh: Protect constraints"
+                         number_of_elements="1"
+                         default_values="1"
+                         panel_visibility="advanced">
+        <BooleanDomain name="bool"/>
+        <Documentation>
+          CGAL protect_constraints. When ON, feature edges are neither split nor collapsed.
+          When OFF, constrained edges may be split or collapsed per CGAL (see collapse_constraints).
+        </Documentation>
+      </IntVectorProperty>
+
+      <IntVectorProperty command="SetRemeshCollapseConstraints"
+                         name="RemeshCollapseConstraints"
+                         label="Remesh: Collapse constraints"
+                         number_of_elements="1"
+                         default_values="1"
+                         panel_visibility="advanced">
+        <BooleanDomain name="bool"/>
+        <Documentation>
+          CGAL collapse_constraints. When Protect constraints is OFF, allows collapsing constrained edges.
+          Ignored by CGAL when Protect constraints is ON.
+        </Documentation>
+      </IntVectorProperty>
+
+      <IntVectorProperty command="SetRemeshRelaxConstraints"
+                         name="RemeshRelaxConstraints"
+                         label="Remesh: Relax constraints"
+                         number_of_elements="1"
+                         default_values="0"
+                         panel_visibility="advanced">
+        <BooleanDomain name="bool"/>
+        <Documentation>
+          CGAL relax_constraints. When ON, endpoints of constrained and boundary edges may move along constrained polylines during relaxation.
+        </Documentation>
+      </IntVectorProperty>
+
+      <IntVectorProperty command="SetRemeshDoSplit"
+                         name="RemeshDoSplit"
+                         label="Remesh: Do split"
+                         number_of_elements="1"
+                         default_values="1"
+                         panel_visibility="advanced">
+        <BooleanDomain name="bool"/>
+        <Documentation>CGAL isotropic_remeshing do_split.</Documentation>
+      </IntVectorProperty>
+
+      <IntVectorProperty command="SetRemeshDoCollapse"
+                         name="RemeshDoCollapse"
+                         label="Remesh: Do collapse"
+                         number_of_elements="1"
+                         default_values="1"
+                         panel_visibility="advanced">
+        <BooleanDomain name="bool"/>
+        <Documentation>CGAL isotropic_remeshing do_collapse.</Documentation>
+      </IntVectorProperty>
+
+      <IntVectorProperty command="SetRemeshDoFlip"
+                         name="RemeshDoFlip"
+                         label="Remesh: Do flip"
+                         number_of_elements="1"
+                         default_values="1"
+                         panel_visibility="advanced">
+        <BooleanDomain name="bool"/>
+        <Documentation>CGAL isotropic_remeshing do_flip.</Documentation>
+      </IntVectorProperty>
+
       <IntVectorProperty
          name="UseUpdateAttributes"
          command="SetUpdateAttributes"

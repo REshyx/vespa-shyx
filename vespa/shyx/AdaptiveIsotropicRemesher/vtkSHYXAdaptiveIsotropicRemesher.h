@@ -3,10 +3,8 @@
  * @brief   Curvature-aware isotropic remesh with min/max edge length, tolerance, and configurable
  *          relaxation steps per iteration.
  *
- * Uses CGAL::Polygon_mesh_processing::Adaptive_sizing_field (CGAL 6.0+) with
- * isotropic_remeshing. Finer triangles tend to appear in higher-curvature regions;
- * edge lengths are clamped to [MinEdgeLength, MaxEdgeLength]. Feature edges are
- * detected and protected like vtkCGALIsotropicRemesher.
+ * Uses CGAL::Polygon_mesh_processing::Adaptive_sizing_field (CGAL 6.0+) as the sizing function
+ * for isotropic_remeshing on faces (curvature-driven target edge length within min/max bounds).
  *
  * Optional Selection (port 1) or SelectionCellArrayName on the input restricts
  * CGAL isotropic remeshing to those faces; the rest of the surface is unchanged.
@@ -135,6 +133,59 @@ public:
   vtkSetClampMacro(SharpFeatureSideFilter, int, 0, 2);
   //@}
 
+  //@{
+  /**
+   * CGAL protect_constraints for isotropic_remeshing. When true, edges marked constrained in
+   * edge_is_constrained_map (here: sharp features) are neither split nor collapsed. When false,
+   * constrained edges may be split or collapsed per CGAL (subject to collapse_constraints); sizing
+   * is still Adaptive_sizing_field on the remeshed patch. Default true.
+   */
+  vtkGetMacro(RemeshProtectConstraints, bool);
+  vtkSetMacro(RemeshProtectConstraints, bool);
+  vtkBooleanMacro(RemeshProtectConstraints, bool);
+  //@}
+
+  //@{
+  /**
+   * CGAL collapse_constraints: allow collapsing constrained edges when RemeshProtectConstraints
+   * is false. Ignored by CGAL when RemeshProtectConstraints is true. Default true (CGAL default).
+   */
+  vtkGetMacro(RemeshCollapseConstraints, bool);
+  vtkSetMacro(RemeshCollapseConstraints, bool);
+  vtkBooleanMacro(RemeshCollapseConstraints, bool);
+  //@}
+
+  //@{
+  /**
+   * CGAL relax_constraints: move endpoints of constrained and boundary edges along constrained
+   * polylines during tangential relaxation. Default false (CGAL default).
+   */
+  vtkGetMacro(RemeshRelaxConstraints, bool);
+  vtkSetMacro(RemeshRelaxConstraints, bool);
+  vtkBooleanMacro(RemeshRelaxConstraints, bool);
+  //@}
+
+  //@{
+  /** CGAL do_split for isotropic_remeshing. Default true. */
+  vtkGetMacro(RemeshDoSplit, bool);
+  vtkSetMacro(RemeshDoSplit, bool);
+  vtkBooleanMacro(RemeshDoSplit, bool);
+  //@}
+
+  //@{
+  /** CGAL do_collapse for isotropic_remeshing. Default true. */
+  vtkGetMacro(RemeshDoCollapse, bool);
+  vtkSetMacro(RemeshDoCollapse, bool);
+  vtkBooleanMacro(RemeshDoCollapse, bool);
+  //@}
+
+  //@{
+  /** CGAL do_flip for isotropic_remeshing. Default true. */
+  vtkGetMacro(RemeshDoFlip, bool);
+  vtkSetMacro(RemeshDoFlip, bool);
+  vtkBooleanMacro(RemeshDoFlip, bool);
+  //@}
+
 protected:
   vtkSHYXAdaptiveIsotropicRemesher();
   ~vtkSHYXAdaptiveIsotropicRemesher() override;
@@ -154,6 +205,12 @@ protected:
   int    ShapeSmoothingIterations = 0;
   double ShapeSmoothingTimeStep   = 1e-4;
   int    SharpFeatureSideFilter   = 0;
+  bool   RemeshProtectConstraints   = true;
+  bool   RemeshCollapseConstraints  = true;
+  bool   RemeshRelaxConstraints     = false;
+  bool   RemeshDoSplit              = true;
+  bool   RemeshDoCollapse           = true;
+  bool   RemeshDoFlip               = true;
 
 private:
   vtkSHYXAdaptiveIsotropicRemesher(const vtkSHYXAdaptiveIsotropicRemesher&) = delete;

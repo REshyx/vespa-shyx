@@ -1,5 +1,6 @@
 #include "vtkSHYXSelectionPlaneClipper.h"
 
+#include <vtkAbstractArray.h>
 #include <vtkAppendPolyData.h>
 #include <vtkCell.h>
 #include <vtkCellArray.h>
@@ -26,6 +27,7 @@
 #include <vtkPolyDataConnectivityFilter.h>
 #include <vtkPolyDataNormals.h>
 #include <vtkSelection.h>
+#include <vtkStringArray.h>
 #include <vtkTriangleFilter.h>
 
 #include <algorithm>
@@ -41,6 +43,7 @@ vtkStandardNewMacro(vtkSHYXSelectionPlaneClipper);
 namespace
 {
 constexpr char kPlanePackedFieldName[] = "SHYX_SelectionPlaneClipper_PlanePacked";
+constexpr char kDefaultFillHoleStampArrayName[] = "SHYX_FillHoleStamp";
 
 void RemovePlanePackedField(vtkPolyData* pd)
 {
@@ -410,6 +413,116 @@ bool ComputePatchCentroidAndNormal(vtkPolyData* patch, double centroid[3], doubl
   return true;
 }
 
+void FillStampNewCellWithMarker(vtkAbstractArray* postArr, vtkIdType cellIdx, double marker)
+{
+  if (!postArr)
+  {
+    return;
+  }
+  if (auto* s = vtkStringArray::SafeDownCast(postArr))
+  {
+    s->SetValue(cellIdx, "");
+    return;
+  }
+  auto* da = vtkDataArray::SafeDownCast(postArr);
+  if (!da)
+  {
+    return;
+  }
+  const int nc = da->GetNumberOfComponents();
+  for (int c = 0; c < nc; ++c)
+  {
+    da->SetComponent(cellIdx, c, marker);
+  }
+}
+
+void SetNewCellTupleFromCell0(vtkAbstractArray* postArr, vtkAbstractArray* preArr, vtkIdType outCell, vtkIdType nPre)
+{
+  if (!postArr || !preArr || nPre <= 0)
+  {
+    return;
+  }
+  postArr->SetTuple(outCell, 0, preArr);
+}
+
+/**
+ * vtkFillHolesFilter keeps input polys first (DeepCopy) then appends new triangles; it does not pass
+ * cell data through. Rebuild output cell data from the pre-fill mesh for cells [0, nPre). On new
+ * cells, the stamp scalar array receives FillHoleNewCellDataMarkerValue; other arrays copy tuple
+ * from cell 0 of the pre-fill mesh.
+ */
+void RestoreCellDataAfterFillHoles(vtkPolyData* preFill, vtkPolyData* postFill, double markerValue,
+  const char* stampArrayNameFromUser, vtkSHYXSelectionPlaneClipper* self)
+{
+  if (!preFill || !postFill)
+  {
+    return;
+  }
+  vtkCellData* preCD = preFill->GetCellData();
+  vtkCellData* postCD = postFill->GetCellData();
+  const vtkIdType nPre = preFill->GetNumberOfCells();
+  const vtkIdType nPost = postFill->GetNumberOfCells();
+  if (nPost < nPre)
+  {
+    vtkWarningWithObjectMacro(
+      self, "Fill holes output has fewer cells than pre-fill; skipping cell-data restore.");
+    return;
+  }
+
+  const bool userNamed = (stampArrayNameFromUser && stampArrayNameFromUser[0] != '\0');
+  const std::string effStampName =
+    userNamed ? std::string(stampArrayNameFromUser) : std::string(kDefaultFillHoleStampArrayName);
+  const bool stampExisted = (preCD->GetAbstractArray(effStampName.c_str()) != nullptr);
+
+  postCD->Initialize();
+  postCD->CopyAllocate(preCD, nPost);
+
+  for (vtkIdType i = 0; i < nPre; ++i)
+  {
+    postCD->CopyData(preCD, i, i);
+  }
+
+  const int nArrays = preCD->GetNumberOfArrays();
+  for (vtkIdType i = nPre; i < nPost; ++i)
+  {
+    for (int ai = 0; ai < nArrays; ++ai)
+    {
+      vtkAbstractArray* preArr = preCD->GetAbstractArray(ai);
+      if (!preArr)
+      {
+        continue;
+      }
+      vtkAbstractArray* postArr = postCD->GetAbstractArray(preArr->GetName());
+      const bool isStamp = stampExisted && (effStampName == preArr->GetName());
+      if (isStamp)
+      {
+        FillStampNewCellWithMarker(postArr, i, markerValue);
+      }
+      else
+      {
+        SetNewCellTupleFromCell0(postArr, preArr, i, nPre);
+      }
+    }
+  }
+
+  if (!stampExisted)
+  {
+    vtkNew<vtkDoubleArray> stamp;
+    stamp->SetName(effStampName.c_str());
+    stamp->SetNumberOfComponents(1);
+    stamp->SetNumberOfTuples(nPost);
+    for (vtkIdType i = 0; i < nPre; ++i)
+    {
+      stamp->SetTuple1(i, 0.0);
+    }
+    for (vtkIdType i = nPre; i < nPost; ++i)
+    {
+      stamp->SetTuple1(i, markerValue);
+    }
+    postCD->AddArray(stamp);
+  }
+}
+
 } // namespace
 
 vtkSHYXSelectionPlaneClipper::vtkSHYXSelectionPlaneClipper()
@@ -422,6 +535,7 @@ vtkSHYXSelectionPlaneClipper::~vtkSHYXSelectionPlaneClipper()
 {
   this->SetInteractiveCutPackedString(nullptr);
   this->SetSelectionCellArrayName(nullptr);
+  this->SetFillHoleStampCellArrayName(nullptr);
 }
 
 void vtkSHYXSelectionPlaneClipper::SetSourceConnection(vtkAlgorithmOutput* algOutput)
@@ -439,6 +553,9 @@ void vtkSHYXSelectionPlaneClipper::PrintSelf(ostream& os, vtkIndent indent)
   os << indent << "UseInteractiveCutPlanes: " << this->UseInteractiveCutPlanes << "\n";
   os << indent << "FillHoles: " << this->FillHoles << "\n";
   os << indent << "FillHolesMaximumSize: " << this->FillHolesMaximumSize << "\n";
+  os << indent << "FillHoleNewCellDataMarkerValue: " << this->FillHoleNewCellDataMarkerValue << "\n";
+  os << indent << "FillHoleStampCellArrayName: "
+     << (this->FillHoleStampCellArrayName ? this->FillHoleStampCellArrayName : "(null)") << "\n";
   os << indent << "InteractiveCutPackedString: "
      << (this->InteractiveCutPackedString ? this->InteractiveCutPackedString : "") << "\n";
   os << indent << "SelectionCellArrayName: "
@@ -713,6 +830,8 @@ int vtkSHYXSelectionPlaneClipper::RequestData(
     filler->SetInputData(cleaned);
     filler->SetHoleSize(holeSize);
     filler->Update();
+    RestoreCellDataAfterFillHoles(cleaned, filler->GetOutput(), this->FillHoleNewCellDataMarkerValue,
+      this->FillHoleStampCellArrayName, this);
     vtkNew<vtkCleanPolyData> postClean;
     postClean->SetInputConnection(filler->GetOutputPort());
     postClean->Update();

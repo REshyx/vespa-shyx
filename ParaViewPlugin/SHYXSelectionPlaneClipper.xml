@@ -11,7 +11,11 @@
         With Tip connectivity (default), clipping follows the same strategy as SHYX Vessel End Clipper.
         Optional Selection Cell Array Name selects triangles on port 0 when no selection is provided.
         Fill Holes (default ON) runs vtkFillHolesFilter on the clip boundary using an automatic maximum hole size
-        from the result bounds unless you set Fill Holes Maximum Size.
+        from the result bounds unless you set Fill Holes Maximum Size. Cell data from the clipped surface is
+        restored after filling. New triangles: the chosen single-component cell scalar (Fill Hole Stamp Cell
+        Array) is set to Fill Hole New Cell Marker Value; other cell arrays copy tuple from cell 0 of the
+        pre-fill mesh. If the stamp array is missing or the name is left empty, a new scalar array
+        SHYX_FillHoleStamp is created.
         Field data array SHYX_SelectionPlaneClipper_PlanePacked (six values: plane origin and direction handle)
         is attached to port 0 for the interactive plane widget and for scripting.
       </Documentation>
@@ -26,6 +30,8 @@
         <DataTypeDomain name="input_type">
           <DataType value="vtkPolyData"/>
         </DataTypeDomain>
+        <InputArrayDomain name="fill_hole_cell_scalar_arrays" attribute_type="cell" number_of_components="1"
+                          optional="1"/>
         <Documentation>Full surface mesh to clip (triangles).</Documentation>
       </InputProperty>
 
@@ -119,6 +125,43 @@
           selects automatically from the clipped mesh bounding diagonal (about 35 percent).
         </Documentation>
       </DoubleVectorProperty>
+
+      <DoubleVectorProperty command="SetFillHoleNewCellDataMarkerValue"
+                            name="FillHoleNewCellDataMarkerValue"
+                            label="Fill Hole New Cell Marker Value"
+                            number_of_elements="1"
+                            default_values="0.0"
+                            panel_visibility="advanced">
+        <Documentation>
+          Value written on each new fill-hole triangle in the Fill Hole Stamp Cell Array (single-component
+          cell scalar). Newly created stamp arrays use this value on new triangles and 0 on pre-fill cells.
+        </Documentation>
+      </DoubleVectorProperty>
+
+      <StringVectorProperty name="FillHoleStampCellArrayName"
+                            label="Fill Hole Stamp Cell Array"
+                            command="SetFillHoleStampCellArrayName"
+                            number_of_elements="1"
+                            default_values=""
+                            animateable="0"
+                            panel_visibility="advanced">
+        <ArrayListDomain name="array_list"
+                         attribute_type="Scalars"
+                         number_of_components="1"
+                         input_domain_name="fill_hole_cell_scalar_arrays">
+          <RequiredProperties>
+            <Property name="Input" function="Input"/>
+          </RequiredProperties>
+        </ArrayListDomain>
+        <Documentation>
+          Single-component cell scalar that receives Fill Hole New Cell Marker Value on new fill-hole
+          triangles. Leave empty or choose a name not present before filling to create a new vtkDoubleArray
+          (empty name uses SHYX_FillHoleStamp). Other cell arrays on new triangles copy tuple from cell 0.
+        </Documentation>
+        <Hints>
+          <ArraySelectionWidget icon_type="cell"/>
+        </Hints>
+      </StringVectorProperty>
 
       <IntVectorProperty command="SetUseInteractiveCutPlanes"
                          name="UseInteractiveCutPlanes"

@@ -78,6 +78,17 @@ public:
   vtkGetMacro(FillHolesMaximumSize, double);
   vtkSetMacro(FillHolesMaximumSize, double);
 
+  /**
+   * vtkFillHolesFilter does not pass input cell data to the output. After filling, we restore cell
+   * arrays for pre-fill cells, then on new fill-hole triangles: the chosen single-component cell
+   * scalar (FillHoleStampCellArrayName, or new SHYX_FillHoleStamp when empty/missing) is set to
+   * FillHoleNewCellDataMarkerValue; other cell arrays copy tuple from cell 0 of the pre-fill mesh.
+   */
+  vtkGetMacro(FillHoleNewCellDataMarkerValue, double);
+  vtkSetMacro(FillHoleNewCellDataMarkerValue, double);
+  vtkSetStringMacro(FillHoleStampCellArrayName);
+  vtkGetStringMacro(FillHoleStampCellArrayName);
+
 protected:
   vtkSHYXSelectionPlaneClipper();
   ~vtkSHYXSelectionPlaneClipper() override;
@@ -97,6 +108,9 @@ protected:
   int FillHoles = 1;
   double FillHolesMaximumSize = 0.0;
 
+  double FillHoleNewCellDataMarkerValue = 0.0;
+
+  char* FillHoleStampCellArrayName = nullptr;
   char* SelectionCellArrayName = nullptr;
 
 private:
