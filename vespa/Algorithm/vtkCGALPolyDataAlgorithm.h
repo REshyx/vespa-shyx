@@ -39,8 +39,11 @@ public:
   /**
    * Choose if the result mesh should have the
    * point / cell data attributes of the input.
-   * If so, a vtkProbeFilter is called in order
-   * to interpolate values to the new mesh.
+   * If so, point data is interpolated with vtkProbeFilter; cell data is copied from the input cell
+   * nearest each output cell centroid (vtkStaticCellLocator::FindClosestPoint). vtkPolyData::BuildCells
+   * is invoked on input and output before SMP; centroid + lookup run in vtkSMPTools::For with
+   * thread-local vtkGenericCell; CopyData is serial. Default [smp-probe] unless VESPA_VTKCGAL_SMP_PROBE=0
+   * (or off/false/no).
    * Default is true.
    **/
   vtkGetMacro(UpdateAttributes, bool);
@@ -53,8 +56,10 @@ protected:
   ~vtkCGALPolyDataAlgorithm() override = default;
 
   /**
-   * interpolate attributes of input onto the new VTK mesh
-   * if UpdateAttributes is true.
+   * Interpolate input point data onto the new mesh (vtkProbeFilter), and map input cell data by
+   * nearest-cell lookup from each output cell centroid (SMP centroid + nearest cell; serial CopyData;
+   * requires vtkPolyData::BuildCells before parallel cell access per VTK guidance).
+   * No effect unless UpdateAttributes is true.
    */
   bool interpolateAttributes(vtkPolyData* input, vtkPolyData* vtkMesh);
 

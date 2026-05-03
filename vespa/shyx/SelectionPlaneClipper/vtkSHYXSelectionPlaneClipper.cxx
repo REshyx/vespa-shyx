@@ -43,7 +43,7 @@ vtkStandardNewMacro(vtkSHYXSelectionPlaneClipper);
 namespace
 {
 constexpr char kPlanePackedFieldName[] = "SHYX_SelectionPlaneClipper_PlanePacked";
-constexpr char kDefaultFillHoleStampArrayName[] = "SHYX_FillHoleStamp";
+constexpr char kDefaultFillHoleStampArrayName[] = "EndpointIndex";
 
 void RemovePlanePackedField(vtkPolyData* pd)
 {
@@ -529,6 +529,7 @@ vtkSHYXSelectionPlaneClipper::vtkSHYXSelectionPlaneClipper()
 {
   this->SetNumberOfInputPorts(2);
   this->SetNumberOfOutputPorts(1);
+  this->SetFillHoleStampCellArrayName(kDefaultFillHoleStampArrayName);
 }
 
 vtkSHYXSelectionPlaneClipper::~vtkSHYXSelectionPlaneClipper()

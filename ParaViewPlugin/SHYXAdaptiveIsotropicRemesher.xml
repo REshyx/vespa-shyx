@@ -8,14 +8,23 @@
         Adaptive isotropic remeshing using CGAL Adaptive_sizing_field (discrete curvature).
         Edge lengths are limited by Min/Max Edge Length; AdaptiveTolerance controls fineness
         together with curvature. With a Selection (or Selection Cell Array Name), only those
-        faces are remeshed; otherwise the whole surface is remeshed. Optional post-remesh
-        smooth_shape uses the same Protection Angle to detect sharp edges and fix those vertices.
-        Port 1 outputs detected sharp features on the final mesh (VTK_LINE + VTK_VERTEX).
+        faces are remeshed; otherwise the whole surface is remeshed. Edges on the boundary between
+        selected and unselected triangles are treated as CGAL feature edges for remesh and for
+        optional smooth_shape vertex pinning (together with angle-based sharp edges). Post-remesh
+        smooth_shape uses the same Protection Angle for sharp edges; with Feature Mask enabled it also
+        evaluates the same mask array and threshold on the remeshed surface (after interpolation) to
+        clip features and mark mask-region boundaries—no centroid classification.
+        Port 2 is the input mask patch; port 3 is the threshold extract on remeshed port 0.
+        Port 1 lines come from port 2 (input mask) when the mask is valid; otherwise from the full
+        remeshed surface. Port 1 vertex cells (feature points) are emitted only when Shape Smooth
+        Iterations &gt; 0: from port 3 if the mask is on, otherwise from the full remeshed surface.
         Requires CGAL 6.0+.
       </Documentation>
 
       <OutputPort name="Remeshed surface" index="0" id="port0" />
       <OutputPort name="Sharp features" index="1" id="port1" />
+      <OutputPort name="Mask patch (input)" index="2" id="port2" />
+      <OutputPort name="Mask patch (remeshed)" index="3" id="port3" />
 
       <InputProperty name="Input"
                      command="SetInputConnection">
@@ -26,6 +35,7 @@
         <DataTypeDomain name="input_type">
           <DataType value="vtkPolyData"/>
         </DataTypeDomain>
+        <InputArrayDomain name="feature_mask_arrays" optional="1"/>
       </InputProperty>
 
       <InputProperty name="Selection" label="Selection"
@@ -40,6 +50,8 @@
         <Documentation>
           Optional vtkSelection (active selection). When present and non-empty, CGAL remeshing
           is applied only to the indicated faces (same convention as SHYX Delete Selected Cells).
+          The boundary between selected and non-selected faces is also constrained as feature edges
+          for remesh and smooth_shape (with ProtectAngle / Feature Mask rules).
         </Documentation>
         <Hints>
           <SelectionInput/>
@@ -50,7 +62,8 @@
           command="SetSelectionCellArrayName" number_of_elements="1" default_values="">
         <Documentation>
           If Selection is empty: name of a cell data array on Input. Faces are remeshed when
-          value &gt; 0.5 (float) or non-zero (integer types).
+          value &gt; 0.5 (float) or non-zero (integer types). The patch boundary vs unselected
+          faces is also used as feature edges for remesh / smooth_shape (same as the Selection port).
         </Documentation>
       </StringVectorProperty>
 
@@ -239,6 +252,85 @@
                          panel_visibility="advanced">
         <BooleanDomain name="bool"/>
         <Documentation>CGAL isotropic_remeshing do_flip.</Documentation>
+      </IntVectorProperty>
+
+      <IntVectorProperty command="SetFeatureMaskEnabled"
+                         name="FeatureMaskEnabled"
+                         label="Feature Mask"
+                         number_of_elements="1"
+                         default_values="0"
+                         animateable="0">
+        <BooleanDomain name="bool"/>
+        <Documentation>
+          When on: threshold input faces to port 2; port 1 sharp features are computed only on that
+          patch; on the full surface, sharp edges are intersected with the mask for CGAL remesh /
+          smooth_shape. Choose a point- or cell-centered array, a threshold (tuple magnitude &gt;
+          threshold), and optional All Scalars for point arrays.
+        </Documentation>
+      </IntVectorProperty>
+
+      <StringVectorProperty name="FeatureMaskArrayName"
+                            label="Array"
+                            command="SetFeatureMaskArrayName"
+                            number_of_elements="1"
+                            default_values=""
+                            animateable="0">
+        <ArrayListDomain name="feature_mask_list"
+                         input_domain_name="feature_mask_arrays">
+          <RequiredProperties>
+            <Property name="Input" function="Input"/>
+          </RequiredProperties>
+        </ArrayListDomain>
+        <Documentation>
+          Name of a point- or cell-centered array. If both exist with the same name, cell data is
+          used. Tuple magnitude must be &gt; Threshold for a cell (or per-point corner) to pass.
+        </Documentation>
+        <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="visibility"
+                                   property="FeatureMaskEnabled"
+                                   value="1"/>
+          <ArraySelectionWidget/>
+        </Hints>
+      </StringVectorProperty>
+
+      <DoubleVectorProperty command="SetFeatureMaskThreshold"
+                            name="FeatureMaskThreshold"
+                            label="Threshold"
+                            number_of_elements="1"
+                            default_values="0"
+                            animateable="1">
+        <DoubleRangeDomain name="range" min="-1e308" max="1e308"/>
+        <Documentation>
+          Cells pass when tuple magnitude is strictly greater than this value (scalar or vector
+          magnitude). Typical: 0 to keep values &gt; 0.
+        </Documentation>
+        <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="visibility"
+                                   property="FeatureMaskEnabled"
+                                   value="1"/>
+        </Hints>
+      </DoubleVectorProperty>
+
+      <IntVectorProperty command="SetFeatureMaskAllScalars"
+                         name="FeatureMaskAllScalars"
+                         label="All Scalars"
+                         number_of_elements="1"
+                         default_values="0"
+                         animateable="0">
+        <BooleanDomain name="bool"/>
+        <Documentation>
+          When the chosen array is point-centered: if on, every corner of a cell must pass the
+          magnitude test; if off, one passing corner is enough (vtkThreshold-style). Ignored when
+          the array resolves to cell data.
+        </Documentation>
+        <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="visibility"
+                                   property="FeatureMaskEnabled"
+                                   value="1"/>
+        </Hints>
       </IntVectorProperty>
 
       <IntVectorProperty

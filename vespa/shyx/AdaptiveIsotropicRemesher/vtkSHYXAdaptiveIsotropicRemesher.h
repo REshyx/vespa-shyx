@@ -8,15 +8,27 @@
  *
  * Optional Selection (port 1) or SelectionCellArrayName on the input restricts
  * CGAL isotropic remeshing to those faces; the rest of the surface is unchanged.
+ * Edges on the boundary between selected and unselected faces are also marked as
+ * CGAL feature/constrained edges for isotropic_remeshing and for smooth_shape (together
+ * with angle-based sharp edges and optional FeatureMask filtering).
  * With no selection, the whole surface is remeshed (previous behavior).
  *
- * Optional post-remesh CGAL smooth_shape uses the same feature angle: sharp edges
- * are re-detected on the remeshed surface and incident vertices are constrained.
+ * Optional post-remesh CGAL smooth_shape re-detects sharp edges on the remeshed surface.
+ * When Feature mask is enabled, the same cell/point array and threshold are evaluated on the
+ * remeshed surface (after attribute interpolation) to clip sharp features and to mark mask-region
+ * boundary edges. smooth_shape anchor positions from the mask use sharp endpoints on the
+ * **remeshed** threshold patch (not the input port 2 patch). Selection boundary anchors still use
+ * input topology.
  *
  * Output port 0: remeshed (and optionally shape-smoothed) vtkPolyData.
- * Output port 1: detected sharp features on the final mesh as vtkPolyData with
- * VTK_LINE cells (feature edges) and VTK_VERTEX cells (endpoints on feature edges),
- * using the same Protection Angle and optional signed-side filter (see SharpFeatureSideFilter).
+ * Output port 1: **Lines** (sharp feature edges) use the **input** mask region (port 2) when the
+ * feature mask is valid and non-empty; otherwise the full remeshed surface (with optional mask
+ * filtering on the output). **Vertices** (feature points) are added only if **ShapeSmoothingIterations
+ * &gt; 0**: with feature mask, from the remeshed threshold patch (port 3); without mask, from the
+ * full remeshed surface. If there is no smooth step, port 1 has no vertex cells.
+ * Output port 2: input geometry, faces passing the feature mask threshold (for remesh constraints).
+ * Output port 3: same as port 0 after remesh/smooth, faces passing the mask threshold (remeshed
+ * mask patch for visualization and for smooth anchor geometry when Feature Mask is on).
  *
  * Requires CGAL 6.0 or newer.
  */
@@ -186,6 +198,42 @@ public:
   vtkBooleanMacro(RemeshDoFlip, bool);
   //@}
 
+  //@{
+  /**
+   * When true, feature extraction on port 2 and constraints use FeatureMaskArrayName:
+   * tuple magnitude must be strictly greater than FeatureMaskThreshold. The array may live on
+   * points or cells (same name resolves to cell data if a valid per-cell array exists, otherwise
+   * point data). For point-centered arrays, FeatureMaskAllScalars controls whether every corner
+   * of a cell must pass (true) or any corner suffices (false). Default false (no mask).
+   */
+  vtkGetMacro(FeatureMaskEnabled, bool);
+  vtkSetMacro(FeatureMaskEnabled, bool);
+  vtkBooleanMacro(FeatureMaskEnabled, bool);
+  //@}
+
+  vtkSetStringMacro(FeatureMaskArrayName);
+  vtkGetStringMacro(FeatureMaskArrayName);
+
+  //@{
+  /**
+   * Cells pass the mask when tuple magnitude is strictly greater than this value.
+   * Default 0 (common case: mark values &gt; 0).
+   */
+  vtkGetMacro(FeatureMaskThreshold, double);
+  vtkSetMacro(FeatureMaskThreshold, double);
+  //@}
+
+  //@{
+  /**
+   * When the chosen mask array is point-centered: if true, every corner point of a cell must pass
+   * the magnitude test; if false, one passing corner is enough. Ignored for cell-centered arrays.
+   * Default false.
+   */
+  vtkGetMacro(FeatureMaskAllScalars, bool);
+  vtkSetMacro(FeatureMaskAllScalars, bool);
+  vtkBooleanMacro(FeatureMaskAllScalars, bool);
+  //@}
+
 protected:
   vtkSHYXAdaptiveIsotropicRemesher();
   ~vtkSHYXAdaptiveIsotropicRemesher() override;
@@ -211,6 +259,11 @@ protected:
   bool   RemeshDoSplit              = true;
   bool   RemeshDoCollapse           = true;
   bool   RemeshDoFlip               = true;
+
+  bool   FeatureMaskEnabled    = false;
+  char*  FeatureMaskArrayName = nullptr;
+  double FeatureMaskThreshold  = 0.0;
+  bool   FeatureMaskAllScalars   = false;
 
 private:
   vtkSHYXAdaptiveIsotropicRemesher(const vtkSHYXAdaptiveIsotropicRemesher&) = delete;
