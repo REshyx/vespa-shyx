@@ -14,10 +14,11 @@
  *
  * Output polydata (port 0) carries cell-data array \c EndpointIndex when
  * CapEndpoints is on: each triangle introduced by CGAL hole filling at
- * endpoint \e k is tagged with \e k; all other triangles are \c -1.
+ * endpoint \e k (1-based: first leaf is 1, second is 2, ...) is tagged with
+ * \e k; all other triangles are \c -1.
  * Capping runs once per successful clip so each cap is attributed to the
  * endpoint that opened that hole. Port 1 visualization geometry also exposes
- * point-data \c EndpointIndex for glyphs (unchanged).
+ * point-data \c EndpointIndex with the same 1-based endpoint id for glyphs.
  */
 
 #ifndef vtkCGALVesselEndClipper_h
@@ -71,7 +72,8 @@ public:
      * If true, after each successful endpoint clip the open boundary is
      * filled with CGAL PMP (same strategy as vtkCGALPatchFilling), so the
      * mesh stays closed between clips. New cap triangles receive cell-data
-     * EndpointIndex equal to that endpoint's index. Patch smoothness is
+     * EndpointIndex equal to that endpoint's 1-based index (first endpoint is 1).
+     * Patch smoothness is
      * controlled by FairingContinuity. Requires the input vessel mesh to be
      * closed before clipping. Default is true.
      */

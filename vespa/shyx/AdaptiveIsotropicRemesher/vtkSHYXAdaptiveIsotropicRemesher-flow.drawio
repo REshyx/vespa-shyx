@@ -99,7 +99,7 @@
         </mxCell>
 
         <!-- Selection -->
-        <mxCell id="sel" value="选区 selected（面 id 集合）&#xa;优先 port1 vtkSelection → ExtractSelection → CollectCellsFromExtracted&#xa;否则若 SelectionCellArrayName：胞标量 &gt;0.5 或非零整型" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;align=left;spacingLeft=6" vertex="1" parent="1">
+        <mxCell id="sel" value="选区 selected（面 id 集合）&#xa;port1 vtkSelection → vtkExtractSelection → CollectCellsFromExtracted（vtkOriginalCellIds / 点选回推）&#xa;无有效选区则整面 remesh" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;align=left;spacingLeft=6" vertex="1" parent="1">
           <mxGeometry x="40" y="660" width="400" height="88" as="geometry" />
         </mxCell>
         <mxCell id="e9" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="mergeA" target="sel">

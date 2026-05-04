@@ -1,0 +1,14 @@
+NAME
+  vtkSHYXRepairDegeneracies
+DESCRIPTION
+  "SHYX: CGAL PMP remove_degenerate_faces / remove_almost_degenerate_faces (repair_degeneracies.h)."
+GROUPS
+  Meshing
+DEPENDS
+  vtkCGALAlgorithm
+  vtkCGALPMP
+  VTK::FiltersCore
+PRIVATE_DEPENDS
+  VTK::CommonCore
+  VTK::CommonDataModel
+  VTK::CommonExecutionModel

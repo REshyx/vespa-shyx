@@ -397,7 +397,7 @@ int vtkCGALVesselEndClipper::RequestData(
         for (int e = 0; e < nClips; ++e)
         {
             char buf[128];
-            std::snprintf(buf, sizeof(buf), "Endpoint %05d (%.2f, %.2f, %.2f)", e,
+            std::snprintf(buf, sizeof(buf), "Endpoint %05d (%.2f, %.2f, %.2f)", e + 1,
                 clips[e].endPt[0], clips[e].endPt[1], clips[e].endPt[2]);
             clips[e].name = buf;
         }
@@ -506,7 +506,7 @@ int vtkCGALVesselEndClipper::RequestData(
             {
                 arrNormals->InsertNextTuple3(n[0], n[1], n[2]);
                 arrEnabled->InsertNextValue(enabled ? 1 : 0);
-                arrIndex->InsertNextValue(static_cast<int>(i));
+                arrIndex->InsertNextValue(static_cast<int>(i + 1));
             }
         }
 
@@ -598,7 +598,7 @@ int vtkCGALVesselEndClipper::RequestData(
         // Informational warning for large tips (but still proceed)
         if (tipPts > currentMesh->GetNumberOfPoints() / 3)
         {
-            vtkWarningMacro("Tip at endpoint " << i << " is large ("
+            vtkWarningMacro("Tip at endpoint " << (i + 1) << " is large ("
                 << tipPts << " / " << currentMesh->GetNumberOfPoints()
                 << " pts). Uncheck this endpoint if the result is wrong.");
         }
@@ -651,7 +651,7 @@ int vtkCGALVesselEndClipper::RequestData(
                 std::make_unique<vtkCGALHelper::Vespa_surface>();
             if (!vtkCGALHelper::toCGAL(triMesh, cgalMesh.get(), &vtkCellToCgalFace))
             {
-                vtkErrorMacro("CGAL endpoint capping at endpoint " << i
+                vtkErrorMacro("CGAL endpoint capping at endpoint " << (i + 1)
                     << ": mesh could not be converted to a CGAL surface mesh. "
                        "Try CapEndpoints off or repair non-manifold geometry.");
                 return 0;
@@ -680,9 +680,9 @@ int vtkCGALVesselEndClipper::RequestData(
                 pmp::extract_boundary_cycles(cgalMesh->surface, std::back_inserter(borderCycles));
                 if (borderCycles.size() > 1u)
                 {
-                    vtkWarningMacro("Endpoint " << i << ": mesh has " << borderCycles.size()
+                    vtkWarningMacro("Endpoint " << (i + 1) << ": mesh has " << borderCycles.size()
                         << " boundary cycles; all new cap triangles are tagged with EndpointIndex == "
-                        << i << ".");
+                        << (i + 1) << ".");
                 }
                 for (Graph_halfedge h : borderCycles)
                 {
@@ -694,19 +694,19 @@ int vtkCGALVesselEndClipper::RequestData(
             }
             catch (std::exception& e)
             {
-                vtkErrorMacro("CGAL endpoint capping at endpoint " << i << ": " << e.what());
+                vtkErrorMacro("CGAL endpoint capping at endpoint " << (i + 1) << ": " << e.what());
                 return 0;
             }
 
             if (!holeOk)
             {
-                vtkWarningMacro("CGAL endpoint capping at endpoint " << i
+                vtkWarningMacro("CGAL endpoint capping at endpoint " << (i + 1)
                     << ": one or more boundary cycles could not be filled cleanly.");
             }
 
             for (Graph_Faces pf : patch_facets)
             {
-                put(epmap, pf, static_cast<int>(i));
+                put(epmap, pf, static_cast<int>(i + 1));
             }
 
             vtkSmartPointer<vtkPolyData> capped = vtkSmartPointer<vtkPolyData>::New();

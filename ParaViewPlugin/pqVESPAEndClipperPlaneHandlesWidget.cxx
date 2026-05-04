@@ -362,9 +362,10 @@ void pqVESPAEndClipperPlaneHandlesWidget::updatePlaneWidgetsVisibility()
         {
             continue;
         }
-        const bool showOne = base && focus >= 0 &&
-            static_cast<size_t>(focus) < this->PlaneWidgets.size() &&
-            static_cast<int>(i) == focus;
+        // Row labels use 1-based endpoint numbers; PlaneWidgets stay 0-based.
+        const bool showOne = base && focus >= 1 &&
+            focus <= static_cast<int>(this->PlaneWidgets.size()) &&
+            static_cast<int>(i) == focus - 1;
         vtkSMPropertyHelper(wdg, "Visibility", true).Set(showOne ? 1 : 0);
         vtkSMPropertyHelper(wdg, "Enabled", true).Set(showOne ? 1 : 0);
         wdg->UpdateVTKObjects();

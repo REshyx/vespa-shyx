@@ -1,0 +1,99 @@
+<ServerManagerConfiguration>
+  <ProxyGroup name="filters">
+    <SourceProxy name="SHYXRepairDegeneracies"
+                 class="vtkSHYXRepairDegeneracies"
+                 label="SHYX Repair Degeneracies (CGAL)">
+      <Documentation short_help="Remove degenerate and almost-degenerate triangles (CGAL PMP).">
+        CGAL Polygon_mesh_processing from repair_degeneracies.h: remove_degenerate_faces (zero-length
+        edges, collinear triangles) and optionally remove_almost_degenerate_faces (caps and needles).
+        Triangle vtkPolyData only. Named-parameter defaults match CGAL (cap ~160°, needle ratio 4).
+        Preserve genus applies to the degenerate-edge removal step inside remove_degenerate_faces.
+        Port 0: repaired mesh. Port 1: VTK_TRIANGLE cells for targeted regions — SHYX_RepairRegion 1 =
+        exact degenerate on input; if &quot;Remove almost degenerate&quot; is on, 2 = needle, 3 = cap, 4 = both
+        (faces on the mesh after remove_degenerate_faces, before remove_almost_degenerate_faces).
+      </Documentation>
+
+      <OutputPort name="Repaired mesh" index="0" id="port0" />
+      <OutputPort name="Repair regions" index="1" id="port1" />
+
+      <InputProperty name="Input" command="SetInputConnection">
+        <ProxyGroupDomain name="groups">
+          <Group name="sources"/>
+          <Group name="filters"/>
+        </ProxyGroupDomain>
+        <DataTypeDomain name="input_type">
+          <DataType value="vtkPolyData"/>
+        </DataTypeDomain>
+      </InputProperty>
+
+      <IntVectorProperty name="RemoveAlmostDegenerate"
+                         label="Remove Almost Degenerate (Caps/Needles)"
+                         command="SetRemoveAlmostDegenerate"
+                         number_of_elements="1"
+                         default_values="1"
+                         animateable="0">
+        <BooleanDomain name="bool"/>
+      </IntVectorProperty>
+
+      <DoubleVectorProperty name="CapThreshold"
+                            label="Cap Threshold (cosine)"
+                            command="SetCapThreshold"
+                            number_of_elements="1"
+                            default_values="-0.939692621"
+                            panel_visibility="advanced">
+        <Documentation>Cosine of minimum angle; faces with a larger angle are caps. CGAL default is cos(160°).</Documentation>
+      </DoubleVectorProperty>
+
+      <DoubleVectorProperty name="NeedleThreshold"
+                            label="Needle Threshold (edge length ratio)"
+                            command="SetNeedleThreshold"
+                            number_of_elements="1"
+                            default_values="4"
+                            panel_visibility="advanced">
+        <Documentation>Longest/shortest edge ratio above which a face is treated as a needle.</Documentation>
+      </DoubleVectorProperty>
+
+      <DoubleVectorProperty name="CollapseLengthThreshold"
+                            label="Collapse Max Edge Length (0=off)"
+                            command="SetCollapseLengthThreshold"
+                            number_of_elements="1"
+                            default_values="0"
+                            panel_visibility="advanced">
+        <Documentation>If non-zero, do not collapse edges longer than this value.</Documentation>
+      </DoubleVectorProperty>
+
+      <DoubleVectorProperty name="FlipTriangleHeightThreshold"
+                            label="Flip Max Triangle Height (0=off)"
+                            command="SetFlipTriangleHeightThreshold"
+                            number_of_elements="1"
+                            default_values="0"
+                            panel_visibility="advanced">
+        <Documentation>If non-zero, skip edge flips when triangle height exceeds this threshold.</Documentation>
+      </DoubleVectorProperty>
+
+      <IntVectorProperty name="PreserveGenus"
+                         label="Preserve Genus (Degenerate Edges)"
+                         command="SetPreserveGenus"
+                         number_of_elements="1"
+                         default_values="1"
+                         panel_visibility="advanced"
+                         animateable="0">
+        <BooleanDomain name="bool"/>
+      </IntVectorProperty>
+
+      <IntVectorProperty name="UpdateAttributes"
+                         label="Interpolate Point Data"
+                         command="SetUpdateAttributes"
+                         number_of_elements="1"
+                         default_values="1"
+                         panel_visibility="advanced"
+                         animateable="0">
+        <BooleanDomain name="bool"/>
+      </IntVectorProperty>
+
+      <Hints>
+        <ShowInMenu category="SHYX" icon=":/VESPA/SHYX_Point_Cloud_Surface_SDF.png"/>
+      </Hints>
+    </SourceProxy>
+  </ProxyGroup>
+</ServerManagerConfiguration>

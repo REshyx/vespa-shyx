@@ -908,7 +908,6 @@ vtkSHYXAdaptiveIsotropicRemesher::vtkSHYXAdaptiveIsotropicRemesher()
 //------------------------------------------------------------------------------
 vtkSHYXAdaptiveIsotropicRemesher::~vtkSHYXAdaptiveIsotropicRemesher()
 {
-  this->SetSelectionCellArrayName(nullptr);
   this->SetFeatureMaskArrayName(nullptr);
 }
 
@@ -936,8 +935,6 @@ void vtkSHYXAdaptiveIsotropicRemesher::PrintSelf(ostream& os, vtkIndent indent)
   os << indent << "RemeshDoSplit: " << (this->RemeshDoSplit ? "on" : "off") << std::endl;
   os << indent << "RemeshDoCollapse: " << (this->RemeshDoCollapse ? "on" : "off") << std::endl;
   os << indent << "RemeshDoFlip: " << (this->RemeshDoFlip ? "on" : "off") << std::endl;
-  os << indent << "SelectionCellArrayName: "
-     << (this->SelectionCellArrayName ? this->SelectionCellArrayName : "(null)") << std::endl;
   os << indent << "FeatureMaskEnabled: " << (this->FeatureMaskEnabled ? "on" : "off") << std::endl;
   os << indent << "FeatureMaskArrayName: "
      << (this->FeatureMaskArrayName ? this->FeatureMaskArrayName : "(null)") << std::endl;
@@ -1079,36 +1076,6 @@ int vtkSHYXAdaptiveIsotropicRemesher::RequestData(
           (extracted->GetNumberOfCells() > 0 || extracted->GetNumberOfPoints() > 0))
         {
           CollectCellsFromExtracted(input, extracted, selected);
-        }
-      }
-    }
-  }
-
-  if (selected.empty() && this->SelectionCellArrayName && this->SelectionCellArrayName[0] != '\0')
-  {
-    vtkDataArray* arr = input->GetCellData()->GetArray(this->SelectionCellArrayName);
-    if (!arr)
-    {
-      vtkWarningMacro("SelectionCellArrayName \""
-        << this->SelectionCellArrayName << "\" not found on input cell data.");
-    }
-    else
-    {
-      const vtkIdType nc = input->GetNumberOfCells();
-      for (vtkIdType cid = 0; cid < nc; ++cid)
-      {
-        bool take = false;
-        if (arr->IsIntegral())
-        {
-          take = (arr->GetTuple1(cid) != 0.0);
-        }
-        else
-        {
-          take = (arr->GetTuple1(cid) > 0.5);
-        }
-        if (take)
-        {
-          selected.insert(cid);
         }
       }
     }

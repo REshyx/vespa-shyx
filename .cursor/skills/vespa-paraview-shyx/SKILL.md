@@ -83,4 +83,55 @@ description: >-
 - SHYX 实现根：`vespa/shyx/*/`
 - **ParaView 上游源码（本地参考）**：`C:\SoftWare\ParaView` — 可对照 Proxy、Server Manager XML、插件 CMake、`paraview_add_plugin` 等与版本一致的实现；本路径为开发机约定，若不存在则以实际安装的 ParaView 源码目录为准。
 
-更细的 ParaView 代理 XML 域（`DataTypeDomain`、`IntVectorProperty` 等）以**已有 `SHYX*.xml`** 为模板，查阅 ParaView 版本对应文档为辅。
+更细的 **Domain / Decorator** 与常见 Hints 见 **§8**。其余 ParaView SM 细节以**已有 `SHYX*.xml`** 为模板，对照本地 `ParaView` 源码（如 `Remoting/ServerManager`、`Qt/ApplicationComponents`）与官方文档。
+
+## 8. ParaView 属性：`Domain` vs `PropertyWidgetDecorator`（插件可用与扩展）
+
+### 8.1 分工
+
+| 概念 | 所在层 | 作用 |
+|------|--------|------|
+| **`XXXDomain`**（如 `BoundsDomain`、`IntRangeDomain`、`EnumerationDomain`、`ArrayListDomain`） | Server Manager：写在**属性节点下**（`<DoubleVectorProperty>` 等的子元素） | 约束/推导该属性的**取值范围、枚举项、与 Input 关联的数组列表**等，为面板提供合法值与建议。 |
+| **`PropertyWidgetDecorator`**（`Hints` 里 `type="GenericDecorator"` 等） | 客户端 Qt：写在属性的 `<Hints>` 里 | 根据**其它属性或数据状态**控制控件的**显示/隐藏**或**启用/禁用**（与 Domain 正交）。 |
+
+### 8.2 插件能否使用、能否自定义
+
+- **使用**：与内置过滤器相同，在 **`ParaViewPlugin/SHYX*.xml`** 里写已存在的 Domain 名与 Decorator 的 `type=` 即可（需与所链 ParaView 版本一致）。示例：`SHYXAdaptiveIsotropicRemesher.xml` 中 `MinEdgeLength` / `MaxEdgeLength` 的 `BoundsDomain`，以及 `GenericDecorator` / `CompositeDecorator`。
+- **自定义 Domain**：通常需 **C++** 提供 `vtkSMDomain` 子类并注册；**仅 XML 发明新标签名**一般不可行。多数 shyx 插件只组合现有 Domain。
+- **自定义 Decorator**：**可以**。上游示例：`ParaView/Examples/Plugins/PropertyWidgets/Plugin/` 中的 `pqMyPropertyWidgetDecorator`：继承 `pqPropertyWidgetDecorator`，通过 **`pqPropertyWidgetInterface::createWidgetDecorator()`** 按 XML `type="..."` 分派；插件注册**额外的** `pqPropertyWidgetInterface` 与标准实现并列。若需与 server 共用逻辑，可走 `vtkPropertyDecorator`（如 `vtkGenericPropertyDecorator`）再由 Qt 侧包装。
+
+### 8.3 内置 `createWidgetDecorator` 识别的 `type`（参考 `pqStandardPropertyWidgetInterface.cxx`）
+
+在标准 ParaView 客户端中常见：`GenericDecorator`、`CompositeDecorator`、`EnableWidgetDecorator`、`ShowWidgetDecorator`、`InputDataTypeDecorator`、`MultiComponentsDecorator`、`OSPRayHidingDecorator`、`SessionTypeDecorator`、`CTHArraySelectionDecorator`。另有自动附加的 `pqAnimationShortcutDecorator`（通常不写进 XML）。
+
+### 8.4 `GenericDecorator`（`vtkGenericPropertyDecorator`）要点
+
+- **`mode`**：`visibility` → 控制是否出现在面板；`enabled_state` → 可见但灰显/可编辑。
+- **`property` / `index`**：观察另一 SM 属性名及可选元素下标。
+- **`value`** 或 **`values="a b c"`**（空格分隔）：与 `vtkVariant::ToString()` **相等** 即匹配；`values` 为 **OR**（任一匹配）。
+- **`inverse="1"`**：对匹配结果取反。可用于例如「数组名字符串**非空**才显示」：`value=""` + `inverse="1"`（空串匹配为真，取反后为假；非空则反之为真）。
+- **`number_of_components="N"`**：仅适用于带 **`ArrayListDomain`** 的典型 **5 元组** 数组选择字符串属性：按当前选中数组在输入上的 **分量数** 决定是否匹配。
+- **特殊**：被观察属性 **0 个元素** 且配置值为 **`"null"`** 时用于「无 proxy」等语义；`vtkSMProxyProperty` + `ProxyListDomain` 另有按子 proxy XML 名匹配的逻辑。
+
+### 8.5 `CompositeDecorator`（`vtkCompositePropertyDecorator`）
+
+- 根节点下为 **`<Expression type="and|or">`**，可嵌套子 `<Expression>` 与内层 `<PropertyWidgetDecorator type="GenericDecorator" .../>`，实现任意 **与/或** 组合（见上游 `vtkCompositePropertyDecorator.h` 内嵌 XML 示例）。
+
+### 8.6 同一属性上多个 Decorator
+
+- 客户端 **`pqProxyWidget`** 对同一控件：**所有** decorator 的 `canShowWidget` 均需为真才显示（**逻辑与**）。因此不能靠两个 `GenericDecorator`（`value=1` 与 `value=2`）表达 **OR**，应使用 **`CompositeDecorator`** 包一层 `type="or"`。
+
+### 8.7 `BoundsDomain` 与「自动刷新」（示例：`MinEdgeLength` / `MaxEdgeLength`）
+
+- XML：`BoundsDomain mode="scaled_extent"` + `scale_factor` + `RequiredProperties` 绑定 **`Input`**。
+- **含义**：**不是** VTK 算子在 `RequestData` 里改 Min/Max；而是 **Input 的包围盒变化** 时，ParaView **更新该属性的 Domain**（建议尺度、Scale/Reset 等）。`scaled_extent` 下 `scale_factor` 为相对包围盒特征长度的比例（如 `SHYXAdaptiveIsotropicRemesher.xml` 文档所写：Min 约 **0.1%** 最长边、Max 约 **5%** 最长边）。
+- **不会**在后台静默覆盖用户已填的数值，除非用户在 UI 上使用 **Reset/Scale** 等显式采用建议值。
+
+### 8.8 其它与面板相关的常见能力（除 Domain/Decorator）
+
+- **`PropertyGroup`**：成组与标签。
+- **`panel_visibility`**：`default` / `advanced` / `never`（高级区或完全不显示）。
+- **`Hints`**：`ShowInMenu`、`ArraySelectionWidget`、`SelectionInput`、`panel_widget`（自定义整页属性 UI）等。
+- **输入与数据域**：`InputProperty`、`DataTypeDomain`、`InputArrayDomain` 等。
+
+本地对照源码时，Decorator 工厂与注册：`Qt/ApplicationComponents/pqStandardPropertyWidgetInterface.cxx`；`GenericDecorator` 逻辑：`Remoting/ApplicationComponents/vtkGenericPropertyDecorator.cxx`；组合逻辑：`vtkCompositePropertyDecorator.cxx`。

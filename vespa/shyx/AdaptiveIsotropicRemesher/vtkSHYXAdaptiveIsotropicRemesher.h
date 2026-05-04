@@ -6,8 +6,8 @@
  * Uses CGAL::Polygon_mesh_processing::Adaptive_sizing_field (CGAL 6.0+) as the sizing function
  * for isotropic_remeshing on faces (curvature-driven target edge length within min/max bounds).
  *
- * Optional Selection (port 1) or SelectionCellArrayName on the input restricts
- * CGAL isotropic remeshing to those faces; the rest of the surface is unchanged.
+ * Optional vtkSelection on port 1 restricts CGAL isotropic remeshing to the selected faces;
+ * the rest of the surface is unchanged.
  * Edges on the boundary between selected and unselected faces are also marked as
  * CGAL feature/constrained edges for isotropic_remeshing and for smooth_shape (together
  * with angle-based sharp edges and optional FeatureMask filtering).
@@ -52,14 +52,6 @@ public:
 
   /** vtkSelection input (port 1), same pattern as SHYX Delete Selected Cells. */
   void SetSourceConnection(vtkAlgorithmOutput* algOutput);
-
-  /**
-   * When port 1 has no usable selection: name of a cell data array on port 0.
-   * A face is included in the remesh patch if the first component is > 0.5 (float)
-   * or non-zero (integral types).
-   */
-  vtkSetStringMacro(SelectionCellArrayName);
-  vtkGetStringMacro(SelectionCellArrayName);
 
   //@{
   /**
@@ -241,8 +233,6 @@ protected:
   int RequestData(vtkInformation*, vtkInformationVector**, vtkInformationVector*) override;
   int FillInputPortInformation(int port, vtkInformation* info) override;
   int FillOutputPortInformation(int port, vtkInformation* info) override;
-
-  char* SelectionCellArrayName = nullptr;
 
   double MinEdgeLength       = 0.0;
   double MaxEdgeLength       = 0.0;
