@@ -1,0 +1,433 @@
+<?xml version="1.0" ?>
+<ServerManagerConfiguration>
+  <ProxyGroup name="filters">
+    <SourceProxy class="vtkSHYXShapeSmoothing"
+                 label="SHYX Shape Smoothing"
+                 name="SHYXShapeSmoothing">
+      <Documentation short_help="Switchable triangle-mesh smoothing using CGAL PMP (smooth_shape / angle_and_area_smoothing / fair).">
+        Smooths a triangulated vtkPolyData with one of three CGAL algorithms:
+        - Shape MCF (smooth_shape, mean curvature flow) with optional rescaling (do_scale) for
+          approximate volume preservation;
+        - Angle &amp; Area (angle_and_area_smoothing) with optional reprojection on the input
+          surface (do_project) which keeps the overall shape/volume close to the input even with
+          few constraints; area-based smoothing requires Ceres at build time;
+        - Fair (bi-Laplacian fairing) on a vertex range, driven by Fairing Continuity. Vertices
+          outside the chosen range act as boundary conditions, exactly preserving everything else.
+
+        Constrained vertices come from the same threshold-based feature extraction as
+        SHYX Adaptive Isotropic Remesher: sharp edges via Protection Angle (signed dihedral side
+        filter optional), and an optional Feature Mask (point/cell array threshold) which drops
+        sharp edges leaving the mask, adds mask-region boundary edges as feature edges, and
+        contributes sharp endpoints inside the mask threshold patch as anchor positions snapped
+        within Anchor Tolerance of the bounding box length.
+
+        Output port 0: smoothed surface. Output port 1: feature diagnostic (lines = feature edges,
+        verts = constrained feature vertices).
+      </Documentation>
+
+      <OutputPort name="Smoothed surface" index="0" id="port0" />
+      <OutputPort name="Feature diagnostic" index="1" id="port1" />
+
+      <InputProperty name="Input"
+                     command="SetInputConnection">
+        <ProxyGroupDomain name="groups">
+          <Group name="sources"/>
+          <Group name="filters"/>
+        </ProxyGroupDomain>
+        <DataTypeDomain name="input_type">
+          <DataType value="vtkPolyData"/>
+        </DataTypeDomain>
+        <InputArrayDomain name="feature_mask_arrays" optional="1"/>
+      </InputProperty>
+
+      <!-- Algorithm selection -->
+      <IntVectorProperty command="SetSmoothingMethod"
+                         name="SmoothingMethod"
+                         label="Algorithm"
+                         number_of_elements="1"
+                         default_values="0"
+                         animateable="0">
+        <EnumerationDomain name="enum">
+          <Entry text="Shape MCF (smooth_shape)" value="0"/>
+          <Entry text="Angle &amp; Area (angle_and_area_smoothing)" value="1"/>
+          <Entry text="Fair (bi-Laplacian)" value="2"/>
+        </EnumerationDomain>
+        <Documentation>
+          CGAL Polygon Mesh Processing smoothing algorithm. Shape MCF moves vertices along normals
+          using mean curvature; Angle &amp; Area equalises angle/area distributions; Fair solves a
+          bi-Laplacian system on a vertex range (boundary conditions are the unmoved vertices).
+        </Documentation>
+      </IntVectorProperty>
+
+      <IntVectorProperty command="SetNumberOfIterations"
+                         name="NumberOfIterations"
+                         label="Number Of Iterations"
+                         number_of_elements="1"
+                         default_values="1">
+        <IntRangeDomain name="range" min="1" max="200"/>
+        <Documentation>
+          Iterations for Shape MCF and Angle &amp; Area; ignored by Fair (a single linear solve).
+        </Documentation>
+        <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="visibility"
+                                   property="SmoothingMethod"
+                                   values="0 1"/>
+        </Hints>
+      </IntVectorProperty>
+
+      <!-- Constraints: sharp edges + side filter -->
+      <DoubleVectorProperty command="SetProtectAngle"
+                            name="ProtectAngle"
+                            label="Protection Angle"
+                            number_of_elements="1"
+                            default_values="70">
+        <DoubleRangeDomain name="range" min="0" max="180"/>
+        <Documentation>
+          Sharp edge angle threshold in degrees. Endpoints of detected sharp edges are constrained
+          (fixed) during smoothing.
+        </Documentation>
+      </DoubleVectorProperty>
+
+      <IntVectorProperty command="SetSharpFeatureSideFilter"
+                         name="SharpFeatureSideFilter"
+                         label="Sharp side filter"
+                         number_of_elements="1"
+                         default_values="0"
+                         animateable="0"
+                         panel_visibility="advanced">
+        <EnumerationDomain name="enum">
+          <Entry text="None" value="0"/>
+          <Entry text="Exclude concave (signed &lt; 0)" value="1"/>
+          <Entry text="Exclude convex (signed &gt; 0)" value="2"/>
+        </EnumerationDomain>
+        <Documentation>
+          Optional filter on interior sharp edges using signed dihedral angle (CGAL
+          approximate_dihedral_angle). Boundary edges are unchanged. If convex/concave looks
+          swapped, flip mesh orientation or pick the other entry.
+        </Documentation>
+      </IntVectorProperty>
+
+      <DoubleVectorProperty command="SetAnchorTolerance"
+                            name="AnchorTolerance"
+                            label="Anchor Tolerance (relative)"
+                            number_of_elements="1"
+                            default_values="1e-4"
+                            panel_visibility="advanced">
+        <DoubleRangeDomain name="range" min="0" max="1"/>
+        <Documentation>
+          Relative tolerance (fraction of input AABB longest side) used when snapping anchor
+          positions onto the working mesh. Used only when Feature Mask is ON.
+        </Documentation>
+      </DoubleVectorProperty>
+
+      <!-- Feature Mask block (mirrors AIR) -->
+      <IntVectorProperty command="SetFeatureMaskEnabled"
+                         name="FeatureMaskEnabled"
+                         label="Feature Mask"
+                         number_of_elements="1"
+                         default_values="0"
+                         animateable="0">
+        <BooleanDomain name="bool"/>
+        <Documentation>
+          When ON: a tuple-magnitude threshold on a point/cell array defines the active region.
+          Sharp edges leaving the mask are dropped, mask-region boundary edges are added as feature
+          edges, and sharp endpoints of the mask threshold patch contribute anchor positions.
+        </Documentation>
+      </IntVectorProperty>
+
+      <StringVectorProperty name="FeatureMaskArrayName"
+                            label="Array"
+                            command="SetFeatureMaskArrayName"
+                            number_of_elements="1"
+                            default_values=""
+                            animateable="0">
+        <ArrayListDomain name="feature_mask_list"
+                         input_domain_name="feature_mask_arrays">
+          <RequiredProperties>
+            <Property name="Input" function="Input"/>
+          </RequiredProperties>
+        </ArrayListDomain>
+        <Documentation>
+          Name of a point- or cell-centered array. If both exist with the same name, cell data is
+          used. Tuple magnitude must be &gt; Threshold for a cell (or per-point corner) to pass.
+        </Documentation>
+        <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="visibility"
+                                   property="FeatureMaskEnabled"
+                                   value="1"/>
+          <ArraySelectionWidget/>
+        </Hints>
+      </StringVectorProperty>
+
+      <DoubleVectorProperty command="SetFeatureMaskThreshold"
+                            name="FeatureMaskThreshold"
+                            label="Threshold"
+                            number_of_elements="1"
+                            default_values="0"
+                            animateable="1">
+        <DoubleRangeDomain name="range" min="-1e308" max="1e308"/>
+        <Documentation>
+          Cells pass when tuple magnitude is strictly greater than this value. Typical: 0.
+        </Documentation>
+        <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="visibility"
+                                   property="FeatureMaskEnabled"
+                                   value="1"/>
+        </Hints>
+      </DoubleVectorProperty>
+
+      <IntVectorProperty command="SetFeatureMaskAllScalars"
+                         name="FeatureMaskAllScalars"
+                         label="All Scalars"
+                         number_of_elements="1"
+                         default_values="0"
+                         animateable="0">
+        <BooleanDomain name="bool"/>
+        <Documentation>
+          When the chosen array is point-centered: if ON, every corner of a cell must pass the
+          magnitude test; if OFF, one passing corner is enough. Ignored when the array resolves to
+          cell data.
+        </Documentation>
+        <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="visibility"
+                                   property="FeatureMaskEnabled"
+                                   value="1"/>
+        </Hints>
+      </IntVectorProperty>
+
+      <!-- ============== Shape MCF (smooth_shape) ============== -->
+      <DoubleVectorProperty command="SetShapeTimeStep"
+                            name="ShapeTimeStep"
+                            label="Time Step"
+                            number_of_elements="1"
+                            default_values="0.0001">
+        <DoubleRangeDomain name="range" min="1e-12" max="1"/>
+        <Documentation>
+          CGAL smooth_shape `time` parameter. Larger = faster convergence, more distortion. Typical
+          1e-6 to 1.
+        </Documentation>
+        <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="visibility"
+                                   property="SmoothingMethod"
+                                   value="0"/>
+        </Hints>
+      </DoubleVectorProperty>
+
+      <IntVectorProperty command="SetShapeDoScale"
+                         name="ShapeDoScale"
+                         label="Preserve volume (do_scale)"
+                         number_of_elements="1"
+                         default_values="1">
+        <BooleanDomain name="bool"/>
+        <Documentation>
+          CGAL smooth_shape `do_scale`: rescale the mesh after each iteration to compensate for
+          the volume shrinkage of mean curvature flow.
+
+          IMPORTANT: CGAL only applies this rescaling when BOTH conditions hold:
+          (1) the mesh is closed (`CGAL::is_closed`, no boundary loops); and
+          (2) at most one vertex is constrained.
+
+          Otherwise CGAL silently skips it and the surface keeps shrinking. Open meshes (e.g. a
+          pipe with inlet/outlet boundaries) hit (1); typical sharp-feature constraints from
+          Protection Angle / Feature Mask hit (2). For volume-like preservation on open meshes
+          and/or with many constraints, switch Algorithm to 'Angle &amp; Area' and keep
+          'Reproject on input (do_project)' = ON, or use 'Fair' with 'Mask region only'.
+        </Documentation>
+        <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="visibility"
+                                   property="SmoothingMethod"
+                                   value="0"/>
+        </Hints>
+      </IntVectorProperty>
+
+      <!-- ============== Angle &amp; Area (angle_and_area_smoothing) ============== -->
+      <IntVectorProperty command="SetUseAngleSmoothing"
+                         name="UseAngleSmoothing"
+                         label="Use angle smoothing"
+                         number_of_elements="1"
+                         default_values="1">
+        <BooleanDomain name="bool"/>
+        <Documentation>CGAL `use_angle_smoothing` named parameter.</Documentation>
+        <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="visibility"
+                                   property="SmoothingMethod"
+                                   value="1"/>
+        </Hints>
+      </IntVectorProperty>
+
+      <IntVectorProperty command="SetUseAreaSmoothing"
+                         name="UseAreaSmoothing"
+                         label="Use area smoothing (Ceres)"
+                         number_of_elements="1"
+                         default_values="1">
+        <BooleanDomain name="bool"/>
+        <Documentation>
+          CGAL `use_area_smoothing`. Requires Ceres at build time (CGAL_PMP_USE_CERES_SOLVER).
+          Without Ceres CGAL prints a warning and disables it; the angle path still runs.
+        </Documentation>
+        <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="visibility"
+                                   property="SmoothingMethod"
+                                   value="1"/>
+        </Hints>
+      </IntVectorProperty>
+
+      <IntVectorProperty command="SetUseSafetyConstraints"
+                         name="UseSafetyConstraints"
+                         label="Use safety constraints"
+                         number_of_elements="1"
+                         default_values="1">
+        <BooleanDomain name="bool"/>
+        <Documentation>
+          CGAL `use_safety_constraints`: reject moves that would worsen the smallest angle or
+          create self-intersections.
+        </Documentation>
+        <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="visibility"
+                                   property="SmoothingMethod"
+                                   value="1"/>
+        </Hints>
+      </IntVectorProperty>
+
+      <IntVectorProperty command="SetUseDelaunayFlips"
+                         name="UseDelaunayFlips"
+                         label="Use Delaunay flips"
+                         number_of_elements="1"
+                         default_values="1"
+                         panel_visibility="advanced">
+        <BooleanDomain name="bool"/>
+        <Documentation>
+          CGAL `use_Delaunay_flips`: finish each area-smoothing pass with Delaunay edge flips.
+        </Documentation>
+        <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="visibility"
+                                   property="SmoothingMethod"
+                                   value="1"/>
+        </Hints>
+      </IntVectorProperty>
+
+      <IntVectorProperty command="SetDoProject"
+                         name="DoProject"
+                         label="Reproject on input (do_project)"
+                         number_of_elements="1"
+                         default_values="1">
+        <BooleanDomain name="bool"/>
+        <Documentation>
+          CGAL `do_project`: after each iteration, reproject vertices on an AABB tree built from
+          the input triangles. Main shape/volume-preservation knob for angle_and_area_smoothing.
+        </Documentation>
+        <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="visibility"
+                                   property="SmoothingMethod"
+                                   value="1"/>
+        </Hints>
+      </IntVectorProperty>
+
+      <!-- ============== Fair ============== -->
+      <IntVectorProperty command="SetFairingContinuity"
+                         name="FairingContinuity"
+                         label="Fairing continuity"
+                         number_of_elements="1"
+                         default_values="1">
+        <EnumerationDomain name="enum">
+          <Entry text="C0" value="0"/>
+          <Entry text="C1" value="1"/>
+          <Entry text="C2" value="2"/>
+        </EnumerationDomain>
+        <Documentation>
+          CGAL fair `fairing_continuity`. Higher continuity needs more fixed boundary vertices.
+        </Documentation>
+        <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="visibility"
+                                   property="SmoothingMethod"
+                                   value="2"/>
+        </Hints>
+      </IntVectorProperty>
+
+      <IntVectorProperty command="SetFairScope"
+                         name="FairScope"
+                         label="Fair scope"
+                         number_of_elements="1"
+                         default_values="0"
+                         animateable="0">
+        <EnumerationDomain name="enum">
+          <Entry text="All non-constrained vertices" value="0"/>
+          <Entry text="Mask region only (non-constrained)" value="1"/>
+        </EnumerationDomain>
+        <Documentation>
+          Vertex range passed to CGAL fair. "All non-constrained" fairs every non-feature vertex
+          (the mesh must have constraints, otherwise CGAL would shrink it to the origin).
+          "Mask region only" fairs only vertices fully inside the Feature Mask region (requires
+          Feature Mask ON).
+        </Documentation>
+        <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="visibility"
+                                   property="SmoothingMethod"
+                                   value="2"/>
+        </Hints>
+      </IntVectorProperty>
+
+      <IntVectorProperty
+         name="UseUpdateAttributes"
+         command="SetUpdateAttributes"
+         label="Copy attributes"
+         number_of_elements="1"
+         default_values="1"
+         panel_visibility="advanced">
+         <BooleanDomain name="bool"/>
+         <Documentation>
+           If ON, point/cell data are copied onto the smoothed mesh.
+         </Documentation>
+      </IntVectorProperty>
+
+      <PropertyGroup label="Constraints">
+        <Property name="ProtectAngle"/>
+        <Property name="SharpFeatureSideFilter"/>
+        <Property name="AnchorTolerance"/>
+      </PropertyGroup>
+
+      <PropertyGroup label="Feature Mask (threshold)">
+        <Property name="FeatureMaskEnabled"/>
+        <Property name="FeatureMaskArrayName"/>
+        <Property name="FeatureMaskThreshold"/>
+        <Property name="FeatureMaskAllScalars"/>
+      </PropertyGroup>
+
+      <PropertyGroup label="Shape MCF (smooth_shape)">
+        <Property name="ShapeTimeStep"/>
+        <Property name="ShapeDoScale"/>
+      </PropertyGroup>
+
+      <PropertyGroup label="Angle &amp; Area (angle_and_area_smoothing)">
+        <Property name="UseAngleSmoothing"/>
+        <Property name="UseAreaSmoothing"/>
+        <Property name="UseSafetyConstraints"/>
+        <Property name="UseDelaunayFlips"/>
+        <Property name="DoProject"/>
+      </PropertyGroup>
+
+      <PropertyGroup label="Fair (bi-Laplacian)">
+        <Property name="FairingContinuity"/>
+        <Property name="FairScope"/>
+      </PropertyGroup>
+
+      <Hints>
+        <ShowInMenu category="SHYX"/>
+      </Hints>
+
+    </SourceProxy>
+  </ProxyGroup>
+</ServerManagerConfiguration>

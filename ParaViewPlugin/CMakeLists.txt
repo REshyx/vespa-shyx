@@ -121,6 +121,7 @@ paraview_add_plugin(VESPAPlugin
     "SHYXArrayCurveMapper.xml"
     "SHYXAutorefineSelfIntersectionFilter.xml"
     "SHYXBooleanOperationFilter.xml"
+    "SHYXShapeSmoothing.xml"
     "PulseGlyphRepresentation.xml"
     "AnimatedStreamlineRepresentation.xml"
     "PointLabelRepresentation.xml"

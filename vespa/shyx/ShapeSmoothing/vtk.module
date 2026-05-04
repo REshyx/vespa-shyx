@@ -1,0 +1,13 @@
+NAME
+  vtkSHYXShapeSmoothing
+DESCRIPTION
+  "Shape smoothing on triangulated vtkPolyData using CGAL PMP (smooth_shape / angle_and_area_smoothing / fair) with sharp-edge + threshold-mask vertex constraints and volume-preservation options."
+GROUPS
+  Meshing
+DEPENDS
+  vtkCGALAlgorithm
+  VTK::FiltersCore
+PRIVATE_DEPENDS
+  VTK::CommonCore
+  VTK::CommonDataModel
+  VTK::CommonExecutionModel

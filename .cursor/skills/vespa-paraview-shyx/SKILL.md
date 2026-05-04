@@ -43,6 +43,8 @@ description: >-
 
 - **多端口 + CGAL 诊断/修复**：`vespa/shyx/MeshChecker/` + `ParaViewPlugin/SHYXMeshChecker.xml`；类继承自 `vtkCGALPolyDataAlgorithm`，`vtk.module` 依赖 `vtkCGALAlgorithm` / `vtkCGALPMP` 等。
 - **纯 VTK 链**：`vespa/shyx/ConvexHullFilter/` + `SHYXConvexHullFilter.xml`；`vtk.module` 仅 `VTK::FiltersCore` / `Geometry` 等。
+- **CGAL PMP + ProtectAngle/FeatureMask 约束 + 多输出**：`vespa/shyx/AdaptiveIsotropicRemesher/` + `ParaViewPlugin/SHYXAdaptiveIsotropicRemesher.xml`；XML 用多 `PropertyGroup` 分节、`panel_visibility="advanced"` 整组进 Advanced、`enabled_state` + `inverse=1` 做条件灰显。可作为「面板布局」模板。
+- **single proxy / 多算法切换**：`vespa/shyx/ShapeSmoothing/` + `ParaViewPlugin/SHYXShapeSmoothing.xml`；顶层 `SmoothingMethod` 枚举驱动 `smooth_shape` / `angle_and_area_smoothing` / `fair` 三套子参数，每套挂 `GenericDecorator value="N"`，跨算法共享的属性用 `values="0 1"`。详见 **§8.6.5**。
 
 新增功能时，**在 shyx 里找输入/输出类型最相近的已有目录**，复用其 CMake/`vtk.module`/XML 结构，而不是从零猜 ParaView 域名。
 
@@ -56,7 +58,7 @@ description: >-
 4. **C++ 约定**：
    - 类名 `vtkSHYX*`；基类与项目内同类算子一致（`vtkImageAlgorithm` / `vtkPolyDataAlgorithm` / `vtkCGALPolyDataAlgorithm` 等）。
    - `Set*` / `Get*` 与 XML 里 `command="Set..."` 一致；多输出端口在 XML 中声明 `<OutputPort ... index="N"/>`。
-5. **Server-manager XML** `ParaViewPlugin/SHYX<YourName>.xml`：`<SourceProxy class="vtkSHYX<YourName>" label="...">`，`Input` / 属性与 Hints 与现有一致风格。
+5. **Server-manager XML** `ParaViewPlugin/SHYX<YourName>.xml`：`<SourceProxy class="vtkSHYX<YourName>" label="...">`，`Input` / 属性与 Hints 与现有一致风格。布局上按功能切 `<PropertyGroup>` 分节、把整组次要项压到 `panel_visibility="advanced"`、条件性子项用 `GenericDecorator`（`enabled_state` 或 `visibility`，按 §8.6.3 的取舍）。多算法 single-proxy 走 §8.6.5 模板。
 6. **注册 XML**：在 `ParaViewPlugin/CMakeLists.txt` 的 `SERVER_MANAGER_XML` 中**追加**一行 `"SHYX<YourName>.xml"`（保持字母顺序可维护性更好，与现有块一致即可）。
 7. **若需图标**：`VESPAIcons.qrc` 增加资源并在 XML `ShowInMenu` 里引用 `:/...` 路径（对照已有条目）。
 8. **若根 CMake 有条件排除**：如果新目录名命中 `list(FILTER ... EXCLUDE` 的规则，或依赖可选组件（VMTK/CGAL 6），在根 `CMakeLists.txt` 的注释与逻辑中保持一致，并在 README 里说明开启方式。
@@ -85,53 +87,171 @@ description: >-
 
 更细的 **Domain / Decorator** 与常见 Hints 见 **§8**。其余 ParaView SM 细节以**已有 `SHYX*.xml`** 为模板，对照本地 `ParaView` 源码（如 `Remoting/ServerManager`、`Qt/ApplicationComponents`）与官方文档。
 
-## 8. ParaView 属性：`Domain` vs `PropertyWidgetDecorator`（插件可用与扩展）
+## 8. ParaView 属性面板 UI（Domain / Decorator / 布局）
 
-### 8.1 分工
+### 8.1 Domain vs Decorator（分工）
 
 | 概念 | 所在层 | 作用 |
 |------|--------|------|
-| **`XXXDomain`**（如 `BoundsDomain`、`IntRangeDomain`、`EnumerationDomain`、`ArrayListDomain`） | Server Manager：写在**属性节点下**（`<DoubleVectorProperty>` 等的子元素） | 约束/推导该属性的**取值范围、枚举项、与 Input 关联的数组列表**等，为面板提供合法值与建议。 |
+| **`XXXDomain`**（`BoundsDomain` / `IntRangeDomain` / `EnumerationDomain` / `ArrayListDomain` …） | Server Manager：写在**属性节点下** | 约束/推导该属性的**取值范围、枚举项、与 Input 关联的数组列表**等，为面板提供合法值与建议。 |
 | **`PropertyWidgetDecorator`**（`Hints` 里 `type="GenericDecorator"` 等） | 客户端 Qt：写在属性的 `<Hints>` 里 | 根据**其它属性或数据状态**控制控件的**显示/隐藏**或**启用/禁用**（与 Domain 正交）。 |
 
 ### 8.2 插件能否使用、能否自定义
 
-- **使用**：与内置过滤器相同，在 **`ParaViewPlugin/SHYX*.xml`** 里写已存在的 Domain 名与 Decorator 的 `type=` 即可（需与所链 ParaView 版本一致）。示例：`SHYXAdaptiveIsotropicRemesher.xml` 中 `MinEdgeLength` / `MaxEdgeLength` 的 `BoundsDomain`，以及 `GenericDecorator` / `CompositeDecorator`。
-- **自定义 Domain**：通常需 **C++** 提供 `vtkSMDomain` 子类并注册；**仅 XML 发明新标签名**一般不可行。多数 shyx 插件只组合现有 Domain。
-- **自定义 Decorator**：**可以**。上游示例：`ParaView/Examples/Plugins/PropertyWidgets/Plugin/` 中的 `pqMyPropertyWidgetDecorator`：继承 `pqPropertyWidgetDecorator`，通过 **`pqPropertyWidgetInterface::createWidgetDecorator()`** 按 XML `type="..."` 分派；插件注册**额外的** `pqPropertyWidgetInterface` 与标准实现并列。若需与 server 共用逻辑，可走 `vtkPropertyDecorator`（如 `vtkGenericPropertyDecorator`）再由 Qt 侧包装。
+- **使用**：在 **`ParaViewPlugin/SHYX*.xml`** 里直接写已存在的 Domain 名与 Decorator 的 `type=` 即可（需与所链 ParaView 版本一致）。
+- **自定义 Domain**：通常需 **C++** 子类化 `vtkSMDomain` 并注册；仅 XML 发明新标签名一般不可行。多数 shyx 插件只组合现有 Domain。
+- **自定义 Decorator**：**可以**。上游示例 `ParaView/Examples/Plugins/PropertyWidgets/Plugin/`：继承 `pqPropertyWidgetDecorator`，通过 `pqPropertyWidgetInterface::createWidgetDecorator()` 按 XML `type="..."` 分派；插件注册一个**额外的** `pqPropertyWidgetInterface` 与标准实现并列。若需 server-side 共用逻辑，走 `vtkPropertyDecorator`（如 `vtkGenericPropertyDecorator`）再由 Qt 侧包装。
 
-### 8.3 内置 `createWidgetDecorator` 识别的 `type`（参考 `pqStandardPropertyWidgetInterface.cxx`）
+### 8.3 内置 `createWidgetDecorator` 识别的 `type`
 
-在标准 ParaView 客户端中常见：`GenericDecorator`、`CompositeDecorator`、`EnableWidgetDecorator`、`ShowWidgetDecorator`、`InputDataTypeDecorator`、`MultiComponentsDecorator`、`OSPRayHidingDecorator`、`SessionTypeDecorator`、`CTHArraySelectionDecorator`。另有自动附加的 `pqAnimationShortcutDecorator`（通常不写进 XML）。
+参考 `Qt/ApplicationComponents/pqStandardPropertyWidgetInterface.cxx`：`GenericDecorator`、`CompositeDecorator`、`EnableWidgetDecorator`、`ShowWidgetDecorator`、`InputDataTypeDecorator`、`MultiComponentsDecorator`、`OSPRayHidingDecorator`、`SessionTypeDecorator`、`CTHArraySelectionDecorator`。另有自动附加的 `pqAnimationShortcutDecorator`（不写进 XML）。
 
-### 8.4 `GenericDecorator`（`vtkGenericPropertyDecorator`）要点
+### 8.4 `GenericDecorator`（`vtkGenericPropertyDecorator`）
 
-- **`mode`**：`visibility` → 控制是否出现在面板；`enabled_state` → 可见但灰显/可编辑。
-- **`property` / `index`**：观察另一 SM 属性名及可选元素下标。
-- **`value`** 或 **`values="a b c"`**（空格分隔）：与 `vtkVariant::ToString()` **相等** 即匹配；`values` 为 **OR**（任一匹配）。
-- **`inverse="1"`**：对匹配结果取反。可用于例如「数组名字符串**非空**才显示」：`value=""` + `inverse="1"`（空串匹配为真，取反后为假；非空则反之为真）。
-- **`number_of_components="N"`**：仅适用于带 **`ArrayListDomain`** 的典型 **5 元组** 数组选择字符串属性：按当前选中数组在输入上的 **分量数** 决定是否匹配。
-- **特殊**：被观察属性 **0 个元素** 且配置值为 **`"null"`** 时用于「无 proxy」等语义；`vtkSMProxyProperty` + `ProxyListDomain` 另有按子 proxy XML 名匹配的逻辑。
+| 属性 | 说明 |
+|------|------|
+| `mode` | `visibility` → 显示/隐藏；`enabled_state` → 可见但灰显/可编辑 |
+| `property` / `index` | 观察的 SM 属性名 + 可选元素下标 |
+| `value` | 与 `vtkVariant::ToString()` **相等** 即匹配 |
+| `values="a b c"` | 空格分隔，**任一相等**即匹配（OR） |
+| `inverse="1"` | 对匹配结果取反 |
+| `number_of_components="N"` | 仅适用于带 `ArrayListDomain` 的典型 5 元组数组选择字符串属性，按当前选中数组在输入上的分量数决定 |
 
-### 8.5 `CompositeDecorator`（`vtkCompositePropertyDecorator`）
+特殊：被观察属性 **0 个元素** + `value="null"` 表示「无 proxy」分支；`vtkSMProxyProperty + ProxyListDomain` 另有按子 proxy XML 名匹配的逻辑。
 
-- 根节点下为 **`<Expression type="and|or">`**，可嵌套子 `<Expression>` 与内层 `<PropertyWidgetDecorator type="GenericDecorator" .../>`，实现任意 **与/或** 组合（见上游 `vtkCompositePropertyDecorator.h` 内嵌 XML 示例）。
+### 8.5 `CompositeDecorator` 与多 decorator 的逻辑组合
 
-### 8.6 同一属性上多个 Decorator
+- 根节点 **`<Expression type="and|or">`** 可嵌套子 `<Expression>` 与叶 `<PropertyWidgetDecorator type="GenericDecorator" .../>`。
+- **同一控件挂多个并列 decorator**（在 `<Hints>` 里平级写两个 `<PropertyWidgetDecorator>`） → pqProxyWidget 取**逻辑 AND**（任一 `canShowWidget=false` 即隐藏）。**OR 必须用 `CompositeDecorator + Expression type="or"`**，不要写两个 `value=0` / `value=1` 的 GenericDecorator（结果永远 false）。
 
-- 客户端 **`pqProxyWidget`** 对同一控件：**所有** decorator 的 `canShowWidget` 均需为真才显示（**逻辑与**）。因此不能靠两个 `GenericDecorator`（`value=1` 与 `value=2`）表达 **OR**，应使用 **`CompositeDecorator`** 包一层 `type="or"`。
+完整骨架：
+```xml
+<PropertyWidgetDecorator type="CompositeDecorator">
+  <Expression type="or">
+    <PropertyWidgetDecorator type="GenericDecorator"
+                             mode="visibility" property="Mode" value="A"/>
+    <Expression type="and">
+      <PropertyWidgetDecorator type="GenericDecorator"
+                               mode="visibility" property="Mode" value="B"/>
+      <PropertyWidgetDecorator type="GenericDecorator"
+                               mode="visibility" property="UseAdvanced" value="1"/>
+    </Expression>
+  </Expression>
+</PropertyWidgetDecorator>
+```
+
+### 8.6 实战配方（cookbook）
+
+#### 8.6.1 「非 0 / 非空才启用」用 `value="0" inverse="1"` / `value="" inverse="1"`
+
+`enabled_state` 优于 `visibility` 的典型场景（控件存在感保留，避免面板跳动）：
+
+```xml
+<DoubleVectorProperty name="ShapeSmoothingTimeStep" command="SetShapeSmoothingTimeStep" ...>
+  ...
+  <Hints>
+    <PropertyWidgetDecorator type="GenericDecorator"
+                             mode="enabled_state"
+                             property="ShapeSmoothingIterations"
+                             value="0"
+                             inverse="1"/>
+  </Hints>
+</DoubleVectorProperty>
+```
+含义：「Iterations==0 → 灰显；非 0 → 可编辑」。`value="" inverse="1"` 同理表示「非空字符串才启用」。
+
+仓库内例子：`ParaViewPlugin/SHYXAdaptiveIsotropicRemesher.xml` 的 `ShapeSmoothingTimeStep`。
+
+#### 8.6.2 OR 多值用 `values="a b c"`
+
+```xml
+<!-- 仅在 SmoothingMethod 为 0 或 1 时显示 NumberOfIterations -->
+<PropertyWidgetDecorator type="GenericDecorator"
+                         mode="visibility"
+                         property="SmoothingMethod"
+                         values="0 1"/>
+```
+
+仓库内例子：`ParaViewPlugin/SHYXShapeSmoothing.xml` 的 `NumberOfIterations`。
+
+#### 8.6.3 `enabled_state` vs `visibility` 的取舍
+
+| 场景 | 推荐 | 理由 |
+|------|------|------|
+| 主开关关时整组**逻辑上无意义**（如整块 FeatureMask 子项依赖 FeatureMaskEnabled=1） | `visibility` | 节省垂直空间，避免误编辑 |
+| 子选项概念上属于本组、只是上下文偶尔被 CGAL 忽略（如 `RemeshCollapseConstraints` 在 `Protect` 时 ignored） | `enabled_state` | 控件常驻；面板不跳动；用户能看见它存在 |
+| 不同算法/模式切换出的不同子参数集 | `visibility` | 跨算法切换时面板差异显著，隐藏更清晰 |
+
+#### 8.6.4 整组进 Advanced 面板
+
+`panel_visibility` 既可写在单个属性上，也可写在 **`<PropertyGroup>`** 上；整组同档时写在组上最简洁：
+
+```xml
+<PropertyGroup label="Remesh operations (CGAL)" panel_visibility="advanced">
+  <Property name="RemeshDoSplit"/>
+  <Property name="RemeshDoCollapse"/>
+  <Property name="RemeshDoFlip"/>
+</PropertyGroup>
+```
+
+仓库内例子：`ParaViewPlugin/SHYXAdaptiveIsotropicRemesher.xml`「REMESH OPERATIONS」段。
+
+#### 8.6.5 按算法/模式切换整页面板（single proxy, multi algorithm）
+
+当一个 `SourceProxy` 内置多种算法时（例 `SHYXShapeSmoothing.xml`：`smooth_shape` / `angle_and_area_smoothing` / `fair`）：
+
+1. **顶层主开关**：`IntVectorProperty + EnumerationDomain`，命名如 `SmoothingMethod`。
+2. **每个算法的子参数无条件声明**（C++ 端始终持有完整状态，行为不依赖 UI 是否显示）。
+3. 每个子属性 `<Hints>` 里挂 `GenericDecorator value="N"`；多算法共享时用 `values="N M"`；全算法通用直接不挂 decorator。
+4. 每个算法的子参数集合再包一个 `<PropertyGroup label="算法名 (CGAL fn)">`，面板自动出现可折叠分节。
+
+骨架：
+```xml
+<IntVectorProperty name="SmoothingMethod" command="SetSmoothingMethod" ... default_values="0">
+  <EnumerationDomain name="enum">
+    <Entry text="Shape MCF"      value="0"/>
+    <Entry text="Angle &amp; Area" value="1"/>
+    <Entry text="Fair"           value="2"/>
+  </EnumerationDomain>
+</IntVectorProperty>
+
+<DoubleVectorProperty name="ShapeTimeStep" ...>
+  <Hints>
+    <PropertyWidgetDecorator type="GenericDecorator" mode="visibility"
+                             property="SmoothingMethod" value="0"/>
+  </Hints>
+</DoubleVectorProperty>
+<!-- 类似地：UseAngleSmoothing 挂 value="1"；FairingContinuity 挂 value="2" -->
+
+<PropertyGroup label="Shape MCF (smooth_shape)">
+  <Property name="ShapeTimeStep"/>
+  <Property name="ShapeDoScale"/>
+</PropertyGroup>
+```
+
+#### 8.6.6 `PropertyGroup` 排序与放置
+
+- 把 `<PropertyGroup>` 写在**该组所有属性声明之后**最稳妥：面板呈现顺序大致按 PropertyGroup 在 XML 里出现的顺序，未在任何组里的属性按各自声明顺序穿插。
+- 不要把同一个 `Property name="..."` 同时塞进多个 PropertyGroup。
+- 标签简洁化：分组标题已暗含上下文，单属性 `label` 可去掉 `"Remesh:" / "Shape Smooth:"` 之类前缀。
+- 修改面板布局时**不要**改 `name=""` / `command=""` / `default_values=""`，否则破坏现有 state 文件 / Python 脚本兼容性。
 
 ### 8.7 `BoundsDomain` 与「自动刷新」（示例：`MinEdgeLength` / `MaxEdgeLength`）
 
 - XML：`BoundsDomain mode="scaled_extent"` + `scale_factor` + `RequiredProperties` 绑定 **`Input`**。
-- **含义**：**不是** VTK 算子在 `RequestData` 里改 Min/Max；而是 **Input 的包围盒变化** 时，ParaView **更新该属性的 Domain**（建议尺度、Scale/Reset 等）。`scaled_extent` 下 `scale_factor` 为相对包围盒特征长度的比例（如 `SHYXAdaptiveIsotropicRemesher.xml` 文档所写：Min 约 **0.1%** 最长边、Max 约 **5%** 最长边）。
-- **不会**在后台静默覆盖用户已填的数值，除非用户在 UI 上使用 **Reset/Scale** 等显式采用建议值。
+- **含义**：**不是** VTK 算子在 `RequestData` 里改 Min/Max；而是 **Input 的包围盒变化**时，ParaView **更新该属性的 Domain**（建议尺度、Scale/Reset 等）。`scaled_extent` 下 `scale_factor` 是相对包围盒特征长度的比例（`SHYXAdaptiveIsotropicRemesher.xml`：Min 约 **0.1%** 最长边、Max 约 **5%** 最长边）。
+- **不会**在后台静默覆盖用户已填的数值，除非用户在 UI 上点 **Reset/Scale** 显式采用建议值。
 
-### 8.8 其它与面板相关的常见能力（除 Domain/Decorator）
+### 8.8 其它与面板相关的常见能力
 
-- **`PropertyGroup`**：成组与标签。
-- **`panel_visibility`**：`default` / `advanced` / `never`（高级区或完全不显示）。
-- **`Hints`**：`ShowInMenu`、`ArraySelectionWidget`、`SelectionInput`、`panel_widget`（自定义整页属性 UI）等。
-- **输入与数据域**：`InputProperty`、`DataTypeDomain`、`InputArrayDomain` 等。
+- **`PropertyGroup`**：分节标签、`panel_visibility`、`panel_widget` 自定义整组 UI。
+- **`panel_visibility`**：`default` / `advanced` / `never`。
+- **`Hints`**：`ShowInMenu`、`ArraySelectionWidget`、`SelectionInput`、`panel_widget` 等。
+- **输入与数据域**：`InputProperty`、`DataTypeDomain`、`InputArrayDomain`。
 
-本地对照源码时，Decorator 工厂与注册：`Qt/ApplicationComponents/pqStandardPropertyWidgetInterface.cxx`；`GenericDecorator` 逻辑：`Remoting/ApplicationComponents/vtkGenericPropertyDecorator.cxx`；组合逻辑：`vtkCompositePropertyDecorator.cxx`。
+### 8.9 本地对照源码
+
+- Decorator 工厂与注册：`Qt/ApplicationComponents/pqStandardPropertyWidgetInterface.cxx`
+- `GenericDecorator` 逻辑：`Remoting/ApplicationComponents/vtkGenericPropertyDecorator.cxx`
+- 组合逻辑：`vtkCompositePropertyDecorator.cxx`
+- 面板组装：`Qt/Components/pqProxyWidget.cxx`（多 decorator 取 AND 的判定在此）

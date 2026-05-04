@@ -6,26 +6,34 @@
                  name="SHYXAdaptiveIsotropicRemesher">
       <Documentation short_help="Curvature-aware CGAL remesh with min/max edge length.">
         Adaptive isotropic remeshing using CGAL Adaptive_sizing_field (discrete curvature).
-        Edge lengths are limited by Min/Max Edge Length; AdaptiveTolerance controls fineness
-        together with curvature. With a non-empty vtkSelection on port 1, only those faces are
-        remeshed; otherwise the whole surface is remeshed. Edges on the boundary between
-        selected and unselected triangles are treated as CGAL feature edges for remesh and for
-        optional smooth_shape vertex pinning (together with angle-based sharp edges). Post-remesh
-        smooth_shape uses the same Protection Angle for sharp edges; with Feature Mask enabled it also
-        evaluates the same mask array and threshold on the remeshed surface (after interpolation) to
-        clip features and mark mask-region boundaries—no centroid classification.
-        Port 2 is the input mask patch; port 3 is the threshold extract on remeshed port 0.
-        Port 1 lines come from port 2 (input mask) when the mask is valid; otherwise from the full
-        remeshed surface. Port 1 vertex cells (feature points) are emitted only when Shape Smooth
-        Iterations &gt; 0: from port 3 if the mask is on, otherwise from the full remeshed surface.
+        Edge lengths are bounded by Min/Max Edge Length; Adaptive Tolerance controls fineness
+        together with curvature. With a non-empty vtkSelection on input port 1, only those faces
+        are remeshed; otherwise the whole surface is remeshed. Edges on the boundary between
+        selected and unselected triangles are constrained as CGAL feature edges (also used for
+        the optional smooth_shape vertex pinning, together with angle-based sharp edges).
+
+        Post-remesh smooth_shape uses the same Protection Angle for sharp edges; with Feature
+        Mask enabled it re-evaluates the same array/threshold on the remeshed surface (after
+        attribute interpolation) to clip features and to mark mask-region boundaries.
+
+        Outputs:
+          0  Remeshed (and optionally shape-smoothed) surface.
+          1  Sharp/feature edges (lines) and (only if Shape Smooth Iterations &gt; 0) the
+             constrained feature points (verts).
+          2  Input geometry, faces passing the feature mask threshold.
+          3  Remeshed geometry, faces passing the feature mask threshold (mask patch on output).
+
         Requires CGAL 6.0+.
       </Documentation>
 
-      <OutputPort name="Remeshed surface" index="0" id="port0" />
-      <OutputPort name="Sharp features" index="1" id="port1" />
-      <OutputPort name="Mask patch (input)" index="2" id="port2" />
-      <OutputPort name="Mask patch (remeshed)" index="3" id="port3" />
+      <OutputPort name="Remeshed surface"      index="0" id="port0"/>
+      <OutputPort name="Sharp features"        index="1" id="port1"/>
+      <OutputPort name="Mask patch (input)"    index="2" id="port2"/>
+      <OutputPort name="Mask patch (remeshed)" index="3" id="port3"/>
 
+      <!-- =================================================================
+                                       INPUTS
+           ================================================================= -->
       <InputProperty name="Input"
                      command="SetInputConnection">
         <ProxyGroupDomain name="groups">
@@ -49,113 +57,115 @@
         </DataTypeDomain>
         <Documentation>
           Optional vtkSelection. When present and non-empty, CGAL remeshing is applied only to the
-          indicated faces (same convention as SHYX Delete Selected Cells). If port 1 is unset or
+          indicated faces (same convention as SHYX Delete Selected Cells). If the port is unset or
           the selection yields no cells, the whole surface is remeshed. The boundary between
           selected and non-selected faces is also constrained as feature edges for remesh and
-          smooth_shape (with ProtectAngle / Feature Mask rules).
+          smooth_shape (with Protection Angle / Feature Mask rules).
         </Documentation>
         <Hints>
           <SelectionInput/>
         </Hints>
       </InputProperty>
 
+      <!-- =================================================================
+                                       SIZING
+           ================================================================= -->
       <DoubleVectorProperty command="SetMinEdgeLength"
                             name="MinEdgeLength"
-                            label="Min Edge Length"
+                            label="Min edge length"
                             number_of_elements="1"
                             default_values="0">
         <BoundsDomain mode="scaled_extent" name="bounds_min" scale_factor="0.001">
           <RequiredProperties>
-            <Property function="Input" name="Input" />
+            <Property function="Input" name="Input"/>
           </RequiredProperties>
         </BoundsDomain>
         <Documentation>
           Minimum edge length; must be &gt; 0. ParaView BoundsDomain (scaled_extent 0.001)
-          suggests 0.1% of the input axis-aligned bounding box longest side; use scale/Reset
+          suggests 0.1% of the input axis-aligned bounding box longest side; use Scale/Reset
           next to the property.
         </Documentation>
       </DoubleVectorProperty>
 
       <DoubleVectorProperty command="SetMaxEdgeLength"
                             name="MaxEdgeLength"
-                            label="Max Edge Length"
+                            label="Max edge length"
                             number_of_elements="1"
                             default_values="0">
         <BoundsDomain mode="scaled_extent" name="bounds_max" scale_factor="0.05">
           <RequiredProperties>
-            <Property function="Input" name="Input" />
+            <Property function="Input" name="Input"/>
           </RequiredProperties>
         </BoundsDomain>
         <Documentation>
-          Maximum edge length; must be &gt; Min Edge Length. ParaView BoundsDomain
+          Maximum edge length; must be &gt; Min edge length. ParaView BoundsDomain
           (scaled_extent 0.05) suggests 5% of the input axis-aligned bounding box longest side;
-          use scale/Reset next to the property.
+          use Scale/Reset next to the property.
         </Documentation>
       </DoubleVectorProperty>
 
       <DoubleVectorProperty command="SetAdaptiveTolerance"
                             name="AdaptiveTolerance"
-                            label="Adaptive Tolerance (tol)"
+                            label="Adaptive tolerance"
                             number_of_elements="1"
                             default_values="0.01">
+        <DoubleRangeDomain name="range" min="0"/>
         <Documentation>
-          CGAL adaptive sizing tolerance; smaller values tend to refine more within min/max bounds.
+          CGAL Adaptive_sizing_field tolerance. Smaller values tend to refine more within the
+          Min/Max edge length bounds.
         </Documentation>
       </DoubleVectorProperty>
 
+      <PropertyGroup label="Sizing">
+        <Property name="MinEdgeLength"/>
+        <Property name="MaxEdgeLength"/>
+        <Property name="AdaptiveTolerance"/>
+      </PropertyGroup>
+
+      <!-- =================================================================
+                                    ITERATIONS
+           ================================================================= -->
       <IntVectorProperty command="SetNumberOfIterations"
                          name="NumberOfIterations"
-                         label="Number Of Iterations"
+                         label="Remesh iterations"
                          number_of_elements="1"
                          default_values="3">
         <IntRangeDomain name="range" min="1" max="20"/>
         <Documentation>
-          Number of remeshing iterations.
+          Number of CGAL isotropic_remeshing iterations.
         </Documentation>
       </IntVectorProperty>
 
       <IntVectorProperty command="SetNumberOfRelaxationSteps"
                          name="NumberOfRelaxationSteps"
-                         label="Relaxation Steps"
+                         label="Relaxation steps"
                          number_of_elements="1"
                          default_values="3"
                          panel_visibility="advanced">
         <IntRangeDomain name="range" min="0" max="20"/>
         <Documentation>
-          CGAL vertex relocation steps per remesh iteration (higher = smoother surface; 0 = no relaxation).
+          CGAL vertex-relocation steps per remesh iteration (higher = smoother surface;
+          0 disables relaxation).
         </Documentation>
       </IntVectorProperty>
 
-      <IntVectorProperty command="SetShapeSmoothingIterations"
-                         name="ShapeSmoothingIterations"
-                         label="Shape Smooth Iterations"
-                         number_of_elements="1"
-                         default_values="0">
-        <IntRangeDomain name="range" min="0" max="100"/>
-        <Documentation>
-          Post-remesh CGAL smooth_shape iterations. 0 disables. Sharp-edge vertices (Protection Angle) stay fixed.
-        </Documentation>
-      </IntVectorProperty>
+      <PropertyGroup label="Iterations">
+        <Property name="NumberOfIterations"/>
+        <Property name="NumberOfRelaxationSteps"/>
+      </PropertyGroup>
 
-      <DoubleVectorProperty command="SetShapeSmoothingTimeStep"
-                            name="ShapeSmoothingTimeStep"
-                            label="Shape Smooth Time Step"
-                            number_of_elements="1"
-                            default_values="0.0001">
-        <DoubleRangeDomain name="range" min="1e-12" max="1"/>
-        <Documentation>
-          CGAL smooth_shape time step (smoothing speed). Typical range about 1e-6 to 1. Used only when Shape Smooth Iterations &gt; 0.
-        </Documentation>
-      </DoubleVectorProperty>
-
+      <!-- =================================================================
+                                  FEATURE EDGES
+           ================================================================= -->
       <DoubleVectorProperty command="SetProtectAngle"
                             name="ProtectAngle"
-                            label="Protection Angle"
+                            label="Protection angle"
                             number_of_elements="1"
                             default_values="70">
         <DoubleRangeDomain name="range" min="0" max="180"/>
         <Documentation>
-          Feature edge angle threshold in degrees.
+          Sharp-edge angle threshold in degrees (CGAL detect_sharp_edges). Endpoints of detected
+          sharp edges are protected during remesh and pinned during smooth_shape.
         </Documentation>
       </DoubleVectorProperty>
 
@@ -169,69 +179,37 @@
         <EnumerationDomain name="enum">
           <Entry text="None" value="0"/>
           <Entry text="Exclude concave (signed &lt; 0)" value="1"/>
-          <Entry text="Exclude convex (signed &gt; 0)" value="2"/>
+          <Entry text="Exclude convex (signed &gt; 0)"  value="2"/>
         </EnumerationDomain>
         <Documentation>
           Optional filter on interior sharp edges after CGAL detect_sharp_edges, using signed
           dihedral angle (approximate_dihedral_angle). Excludes concave (signed &lt; 0) or convex
-          (signed &gt; 0) from remesh/shape constraints and from port 1. Boundary edges unchanged.
-          If convex/concave looks swapped, flip mesh orientation or pick the other entry.
+          (signed &gt; 0) from remesh / shape constraints and from port 1. Boundary edges are
+          unchanged. If convex/concave looks swapped, flip mesh orientation or pick the other
+          entry.
         </Documentation>
       </IntVectorProperty>
 
-      <IntVectorProperty command="SetRemeshProtectConstraints"
-                         name="RemeshProtectConstraints"
-                         label="Remesh: Protect constraints (No edge split and collapse)"
-                         number_of_elements="1"
-                         default_values="1">
-        <BooleanDomain name="bool"/>
-        <Documentation>
-          CGAL protect_constraints. When ON, feature edges are neither split nor collapsed.
-          When OFF, constrained edges may be split or collapsed per CGAL (see collapse_constraints).
-        </Documentation>
-      </IntVectorProperty>
+      <PropertyGroup label="Feature edges">
+        <Property name="ProtectAngle"/>
+        <Property name="SharpFeatureSideFilter"/>
+      </PropertyGroup>
 
-      <IntVectorProperty command="SetRemeshCollapseConstraints"
-                         name="RemeshCollapseConstraints"
-                         label="Remesh: Collapse constraints"
-                         number_of_elements="1"
-                         default_values="1">
-        <BooleanDomain name="bool"/>
-        <Documentation>
-          CGAL collapse_constraints. When Protect constraints is OFF, allows collapsing constrained edges.
-          Ignored by CGAL when Protect constraints is ON.
-        </Documentation>
-        <Hints>
-          <PropertyWidgetDecorator type="GenericDecorator"
-                                   mode="visibility"
-                                   property="RemeshProtectConstraints"
-                                   value="0"/>
-        </Hints>
-      </IntVectorProperty>
-
-      <IntVectorProperty command="SetRemeshRelaxConstraints"
-                         name="RemeshRelaxConstraints"
-                         label="Remesh: Relax constraints"
-                         number_of_elements="1"
-                         default_values="0">
-        <BooleanDomain name="bool"/>
-        <Documentation>
-          CGAL relax_constraints. When ON, endpoints of constrained and boundary edges may move along constrained polylines during relaxation.
-        </Documentation>
-      </IntVectorProperty>
-
+      <!-- =================================================================
+                              FEATURE MASK (threshold)
+           ================================================================= -->
       <IntVectorProperty command="SetFeatureMaskEnabled"
                          name="FeatureMaskEnabled"
-                         label="Feature Mask"
+                         label="Use feature mask"
                          number_of_elements="1"
                          default_values="0"
                          animateable="0">
         <BooleanDomain name="bool"/>
         <Documentation>
-          When on: threshold input faces to port 2; port 1 sharp features are computed only on that
-          patch; on the full surface, sharp edges are intersected with the mask for CGAL remesh /
-          smooth_shape. Choose a point- or cell-centered array, a threshold (tuple magnitude &gt;
-          threshold), and optional All Scalars for point arrays.
+          When ON: threshold input faces to port 2; port 1 sharp features are computed only on
+          that patch; on the full surface, sharp edges are intersected with the mask for CGAL
+          remesh / smooth_shape. Choose a point- or cell-centered array, a threshold (tuple
+          magnitude &gt; threshold), and the optional All Scalars flag for point arrays.
         </Documentation>
       </IntVectorProperty>
 
@@ -248,8 +226,9 @@
           </RequiredProperties>
         </ArrayListDomain>
         <Documentation>
-          Name of a point- or cell-centered array. If both exist with the same name, cell data is
-          used. Tuple magnitude must be &gt; Threshold for a cell (or per-point corner) to pass.
+          Name of a point- or cell-centered array. If both exist with the same name, cell data
+          is used. Tuple magnitude must be &gt; Threshold for a cell (or per-point corner) to
+          pass.
         </Documentation>
         <Hints>
           <PropertyWidgetDecorator type="GenericDecorator"
@@ -281,15 +260,15 @@
 
       <IntVectorProperty command="SetFeatureMaskAllScalars"
                          name="FeatureMaskAllScalars"
-                         label="All Scalars"
+                         label="All scalars"
                          number_of_elements="1"
                          default_values="0"
                          animateable="0">
         <BooleanDomain name="bool"/>
         <Documentation>
-          When the chosen array is point-centered: if on, every corner of a cell must pass the
-          magnitude test; if off, one passing corner is enough (vtkThreshold-style). Ignored when
-          the array resolves to cell data.
+          When the chosen array is point-centered: if ON, every corner of a cell must pass the
+          magnitude test; if OFF, one passing corner is enough (vtkThreshold-style). Ignored
+          when the array resolves to cell data.
         </Documentation>
         <Hints>
           <PropertyWidgetDecorator type="GenericDecorator"
@@ -299,52 +278,159 @@
         </Hints>
       </IntVectorProperty>
 
-      <IntVectorProperty
-         name="UseUpdateAttributes"
-         command="SetUpdateAttributes"
-         label="Interpolate attributes"
-         number_of_elements="1"
-         default_values="1">
-         <BooleanDomain name="bool"/>
-         <Documentation>
-           If ON, point/cell data are interpolated onto the new mesh.
-         </Documentation>
+      <PropertyGroup label="Feature mask (threshold)">
+        <Property name="FeatureMaskEnabled"/>
+        <Property name="FeatureMaskArrayName"/>
+        <Property name="FeatureMaskThreshold"/>
+        <Property name="FeatureMaskAllScalars"/>
+      </PropertyGroup>
+
+      <!-- =================================================================
+                              REMESH CONSTRAINTS (CGAL)
+           ================================================================= -->
+      <IntVectorProperty command="SetRemeshProtectConstraints"
+                         name="RemeshProtectConstraints"
+                         label="Protect constraints"
+                         number_of_elements="1"
+                         default_values="1">
+        <BooleanDomain name="bool"/>
+        <Documentation>
+          CGAL `protect_constraints`. When ON, feature edges are neither split nor collapsed.
+          When OFF, constrained edges may be split or collapsed per CGAL (subject to
+          Collapse constraints below).
+        </Documentation>
       </IntVectorProperty>
 
+      <IntVectorProperty command="SetRemeshCollapseConstraints"
+                         name="RemeshCollapseConstraints"
+                         label="Collapse constraints"
+                         number_of_elements="1"
+                         default_values="1">
+        <BooleanDomain name="bool"/>
+        <Documentation>
+          CGAL `collapse_constraints`. When Protect constraints is OFF, allows collapsing
+          constrained edges. Ignored by CGAL when Protect constraints is ON.
+        </Documentation>
+        <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="enabled_state"
+                                   property="RemeshProtectConstraints"
+                                   value="0"/>
+        </Hints>
+      </IntVectorProperty>
+
+      <IntVectorProperty command="SetRemeshRelaxConstraints"
+                         name="RemeshRelaxConstraints"
+                         label="Relax constraints"
+                         number_of_elements="1"
+                         default_values="0">
+        <BooleanDomain name="bool"/>
+        <Documentation>
+          CGAL `relax_constraints`. When ON, endpoints of constrained and boundary edges may
+          move along constrained polylines during tangential relaxation.
+        </Documentation>
+      </IntVectorProperty>
+
+      <PropertyGroup label="Remesh constraints (CGAL)">
+        <Property name="RemeshProtectConstraints"/>
+        <Property name="RemeshCollapseConstraints"/>
+        <Property name="RemeshRelaxConstraints"/>
+      </PropertyGroup>
+
+      <!-- =================================================================
+                              REMESH OPERATIONS (advanced)
+           ================================================================= -->
       <IntVectorProperty command="SetRemeshDoSplit"
                          name="RemeshDoSplit"
-                         label="Remesh: Do split"
+                         label="Allow split"
                          number_of_elements="1"
                          default_values="1"
                          panel_visibility="advanced">
         <BooleanDomain name="bool"/>
-        <Documentation>CGAL isotropic_remeshing do_split.</Documentation>
+        <Documentation>CGAL `isotropic_remeshing::do_split`.</Documentation>
       </IntVectorProperty>
 
       <IntVectorProperty command="SetRemeshDoCollapse"
                          name="RemeshDoCollapse"
-                         label="Remesh: Do collapse"
+                         label="Allow collapse"
                          number_of_elements="1"
                          default_values="1"
                          panel_visibility="advanced">
         <BooleanDomain name="bool"/>
-        <Documentation>CGAL isotropic_remeshing do_collapse.</Documentation>
+        <Documentation>CGAL `isotropic_remeshing::do_collapse`.</Documentation>
       </IntVectorProperty>
 
       <IntVectorProperty command="SetRemeshDoFlip"
                          name="RemeshDoFlip"
-                         label="Remesh: Do flip"
+                         label="Allow flip"
                          number_of_elements="1"
                          default_values="1"
                          panel_visibility="advanced">
         <BooleanDomain name="bool"/>
-        <Documentation>CGAL isotropic_remeshing do_flip.</Documentation>
+        <Documentation>CGAL `isotropic_remeshing::do_flip`.</Documentation>
       </IntVectorProperty>
 
-      <PropertyGroup label="Remesh: split, collapse &amp; flip (CGAL)">
+      <PropertyGroup label="Remesh operations (CGAL)" panel_visibility="advanced">
         <Property name="RemeshDoSplit"/>
         <Property name="RemeshDoCollapse"/>
         <Property name="RemeshDoFlip"/>
+      </PropertyGroup>
+
+      <!-- =================================================================
+                          POST-REMESH SHAPE SMOOTHING
+           ================================================================= -->
+      <IntVectorProperty command="SetShapeSmoothingIterations"
+                         name="ShapeSmoothingIterations"
+                         label="Iterations"
+                         number_of_elements="1"
+                         default_values="0">
+        <IntRangeDomain name="range" min="0" max="100"/>
+        <Documentation>
+          Post-remesh CGAL smooth_shape iterations. 0 disables. Sharp-edge vertices
+          (Protection Angle) and Feature-Mask boundary vertices stay fixed.
+        </Documentation>
+      </IntVectorProperty>
+
+      <DoubleVectorProperty command="SetShapeSmoothingTimeStep"
+                            name="ShapeSmoothingTimeStep"
+                            label="Time step"
+                            number_of_elements="1"
+                            default_values="0.0001">
+        <DoubleRangeDomain name="range" min="1e-12" max="1"/>
+        <Documentation>
+          CGAL smooth_shape time step (smoothing speed). Typical range about 1e-6 to 1.
+          Used only when Shape-smoothing Iterations &gt; 0.
+        </Documentation>
+        <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="enabled_state"
+                                   property="ShapeSmoothingIterations"
+                                   value="0"
+                                   inverse="1"/>
+        </Hints>
+      </DoubleVectorProperty>
+
+      <PropertyGroup label="Post-remesh smoothing (smooth_shape)">
+        <Property name="ShapeSmoothingIterations"/>
+        <Property name="ShapeSmoothingTimeStep"/>
+      </PropertyGroup>
+
+      <!-- =================================================================
+                                       OUTPUT
+           ================================================================= -->
+      <IntVectorProperty name="UseUpdateAttributes"
+                         command="SetUpdateAttributes"
+                         label="Interpolate attributes"
+                         number_of_elements="1"
+                         default_values="1">
+        <BooleanDomain name="bool"/>
+        <Documentation>
+          If ON, point/cell data are interpolated onto the new mesh.
+        </Documentation>
+      </IntVectorProperty>
+
+      <PropertyGroup label="Output">
+        <Property name="UseUpdateAttributes"/>
       </PropertyGroup>
 
       <Hints>
