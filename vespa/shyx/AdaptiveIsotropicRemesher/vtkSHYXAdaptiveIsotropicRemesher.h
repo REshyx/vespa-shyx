@@ -192,11 +192,28 @@ public:
 
   //@{
   /**
+   * Master switch for sharp-edge / feature-mask constraints.
+   * When true (default), CGAL detect_sharp_edges (with ProtectAngle / SharpFeatureSideFilter)
+   * and feature-mask region/boundary contributions are added to edge_is_constrained_map for
+   * isotropic_remeshing and to vertex_is_constrained_map for smooth_shape; ProtectAngle,
+   * SharpFeatureSideFilter, FeatureMaskEnabled, and related properties take effect.
+   * When false, those sources do NOT write feature-edge constraints; remesh and smooth_shape
+   * see only vtkSelection-boundary constraints (when a selection input is connected).
+   * vtkSelection behavior is independent of this toggle.
+   */
+  vtkGetMacro(DetectFeatureEdges, bool);
+  vtkSetMacro(DetectFeatureEdges, bool);
+  vtkBooleanMacro(DetectFeatureEdges, bool);
+  //@}
+
+  //@{
+  /**
    * When true, feature extraction on port 2 and constraints use FeatureMaskArrayName:
    * tuple magnitude must be strictly greater than FeatureMaskThreshold. The array may live on
    * points or cells (same name resolves to cell data if a valid per-cell array exists, otherwise
    * point data). For point-centered arrays, FeatureMaskAllScalars controls whether every corner
    * of a cell must pass (true) or any corner suffices (false). Default false (no mask).
+   * Has no effect when DetectFeatureEdges is false.
    */
   vtkGetMacro(FeatureMaskEnabled, bool);
   vtkSetMacro(FeatureMaskEnabled, bool);
@@ -250,6 +267,7 @@ protected:
   bool   RemeshDoCollapse           = true;
   bool   RemeshDoFlip               = true;
 
+  bool   DetectFeatureEdges    = true;
   bool   FeatureMaskEnabled    = false;
   char*  FeatureMaskArrayName = nullptr;
   double FeatureMaskThreshold  = 0.0;

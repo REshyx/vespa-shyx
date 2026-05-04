@@ -9,8 +9,13 @@
         Edge lengths are bounded by Min/Max Edge Length; Adaptive Tolerance controls fineness
         together with curvature. With a non-empty vtkSelection on input port 1, only those faces
         are remeshed; otherwise the whole surface is remeshed. Edges on the boundary between
-        selected and unselected triangles are constrained as CGAL feature edges (also used for
-        the optional smooth_shape vertex pinning, together with angle-based sharp edges).
+        selected and unselected triangles are always constrained as feature edges (independent
+        of the Detect feature edges master toggle).
+
+        Detect feature edges (master toggle): when ON (default), CGAL detect_sharp_edges and
+        feature-mask region/boundary contributions are added to the constraint maps for remesh
+        and smooth_shape. When OFF, those sources are skipped; only the vtkSelection boundary
+        constrains remeshing/smoothing, and output port 1 is empty.
 
         Post-remesh smooth_shape uses the same Protection Angle for sharp edges; with Feature
         Mask enabled it re-evaluates the same array/threshold on the remeshed surface (after
@@ -19,7 +24,7 @@
         Outputs:
           0  Remeshed (and optionally shape-smoothed) surface.
           1  Sharp/feature edges (lines) and (only if Shape Smooth Iterations &gt; 0) the
-             constrained feature points (verts).
+             constrained feature points (verts). Empty when Detect feature edges is OFF.
           2  Input geometry, faces passing the feature mask threshold.
           3  Remeshed geometry, faces passing the feature mask threshold (mask patch on output).
 
@@ -155,8 +160,26 @@
       </PropertyGroup>
 
       <!-- =================================================================
-                                  FEATURE EDGES
+                              FEATURE EDGES & FEATURE MASK
            ================================================================= -->
+      <IntVectorProperty command="SetDetectFeatureEdges"
+                         name="DetectFeatureEdges"
+                         label="Detect feature edges"
+                         number_of_elements="1"
+                         default_values="1"
+                         animateable="0">
+        <BooleanDomain name="bool"/>
+        <Documentation>
+          Master switch for sharp-edge / feature-mask constraints. When ON (default), CGAL
+          detect_sharp_edges (with Protection angle / Sharp side filter) and feature-mask region
+          / boundary contributions are added to edge_is_constrained_map for isotropic_remeshing
+          and to vertex_is_constrained_map for smooth_shape. When OFF, none of those sources
+          contribute; remesh and smooth_shape only see vtkSelection-boundary constraints (when a
+          selection input is connected). vtkSelection behavior is independent of this toggle.
+          Output port 1 is empty when OFF.
+        </Documentation>
+      </IntVectorProperty>
+
       <DoubleVectorProperty command="SetProtectAngle"
                             name="ProtectAngle"
                             label="Protection angle"
@@ -167,6 +190,12 @@
           Sharp-edge angle threshold in degrees (CGAL detect_sharp_edges). Endpoints of detected
           sharp edges are protected during remesh and pinned during smooth_shape.
         </Documentation>
+        <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="enabled_state"
+                                   property="DetectFeatureEdges"
+                                   value="1"/>
+        </Hints>
       </DoubleVectorProperty>
 
       <IntVectorProperty command="SetSharpFeatureSideFilter"
@@ -188,16 +217,14 @@
           unchanged. If convex/concave looks swapped, flip mesh orientation or pick the other
           entry.
         </Documentation>
+        <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="enabled_state"
+                                   property="DetectFeatureEdges"
+                                   value="1"/>
+        </Hints>
       </IntVectorProperty>
 
-      <PropertyGroup label="Feature edges">
-        <Property name="ProtectAngle"/>
-        <Property name="SharpFeatureSideFilter"/>
-      </PropertyGroup>
-
-      <!-- =================================================================
-                              FEATURE MASK (threshold)
-           ================================================================= -->
       <IntVectorProperty command="SetFeatureMaskEnabled"
                          name="FeatureMaskEnabled"
                          label="Use feature mask"
@@ -210,7 +237,14 @@
           that patch; on the full surface, sharp edges are intersected with the mask for CGAL
           remesh / smooth_shape. Choose a point- or cell-centered array, a threshold (tuple
           magnitude &gt; threshold), and the optional All Scalars flag for point arrays.
+          Has no effect when Detect feature edges is OFF.
         </Documentation>
+        <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="enabled_state"
+                                   property="DetectFeatureEdges"
+                                   value="1"/>
+        </Hints>
       </IntVectorProperty>
 
       <StringVectorProperty name="FeatureMaskArrayName"
@@ -231,10 +265,18 @@
           pass.
         </Documentation>
         <Hints>
-          <PropertyWidgetDecorator type="GenericDecorator"
-                                   mode="visibility"
-                                   property="FeatureMaskEnabled"
-                                   value="1"/>
+          <PropertyWidgetDecorator type="CompositeDecorator">
+            <Expression type="and">
+              <PropertyWidgetDecorator type="GenericDecorator"
+                                       mode="visibility"
+                                       property="FeatureMaskEnabled"
+                                       value="1"/>
+              <PropertyWidgetDecorator type="GenericDecorator"
+                                       mode="enabled_state"
+                                       property="DetectFeatureEdges"
+                                       value="1"/>
+            </Expression>
+          </PropertyWidgetDecorator>
           <ArraySelectionWidget/>
         </Hints>
       </StringVectorProperty>
@@ -251,10 +293,18 @@
           magnitude). Typical: 0 to keep values &gt; 0.
         </Documentation>
         <Hints>
-          <PropertyWidgetDecorator type="GenericDecorator"
-                                   mode="visibility"
-                                   property="FeatureMaskEnabled"
-                                   value="1"/>
+          <PropertyWidgetDecorator type="CompositeDecorator">
+            <Expression type="and">
+              <PropertyWidgetDecorator type="GenericDecorator"
+                                       mode="visibility"
+                                       property="FeatureMaskEnabled"
+                                       value="1"/>
+              <PropertyWidgetDecorator type="GenericDecorator"
+                                       mode="enabled_state"
+                                       property="DetectFeatureEdges"
+                                       value="1"/>
+            </Expression>
+          </PropertyWidgetDecorator>
         </Hints>
       </DoubleVectorProperty>
 
@@ -271,14 +321,25 @@
           when the array resolves to cell data.
         </Documentation>
         <Hints>
-          <PropertyWidgetDecorator type="GenericDecorator"
-                                   mode="visibility"
-                                   property="FeatureMaskEnabled"
-                                   value="1"/>
+          <PropertyWidgetDecorator type="CompositeDecorator">
+            <Expression type="and">
+              <PropertyWidgetDecorator type="GenericDecorator"
+                                       mode="visibility"
+                                       property="FeatureMaskEnabled"
+                                       value="1"/>
+              <PropertyWidgetDecorator type="GenericDecorator"
+                                       mode="enabled_state"
+                                       property="DetectFeatureEdges"
+                                       value="1"/>
+            </Expression>
+          </PropertyWidgetDecorator>
         </Hints>
       </IntVectorProperty>
 
-      <PropertyGroup label="Feature mask (threshold)">
+      <PropertyGroup label="Feature edges &amp; mask">
+        <Property name="DetectFeatureEdges"/>
+        <Property name="ProtectAngle"/>
+        <Property name="SharpFeatureSideFilter"/>
         <Property name="FeatureMaskEnabled"/>
         <Property name="FeatureMaskArrayName"/>
         <Property name="FeatureMaskThreshold"/>

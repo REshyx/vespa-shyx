@@ -112,10 +112,27 @@ public:
 
   //@{
   /**
+   * Master switch for sharp-edge / feature-mask constraints (mirrors
+   * vtkSHYXAdaptiveIsotropicRemesher::DetectFeatureEdges). When true (default), CGAL
+   * detect_sharp_edges (ProtectAngle / SharpFeatureSideFilter) and feature-mask
+   * region/boundary contributions populate the constrained edge map and constrained
+   * vertex map used by the selected smoother. When false, none of those sources contribute;
+   * featureEdges and vertexConstrained stay empty, so SHAPE_MCF and ANGLE_AND_AREA run with
+   * no constraints, FAIR triggers the "every vertex would be moved" error unless the mesh
+   * has another natural boundary.
+   */
+  vtkGetMacro(DetectFeatureEdges, bool);
+  vtkSetMacro(DetectFeatureEdges, bool);
+  vtkBooleanMacro(DetectFeatureEdges, bool);
+  //@}
+
+  //@{
+  /**
    * Enable threshold-based Feature Mask. When ON, FeatureMaskArrayName / FeatureMaskThreshold /
    * FeatureMaskAllScalars define the active region (cells passing the magnitude test). Sharp
    * edges leaving the mask are cleared, mask-region boundary edges are added as feature edges,
    * and sharp endpoints inside the mask patch contribute anchor positions. Default OFF.
+   * Has no effect when DetectFeatureEdges is false.
    */
   vtkGetMacro(FeatureMaskEnabled, bool);
   vtkSetMacro(FeatureMaskEnabled, bool);
@@ -248,6 +265,7 @@ protected:
   int    SharpFeatureSideFilter = 0;
   double AnchorTolerance        = 1e-4;
 
+  bool   DetectFeatureEdges    = true;
   bool   FeatureMaskEnabled    = false;
   char*  FeatureMaskArrayName  = nullptr;
   double FeatureMaskThreshold  = 0.0;

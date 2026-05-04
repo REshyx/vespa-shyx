@@ -19,7 +19,9 @@
         filter optional), and an optional Feature Mask (point/cell array threshold) which drops
         sharp edges leaving the mask, adds mask-region boundary edges as feature edges, and
         contributes sharp endpoints inside the mask threshold patch as anchor positions snapped
-        within Anchor Tolerance of the bounding box length.
+        within Anchor Tolerance of the bounding box length. The Detect feature edges master
+        toggle disables both sources at once; with it OFF, no constraints are produced from the
+        feature pipeline.
 
         Output port 0: smoothed surface. Output port 1: feature diagnostic (lines = feature edges,
         verts = constrained feature vertices).
@@ -76,7 +78,24 @@
         </Hints>
       </IntVectorProperty>
 
-      <!-- Constraints: sharp edges + side filter -->
+      <!-- Feature edges & mask -->
+      <IntVectorProperty command="SetDetectFeatureEdges"
+                         name="DetectFeatureEdges"
+                         label="Detect feature edges"
+                         number_of_elements="1"
+                         default_values="1"
+                         animateable="0">
+        <BooleanDomain name="bool"/>
+        <Documentation>
+          Master switch for sharp-edge / feature-mask constraints (mirrors SHYX Adaptive Isotropic
+          Remesher). When ON (default), CGAL detect_sharp_edges (Protection angle / Sharp side
+          filter) and feature-mask region/boundary contributions populate the constrained edge map
+          and the constrained vertex map used by the smoother. When OFF, none of those sources
+          contribute; SHAPE_MCF and ANGLE_AND_AREA run unconstrained, FAIR fails with the "every
+          vertex would be moved" error unless the input has another natural boundary condition.
+        </Documentation>
+      </IntVectorProperty>
+
       <DoubleVectorProperty command="SetProtectAngle"
                             name="ProtectAngle"
                             label="Protection Angle"
@@ -87,6 +106,12 @@
           Sharp edge angle threshold in degrees. Endpoints of detected sharp edges are constrained
           (fixed) during smoothing.
         </Documentation>
+        <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="enabled_state"
+                                   property="DetectFeatureEdges"
+                                   value="1"/>
+        </Hints>
       </DoubleVectorProperty>
 
       <IntVectorProperty command="SetSharpFeatureSideFilter"
@@ -106,6 +131,12 @@
           approximate_dihedral_angle). Boundary edges are unchanged. If convex/concave looks
           swapped, flip mesh orientation or pick the other entry.
         </Documentation>
+        <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="enabled_state"
+                                   property="DetectFeatureEdges"
+                                   value="1"/>
+        </Hints>
       </IntVectorProperty>
 
       <DoubleVectorProperty command="SetAnchorTolerance"
@@ -119,9 +150,14 @@
           Relative tolerance (fraction of input AABB longest side) used when snapping anchor
           positions onto the working mesh. Used only when Feature Mask is ON.
         </Documentation>
+        <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="enabled_state"
+                                   property="DetectFeatureEdges"
+                                   value="1"/>
+        </Hints>
       </DoubleVectorProperty>
 
-      <!-- Feature Mask block (mirrors AIR) -->
       <IntVectorProperty command="SetFeatureMaskEnabled"
                          name="FeatureMaskEnabled"
                          label="Feature Mask"
@@ -133,7 +169,14 @@
           When ON: a tuple-magnitude threshold on a point/cell array defines the active region.
           Sharp edges leaving the mask are dropped, mask-region boundary edges are added as feature
           edges, and sharp endpoints of the mask threshold patch contribute anchor positions.
+          Has no effect when Detect feature edges is OFF.
         </Documentation>
+        <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="enabled_state"
+                                   property="DetectFeatureEdges"
+                                   value="1"/>
+        </Hints>
       </IntVectorProperty>
 
       <StringVectorProperty name="FeatureMaskArrayName"
@@ -153,10 +196,18 @@
           used. Tuple magnitude must be &gt; Threshold for a cell (or per-point corner) to pass.
         </Documentation>
         <Hints>
-          <PropertyWidgetDecorator type="GenericDecorator"
-                                   mode="visibility"
-                                   property="FeatureMaskEnabled"
-                                   value="1"/>
+          <PropertyWidgetDecorator type="CompositeDecorator">
+            <Expression type="and">
+              <PropertyWidgetDecorator type="GenericDecorator"
+                                       mode="visibility"
+                                       property="FeatureMaskEnabled"
+                                       value="1"/>
+              <PropertyWidgetDecorator type="GenericDecorator"
+                                       mode="enabled_state"
+                                       property="DetectFeatureEdges"
+                                       value="1"/>
+            </Expression>
+          </PropertyWidgetDecorator>
           <ArraySelectionWidget/>
         </Hints>
       </StringVectorProperty>
@@ -172,10 +223,18 @@
           Cells pass when tuple magnitude is strictly greater than this value. Typical: 0.
         </Documentation>
         <Hints>
-          <PropertyWidgetDecorator type="GenericDecorator"
-                                   mode="visibility"
-                                   property="FeatureMaskEnabled"
-                                   value="1"/>
+          <PropertyWidgetDecorator type="CompositeDecorator">
+            <Expression type="and">
+              <PropertyWidgetDecorator type="GenericDecorator"
+                                       mode="visibility"
+                                       property="FeatureMaskEnabled"
+                                       value="1"/>
+              <PropertyWidgetDecorator type="GenericDecorator"
+                                       mode="enabled_state"
+                                       property="DetectFeatureEdges"
+                                       value="1"/>
+            </Expression>
+          </PropertyWidgetDecorator>
         </Hints>
       </DoubleVectorProperty>
 
@@ -192,10 +251,18 @@
           cell data.
         </Documentation>
         <Hints>
-          <PropertyWidgetDecorator type="GenericDecorator"
-                                   mode="visibility"
-                                   property="FeatureMaskEnabled"
-                                   value="1"/>
+          <PropertyWidgetDecorator type="CompositeDecorator">
+            <Expression type="and">
+              <PropertyWidgetDecorator type="GenericDecorator"
+                                       mode="visibility"
+                                       property="FeatureMaskEnabled"
+                                       value="1"/>
+              <PropertyWidgetDecorator type="GenericDecorator"
+                                       mode="enabled_state"
+                                       property="DetectFeatureEdges"
+                                       value="1"/>
+            </Expression>
+          </PropertyWidgetDecorator>
         </Hints>
       </IntVectorProperty>
 
@@ -393,13 +460,11 @@
          </Documentation>
       </IntVectorProperty>
 
-      <PropertyGroup label="Constraints">
+      <PropertyGroup label="Feature edges &amp; mask">
+        <Property name="DetectFeatureEdges"/>
         <Property name="ProtectAngle"/>
         <Property name="SharpFeatureSideFilter"/>
         <Property name="AnchorTolerance"/>
-      </PropertyGroup>
-
-      <PropertyGroup label="Feature Mask (threshold)">
         <Property name="FeatureMaskEnabled"/>
         <Property name="FeatureMaskArrayName"/>
         <Property name="FeatureMaskThreshold"/>

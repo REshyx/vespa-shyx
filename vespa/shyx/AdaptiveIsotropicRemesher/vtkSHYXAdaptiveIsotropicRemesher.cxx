@@ -230,7 +230,7 @@ void ExtractMaskedFacesPolyData(vtkPolyData* inMesh, const std::vector<char>& ke
       continue;
     }
 
-    vtkCellArray* target = nullptr;
+    vtkCellArray* target = newPolys;
     switch (ctype)
     {
       case VTK_VERTEX:
@@ -241,24 +241,14 @@ void ExtractMaskedFacesPolyData(vtkPolyData* inMesh, const std::vector<char>& ke
       case VTK_POLY_LINE:
         target = newLines;
         break;
-      case VTK_TRIANGLE:
-      case VTK_QUAD:
-      case VTK_POLYGON:
-      case VTK_PIXEL:
-        target = newPolys;
-        break;
       case VTK_TRIANGLE_STRIP:
         target = newStrips;
         break;
       default:
-        target = newPolys;
         break;
     }
-    if (target)
-    {
-      target->InsertNextCell(remapped);
-      keptOrig.push_back(cid);
-    }
+    target->InsertNextCell(remapped);
+    keptOrig.push_back(cid);
   }
 
   out->SetPoints(newPts);
@@ -317,6 +307,80 @@ void MarkFeatureEdgeByVertices(CGAL_Surface& sm, EdgeBoolMap featureEdges,
   }
 }
 
+struct EdgeKeyHash
+{
+  size_t operator()(std::pair<vtkIdType, vtkIdType> k) const noexcept
+  {
+    return (static_cast<size_t>(k.first) << 32) ^ static_cast<size_t>(k.second);
+  }
+};
+using EdgeCellMap =
+  std::unordered_map<std::pair<vtkIdType, vtkIdType>, std::vector<vtkIdType>, EdgeKeyHash>;
+
+void BuildEdgeCells(vtkPolyData* pd, EdgeCellMap& edgeCells)
+{
+  vtkIdType npts;
+  const vtkIdType* pids;
+  const vtkIdType nCells = pd->GetNumberOfCells();
+  edgeCells.reserve(static_cast<size_t>(nCells) * 2);
+  for (vtkIdType cid = 0; cid < nCells; ++cid)
+  {
+    pd->GetCellPoints(cid, npts, pids);
+    for (vtkIdType a = 0; a < npts; ++a)
+    {
+      vtkIdType u = pids[a];
+      vtkIdType v = pids[(a + 1) % npts];
+      if (u > v)
+      {
+        std::swap(u, v);
+      }
+      edgeCells[{ u, v }].push_back(cid);
+    }
+  }
+}
+
+template <typename Callback>
+void ForEachSelectionBoundaryEdge(
+  vtkPolyData* pd, const std::set<vtkIdType>& selected, Callback cb)
+{
+  if (!pd || selected.empty())
+  {
+    return;
+  }
+  EdgeCellMap edgeCells;
+  BuildEdgeCells(pd, edgeCells);
+  const vtkIdType nPts = pd->GetNumberOfPoints();
+  for (auto& kv : edgeCells)
+  {
+    auto& ids = kv.second;
+    std::sort(ids.begin(), ids.end());
+    ids.erase(std::unique(ids.begin(), ids.end()), ids.end());
+
+    const vtkIdType pu = kv.first.first;
+    const vtkIdType pv = kv.first.second;
+    if (pu < 0 || pv < 0 || pu >= nPts || pv >= nPts)
+    {
+      continue;
+    }
+
+    bool boundary = false;
+    if (ids.size() == 2)
+    {
+      const bool s0 = selected.count(ids[0]) != 0u;
+      const bool s1 = selected.count(ids[1]) != 0u;
+      boundary = (s0 != s1);
+    }
+    else if (ids.size() == 1)
+    {
+      boundary = (selected.count(ids[0]) != 0u);
+    }
+    if (boundary)
+    {
+      cb(pu, pv);
+    }
+  }
+}
+
 template <typename EdgeBoolMap>
 void AddSelectionBoundaryUsingVtkTopology(vtkObject* logger, vtkPolyData* pd, CGAL_Surface& sm,
   EdgeBoolMap featureEdges, const std::set<vtkIdType>& selected)
@@ -325,8 +389,8 @@ void AddSelectionBoundaryUsingVtkTopology(vtkObject* logger, vtkPolyData* pd, CG
   {
     return;
   }
-  const vtkIdType nPts = pd->GetNumberOfPoints();
-  if (static_cast<size_t>(sm.number_of_vertices()) != static_cast<size_t>(nPts))
+  if (static_cast<size_t>(sm.number_of_vertices()) !=
+      static_cast<size_t>(pd->GetNumberOfPoints()))
   {
     if (logger)
     {
@@ -337,138 +401,23 @@ void AddSelectionBoundaryUsingVtkTopology(vtkObject* logger, vtkPolyData* pd, CG
     return;
   }
 
-  using EdgeKey = std::pair<vtkIdType, vtkIdType>;
-  struct EdgeKeyHash
-  {
-    size_t operator()(EdgeKey k) const noexcept
-    {
-      return (static_cast<size_t>(k.first) << 32) ^ static_cast<size_t>(k.second);
-    }
-  };
-  std::unordered_map<EdgeKey, std::vector<vtkIdType>, EdgeKeyHash> edgeCells;
-  vtkIdType npts;
-  const vtkIdType* pids;
-  const vtkIdType nCells = pd->GetNumberOfCells();
-  edgeCells.reserve(static_cast<size_t>(nCells) * 2);
-  for (vtkIdType cid = 0; cid < nCells; ++cid)
-  {
-    pd->GetCellPoints(cid, npts, pids);
-    for (vtkIdType a = 0; a < npts; ++a)
-    {
-      vtkIdType u = pids[a];
-      vtkIdType v = pids[(a + 1) % npts];
-      if (u > v)
-      {
-        std::swap(u, v);
-      }
-      edgeCells[{ u, v }].push_back(cid);
-    }
-  }
-
-  for (auto& kv : edgeCells)
-  {
-    auto& ids = kv.second;
-    std::sort(ids.begin(), ids.end());
-    ids.erase(std::unique(ids.begin(), ids.end()), ids.end());
-
-    const vtkIdType pu = kv.first.first;
-    const vtkIdType pv = kv.first.second;
-    if (pu < 0 || pv < 0 || pu >= nPts || pv >= nPts)
-    {
-      continue;
-    }
-
+  ForEachSelectionBoundaryEdge(pd, selected, [&](vtkIdType pu, vtkIdType pv) {
     const CGAL_Surface::Vertex_index va(static_cast<std::size_t>(pu));
     const CGAL_Surface::Vertex_index vb(static_cast<std::size_t>(pv));
-
-    if (ids.size() == 2)
-    {
-      const bool s0 = selected.count(ids[0]) != 0u;
-      const bool s1 = selected.count(ids[1]) != 0u;
-      if (s0 != s1)
-      {
-        MarkFeatureEdgeByVertices(sm, featureEdges, va, vb);
-      }
-    }
-    else if (ids.size() == 1)
-    {
-      if (selected.count(ids[0]) != 0u)
-      {
-        MarkFeatureEdgeByVertices(sm, featureEdges, va, vb);
-      }
-    }
-  }
+    MarkFeatureEdgeByVertices(sm, featureEdges, va, vb);
+  });
 }
 
 void CollectSelectionBoundaryWorldPoints(vtkPolyData* pd, const std::set<vtkIdType>& selected,
   std::vector<std::array<double, 3>>& out)
 {
-  if (!pd || selected.empty())
-  {
-    return;
-  }
-  const vtkIdType nPts = pd->GetNumberOfPoints();
-  using EdgeKey = std::pair<vtkIdType, vtkIdType>;
-  struct EdgeKeyHash
-  {
-    size_t operator()(EdgeKey k) const noexcept
-    {
-      return (static_cast<size_t>(k.first) << 32) ^ static_cast<size_t>(k.second);
-    }
-  };
-  std::unordered_map<EdgeKey, std::vector<vtkIdType>, EdgeKeyHash> edgeCells;
-  vtkIdType npts;
-  const vtkIdType* pids;
-  const vtkIdType nCells = pd->GetNumberOfCells();
-  edgeCells.reserve(static_cast<size_t>(nCells) * 2);
-  for (vtkIdType cid = 0; cid < nCells; ++cid)
-  {
-    pd->GetCellPoints(cid, npts, pids);
-    for (vtkIdType a = 0; a < npts; ++a)
-    {
-      vtkIdType u = pids[a];
-      vtkIdType v = pids[(a + 1) % npts];
-      if (u > v)
-      {
-        std::swap(u, v);
-      }
-      edgeCells[{ u, v }].push_back(cid);
-    }
-  }
-
-  double x[3];
-  for (auto& kv : edgeCells)
-  {
-    auto& ids = kv.second;
-    std::sort(ids.begin(), ids.end());
-    ids.erase(std::unique(ids.begin(), ids.end()), ids.end());
-
-    const vtkIdType pu = kv.first.first;
-    const vtkIdType pv = kv.first.second;
-    if (pu < 0 || pv < 0 || pu >= nPts || pv >= nPts)
-    {
-      continue;
-    }
-
-    bool take = false;
-    if (ids.size() == 2)
-    {
-      const bool s0 = selected.count(ids[0]) != 0u;
-      const bool s1 = selected.count(ids[1]) != 0u;
-      take = (s0 != s1);
-    }
-    else if (ids.size() == 1)
-    {
-      take = (selected.count(ids[0]) != 0u);
-    }
-    if (take)
-    {
-      pd->GetPoint(pu, x);
-      out.push_back({ x[0], x[1], x[2] });
-      pd->GetPoint(pv, x);
-      out.push_back({ x[0], x[1], x[2] });
-    }
-  }
+  ForEachSelectionBoundaryEdge(pd, selected, [&](vtkIdType pu, vtkIdType pv) {
+    double x[3];
+    pd->GetPoint(pu, x);
+    out.push_back({ x[0], x[1], x[2] });
+    pd->GetPoint(pv, x);
+    out.push_back({ x[0], x[1], x[2] });
+  });
 }
 
 template <typename EdgeBoolMapFull, typename EdgeBoolMapPatch>
@@ -478,17 +427,18 @@ void LiftPatchSharpFeaturesToFullMesh(vtkObject* logger, CGAL_Surface& fullSm, E
   const double scale = (bboxLength > 0.0) ? (1.0e9 / bboxLength) : 1.0e9;
 
   using QuantKey = std::tuple<std::int64_t, std::int64_t, std::int64_t>;
-  std::map<QuantKey, CGAL_Surface::Vertex_index> fullVertByQuant;
-
-  for (CGAL_Surface::Vertex_index v : fullSm.vertices())
-  {
-    const auto& p = fullSm.point(v);
-    QuantKey key = {
+  const auto quant = [scale](const auto& p) -> QuantKey {
+    return {
       static_cast<std::int64_t>(std::llround(CGAL::to_double(p.x()) * scale)),
       static_cast<std::int64_t>(std::llround(CGAL::to_double(p.y()) * scale)),
       static_cast<std::int64_t>(std::llround(CGAL::to_double(p.z()) * scale)),
     };
-    fullVertByQuant[key] = v;
+  };
+
+  std::map<QuantKey, CGAL_Surface::Vertex_index> fullVertByQuant;
+  for (CGAL_Surface::Vertex_index v : fullSm.vertices())
+  {
+    fullVertByQuant[quant(fullSm.point(v))] = v;
   }
 
   std::size_t missing = 0;
@@ -501,20 +451,8 @@ void LiftPatchSharpFeaturesToFullMesh(vtkObject* logger, CGAL_Surface& fullSm, E
     const CGAL_Surface::Halfedge_index ph = patchSm.halfedge(pe);
     const CGAL_Surface::Vertex_index pv0 = patchSm.source(ph);
     const CGAL_Surface::Vertex_index pv1 = patchSm.target(ph);
-    const auto& p0 = patchSm.point(pv0);
-    const auto& p1 = patchSm.point(pv1);
-    QuantKey k0 = {
-      static_cast<std::int64_t>(std::llround(CGAL::to_double(p0.x()) * scale)),
-      static_cast<std::int64_t>(std::llround(CGAL::to_double(p0.y()) * scale)),
-      static_cast<std::int64_t>(std::llround(CGAL::to_double(p0.z()) * scale)),
-    };
-    QuantKey k1 = {
-      static_cast<std::int64_t>(std::llround(CGAL::to_double(p1.x()) * scale)),
-      static_cast<std::int64_t>(std::llround(CGAL::to_double(p1.y()) * scale)),
-      static_cast<std::int64_t>(std::llround(CGAL::to_double(p1.z()) * scale)),
-    };
-    auto it0 = fullVertByQuant.find(k0);
-    auto it1 = fullVertByQuant.find(k1);
+    const auto it0 = fullVertByQuant.find(quant(patchSm.point(pv0)));
+    const auto it1 = fullVertByQuant.find(quant(patchSm.point(pv1)));
     if (it0 == fullVertByQuant.end() || it1 == fullVertByQuant.end())
     {
       ++missing;
@@ -671,7 +609,8 @@ void CollectCellsFromExtracted(vtkPolyData* mesh, vtkDataSet* extracted, std::se
   {
     return;
   }
-  std::set<vtkIdType> selPt;
+  std::unordered_set<vtkIdType> selPt;
+  selPt.reserve(static_cast<size_t>(ptIds->GetNumberOfTuples()));
   for (vtkIdType i = 0; i < ptIds->GetNumberOfTuples(); ++i)
   {
     const vtkIdType pid = ptIds->GetValue(i);
@@ -739,6 +678,14 @@ void ApplySharpFeatureSideFilter(CGAL_Surface& sm, EdgeBoolMap featureEdges, int
   }
 }
 
+template <typename EdgeBoolMap>
+void DetectSharpEdgesWithFilter(
+  CGAL_Surface& sm, double protectAngleDeg, int sharpSideMode, EdgeBoolMap featureEdges)
+{
+  pmp::detect_sharp_edges(sm, protectAngleDeg, featureEdges);
+  ApplySharpFeatureSideFilter(sm, featureEdges, sharpSideMode);
+}
+
 void CollectPatchSharpFeatureWorldPoints(vtkPolyData* maskPatch, double protectAngle, int sharpSideFilter,
   std::vector<std::array<double, 3>>& outAppend)
 {
@@ -752,8 +699,7 @@ void CollectPatchSharpFeatureWorldPoints(vtkPolyData* maskPatch, double protectA
     return;
   }
   auto feat = get(CGAL::edge_is_feature, patch.surface);
-  pmp::detect_sharp_edges(patch.surface, protectAngle, feat);
-  ApplySharpFeatureSideFilter(patch.surface, feat, sharpSideFilter);
+  DetectSharpEdgesWithFilter(patch.surface, protectAngle, sharpSideFilter, feat);
   for (CGAL_Surface::Edge_index e : patch.surface.edges())
   {
     if (!boost::get(feat, e))
@@ -935,6 +881,7 @@ void vtkSHYXAdaptiveIsotropicRemesher::PrintSelf(ostream& os, vtkIndent indent)
   os << indent << "RemeshDoSplit: " << (this->RemeshDoSplit ? "on" : "off") << std::endl;
   os << indent << "RemeshDoCollapse: " << (this->RemeshDoCollapse ? "on" : "off") << std::endl;
   os << indent << "RemeshDoFlip: " << (this->RemeshDoFlip ? "on" : "off") << std::endl;
+  os << indent << "DetectFeatureEdges: " << (this->DetectFeatureEdges ? "on" : "off") << std::endl;
   os << indent << "FeatureMaskEnabled: " << (this->FeatureMaskEnabled ? "on" : "off") << std::endl;
   os << indent << "FeatureMaskArrayName: "
      << (this->FeatureMaskArrayName ? this->FeatureMaskArrayName : "(null)") << std::endl;
@@ -1114,27 +1061,30 @@ int vtkSHYXAdaptiveIsotropicRemesher::RequestData(
   try
   {
     auto featureEdges = get(CGAL::edge_is_feature, cgalMesh->surface);
-    pmp::detect_sharp_edges(cgalMesh->surface, this->ProtectAngle, featureEdges);
-    ApplySharpFeatureSideFilter(cgalMesh->surface, featureEdges, this->SharpFeatureSideFilter);
-    if (this->FeatureMaskEnabled && inputFeatureMaskOk)
+    if (this->DetectFeatureEdges)
     {
-      std::vector<vtkIdType> faceIdxToVtkIn;
-      BuildCgalFaceIndexToVtkCell(cgalMesh->surface, faceIdxToVtkIn);
-      ApplyFeatureRegionMaskToSharpEdges(
-        cgalMesh->surface, featureEdges, inputFeatureMask, faceIdxToVtkIn);
-    }
-
-    if (this->FeatureMaskEnabled && inputFeatureMaskOk && outputMaskPatch->GetNumberOfCells() > 0)
-    {
-      vtkCGALHelper::Vespa_surface cgalForPort1Patch;
-      if (vtkCGALHelper::toCGAL(outputMaskPatch, &cgalForPort1Patch, nullptr))
+      DetectSharpEdgesWithFilter(
+        cgalMesh->surface, this->ProtectAngle, this->SharpFeatureSideFilter, featureEdges);
+      if (this->FeatureMaskEnabled && inputFeatureMaskOk)
       {
-        auto patchFeat = get(CGAL::edge_is_feature, cgalForPort1Patch.surface);
-        pmp::detect_sharp_edges(cgalForPort1Patch.surface, this->ProtectAngle, patchFeat);
-        ApplySharpFeatureSideFilter(
-          cgalForPort1Patch.surface, patchFeat, this->SharpFeatureSideFilter);
-        LiftPatchSharpFeaturesToFullMesh(this, cgalMesh->surface, featureEdges,
-          cgalForPort1Patch.surface, patchFeat, L);
+        std::vector<vtkIdType> faceIdxToVtkIn;
+        BuildCgalFaceIndexToVtkCell(cgalMesh->surface, faceIdxToVtkIn);
+        ApplyFeatureRegionMaskToSharpEdges(
+          cgalMesh->surface, featureEdges, inputFeatureMask, faceIdxToVtkIn);
+      }
+
+      if (this->FeatureMaskEnabled && inputFeatureMaskOk &&
+        outputMaskPatch->GetNumberOfCells() > 0)
+      {
+        vtkCGALHelper::Vespa_surface cgalForPort1Patch;
+        if (vtkCGALHelper::toCGAL(outputMaskPatch, &cgalForPort1Patch, nullptr))
+        {
+          auto patchFeat = get(CGAL::edge_is_feature, cgalForPort1Patch.surface);
+          DetectSharpEdgesWithFilter(cgalForPort1Patch.surface, this->ProtectAngle,
+            this->SharpFeatureSideFilter, patchFeat);
+          LiftPatchSharpFeaturesToFullMesh(this, cgalMesh->surface, featureEdges,
+            cgalForPort1Patch.surface, patchFeat, L);
+        }
       }
     }
 
@@ -1172,7 +1122,7 @@ int vtkSHYXAdaptiveIsotropicRemesher::RequestData(
     {
       std::vector<std::array<double, 3>> smoothAnchorPoints;
       CollectSelectionBoundaryWorldPoints(input, selected, smoothAnchorPoints);
-      if (this->FeatureMaskEnabled)
+      if (this->DetectFeatureEdges && this->FeatureMaskEnabled)
       {
         vtkNew<vtkPolyData> remeshedSurfForSmoothAnchors;
         vtkCGALHelper::toVTK(cgalMesh.get(), remeshedSurfForSmoothAnchors);
@@ -1192,47 +1142,57 @@ int vtkSHYXAdaptiveIsotropicRemesher::RequestData(
       }
       const double smoothAnchorTolSq = std::max(1e-36, (1e-4 * L) * (1e-4 * L));
 
-      pmp::detect_sharp_edges(cgalMesh->surface, this->ProtectAngle, featureEdges);
-      ApplySharpFeatureSideFilter(cgalMesh->surface, featureEdges, this->SharpFeatureSideFilter);
-
-      vtkNew<vtkPolyData> tmpSurf;
-      vtkCGALHelper::toVTK(cgalMesh.get(), tmpSurf);
-      this->interpolateAttributes(input, tmpSurf);
-
-      if (this->FeatureMaskEnabled)
+      if (this->DetectFeatureEdges)
       {
-        std::vector<char> smoothMask;
-        if (ComputeFeatureFaceMask(tmpSurf, this->FeatureMaskArrayName, this->FeatureMaskThreshold,
-              this->FeatureMaskAllScalars, smoothMask))
-        {
-          std::vector<vtkIdType> faceIdxToSm;
-          BuildCgalFaceIndexToVtkCell(cgalMesh->surface, faceIdxToSm);
-          ApplyFeatureRegionMaskToSharpEdges(
-            cgalMesh->surface, featureEdges, smoothMask, faceIdxToSm);
+        DetectSharpEdgesWithFilter(
+          cgalMesh->surface, this->ProtectAngle, this->SharpFeatureSideFilter, featureEdges);
 
-          std::vector<char> faceInMaskRegion(
-            static_cast<size_t>(cgalMesh->surface.number_of_faces()), 0);
-          for (CGAL_Surface::Face_index f : cgalMesh->surface.faces())
-          {
-            const std::size_t fi = static_cast<std::size_t>(f.idx());
-            if (fi >= faceIdxToSm.size())
-            {
-              continue;
-            }
-            const vtkIdType vtkC = faceIdxToSm[fi];
-            if (vtkC >= 0 && static_cast<size_t>(vtkC) < smoothMask.size() &&
-                smoothMask[static_cast<size_t>(vtkC)])
-            {
-              faceInMaskRegion[fi] = 1;
-            }
-          }
-          AddPatchBoundaryFeatureEdges(cgalMesh->surface, featureEdges, faceInMaskRegion);
-        }
-        else
+        vtkNew<vtkPolyData> tmpSurf;
+        vtkCGALHelper::toVTK(cgalMesh.get(), tmpSurf);
+        this->interpolateAttributes(input, tmpSurf);
+
+        if (this->FeatureMaskEnabled)
         {
-          vtkWarningMacro("Feature mask: could not evaluate threshold on the remeshed surface "
-                          "before smooth_shape (same array/threshold as remesh); mask clipping and "
-                          "mask-boundary feature constraints are skipped for smoothing.");
+          std::vector<char> smoothMask;
+          if (ComputeFeatureFaceMask(tmpSurf, this->FeatureMaskArrayName,
+                this->FeatureMaskThreshold, this->FeatureMaskAllScalars, smoothMask))
+          {
+            std::vector<vtkIdType> faceIdxToSm;
+            BuildCgalFaceIndexToVtkCell(cgalMesh->surface, faceIdxToSm);
+            ApplyFeatureRegionMaskToSharpEdges(
+              cgalMesh->surface, featureEdges, smoothMask, faceIdxToSm);
+
+            std::vector<char> faceInMaskRegion(
+              static_cast<size_t>(cgalMesh->surface.number_of_faces()), 0);
+            for (CGAL_Surface::Face_index f : cgalMesh->surface.faces())
+            {
+              const std::size_t fi = static_cast<std::size_t>(f.idx());
+              if (fi >= faceIdxToSm.size())
+              {
+                continue;
+              }
+              const vtkIdType vtkC = faceIdxToSm[fi];
+              if (vtkC >= 0 && static_cast<size_t>(vtkC) < smoothMask.size() &&
+                  smoothMask[static_cast<size_t>(vtkC)])
+              {
+                faceInMaskRegion[fi] = 1;
+              }
+            }
+            AddPatchBoundaryFeatureEdges(cgalMesh->surface, featureEdges, faceInMaskRegion);
+          }
+          else
+          {
+            vtkWarningMacro("Feature mask: could not evaluate threshold on the remeshed surface "
+                            "before smooth_shape (same array/threshold as remesh); mask clipping "
+                            "and mask-boundary feature constraints are skipped for smoothing.");
+          }
+        }
+      }
+      else
+      {
+        for (CGAL_Surface::Edge_index e : cgalMesh->surface.edges())
+        {
+          boost::put(featureEdges, e, false);
         }
       }
 
@@ -1288,95 +1248,99 @@ int vtkSHYXAdaptiveIsotropicRemesher::RequestData(
     outputMaskPatchRemeshed->Initialize();
   }
 
-  bool linesFromInputMaskPatch = false;
-  if (this->FeatureMaskEnabled && inputFeatureMaskOk && outputMaskPatch->GetNumberOfCells() > 0)
+  if (this->DetectFeatureEdges)
   {
-    try
-    {
-      vtkCGALHelper::Vespa_surface cgalPort2;
-      if (vtkCGALHelper::toCGAL(outputMaskPatch, &cgalPort2, nullptr))
-      {
-        auto featPort2 = get(CGAL::edge_is_feature, cgalPort2.surface);
-        pmp::detect_sharp_edges(cgalPort2.surface, this->ProtectAngle, featPort2);
-        ApplySharpFeatureSideFilter(cgalPort2.surface, featPort2, this->SharpFeatureSideFilter);
-        FillFeaturePolyDataSharpLinesOnly(cgalPort2.surface, featPort2, outputFeatures);
-        linesFromInputMaskPatch = true;
-      }
-      else
-      {
-        vtkWarningMacro("Could not build a CGAL surface from the input mask patch (port 2); "
-                        "port 1 lines will use the full remeshed surface.");
-      }
-    }
-    catch (const std::exception& e)
-    {
-      vtkWarningMacro("Sharp feature lines on input mask patch failed: " << e.what()
-                                                                         << " Falling back to full "
-                                                                            "remeshed surface for lines.");
-    }
-  }
-
-  if (!linesFromInputMaskPatch)
-  {
-    CGAL_Surface& sm = cgalMesh->surface;
-    auto featOutMap = get(CGAL::edge_is_feature, sm);
-    pmp::detect_sharp_edges(sm, this->ProtectAngle, featOutMap);
-    ApplySharpFeatureSideFilter(sm, featOutMap, this->SharpFeatureSideFilter);
-    if (this->FeatureMaskEnabled)
-    {
-      std::vector<char> outMask;
-      const bool outOk = ComputeFeatureFaceMask(output, this->FeatureMaskArrayName,
-        this->FeatureMaskThreshold, this->FeatureMaskAllScalars, outMask);
-      if (!outOk)
-      {
-        vtkWarningMacro("Feature mask is enabled but the array could not be evaluated on the "
-                        "remeshed surface (e.g. missing data after interpolation); port 1 lines "
-                        "use unmasked sharp features on the full output.");
-      }
-      else
-      {
-        std::vector<vtkIdType> faceIdxToVtk;
-        BuildCgalFaceIndexToVtkCell(sm, faceIdxToVtk);
-        ApplyFeatureRegionMaskToSharpEdges(sm, featOutMap, outMask, faceIdxToVtk);
-      }
-    }
-    FillFeaturePolyDataSharpLinesOnly(sm, featOutMap, outputFeatures);
-  }
-
-  if (this->ShapeSmoothingIterations > 0)
-  {
-    if (this->FeatureMaskEnabled && outputMaskPatchRemeshed->GetNumberOfCells() > 0)
+    bool linesFromInputMaskPatch = false;
+    if (this->FeatureMaskEnabled && inputFeatureMaskOk && outputMaskPatch->GetNumberOfCells() > 0)
     {
       try
       {
-        vtkCGALHelper::Vespa_surface cgalPort3;
-        if (vtkCGALHelper::toCGAL(outputMaskPatchRemeshed, &cgalPort3, nullptr))
+        vtkCGALHelper::Vespa_surface cgalPort2;
+        if (vtkCGALHelper::toCGAL(outputMaskPatch, &cgalPort2, nullptr))
         {
-          auto featPort3 = get(CGAL::edge_is_feature, cgalPort3.surface);
-          pmp::detect_sharp_edges(cgalPort3.surface, this->ProtectAngle, featPort3);
-          ApplySharpFeatureSideFilter(cgalPort3.surface, featPort3, this->SharpFeatureSideFilter);
-          AppendSharpFeatureVertsToPolyData(outputFeatures, cgalPort3.surface, featPort3);
+          auto featPort2 = get(CGAL::edge_is_feature, cgalPort2.surface);
+          DetectSharpEdgesWithFilter(
+            cgalPort2.surface, this->ProtectAngle, this->SharpFeatureSideFilter, featPort2);
+          FillFeaturePolyDataSharpLinesOnly(cgalPort2.surface, featPort2, outputFeatures);
+          linesFromInputMaskPatch = true;
+        }
+        else
+        {
+          vtkWarningMacro("Could not build a CGAL surface from the input mask patch (port 2); "
+                          "port 1 lines will use the full remeshed surface.");
         }
       }
       catch (const std::exception& e)
       {
-        vtkWarningMacro(
-          "Sharp feature points on remeshed mask patch (port 3) failed: " << e.what());
+        vtkWarningMacro("Sharp feature lines on input mask patch failed: "
+          << e.what() << " Falling back to full remeshed surface for lines.");
       }
     }
-    else if (!this->FeatureMaskEnabled)
+
+    if (!linesFromInputMaskPatch)
     {
       CGAL_Surface& sm = cgalMesh->surface;
-      auto featFull = get(CGAL::edge_is_feature, sm);
-      pmp::detect_sharp_edges(sm, this->ProtectAngle, featFull);
-      ApplySharpFeatureSideFilter(sm, featFull, this->SharpFeatureSideFilter);
-      AppendSharpFeatureVertsToPolyData(outputFeatures, sm, featFull);
+      auto featOutMap = get(CGAL::edge_is_feature, sm);
+      DetectSharpEdgesWithFilter(sm, this->ProtectAngle, this->SharpFeatureSideFilter, featOutMap);
+      if (this->FeatureMaskEnabled)
+      {
+        std::vector<char> outMask;
+        const bool outOk = ComputeFeatureFaceMask(output, this->FeatureMaskArrayName,
+          this->FeatureMaskThreshold, this->FeatureMaskAllScalars, outMask);
+        if (!outOk)
+        {
+          vtkWarningMacro("Feature mask is enabled but the array could not be evaluated on the "
+                          "remeshed surface (e.g. missing data after interpolation); port 1 lines "
+                          "use unmasked sharp features on the full output.");
+        }
+        else
+        {
+          std::vector<vtkIdType> faceIdxToVtk;
+          BuildCgalFaceIndexToVtkCell(sm, faceIdxToVtk);
+          ApplyFeatureRegionMaskToSharpEdges(sm, featOutMap, outMask, faceIdxToVtk);
+        }
+      }
+      FillFeaturePolyDataSharpLinesOnly(sm, featOutMap, outputFeatures);
+    }
+
+    if (this->ShapeSmoothingIterations > 0)
+    {
+      if (this->FeatureMaskEnabled && outputMaskPatchRemeshed->GetNumberOfCells() > 0)
+      {
+        try
+        {
+          vtkCGALHelper::Vespa_surface cgalPort3;
+          if (vtkCGALHelper::toCGAL(outputMaskPatchRemeshed, &cgalPort3, nullptr))
+          {
+            auto featPort3 = get(CGAL::edge_is_feature, cgalPort3.surface);
+            DetectSharpEdgesWithFilter(
+              cgalPort3.surface, this->ProtectAngle, this->SharpFeatureSideFilter, featPort3);
+            AppendSharpFeatureVertsToPolyData(outputFeatures, cgalPort3.surface, featPort3);
+          }
+        }
+        catch (const std::exception& e)
+        {
+          vtkWarningMacro(
+            "Sharp feature points on remeshed mask patch (port 3) failed: " << e.what());
+        }
+      }
+      else if (!this->FeatureMaskEnabled)
+      {
+        CGAL_Surface& sm = cgalMesh->surface;
+        auto featFull = get(CGAL::edge_is_feature, sm);
+        DetectSharpEdgesWithFilter(sm, this->ProtectAngle, this->SharpFeatureSideFilter, featFull);
+        AppendSharpFeatureVertsToPolyData(outputFeatures, sm, featFull);
+      }
+    }
+    else
+    {
+      vtkNew<vtkCellArray> emptyVerts;
+      outputFeatures->SetVerts(emptyVerts);
     }
   }
   else
   {
-    vtkNew<vtkCellArray> emptyVerts;
-    outputFeatures->SetVerts(emptyVerts);
+    outputFeatures->Initialize();
   }
 
   return 1;

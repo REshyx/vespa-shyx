@@ -532,6 +532,7 @@ void vtkSHYXShapeSmoothing::PrintSelf(ostream& os, vtkIndent indent)
   os << indent << "ProtectAngle: " << this->ProtectAngle << std::endl;
   os << indent << "SharpFeatureSideFilter: " << this->SharpFeatureSideFilter << std::endl;
   os << indent << "AnchorTolerance: " << this->AnchorTolerance << std::endl;
+  os << indent << "DetectFeatureEdges: " << this->DetectFeatureEdges << std::endl;
   os << indent << "FeatureMaskEnabled: " << this->FeatureMaskEnabled << std::endl;
   os << indent << "FeatureMaskArrayName: "
      << (this->FeatureMaskArrayName ? this->FeatureMaskArrayName : "(null)") << std::endl;
@@ -590,10 +591,15 @@ int vtkSHYXShapeSmoothing::RequestData(
     return 1;
   }
 
+  // Master switch: when off, sharp-edge / feature-mask sources do not contribute any
+  // constraint to the smoother (A+B suppressed). vtkSHYXShapeSmoothing has no vtkSelection
+  // input (no C source), so featureEdges and vertexConstrained stay empty in that case.
+  const bool detectFeatures = this->DetectFeatureEdges;
+
   // Threshold-based feature mask, evaluated on the input (same convention as AIR).
   std::vector<char> inputFeatureMask;
   bool inputFeatureMaskOk = false;
-  if (this->FeatureMaskEnabled)
+  if (detectFeatures && this->FeatureMaskEnabled)
   {
     inputFeatureMaskOk = ComputeFeatureFaceMask(input, this->FeatureMaskArrayName,
       this->FeatureMaskThreshold, this->FeatureMaskAllScalars, inputFeatureMask);
@@ -604,10 +610,11 @@ int vtkSHYXShapeSmoothing::RequestData(
         << "' was not found on the input or its size mismatched. Feature Mask is ignored.");
     }
   }
+  const bool useMask = detectFeatures && this->FeatureMaskEnabled && inputFeatureMaskOk;
 
   // Anchor positions from sharp endpoints inside the mask threshold patch (input topology).
   std::vector<std::array<double, 3>> anchorPoints;
-  if (this->FeatureMaskEnabled && inputFeatureMaskOk)
+  if (useMask)
   {
     vtkNew<vtkPolyData> inputMaskPatch;
     ExtractMaskedFacesPolyData(input, inputFeatureMask, inputMaskPatch);
@@ -622,47 +629,51 @@ int vtkSHYXShapeSmoothing::RequestData(
 
   try
   {
-    pmp::detect_sharp_edges(sm, this->ProtectAngle, featureEdges);
-    ApplySharpFeatureSideFilter(sm, featureEdges, this->SharpFeatureSideFilter);
-
     std::vector<char> faceInMaskRegion;
-    if (this->FeatureMaskEnabled && inputFeatureMaskOk)
+    if (detectFeatures)
     {
-      std::vector<vtkIdType> faceIdxToSm;
-      BuildCgalFaceIndexToVtkCell(sm, faceIdxToSm);
-      ApplyFeatureRegionMaskToSharpEdges(sm, featureEdges, inputFeatureMask, faceIdxToSm);
+      pmp::detect_sharp_edges(sm, this->ProtectAngle, featureEdges);
+      ApplySharpFeatureSideFilter(sm, featureEdges, this->SharpFeatureSideFilter);
 
-      faceInMaskRegion.assign(static_cast<size_t>(sm.number_of_faces()), 0);
-      for (CGAL_Surface::Face_index f : sm.faces())
+      if (useMask)
       {
-        const std::size_t fi = static_cast<std::size_t>(f.idx());
-        if (fi >= faceIdxToSm.size())
+        std::vector<vtkIdType> faceIdxToSm;
+        BuildCgalFaceIndexToVtkCell(sm, faceIdxToSm);
+        ApplyFeatureRegionMaskToSharpEdges(sm, featureEdges, inputFeatureMask, faceIdxToSm);
+
+        faceInMaskRegion.assign(static_cast<size_t>(sm.number_of_faces()), 0);
+        for (CGAL_Surface::Face_index f : sm.faces())
+        {
+          const std::size_t fi = static_cast<std::size_t>(f.idx());
+          if (fi >= faceIdxToSm.size())
+          {
+            continue;
+          }
+          const vtkIdType vtkC = faceIdxToSm[fi];
+          if (vtkC >= 0 && static_cast<size_t>(vtkC) < inputFeatureMask.size() &&
+            inputFeatureMask[static_cast<size_t>(vtkC)])
+          {
+            faceInMaskRegion[fi] = 1;
+          }
+        }
+        AddPatchBoundaryFeatureEdges(sm, featureEdges, faceInMaskRegion);
+      }
+
+      // Constrained vertices = endpoints of feature edges (sharp + mask boundary).
+      for (CGAL_Surface::Edge_index e : sm.edges())
+      {
+        if (!boost::get(featureEdges, e))
         {
           continue;
         }
-        const vtkIdType vtkC = faceIdxToSm[fi];
-        if (vtkC >= 0 && static_cast<size_t>(vtkC) < inputFeatureMask.size() &&
-          inputFeatureMask[static_cast<size_t>(vtkC)])
-        {
-          faceInMaskRegion[fi] = 1;
-        }
+        const CGAL_Surface::Halfedge_index h = sm.halfedge(e);
+        boost::put(vertexConstrained, sm.source(h), true);
+        boost::put(vertexConstrained, sm.target(h), true);
       }
-      AddPatchBoundaryFeatureEdges(sm, featureEdges, faceInMaskRegion);
-    }
-
-    // Constrained vertices = endpoints of feature edges (sharp + mask boundary).
-    for (CGAL_Surface::Edge_index e : sm.edges())
-    {
-      if (!boost::get(featureEdges, e))
-      {
-        continue;
-      }
-      const CGAL_Surface::Halfedge_index h = sm.halfedge(e);
-      boost::put(vertexConstrained, sm.source(h), true);
-      boost::put(vertexConstrained, sm.target(h), true);
     }
 
     // Anchor snapping (mask patch sharp endpoints) — same convention as AIR.
+    // anchorPoints is empty when detectFeatures is false, so this is a no-op.
     const double L           = InputBBoxLongestEdge(input);
     const double anchorTolL  = std::max(0.0, this->AnchorTolerance) * (L > 0.0 ? L : 1.0);
     const double anchorTolSq = std::max(1e-36, anchorTolL * anchorTolL);
@@ -742,10 +753,11 @@ int vtkSHYXShapeSmoothing::RequestData(
       fairVerts.reserve(static_cast<size_t>(sm.number_of_vertices()));
 
       const bool maskScope = (this->FairScope == FAIR_MASK_REGION_ONLY);
-      if (maskScope && !(this->FeatureMaskEnabled && inputFeatureMaskOk))
+      if (maskScope && !useMask)
       {
-        vtkWarningMacro("FairScope = MaskRegionOnly but Feature Mask is OFF / unresolved; "
-                        "falling back to all non-constrained vertices.");
+        vtkWarningMacro("FairScope = MaskRegionOnly but Feature Mask is OFF / unresolved "
+                        "(or Detect feature edges is OFF); falling back to all "
+                        "non-constrained vertices.");
       }
 
       for (CGAL_Surface::Vertex_index v : sm.vertices())
@@ -754,7 +766,7 @@ int vtkSHYXShapeSmoothing::RequestData(
         {
           continue;
         }
-        if (maskScope && this->FeatureMaskEnabled && inputFeatureMaskOk)
+        if (maskScope && useMask)
         {
           const CGAL_Surface::Halfedge_index hv = sm.halfedge(v);
           if (hv == CGAL_Surface::null_halfedge())
@@ -794,8 +806,8 @@ int vtkSHYXShapeSmoothing::RequestData(
       else if (fairVerts.size() == static_cast<size_t>(sm.number_of_vertices()))
       {
         vtkErrorMacro("Fair: every vertex would be moved (no boundary conditions). CGAL would "
-                      "shrink the mesh to the origin. Add sharp-feature constraints "
-                      "(ProtectAngle) or enable Feature Mask before fairing.");
+                      "shrink the mesh to the origin. Enable Detect feature edges, lower "
+                      "ProtectAngle, or enable Feature Mask before fairing.");
         sm.remove_property_map(vertexConstrained);
         return 0;
       }
