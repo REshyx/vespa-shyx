@@ -1,33 +1,27 @@
 <?xml version="1.0" ?>
 <ServerManagerConfiguration>
   <ProxyGroup name="filters">
-    <SourceProxy class="vtkSHYXAdaptiveIsotropicRemesher"
-                 label="SHYX Adaptive Isotropic Remesher"
-                 name="SHYXAdaptiveIsotropicRemesher">
-      <Documentation short_help="Curvature-aware CGAL remesh with min/max edge length.">
-        Adaptive isotropic remeshing using CGAL Adaptive_sizing_field (discrete curvature).
-        Edge lengths are bounded by Min/Max Edge Length; Adaptive Tolerance controls fineness
-        together with curvature. The remesh face subset is chosen either from an optional
-        vtkSelection on port 1 or from a scalar value range on the input (see Remesh region);
-        when that subset is empty, the whole surface is remeshed. Edges on the boundary between
-        remeshed and untouched triangles are constrained as feature edges (independent of the
-        Detect feature edges master toggle).
+    <SourceProxy class="vtkSHYXAdaptiveIsotropicRemesherTest"
+                 label="SHYX Adaptive Isotropic Remesher Test"
+                 name="SHYXAdaptiveIsotropicRemesherTest">
+      <Documentation short_help="Preview dual adaptive sizing maps (global/feature) without remeshing.">
+        Builds the same CGAL constrained-edge graph and evaluates the dual per-vertex sizing maps
+        (VespaAdaptiveSizeGlobal / VespaAdaptiveSizeFeature) used when FeatureSizingStandAlone is ON
+        in vtkSHYXAdaptiveIsotropicRemesher. Input geometry is unchanged (no isotropic remeshing,
+        no smooth_shape). Requires positive Feature Min/Max Edge Length and Feature Adaptive Tolerance
+        plus global sizing parameters.
 
-        Detect feature edges (master toggle): when ON (default), CGAL detect_sharp_edges and
-        feature-mask region/boundary contributions are added to the constraint maps for remesh
-        and smooth_shape. When OFF, those sources are skipped; only selection / scalar-range
-        patch boundaries constrain remeshing/smoothing, and output port 1 is empty.
-
-        Post-remesh smooth_shape uses the same Protection Angle for sharp edges; with Feature
-        Mask enabled it re-evaluates the same array/threshold on the remeshed surface (after
-        attribute interpolation) to clip features and to mark mask-region boundaries.
+        With vtkSelection on port 1 (default remesh region source), or a scalar range on the input,
+        curvature for the sizing field uses the same expanded patch as the remesher (CGAL
+        Face_filtered_graph semantics).
 
         Outputs:
-          0  Remeshed (and optionally shape-smoothed) surface.
-          1  Sharp/feature edges (lines) and (only if Shape Smooth Iterations &gt; 0) the
-             constrained feature points (verts). Empty when Detect feature edges is OFF.
-          2  Input geometry, faces passing the feature mask threshold.
-          3  Remeshed geometry, faces passing the feature mask threshold (mask patch on output).
+          0  Copy of the input surface with point arrays VespaAdaptiveSizeGlobal and
+             VespaAdaptiveSizeFeature.
+          1  Sharp/feature constraint edges as lines (same detection pipeline as the remesher when
+             Detect feature edges is ON); never adds vertex cells.
+          2  Input geometry restricted by the feature mask threshold (same as remesher).
+          3  Empty (no remeshed mask patch).
 
         Requires CGAL 6.0+.
       </Documentation>
@@ -64,12 +58,7 @@
         </DataTypeDomain>
         <Documentation>
           Optional vtkSelection used when Remesh region source is "Selection (port 1)" (default).
-          When present and non-empty, CGAL remeshing is applied only to the indicated faces (same
-          convention as SHYX Delete Selected Cells). If the port is unset or the selection yields
-          no cells, the whole surface is remeshed. When Remesh region source is "Scalar range on
-          input", this port is ignored for choosing the remesh subset. The boundary between remeshed
-          and untouched faces is constrained as feature edges for remesh and smooth_shape (with
-          Protection Angle / Feature Mask rules).
+          Scalar range mode ignores this port for the expanded patch; see vtkSHYXAdaptiveIsotropicRemesher.
         </Documentation>
         <Hints>
           <SelectionInput/>
@@ -87,11 +76,7 @@
           <Entry text="Scalar range on input" value="1"/>
         </EnumerationDomain>
         <Documentation>
-          How the patch of faces passed to CGAL isotropic remeshing is chosen. Selection uses the
-          vtkSelection input when it resolves to cells. Scalar range includes all cells whose
-          chosen array tuple magnitude lies in [Remesh range min, Remesh range max] (inclusive),
-          with the same point- vs cell-array rules as Feature Mask; port 1 is then ignored for
-          this subset.
+          Same meaning as vtkSHYXAdaptiveIsotropicRemesher: patch used for Face_filtered_graph sizing preview.
         </Documentation>
       </IntVectorProperty>
 
@@ -108,9 +93,7 @@
           </RequiredProperties>
         </ArrayListDomain>
         <Documentation>
-          Point- or cell-centered array on the input. If both exist with the same name, cell data
-          is used. A cell is in the remesh region when tuple magnitude is between Remesh range min
-          and max (inclusive).
+          Point- or cell array for scalar range mode (same rules as the main remesher).
         </Documentation>
         <Hints>
           <PropertyWidgetDecorator type="GenericDecorator"
@@ -128,9 +111,6 @@
                             default_values="0"
                             animateable="1">
         <DoubleRangeDomain name="range" min="-1e308" max="1e308"/>
-        <Documentation>
-          Inclusive lower bound on tuple magnitude for cells in the remesh region (scalar range mode).
-        </Documentation>
         <Hints>
           <PropertyWidgetDecorator type="GenericDecorator"
                                    mode="visibility"
@@ -146,9 +126,6 @@
                             default_values="1"
                             animateable="1">
         <DoubleRangeDomain name="range" min="-1e308" max="1e308"/>
-        <Documentation>
-          Inclusive upper bound; must be &gt;= Remesh range min.
-        </Documentation>
         <Hints>
           <PropertyWidgetDecorator type="GenericDecorator"
                                    mode="visibility"
@@ -164,10 +141,6 @@
                          default_values="0"
                          animateable="0">
         <BooleanDomain name="bool"/>
-        <Documentation>
-          When the range array is point-centered: if ON, every corner of a cell must fall inside
-          the range; if OFF, one in-range corner is enough. Ignored for cell-centered arrays.
-        </Documentation>
         <Hints>
           <PropertyWidgetDecorator type="GenericDecorator"
                                    mode="visibility"

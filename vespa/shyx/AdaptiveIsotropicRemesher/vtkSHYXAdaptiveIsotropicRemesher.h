@@ -6,12 +6,14 @@
  * Uses CGAL::Polygon_mesh_processing::Adaptive_sizing_field (CGAL 6.0+) as the sizing function
  * for isotropic_remeshing on faces (curvature-driven target edge length within min/max bounds).
  *
- * Optional vtkSelection on port 1 restricts CGAL isotropic remeshing to the selected faces;
- * the rest of the surface is unchanged.
- * Edges on the boundary between selected and unselected faces are also marked as
+ * Remesh region: either an optional vtkSelection on port 1 (copied/active selection) or a scalar
+ * value-range on the input polydata (point- or cell-centered array; same name resolution as the
+ * feature mask). The rest of the surface is unchanged when the region is non-empty.
+ * Edges on the boundary between remeshed and untouched faces are also marked as
  * CGAL feature/constrained edges for isotropic_remeshing and for smooth_shape (together
  * with angle-based sharp edges and optional FeatureMask filtering).
- * With no selection, the whole surface is remeshed (previous behavior).
+ * With an empty remesh region (no selection, invalid scalar-range setup, or no cells in range),
+ * the whole surface is remeshed.
  *
  * Optional post-remesh CGAL smooth_shape re-detects sharp edges on the remeshed surface.
  * When Feature mask is enabled, the same cell/point array and threshold are evaluated on the
@@ -52,6 +54,44 @@ public:
 
   /** vtkSelection input (port 1), same pattern as SHYX Delete Selected Cells. */
   void SetSourceConnection(vtkAlgorithmOutput* algOutput);
+
+  //@{
+  /**
+   * How the remesh face subset is chosen. 0 (default): vtkSelection on port 1 when connected and
+   * non-empty. 1: cells on the input whose chosen array's tuple magnitude lies in
+   * [RemeshRangeMin, RemeshRangeMax] (RemeshRange* properties); port 1 is ignored for this purpose.
+   */
+  vtkGetMacro(RemeshRegionMode, int);
+  vtkSetClampMacro(RemeshRegionMode, int, 0, 1);
+  //@}
+
+  vtkSetStringMacro(RemeshRangeArrayName);
+  vtkGetStringMacro(RemeshRangeArrayName);
+
+  //@{
+  /**
+   * Inclusive scalar range for RemeshRegionMode == 1 (tuple magnitude). Cells outside the
+   * interval are not remeshed; requires RemeshRangeMin <= RemeshRangeMax.
+   */
+  vtkGetMacro(RemeshRangeMin, double);
+  vtkSetMacro(RemeshRangeMin, double);
+  //@}
+
+  //@{
+  vtkGetMacro(RemeshRangeMax, double);
+  vtkSetMacro(RemeshRangeMax, double);
+  //@}
+
+  //@{
+  /**
+   * When the chosen remesh-range array is point-centered: if true, every corner of a cell must
+   * fall in [RemeshRangeMin, RemeshRangeMax]; if false, one in-range corner suffices. Ignored for
+   * cell-centered arrays. Default false.
+   */
+  vtkGetMacro(RemeshRangeAllScalars, bool);
+  vtkSetMacro(RemeshRangeAllScalars, bool);
+  vtkBooleanMacro(RemeshRangeAllScalars, bool);
+  //@}
 
   //@{
   /**
@@ -123,6 +163,20 @@ public:
    */
   vtkGetMacro(FeatureAdaptiveTolerance, double);
   vtkSetMacro(FeatureAdaptiveTolerance, double);
+  //@}
+
+  //@{
+  /**
+   * When FeatureSizingStandAlone is true: if ON, the feature-edge sizing map uses
+   * **3D polyline curvature** (Menger / circumcircle curvature) at vertices incident to
+   * constrained feature edges, so creases are treated as space curves. If OFF (default),
+   * feature and global maps both use **surface** principal curvatures from
+   * interpolated_corrected_curvatures (legacy behavior). Ignored when FeatureSizingStandAlone is
+   * false.
+   */
+  vtkGetMacro(FeatureSizingUsePolylineCurvature, bool);
+  vtkSetMacro(FeatureSizingUsePolylineCurvature, bool);
+  vtkBooleanMacro(FeatureSizingUsePolylineCurvature, bool);
   //@}
 
   //@{
@@ -302,6 +356,7 @@ protected:
   double FeatureMinEdgeLength      = 0.0;
   double FeatureMaxEdgeLength      = 0.0;
   double FeatureAdaptiveTolerance  = 0.01;
+  bool   FeatureSizingUsePolylineCurvature = false;
   double ProtectAngle        = 70.0;
   int    NumberOfIterations  = 3;
   int    NumberOfRelaxationSteps = 3;
@@ -320,6 +375,12 @@ protected:
   char*  FeatureMaskArrayName = nullptr;
   double FeatureMaskThreshold  = 0.0;
   bool   FeatureMaskAllScalars   = false;
+
+  int    RemeshRegionMode        = 0;
+  char*  RemeshRangeArrayName    = nullptr;
+  double RemeshRangeMin          = 0.0;
+  double RemeshRangeMax          = 1.0;
+  bool   RemeshRangeAllScalars   = false;
 
 private:
   vtkSHYXAdaptiveIsotropicRemesher(const vtkSHYXAdaptiveIsotropicRemesher&) = delete;

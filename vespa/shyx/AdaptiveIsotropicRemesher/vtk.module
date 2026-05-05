@@ -1,7 +1,7 @@
 NAME
   vtkSHYXAdaptiveIsotropicRemesher
 DESCRIPTION
-  "Curvature-aware isotropic remesh with min/max edge length (CGAL 6.0+)."
+  "Curvature-aware isotropic remesh with min/max edge length (CGAL 6.0+). Includes sizing-field preview filter."
 GROUPS
   Meshing
 DEPENDS

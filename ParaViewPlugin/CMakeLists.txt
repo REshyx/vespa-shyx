@@ -9,8 +9,11 @@ if (${VESPA_MESH_SMOOTHING})
   set(MESH_SMOOTHING_SERVER_MANAGER_XML "VESPAMeshSmoothingFilter.xml")
 endif()
 
+set(ADAPTIVE_REMESHING_SERVER_MANAGER_XML "")
 if (${VESPA_ADAPTIVE_REMESHING})
-  set(ADAPTIVE_REMESHING_SERVER_MANAGER_XML "SHYXAdaptiveIsotropicRemesher.xml")
+  list(APPEND ADAPTIVE_REMESHING_SERVER_MANAGER_XML
+    "SHYXAdaptiveIsotropicRemesher.xml"
+    "SHYXAdaptiveIsotropicRemesherTest.xml")
 endif()
 
 if(VESPA_USE_VMTK)
