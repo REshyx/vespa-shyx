@@ -121,10 +121,99 @@
         </Documentation>
       </DoubleVectorProperty>
 
+      <IntVectorProperty command="SetFeatureSizingStandAlone"
+                         name="FeatureSizingStandAlone"
+                         label="Feature sizing stand-alone"
+                         number_of_elements="1"
+                         default_values="0"
+                         animateable="0">
+        <BooleanDomain name="bool"/>
+        <Documentation>
+          When OFF (default), the whole surface uses the global Min/Max edge length and Adaptive
+          tolerance above; behavior is identical to the previous version.
+          When ON, feature/constrained edges (sharp + feature-mask region/boundary + selection
+          boundary) use a SEPARATE Adaptive_sizing_field built from Feature min/max edge length
+          and Feature adaptive tolerance, while the rest of the surface keeps using the global
+          field. Other options (Protect / Collapse / Relax constraints, Allow split / collapse /
+          flip, etc.) are unaffected. With Protect constraints ON, the feature field has no
+          practical effect because feature edges are not split nor collapsed (only the
+          tangential-relaxation target at their endpoints is altered).
+        </Documentation>
+      </IntVectorProperty>
+
+      <DoubleVectorProperty command="SetFeatureMinEdgeLength"
+                            name="FeatureMinEdgeLength"
+                            label="Feature min edge length"
+                            number_of_elements="1"
+                            default_values="0">
+        <BoundsDomain mode="scaled_extent" name="bounds_feat_min" scale_factor="0.001">
+          <RequiredProperties>
+            <Property function="Input" name="Input"/>
+          </RequiredProperties>
+        </BoundsDomain>
+        <Documentation>
+          Minimum edge length on feature/constrained edges (used only when Feature sizing
+          stand-alone is ON); must be &gt; 0. ParaView BoundsDomain (scaled_extent 0.001)
+          suggests 0.1% of the input axis-aligned bounding box longest side.
+        </Documentation>
+        <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="visibility"
+                                   property="FeatureSizingStandAlone"
+                                   value="1"/>
+        </Hints>
+      </DoubleVectorProperty>
+
+      <DoubleVectorProperty command="SetFeatureMaxEdgeLength"
+                            name="FeatureMaxEdgeLength"
+                            label="Feature max edge length"
+                            number_of_elements="1"
+                            default_values="0">
+        <BoundsDomain mode="scaled_extent" name="bounds_feat_max" scale_factor="0.05">
+          <RequiredProperties>
+            <Property function="Input" name="Input"/>
+          </RequiredProperties>
+        </BoundsDomain>
+        <Documentation>
+          Maximum edge length on feature/constrained edges (used only when Feature sizing
+          stand-alone is ON); must be &gt; Feature min edge length. ParaView BoundsDomain
+          (scaled_extent 0.05) suggests 5% of the input axis-aligned bounding box longest side.
+        </Documentation>
+        <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="visibility"
+                                   property="FeatureSizingStandAlone"
+                                   value="1"/>
+        </Hints>
+      </DoubleVectorProperty>
+
+      <DoubleVectorProperty command="SetFeatureAdaptiveTolerance"
+                            name="FeatureAdaptiveTolerance"
+                            label="Feature adaptive tolerance"
+                            number_of_elements="1"
+                            default_values="0.01">
+        <DoubleRangeDomain name="range" min="0"/>
+        <Documentation>
+          CGAL Adaptive_sizing_field tolerance for feature/constrained edges (used only when
+          Feature sizing stand-alone is ON). Smaller values refine feature edges more within
+          their Feature min/max bounds.
+        </Documentation>
+        <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="visibility"
+                                   property="FeatureSizingStandAlone"
+                                   value="1"/>
+        </Hints>
+      </DoubleVectorProperty>
+
       <PropertyGroup label="Sizing">
         <Property name="MinEdgeLength"/>
         <Property name="MaxEdgeLength"/>
         <Property name="AdaptiveTolerance"/>
+        <Property name="FeatureSizingStandAlone"/>
+        <Property name="FeatureMinEdgeLength"/>
+        <Property name="FeatureMaxEdgeLength"/>
+        <Property name="FeatureAdaptiveTolerance"/>
       </PropertyGroup>
 
       <!-- =================================================================

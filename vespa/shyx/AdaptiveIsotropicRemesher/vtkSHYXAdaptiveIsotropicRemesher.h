@@ -83,6 +83,50 @@ public:
 
   //@{
   /**
+   * When true, feature/constrained edges (sharp + feature-mask region/boundary + selection
+   * boundary -- everything written into edge_is_constrained_map) use a SEPARATE
+   * Adaptive_sizing_field built from FeatureMinEdgeLength / FeatureMaxEdgeLength /
+   * FeatureAdaptiveTolerance, while the rest of the surface keeps using the global
+   * MinEdgeLength / MaxEdgeLength / AdaptiveTolerance field. Other behavior is unchanged:
+   * RemeshProtectConstraints / RemeshCollapseConstraints / RemeshRelaxConstraints / do_split /
+   * do_collapse / do_flip still apply. With RemeshProtectConstraints=true, the feature field
+   * has no practical effect because feature edges are neither split nor collapsed (only their
+   * endpoints' tangential-relaxation target is affected via at()). Default false.
+   */
+  vtkGetMacro(FeatureSizingStandAlone, bool);
+  vtkSetMacro(FeatureSizingStandAlone, bool);
+  vtkBooleanMacro(FeatureSizingStandAlone, bool);
+  //@}
+
+  //@{
+  /**
+   * Minimum allowed edge length on feature edges when FeatureSizingStandAlone is true.
+   * Must be strictly positive.
+   */
+  vtkGetMacro(FeatureMinEdgeLength, double);
+  vtkSetMacro(FeatureMinEdgeLength, double);
+  //@}
+
+  //@{
+  /**
+   * Maximum allowed edge length on feature edges when FeatureSizingStandAlone is true.
+   * Must be greater than FeatureMinEdgeLength.
+   */
+  vtkGetMacro(FeatureMaxEdgeLength, double);
+  vtkSetMacro(FeatureMaxEdgeLength, double);
+  //@}
+
+  //@{
+  /**
+   * Adaptive_sizing_field tolerance for the feature-edge sizing field, used only when
+   * FeatureSizingStandAlone is true. Must be strictly positive.
+   */
+  vtkGetMacro(FeatureAdaptiveTolerance, double);
+  vtkSetMacro(FeatureAdaptiveTolerance, double);
+  //@}
+
+  //@{
+  /**
    * Feature edge angle threshold (degrees); protected during remeshing.
    * Default 70.
    */
@@ -254,6 +298,10 @@ protected:
   double MinEdgeLength       = 0.0;
   double MaxEdgeLength       = 0.0;
   double AdaptiveTolerance   = 0.01;
+  bool   FeatureSizingStandAlone   = false;
+  double FeatureMinEdgeLength      = 0.0;
+  double FeatureMaxEdgeLength      = 0.0;
+  double FeatureAdaptiveTolerance  = 0.01;
   double ProtectAngle        = 70.0;
   int    NumberOfIterations  = 3;
   int    NumberOfRelaxationSteps = 3;
