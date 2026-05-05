@@ -181,6 +181,22 @@ public:
 
   //@{
   /**
+   * When true, CGAL isotropic remeshing runs one iteration at a time and **re-evaluates**
+   * interpolated_corrected_curvatures before each iteration after the first (refreshing the
+   * adaptive sizing targets on the current mesh). When FeatureSizingStandAlone is OFF, a new
+   * CGAL Adaptive_sizing_field is built each pass (ICC in its constructor). When ON,
+   * FeatureAwareAdaptiveSizingField::recompute_curvature is used; refresh uses the **full**
+   * surface as the ICC domain (see vtkSHYXFeatureAwareAdaptiveSizingField.h). Default false
+   * (single CGAL call with NumberOfIterations as today). **Much slower** when iteration count
+   * is large.
+   */
+  vtkGetMacro(RemeshRecomputeCurvatureEachIteration, bool);
+  vtkSetMacro(RemeshRecomputeCurvatureEachIteration, bool);
+  vtkBooleanMacro(RemeshRecomputeCurvatureEachIteration, bool);
+  //@}
+
+  //@{
+  /**
    * Feature edge angle threshold (degrees); protected during remeshing.
    * Default 70.
    */
@@ -357,6 +373,7 @@ protected:
   double FeatureMaxEdgeLength      = 0.0;
   double FeatureAdaptiveTolerance  = 0.01;
   bool   FeatureSizingUsePolylineCurvature = false;
+  bool   RemeshRecomputeCurvatureEachIteration = false;
   double ProtectAngle        = 70.0;
   int    NumberOfIterations  = 3;
   int    NumberOfRelaxationSteps = 3;

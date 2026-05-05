@@ -233,6 +233,19 @@ int vtkSHYXAdaptiveIsotropicRemesherTest::RequestData(
       AddSelectionBoundaryUsingVtkTopology(this, input, cgalMesh->surface, featureEdges, selected);
     }
 
+    {
+      std::vector<char> iccFaceMask;
+      const std::vector<char>* iccMaskPtr = nullptr;
+      if (this->FeatureMaskEnabled && inputFeatureMaskOk)
+      {
+        std::vector<vtkIdType> faceIdxToVtkIn;
+        BuildCgalFaceIndexToVtkCell(cgalMesh->surface, faceIdxToVtkIn);
+        BuildCgalFaceMaskFromVtkCells(cgalMesh->surface, inputFeatureMask, faceIdxToVtkIn, iccFaceMask);
+        iccMaskPtr = &iccFaceMask;
+      }
+      PrepareIccVertexNormalsForAdaptiveSizing(cgalMesh->surface, iccMaskPtr);
+    }
+
     if (patchRemesh)
     {
       FeatureAwareAdaptiveSizingField<decltype(featureEdges)> sizing(this->AdaptiveTolerance,

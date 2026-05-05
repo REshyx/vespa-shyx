@@ -364,6 +364,27 @@
         </Documentation>
       </IntVectorProperty>
 
+      <IntVectorProperty command="SetRemeshRecomputeCurvatureEachIteration"
+                         name="RemeshRecomputeCurvatureEachIteration"
+                         label="Recompute curvature each iteration"
+                         number_of_elements="1"
+                         default_values="0"
+                         animateable="0"
+                         panel_visibility="advanced">
+        <BooleanDomain name="bool"/>
+        <Documentation>
+          When OFF (default), adaptive sizing runs interpolated_corrected_curvatures once before
+          remeshing (CGAL Adaptive_sizing_field / Vespa dual-field constructor); split vertices only
+          inherit sizes by averaging neighbors during remesh.
+          When ON, each remesh iteration runs separately and ICC is re-evaluated on the **current**
+          mesh before starting the next iteration (dual stand-alone field:
+          FeatureAwareAdaptiveSizingField::recompute_curvature; single field: new
+          Adaptive_sizing_field each pass). Refresh uses the **full** surface for ICC when dual
+          sizing has already built patch-expanded curvature on the first pass only. Much slower
+          when Remesh iterations is large.
+        </Documentation>
+      </IntVectorProperty>
+
       <IntVectorProperty command="SetNumberOfRelaxationSteps"
                          name="NumberOfRelaxationSteps"
                          label="Relaxation steps"
@@ -379,6 +400,7 @@
 
       <PropertyGroup label="Iterations">
         <Property name="NumberOfIterations"/>
+        <Property name="RemeshRecomputeCurvatureEachIteration"/>
         <Property name="NumberOfRelaxationSteps"/>
       </PropertyGroup>
 

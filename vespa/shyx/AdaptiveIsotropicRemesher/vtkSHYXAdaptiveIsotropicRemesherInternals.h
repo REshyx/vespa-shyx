@@ -18,7 +18,9 @@
 #include <vtkSetGet.h>
 
 #include <CGAL/Kernel/global_functions.h>
+#include <CGAL/Polygon_mesh_processing/compute_normal.h>
 #include <CGAL/Polygon_mesh_processing/detect_features.h>
+#include <CGAL/boost/graph/helpers.h>
 #include <CGAL/boost/graph/iterator.h>
 #include <CGAL/property_map.h>
 
@@ -364,6 +366,91 @@ inline void BuildCgalFaceIndexToVtkCell(const CGAL_Surface& sm, std::vector<vtkI
     {
       faceIdxToVtkCell[idx] = vtkCell++;
     }
+  }
+}
+
+/** Per-CGAL-face mask from VTK cell mask (same indexing as BuildCgalFaceIndexToVtkCell). */
+inline void BuildCgalFaceMaskFromVtkCells(const CGAL_Surface& mesh,
+  const std::vector<char>& vtkCellMask, const std::vector<vtkIdType>& faceIdxToVtkCell,
+  std::vector<char>& outCgalFaceMask)
+{
+  outCgalFaceMask.assign(static_cast<size_t>(mesh.number_of_faces()), 0);
+  for (CGAL_Surface::Face_index f : mesh.faces())
+  {
+    const std::size_t fi = static_cast<std::size_t>(f.idx());
+    if (fi >= faceIdxToVtkCell.size())
+    {
+      continue;
+    }
+    const vtkIdType vtkC = faceIdxToVtkCell[fi];
+    if (vtkC >= 0 && static_cast<size_t>(vtkC) < vtkCellMask.size())
+    {
+      outCgalFaceMask[fi] = vtkCellMask[static_cast<size_t>(vtkC)];
+    }
+  }
+}
+
+/**
+ * Vertex normals for CGAL interpolated_corrected_curvatures on @a mesh
+ * (`v:vespa_icc_normal`).
+ *
+ * 1) `compute_vertex_normals` — area-weighted blend of **all** incident triangle normals (CGAL
+ *    default; no angle-based crease splitting).
+ * 2) If @a faceInMaskByFaceIdx is set: every vertex incident to at least one masked face gets
+ *    its normal **replaced** by the normalized sum of normals of **masked incident faces only**
+ *    (non-mask faces touching that vertex are ignored).
+ *
+ * @param faceInMaskByFaceIdx optional, indexed by `Face_index::idx()`, length ≥ face count.
+ */
+inline void PrepareIccVertexNormalsForAdaptiveSizing(
+  CGAL_Surface& mesh, const std::vector<char>* faceInMaskByFaceIdx)
+{
+  using Vertex_index = CGAL_Surface::Vertex_index;
+  using Face_index = CGAL_Surface::Face_index;
+  using Vector_3 = CGAL_Kernel::Vector_3;
+
+  auto vn_pair =
+    mesh.template add_property_map<Vertex_index, Vector_3>("v:vespa_icc_normal", Vector_3(0, 0, 0));
+  const auto vn_map = vn_pair.first;
+
+  // CGAL 6.x: pass the property map as the 2nd argument (not parameters::vertex_normal_map alone).
+  pmp_int::compute_vertex_normals(mesh, vn_map);
+
+  if (faceInMaskByFaceIdx == nullptr || faceInMaskByFaceIdx->empty())
+  {
+    return;
+  }
+
+  const std::size_t maskSz = faceInMaskByFaceIdx->size();
+  for (Vertex_index v : mesh.vertices())
+  {
+    Vector_3 maskSum(0, 0, 0);
+    bool touchesMask = false;
+    for (CGAL_Surface::Halfedge_index h : CGAL::halfedges_around_target(v, mesh))
+    {
+      const Face_index f = mesh.face(h);
+      if (f == CGAL_Surface::null_face())
+      {
+        continue;
+      }
+      const std::size_t fi = static_cast<std::size_t>(f.idx());
+      if (fi >= maskSz || !(*faceInMaskByFaceIdx)[fi])
+      {
+        continue;
+      }
+      touchesMask = true;
+      maskSum = maskSum + pmp_int::compute_face_normal(f, mesh);
+    }
+    if (!touchesMask)
+    {
+      continue;
+    }
+    const double sl = CGAL::to_double(maskSum.squared_length());
+    if (!(sl > 1e-30))
+    {
+      continue;
+    }
+    put(vn_map, v, maskSum / std::sqrt(sl));
   }
 }
 

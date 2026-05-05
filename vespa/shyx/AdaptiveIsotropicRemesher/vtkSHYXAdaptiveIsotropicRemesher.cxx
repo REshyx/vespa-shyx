@@ -94,6 +94,8 @@ void vtkSHYXAdaptiveIsotropicRemesher::PrintSelf(ostream& os, vtkIndent indent)
   os << indent << "FeatureAdaptiveTolerance: " << this->FeatureAdaptiveTolerance << std::endl;
   os << indent << "FeatureSizingUsePolylineCurvature: "
      << (this->FeatureSizingUsePolylineCurvature ? "on" : "off") << std::endl;
+  os << indent << "RemeshRecomputeCurvatureEachIteration: "
+     << (this->RemeshRecomputeCurvatureEachIteration ? "on" : "off") << std::endl;
   os << indent << "ProtectAngle: " << this->ProtectAngle << std::endl;
   os << indent << "NumberOfIterations: " << this->NumberOfIterations << std::endl;
   os << indent << "NumberOfRelaxationSteps: " << this->NumberOfRelaxationSteps << std::endl;
@@ -355,8 +357,22 @@ int vtkSHYXAdaptiveIsotropicRemesher::RequestData(
       AddSelectionBoundaryUsingVtkTopology(this, input, cgalMesh->surface, featureEdges, selected);
     }
 
-    const auto remeshNp = [&]() {
-      return pmp::parameters::number_of_iterations(static_cast<unsigned int>(this->NumberOfIterations))
+    if (this->FeatureSizingStandAlone)
+    {
+      std::vector<char> iccFaceMask;
+      const std::vector<char>* iccMaskPtr = nullptr;
+      if (this->FeatureMaskEnabled && inputFeatureMaskOk)
+      {
+        std::vector<vtkIdType> faceIdxToVtkIn;
+        BuildCgalFaceIndexToVtkCell(cgalMesh->surface, faceIdxToVtkIn);
+        BuildCgalFaceMaskFromVtkCells(cgalMesh->surface, inputFeatureMask, faceIdxToVtkIn, iccFaceMask);
+        iccMaskPtr = &iccFaceMask;
+      }
+      PrepareIccVertexNormalsForAdaptiveSizing(cgalMesh->surface, iccMaskPtr);
+    }
+
+    const auto remeshNp = [&](unsigned int iteration_count) {
+      return pmp::parameters::number_of_iterations(iteration_count)
         .number_of_relaxation_steps(static_cast<unsigned int>(this->NumberOfRelaxationSteps))
         .protect_constraints(this->RemeshProtectConstraints)
         .collapse_constraints(this->RemeshCollapseConstraints)
@@ -366,6 +382,9 @@ int vtkSHYXAdaptiveIsotropicRemesher::RequestData(
         .do_flip(this->RemeshDoFlip)
         .edge_is_constrained_map(featureEdges);
     };
+
+    const unsigned int remeshIterations =
+      static_cast<unsigned int>(std::max(0, this->NumberOfIterations));
 
     // Build sizing and run isotropic_remeshing. With FeatureSizingStandAlone off this is the
     // original single-field path (unchanged). With it on we use FeatureAwareAdaptiveSizingField,
@@ -377,7 +396,71 @@ int vtkSHYXAdaptiveIsotropicRemesher::RequestData(
     // a dynamic_vertex_property_t<FT> map and the second one would silently overwrite the
     // first's per-vertex targets. The face_range fed to the field matches the range passed
     // to isotropic_remeshing, as required by Adaptive_sizing_field semantics.
-    if (patchRemesh)
+    //
+    // Optional RemeshRecomputeCurvatureEachIteration: one CGAL iteration per pass and refresh ICC
+    // (dual field: recompute_curvature; single field: reconstruct Adaptive_sizing_field).
+    if (this->RemeshRecomputeCurvatureEachIteration)
+    {
+      if (patchRemesh)
+      {
+        if (this->FeatureSizingStandAlone)
+        {
+          FeatureAwareAdaptiveSizingField<decltype(featureEdges)> sizing(this->AdaptiveTolerance,
+            std::make_pair(minLen, maxLen), this->FeatureAdaptiveTolerance,
+            std::make_pair(featMinLen, featMaxLen), remeshFaces, cgalMesh->surface, featureEdges,
+            this->FeatureSizingUsePolylineCurvature);
+          for (unsigned int pass = 0; pass < remeshIterations; ++pass)
+          {
+            if (pass > 0)
+            {
+              sizing.recompute_curvature(cgalMesh->surface);
+            }
+            pmp::isotropic_remeshing(
+              remeshFaces, sizing, cgalMesh->surface, remeshNp(1));
+          }
+        }
+        else
+        {
+          for (unsigned int pass = 0; pass < remeshIterations; ++pass)
+          {
+            pmp::Adaptive_sizing_field sizing(this->AdaptiveTolerance,
+              std::make_pair(minLen, maxLen), remeshFaces, cgalMesh->surface);
+            pmp::isotropic_remeshing(
+              remeshFaces, sizing, cgalMesh->surface, remeshNp(1));
+          }
+        }
+      }
+      else
+      {
+        if (this->FeatureSizingStandAlone)
+        {
+          FeatureAwareAdaptiveSizingField<decltype(featureEdges)> sizing(this->AdaptiveTolerance,
+            std::make_pair(minLen, maxLen), this->FeatureAdaptiveTolerance,
+            std::make_pair(featMinLen, featMaxLen), cgalMesh->surface.faces(), cgalMesh->surface,
+            featureEdges, this->FeatureSizingUsePolylineCurvature);
+          for (unsigned int pass = 0; pass < remeshIterations; ++pass)
+          {
+            if (pass > 0)
+            {
+              sizing.recompute_curvature(cgalMesh->surface);
+            }
+            pmp::isotropic_remeshing(
+              cgalMesh->surface.faces(), sizing, cgalMesh->surface, remeshNp(1));
+          }
+        }
+        else
+        {
+          for (unsigned int pass = 0; pass < remeshIterations; ++pass)
+          {
+            pmp::Adaptive_sizing_field sizing(this->AdaptiveTolerance,
+              std::make_pair(minLen, maxLen), cgalMesh->surface.faces(), cgalMesh->surface);
+            pmp::isotropic_remeshing(
+              cgalMesh->surface.faces(), sizing, cgalMesh->surface, remeshNp(1));
+          }
+        }
+      }
+    }
+    else if (patchRemesh)
     {
       if (this->FeatureSizingStandAlone)
       {
@@ -385,13 +468,13 @@ int vtkSHYXAdaptiveIsotropicRemesher::RequestData(
           std::make_pair(minLen, maxLen), this->FeatureAdaptiveTolerance,
           std::make_pair(featMinLen, featMaxLen), remeshFaces, cgalMesh->surface, featureEdges,
           this->FeatureSizingUsePolylineCurvature);
-        pmp::isotropic_remeshing(remeshFaces, sizing, cgalMesh->surface, remeshNp());
+        pmp::isotropic_remeshing(remeshFaces, sizing, cgalMesh->surface, remeshNp(remeshIterations));
       }
       else
       {
         pmp::Adaptive_sizing_field sizing(this->AdaptiveTolerance,
           std::make_pair(minLen, maxLen), remeshFaces, cgalMesh->surface);
-        pmp::isotropic_remeshing(remeshFaces, sizing, cgalMesh->surface, remeshNp());
+        pmp::isotropic_remeshing(remeshFaces, sizing, cgalMesh->surface, remeshNp(remeshIterations));
       }
     }
     else
@@ -402,14 +485,15 @@ int vtkSHYXAdaptiveIsotropicRemesher::RequestData(
           std::make_pair(minLen, maxLen), this->FeatureAdaptiveTolerance,
           std::make_pair(featMinLen, featMaxLen), cgalMesh->surface.faces(), cgalMesh->surface,
           featureEdges, this->FeatureSizingUsePolylineCurvature);
-        pmp::isotropic_remeshing(cgalMesh->surface.faces(), sizing, cgalMesh->surface, remeshNp());
+        pmp::isotropic_remeshing(
+          cgalMesh->surface.faces(), sizing, cgalMesh->surface, remeshNp(remeshIterations));
       }
       else
       {
         pmp::Adaptive_sizing_field sizing(this->AdaptiveTolerance,
           std::make_pair(minLen, maxLen), cgalMesh->surface.faces(), cgalMesh->surface);
         pmp::isotropic_remeshing(
-          cgalMesh->surface.faces(), sizing, cgalMesh->surface, remeshNp());
+          cgalMesh->surface.faces(), sizing, cgalMesh->surface, remeshNp(remeshIterations));
       }
     }
 

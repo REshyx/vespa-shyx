@@ -4,6 +4,7 @@
 #include "vtkCGALHelper.h"
 
 #include <CGAL/Kernel_traits.h>
+#include <CGAL/Polygon_mesh_processing/compute_normal.h>
 #include <CGAL/Polygon_mesh_processing/interpolated_corrected_curvatures.h>
 #include <CGAL/boost/graph/Face_filtered_graph.h>
 #include <CGAL/boost/graph/iterator.h>
@@ -59,6 +60,17 @@ namespace pmp_sf = CGAL::Polygon_mesh_processing;
  * curvatures, replace map_f_ at feature vertices with Dunyach sizing from **Menger curvature**
  * of the sharp polyline (max over neighbor pairs), treating creases as 3D curves. Degree-1
  * polyline vertices fall back to surface curvature.
+ *
+ * Between CGAL remesh iterations, `recompute_curvature(mesh)` may be called to run ICC again on the
+ * **current full mesh** and refill both maps (polyline pass included when enabled). Patch remesh
+ * still uses the expanded Face_filtered_graph only for the **initial** constructor pass; refresh
+ * uses the whole surface so face indices stay valid after topology changes.
+ *
+ * ICC vertex normals: build property `v:vespa_icc_normal` with
+ * `PrepareIccVertexNormalsForAdaptiveSizing` before constructing this object. Mask-adjacent
+ * vertices use mask-face normals only (see vtkSHYXAdaptiveIsotropicRemesherInternals.h).
+ * `recompute_curvature` refreshes that map with plain `compute_vertex_normals` (VTK mask indices
+ * are not tracked across remesh topology changes).
  */
 template <typename FeatureEdgeMap>
 class FeatureAwareAdaptiveSizingField
@@ -108,6 +120,22 @@ public:
       CGAL::Face_filtered_graph<CGAL_Surface> ffg(mesh, sel);
       compute_sizes_(ffg, mesh);
     }
+  }
+
+  /**
+   * Re-run interpolated_corrected_curvatures on the current geometry and refill map_g_ / map_f_.
+   * Uses the entire mesh as the curvature domain (see class comment for patch vs refresh).
+   * Refreshes `v:vespa_icc_normal` with CGAL `compute_vertex_normals` when present.
+   */
+  void recompute_curvature(CGAL_Surface& mesh)
+  {
+    const auto vn_opt =
+      mesh.property_map<vertex_descriptor, CGAL_Kernel::Vector_3>("v:vespa_icc_normal");
+    if (vn_opt.has_value())
+    {
+      pmp_sf::compute_vertex_normals(mesh, *vn_opt);
+    }
+    compute_sizes_(mesh, mesh);
   }
 
   FT at(const vertex_descriptor v, const CGAL_Surface& sm) const
@@ -198,8 +226,19 @@ private:
     using Principal = pmp_sf::Principal_curvatures_and_directions<Kernel>;
     using CTag = CGAL::dynamic_vertex_property_t<Principal>;
     auto curv_map = get(CTag(), fg);
-    pmp_sf::interpolated_corrected_curvatures(
-      fg, pmp_sf::parameters::vertex_principal_curvatures_and_directions_map(curv_map));
+    const auto vn_opt =
+      mesh.property_map<vertex_descriptor, CGAL_Kernel::Vector_3>("v:vespa_icc_normal");
+    if (vn_opt.has_value())
+    {
+      pmp_sf::interpolated_corrected_curvatures(fg,
+        pmp_sf::parameters::vertex_principal_curvatures_and_directions_map(curv_map)
+          .vertex_normal_map(*vn_opt));
+    }
+    else
+    {
+      pmp_sf::interpolated_corrected_curvatures(
+        fg, pmp_sf::parameters::vertex_principal_curvatures_and_directions_map(curv_map));
+    }
 
     for (auto v : vertices(fg))
     {
