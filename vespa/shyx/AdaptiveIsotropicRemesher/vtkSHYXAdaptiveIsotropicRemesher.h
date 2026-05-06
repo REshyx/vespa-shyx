@@ -3,34 +3,34 @@
  * @brief   Curvature-aware isotropic remesh with min/max edge length, tolerance, and configurable
  *          relaxation steps per iteration.
  *
- * Uses CGAL::Polygon_mesh_processing::Adaptive_sizing_field (CGAL 6.0+) as the sizing function
- * for isotropic_remeshing on faces (curvature-driven target edge length within min/max bounds).
+ * Uses CGAL Polygon_mesh_processing isotropic remeshing with **Vespa
+ * FeatureAwareAdaptiveSizingField** always (custom interpolated_corrected_curvatures math with
+ * per-vertex caps on dual named CGAL property maps — not CGAL `Adaptive_sizing_field`). After
+ * `PrepareIccVertexNormalsForAdaptiveSizing` (CGAL area-weighted `v:vespa_icc_normal`, and dual
+ * per-vertex normals when the Feature mask applies), curvature-driven targets mirror CGAL's ICC
+ * sizing formula inside min/max bounds. When FeatureSizingStandAlone is OFF, values written to the
+ * feature map reuse the global tolerance/min/max so `v:vespa_size_feature` equals
+ * `v:vespa_size_global` everywhere.
  *
  * Remesh region: either an optional vtkSelection on port 1 (copied/active selection) or a scalar
  * value-range on the input polydata (point- or cell-centered array; same name resolution as the
  * feature mask). The rest of the surface is unchanged when the region is non-empty.
  * Edges on the boundary between remeshed and untouched faces are also marked as
- * CGAL feature/constrained edges for isotropic_remeshing and for smooth_shape (together
- * with angle-based sharp edges and optional FeatureMask filtering).
+ * CGAL feature/constrained edges for isotropic_remeshing (together with angle-based sharp edges
+ * and optional FeatureMask filtering).
  * With an empty remesh region (no selection, invalid scalar-range setup, or no cells in range),
  * the whole surface is remeshed.
  *
- * Optional post-remesh CGAL smooth_shape re-detects sharp edges on the remeshed surface.
- * When Feature mask is enabled, the same cell/point array and threshold are evaluated on the
- * remeshed surface (after attribute interpolation) to clip sharp features and to mark mask-region
- * boundary edges. smooth_shape anchor positions from the mask use sharp endpoints on the
- * **remeshed** threshold patch (not the input port 2 patch). Selection boundary anchors still use
- * input topology.
- *
- * Output port 0: remeshed (and optionally shape-smoothed) vtkPolyData.
- * Output port 1: **Lines** (sharp feature edges) use the **input** mask region (port 2) when the
- * feature mask is valid and non-empty; otherwise the full remeshed surface (with optional mask
- * filtering on the output). **Vertices** (feature points) are added only if **ShapeSmoothingIterations
- * &gt; 0**: with feature mask, from the remeshed threshold patch (port 3); without mask, from the
- * full remeshed surface. If there is no smooth step, port 1 has no vertex cells.
+ * Output port 0: remeshed vtkPolyData.
+ * Output port 1: **Lines** only (sharp feature edges). Uses the **input** mask region (port 2) when
+ * the feature mask is valid and non-empty; otherwise the full remeshed surface (with optional mask
+ * filtering on the output). No vertex cells. Empty when Detect feature edges is OFF.
  * Output port 2: input geometry, faces passing the feature mask threshold (for remesh constraints).
- * Output port 3: same as port 0 after remesh/smooth, faces passing the mask threshold (remeshed
- * mask patch for visualization and for smooth anchor geometry when Feature Mask is on).
+ * Output port 3: **pre-remesh** copy of the input with diagnostic point arrays aligned with the
+ * remesher/Test preview (`v:vespa_icc_normal` is not exported): VespaAdaptiveSizeGlobal /
+ * VespaAdaptiveSizeFeature from named mesh maps (`v:vespa_size_*`, equal per vertex when
+ * FeatureSizingStandAlone is OFF), VespaIccPrincipalCurvatureMin/Max plus uncapped sizing arrays from
+ * a second ICC vertex pass (feature uncapped uses the mirrored feature tolerance when standalone is OFF).
  *
  * Requires CGAL 6.0 or newer.
  */
@@ -113,9 +113,10 @@ public:
 
   //@{
   /**
-   * Error tolerance passed to CGAL Adaptive_sizing_field (together with
-   * discrete curvature). Smaller values generally yield finer meshes within
-   * the min/max bounds. Must be strictly positive.
+   * Tolerance passed to Vespa ICC adaptive sizing (global / non-feature edges via
+   * `FeatureAwareAdaptiveSizingField`); together with interpolated corrected curvature and Min/Max
+   * edge length. Smaller values generally yield finer meshes within the bounds. Must be strictly
+   * positive.
    */
   vtkGetMacro(AdaptiveTolerance, double);
   vtkSetMacro(AdaptiveTolerance, double);
@@ -123,15 +124,17 @@ public:
 
   //@{
   /**
-   * When true, feature/constrained edges (sharp + feature-mask region/boundary + selection
-   * boundary -- everything written into edge_is_constrained_map) use a SEPARATE
-   * Adaptive_sizing_field built from FeatureMinEdgeLength / FeatureMaxEdgeLength /
-   * FeatureAdaptiveTolerance, while the rest of the surface keeps using the global
-   * MinEdgeLength / MaxEdgeLength / AdaptiveTolerance field. Other behavior is unchanged:
-   * RemeshProtectConstraints / RemeshCollapseConstraints / RemeshRelaxConstraints / do_split /
-   * do_collapse / do_flip still apply. With RemeshProtectConstraints=true, the feature field
-   * has no practical effect because feature edges are neither split nor collapsed (only their
-   * endpoints' tangential-relaxation target is affected via at()). Default false.
+   * When true, constrained/feature edges dispatch to **`v:vespa_size_feature`** built from
+   * FeatureMinEdgeLength / FeatureMaxEdgeLength / FeatureAdaptiveTolerance while other edges use the
+   * global sizing map (**`v:vespa_size_global`** from MinEdgeLength / MaxEdgeLength /
+   * AdaptiveTolerance). When false, the constructor receives the global tolerances/length bounds for
+   * both maps **so vertex targets are identical** on every vertex (dual maps still exist; CGAL
+   * remesh only picks one map per edge by feature flag).
+   *
+   * RemeshProtectConstraints / collapse / relaxation / flip / split options are unchanged.
+   * With RemeshProtectConstraints=true, differing feature sizing has little effect on splits/collapses
+   * because constrained edges do not subdivide/compress (only tangential relaxation sees `at()`).
+   * Default false.
    */
   vtkGetMacro(FeatureSizingStandAlone, bool);
   vtkSetMacro(FeatureSizingStandAlone, bool);
@@ -140,8 +143,9 @@ public:
 
   //@{
   /**
-   * Minimum allowed edge length on feature edges when FeatureSizingStandAlone is true.
-   * Must be strictly positive.
+   * Minimum allowed edge length mapped into **`v:vespa_size_feature`** when FeatureSizingStandAlone
+   * is true (must be strictly positive in that mode). When standalone is false this property is ignored
+   * and the global MinEdgeLength is reused for the feature map.
    */
   vtkGetMacro(FeatureMinEdgeLength, double);
   vtkSetMacro(FeatureMinEdgeLength, double);
@@ -149,8 +153,8 @@ public:
 
   //@{
   /**
-   * Maximum allowed edge length on feature edges when FeatureSizingStandAlone is true.
-   * Must be greater than FeatureMinEdgeLength.
+   * Maximum allowed edge length for the feature sizing map when FeatureSizingStandAlone is true
+   * (must be greater than FeatureMinEdgeLength). Ignored when standalone is false; globals are reused.
    */
   vtkGetMacro(FeatureMaxEdgeLength, double);
   vtkSetMacro(FeatureMaxEdgeLength, double);
@@ -158,8 +162,8 @@ public:
 
   //@{
   /**
-   * Adaptive_sizing_field tolerance for the feature-edge sizing field, used only when
-   * FeatureSizingStandAlone is true. Must be strictly positive.
+   * Tolerance for the feature sizing map when FeatureSizingStandAlone is true (strictly positive).
+   * When standalone is false AdaptiveTolerance is reused for both maps.
    */
   vtkGetMacro(FeatureAdaptiveTolerance, double);
   vtkSetMacro(FeatureAdaptiveTolerance, double);
@@ -167,14 +171,11 @@ public:
 
   //@{
   /**
-   * When true, CGAL isotropic remeshing runs one iteration at a time and **re-evaluates**
-   * interpolated_corrected_curvatures before each iteration after the first (refreshing the
-   * adaptive sizing targets on the current mesh). When FeatureSizingStandAlone is OFF, a new
-   * CGAL Adaptive_sizing_field is built each pass (ICC in its constructor). When ON,
-   * FeatureAwareAdaptiveSizingField::recompute_curvature is used; refresh uses the **full**
-   * surface as the ICC domain (see vtkSHYXFeatureAwareAdaptiveSizingField.h). Default false
-   * (single CGAL call with NumberOfIterations as today). **Much slower** when iteration count
-   * is large.
+   * When true, CGAL isotropic remeshing performs **one CGAL iteration per pass** and calls
+   * FeatureAwareAdaptiveSizingField::recompute_curvature before each subsequent pass so ICC is
+   * re-evaluated on the updated mesh (**full surface** ICC domain; see vtkSHYXFeatureAwareAdaptiveSizingField).
+   * When false (default), ICC runs in the sizing-field constructor immediately before multi-iteration remesh,
+   * and splits only interpolate neighbor targets. Much slower when the iteration count is large.
    */
   vtkGetMacro(RemeshRecomputeCurvatureEachIteration, bool);
   vtkSetMacro(RemeshRecomputeCurvatureEachIteration, bool);
@@ -210,24 +211,6 @@ public:
 
   //@{
   /**
-   * Post-remesh CGAL smooth_shape iteration count. 0 disables shape smoothing.
-   * Default 0.
-   */
-  vtkGetMacro(ShapeSmoothingIterations, int);
-  vtkSetMacro(ShapeSmoothingIterations, int);
-  //@}
-
-  //@{
-  /**
-   * CGAL smooth_shape time step (smoothing speed). Used only when
-   * ShapeSmoothingIterations > 0. Typical range about 1e-6 to 1. Default 1e-4.
-   */
-  vtkGetMacro(ShapeSmoothingTimeStep, double);
-  vtkSetMacro(ShapeSmoothingTimeStep, double);
-  //@}
-
-  //@{
-  /**
    * After detect_sharp_edges, optionally remove interior sharp edges on one side of the
    * signed dihedral (CGAL::approximate_dihedral_angle). 0 = none; 1 = exclude concave
    * (signed angle &lt; 0); 2 = exclude convex (signed angle &gt; 0). Boundary edges are
@@ -242,7 +225,7 @@ public:
    * CGAL protect_constraints for isotropic_remeshing. When true, edges marked constrained in
    * edge_is_constrained_map (here: sharp features) are neither split nor collapsed. When false,
    * constrained edges may be split or collapsed per CGAL (subject to collapse_constraints); sizing
-   * is still Adaptive_sizing_field on the remeshed patch. Default true.
+   * is still curvature-driven Vespa ICC on the remeshed patch. Default true.
    */
   vtkGetMacro(RemeshProtectConstraints, bool);
   vtkSetMacro(RemeshProtectConstraints, bool);
@@ -295,10 +278,10 @@ public:
    * Master switch for sharp-edge / feature-mask constraints.
    * When true (default), CGAL detect_sharp_edges (with ProtectAngle / SharpFeatureSideFilter)
    * and feature-mask region/boundary contributions are added to edge_is_constrained_map for
-   * isotropic_remeshing and to vertex_is_constrained_map for smooth_shape; ProtectAngle,
-   * SharpFeatureSideFilter, FeatureMaskEnabled, and related properties take effect.
-   * When false, those sources do NOT write feature-edge constraints; remesh and smooth_shape
-   * see only vtkSelection-boundary constraints (when a selection input is connected).
+   * isotropic_remeshing; ProtectAngle, SharpFeatureSideFilter, FeatureMaskEnabled, and related
+   * properties take effect.
+   * When false, those sources do NOT write feature-edge constraints; remesh sees only
+   * vtkSelection-boundary constraints (when a selection input is connected).
    * vtkSelection behavior is independent of this toggle.
    */
   vtkGetMacro(DetectFeatureEdges, bool);
@@ -362,8 +345,6 @@ protected:
   double ProtectAngle        = 70.0;
   int    NumberOfIterations  = 3;
   int    NumberOfRelaxationSteps = 3;
-  int    ShapeSmoothingIterations = 0;
-  double ShapeSmoothingTimeStep   = 1e-4;
   int    SharpFeatureSideFilter   = 0;
   bool   RemeshProtectConstraints   = true;
   bool   RemeshCollapseConstraints  = true;

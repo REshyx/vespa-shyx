@@ -24,15 +24,50 @@
 
 #include <CGAL/Kernel/global_functions.h>
 
+#include <algorithm>
+#include <cmath>
 #include <exception>
 #include <limits>
 #include <memory>
 #include <set>
 #include <vector>
 
+namespace
+{
+/**
+ * Same ICC sizing formula as FeatureAwareAdaptiveSizingField::vertex_size_, but without clamping to
+ * [short, long]: edge_length^2 = 6*tol/|κ|max - 3*tol^2. Returns NaN when curvature is missing,
+ * |κ|max <= 0, or the expression is non-positive (no real length in this model).
+ */
+double VespaUncappedAdaptiveEdgeLengthFromTol(double tol, double kmin, double kmax)
+{
+  if (std::isnan(kmin) || std::isnan(kmax))
+  {
+    return std::numeric_limits<double>::quiet_NaN();
+  }
+  const double maxAbs = (std::max)(std::abs(kmin), std::abs(kmax));
+  if (maxAbs <= 0.0)
+  {
+    return std::numeric_limits<double>::quiet_NaN();
+  }
+  const double vsq = 6.0 * tol / maxAbs - 3.0 * tol * tol;
+  if (vsq <= 0.0)
+  {
+    return std::numeric_limits<double>::quiet_NaN();
+  }
+  return std::sqrt(vsq);
+}
+} // namespace
+
 vtkStandardNewMacro(vtkSHYXAdaptiveIsotropicRemesherTest);
 
 using namespace vespa_shyx_air_remesh_internals;
+
+//------------------------------------------------------------------------------
+vtkSHYXAdaptiveIsotropicRemesherTest::vtkSHYXAdaptiveIsotropicRemesherTest()
+{
+  this->SetNumberOfOutputPorts(3);
+}
 
 //------------------------------------------------------------------------------
 int vtkSHYXAdaptiveIsotropicRemesherTest::RequestData(
@@ -42,9 +77,8 @@ int vtkSHYXAdaptiveIsotropicRemesherTest::RequestData(
   vtkPolyData* output = vtkPolyData::GetData(outputVector, 0);
   vtkPolyData* outputFeatures = vtkPolyData::GetData(outputVector, 1);
   vtkPolyData* outputMaskPatch = vtkPolyData::GetData(outputVector, 2);
-  vtkPolyData* outputMaskPatchRemeshed = vtkPolyData::GetData(outputVector, 3);
 
-  if (!input || !output || !outputFeatures || !outputMaskPatch || !outputMaskPatchRemeshed)
+  if (!input || !output || !outputFeatures || !outputMaskPatch)
   {
     vtkErrorMacro("Missing input or output.");
     return 0;
@@ -59,16 +93,6 @@ int vtkSHYXAdaptiveIsotropicRemesherTest::RequestData(
   {
     vtkErrorMacro("FeatureAdaptiveTolerance must be positive for sizing preview (got "
       << this->FeatureAdaptiveTolerance << ").");
-    return 0;
-  }
-  if (this->ShapeSmoothingIterations < 0)
-  {
-    vtkErrorMacro("ShapeSmoothingIterations must be >= 0, got " << this->ShapeSmoothingIterations);
-    return 0;
-  }
-  if (this->ShapeSmoothingIterations > 0 && this->ShapeSmoothingTimeStep <= 0.0)
-  {
-    vtkErrorMacro("ShapeSmoothingTimeStep must be positive when shape smoothing is enabled.");
     return 0;
   }
 
@@ -284,30 +308,9 @@ int vtkSHYXAdaptiveIsotropicRemesherTest::RequestData(
       szFeature->SetValue(pid, boost::get(*optPf, vx));
     }
 
-    vtkNew<vtkDoubleArray> iccNormals;
-    iccNormals->SetName("VespaIccVertexNormal");
-    iccNormals->SetNumberOfComponents(3);
-    iccNormals->SetNumberOfTuples(nPts);
     const auto optVn =
       cgalMesh->surface.property_map<CGAL_Surface::Vertex_index, CGAL_Kernel::Vector_3>(
         "v:vespa_icc_normal");
-    if (optVn.has_value())
-    {
-      for (vtkIdType pid = 0; pid < nPts; ++pid)
-      {
-        const CGAL_Surface::Vertex_index vx(static_cast<std::size_t>(pid));
-        const CGAL_Kernel::Vector_3 nvec = boost::get(*optVn, vx);
-        iccNormals->SetTuple3(pid, CGAL::to_double(nvec.x()), CGAL::to_double(nvec.y()),
-          CGAL::to_double(nvec.z()));
-      }
-    }
-    else
-    {
-      for (vtkIdType pid = 0; pid < nPts; ++pid)
-      {
-        iccNormals->SetTuple3(pid, 0.0, 0.0, 0.0);
-      }
-    }
 
     const vtkIdType nCells = input->GetNumberOfCells();
     vtkNew<vtkDoubleArray> mu0Cell;
@@ -368,6 +371,15 @@ int vtkSHYXAdaptiveIsotropicRemesherTest::RequestData(
     ComputeIccVertexCurvatureScalars(cgalMesh->surface, patchRemesh, remeshFaces, vnForIcc,
       iccKmin, iccKmax, iccKmean, iccKgauss);
 
+    vtkNew<vtkDoubleArray> szGlobalUncapped;
+    vtkNew<vtkDoubleArray> szFeatureUncapped;
+    szGlobalUncapped->SetName("VespaAdaptiveSizeGlobalUncapped");
+    szFeatureUncapped->SetName("VespaAdaptiveSizeFeatureUncapped");
+    szGlobalUncapped->SetNumberOfComponents(1);
+    szFeatureUncapped->SetNumberOfComponents(1);
+    szGlobalUncapped->SetNumberOfTuples(nPts);
+    szFeatureUncapped->SetNumberOfTuples(nPts);
+
     vtkNew<vtkDoubleArray> iccPrincipalMin;
     vtkNew<vtkDoubleArray> iccPrincipalMax;
     vtkNew<vtkDoubleArray> iccMeanH;
@@ -397,12 +409,18 @@ int vtkSHYXAdaptiveIsotropicRemesherTest::RequestData(
       iccPrincipalMax->SetValue(pid, kM);
       iccMeanH->SetValue(pid, kmn);
       iccGaussianK->SetValue(pid, kg);
+
+      szGlobalUncapped->SetValue(
+        pid, VespaUncappedAdaptiveEdgeLengthFromTol(this->AdaptiveTolerance, km, kM));
+      szFeatureUncapped->SetValue(
+        pid, VespaUncappedAdaptiveEdgeLengthFromTol(this->FeatureAdaptiveTolerance, km, kM));
     }
 
     output->DeepCopy(input);
     output->GetPointData()->AddArray(szGlobal);
     output->GetPointData()->AddArray(szFeature);
-    output->GetPointData()->AddArray(iccNormals);
+    output->GetPointData()->AddArray(szGlobalUncapped);
+    output->GetPointData()->AddArray(szFeatureUncapped);
     output->GetPointData()->AddArray(iccPrincipalMin);
     output->GetPointData()->AddArray(iccPrincipalMax);
     output->GetPointData()->AddArray(iccMeanH);
@@ -445,8 +463,6 @@ int vtkSHYXAdaptiveIsotropicRemesherTest::RequestData(
     {
       outputFeatures->Initialize();
     }
-
-    outputMaskPatchRemeshed->Initialize();
   }
   catch (std::exception& e)
   {

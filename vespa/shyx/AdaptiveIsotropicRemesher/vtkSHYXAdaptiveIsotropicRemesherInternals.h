@@ -735,18 +735,6 @@ inline void AddSelectionBoundaryUsingVtkTopology(vtkObject* logger, vtkPolyData*
   });
 }
 
-inline void CollectSelectionBoundaryWorldPoints(vtkPolyData* pd, const std::set<vtkIdType>& selected,
-  std::vector<std::array<double, 3>>& out)
-{
-  ForEachSelectionBoundaryEdge(pd, selected, [&](vtkIdType pu, vtkIdType pv) {
-    double x[3];
-    pd->GetPoint(pu, x);
-    out.push_back({ x[0], x[1], x[2] });
-    pd->GetPoint(pv, x);
-    out.push_back({ x[0], x[1], x[2] });
-  });
-}
-
 template <typename EdgeBoolMapFull, typename EdgeBoolMapPatch>
 inline void LiftPatchSharpFeaturesToFullMesh(vtkObject* logger, CGAL_Surface& fullSm, EdgeBoolMapFull fullFeatures,
   const CGAL_Surface& patchSm, EdgeBoolMapPatch patchFeatures, double bboxLength)
@@ -1013,65 +1001,6 @@ inline void DetectSharpEdgesWithFilter(
   ApplySharpFeatureSideFilter(sm, featureEdges, sharpSideMode);
 }
 
-inline void CollectPatchSharpFeatureWorldPoints(vtkPolyData* maskPatch, double protectAngle, int sharpSideFilter,
-  std::vector<std::array<double, 3>>& outAppend)
-{
-  if (!maskPatch || maskPatch->GetNumberOfCells() == 0)
-  {
-    return;
-  }
-  vtkCGALHelper::Vespa_surface patch;
-  if (!vtkCGALHelper::toCGAL(maskPatch, &patch, nullptr))
-  {
-    return;
-  }
-  auto feat = get(CGAL::edge_is_feature, patch.surface);
-  DetectSharpEdgesWithFilter(patch.surface, protectAngle, sharpSideFilter, feat);
-  for (CGAL_Surface::Edge_index e : patch.surface.edges())
-  {
-    if (!boost::get(feat, e))
-    {
-      continue;
-    }
-    const CGAL_Surface::Halfedge_index h = patch.surface.halfedge(e);
-    const CGAL_Surface::Vertex_index v0 = patch.surface.source(h);
-    const CGAL_Surface::Vertex_index v1 = patch.surface.target(h);
-    for (CGAL_Surface::Vertex_index vx : { v0, v1 })
-    {
-      const auto& p = patch.surface.point(vx);
-      outAppend.push_back({ CGAL::to_double(p.x()), CGAL::to_double(p.y()), CGAL::to_double(p.z()) });
-    }
-  }
-}
-
-template <typename VertBoolMap>
-inline void MarkVerticesNearAnchorPoints(CGAL_Surface& sm, VertBoolMap vertConstrained,
-  const std::vector<std::array<double, 3>>& anchors, double tolSq)
-{
-  if (anchors.empty() || tolSq <= 0.0)
-  {
-    return;
-  }
-  for (CGAL_Surface::Vertex_index v : sm.vertices())
-  {
-    const auto& p = sm.point(v);
-    const double px = CGAL::to_double(p.x());
-    const double py = CGAL::to_double(p.y());
-    const double pz = CGAL::to_double(p.z());
-    for (const auto& a : anchors)
-    {
-      const double dx = px - a[0];
-      const double dy = py - a[1];
-      const double dz = pz - a[2];
-      if (dx * dx + dy * dy + dz * dz <= tolSq)
-      {
-        boost::put(vertConstrained, v, true);
-        break;
-      }
-    }
-  }
-}
-
 template <typename EdgeBoolMap>
 inline void FillFeaturePolyDataSharpLinesOnly(const CGAL_Surface& sm, const EdgeBoolMap& featureEdges, vtkPolyData* out)
 {
@@ -1119,55 +1048,6 @@ inline void FillFeaturePolyDataSharpLinesOnly(const CGAL_Surface& sm, const Edge
   out->SetPoints(pts);
   out->SetLines(lines);
   out->SetVerts(verts);
-}
-
-template <typename EdgeBoolMap>
-inline void AppendSharpFeatureVertsToPolyData(vtkPolyData* out, const CGAL_Surface& sm, const EdgeBoolMap& featureEdges)
-{
-  if (!out)
-  {
-    return;
-  }
-  vtkPoints* pts = out->GetPoints();
-  if (!pts)
-  {
-    vtkNew<vtkPoints> np;
-    out->SetPoints(np);
-    pts = out->GetPoints();
-  }
-  vtkNew<vtkCellArray> combinedVerts;
-  vtkCellArray* oldVerts = out->GetVerts();
-  if (oldVerts != nullptr && oldVerts->GetNumberOfCells() > 0)
-  {
-    combinedVerts->DeepCopy(oldVerts);
-  }
-
-  std::unordered_set<std::size_t> emitted;
-  emitted.reserve(static_cast<size_t>(sm.number_of_vertices()));
-
-  for (CGAL_Surface::Edge_index e : sm.edges())
-  {
-    if (!boost::get(featureEdges, e))
-    {
-      continue;
-    }
-    const CGAL_Surface::Halfedge_index h0 = sm.halfedge(e);
-    for (CGAL_Surface::Vertex_index vx :
-      { sm.source(h0), sm.target(h0) })
-    {
-      const std::size_t k = static_cast<std::size_t>(vx.idx());
-      if (!emitted.insert(k).second)
-      {
-        continue;
-      }
-      const auto& p = sm.point(vx);
-      const vtkIdType pid = pts->InsertNextPoint(
-        CGAL::to_double(p.x()), CGAL::to_double(p.y()), CGAL::to_double(p.z()));
-      combinedVerts->InsertNextCell(1, &pid);
-    }
-  }
-
-  out->SetVerts(combinedVerts);
 }
 
 } // namespace vespa_shyx_air_remesh_internals
