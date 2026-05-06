@@ -17,7 +17,9 @@ if (${VESPA_ADAPTIVE_REMESHING})
 endif()
 
 if(VESPA_USE_VMTK)
-  set(VMTK_CENTERLINES_SERVER_MANAGER_XML "SHYXVmtkPolyDataCenterlines.xml")
+  set(VMTK_CENTERLINES_SERVER_MANAGER_XML
+    "SHYXVmtkPolyDataCenterlines.xml"
+    "SHYXVmtkOpeningCenterlines.xml")
 endif()
 
 option(VESPA_SHOW_CGAL_LICENSE_ON_LOAD "Show CGAL License when loading plugin" OFF)
@@ -53,6 +55,20 @@ paraview_plugin_add_property_widget(
   CLASS_NAME pqVESPASelectionPlaneClipperWidget
   INTERFACES vespa_selection_plane_clipper_interfaces
   SOURCES vespa_selection_plane_clipper_sources)
+
+set(shyx_openings_table_interfaces)
+set(shyx_openings_table_sources)
+if (VESPA_USE_VMTK)
+  paraview_plugin_add_property_widget(
+    KIND GROUP_WIDGET
+    TYPE "shyx_openings_table"
+    CLASS_NAME pqSHYXOpeningTable
+    INTERFACES shyx_openings_table_interfaces
+    SOURCES shyx_openings_table_sources)
+  list(APPEND shyx_openings_table_sources
+    pqSHYXOpeningTable.cxx
+    pqSHYXOpeningTable.h)
+endif()
 
 set(vespa_plugin_qt_auto_interfaces)
 set(vespa_plugin_qt_auto_sources)
@@ -133,8 +149,8 @@ paraview_add_plugin(VESPAPlugin
      ${MESH_SMOOTHING_SERVER_MANAGER_XML}
      ${ADAPTIVE_REMESHING_SERVER_MANAGER_XML}
      ${VMTK_CENTERLINES_SERVER_MANAGER_XML}
-  UI_INTERFACES ${acm_interfaces} ${vespa_obb_box_interfaces} ${vespa_endclipper_plane_interfaces} ${vespa_selection_plane_clipper_interfaces} ${vespa_plugin_qt_auto_interfaces}
-  SOURCES ${acm_sources} ${vespa_obb_box_sources} ${vespa_endclipper_plane_sources} ${vespa_selection_plane_clipper_sources}
+  UI_INTERFACES ${acm_interfaces} ${vespa_obb_box_interfaces} ${vespa_endclipper_plane_interfaces} ${vespa_selection_plane_clipper_interfaces} ${shyx_openings_table_interfaces} ${vespa_plugin_qt_auto_interfaces}
+  SOURCES ${acm_sources} ${vespa_obb_box_sources} ${vespa_endclipper_plane_sources} ${vespa_selection_plane_clipper_sources} ${shyx_openings_table_sources}
     pqArrayCurveMapperPanel.cxx
     pqArrayCurveMapperPanel.h
     pqVESPAOBBInteractiveBoxWidget.cxx

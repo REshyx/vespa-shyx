@@ -1,0 +1,240 @@
+<?xml version="1.0" ?>
+<ServerManagerConfiguration>
+  <ProxyGroup name="filters">
+    <SourceProxy name="SHYXVmtkOpeningCenterlines"
+                 class="vtkSHYXVmtkOpeningCenterlines"
+                 label="SHYX VMTK Opening Centerlines">
+      <Documentation short_help="Threshold openings, pick inlets/outlets, optional VMTK centerlines.">
+        Single surface input. Cells whose chosen scalar magnitude lies in [Threshold min, Threshold max]
+        (same point/cell resolution rules as SHYX Adaptive Isotropic Remesher remesh range) are
+        extracted; each connected component defines one opening. The representative point is the mesh
+        vertex closest to that patch centroid (for disk-like inlets/outlets).
+
+        The **Inlets (openings)** list is filled after Apply. Each row is keyed as **SeedPoint: &lt;SurfacePointId&gt;**
+        (representative surface vertex id); identical ids get **#2**, **#3** suffixes. Check entries that are **inlets** (VMTK source seeds); unchecked openings are
+        **outlets** (targets). Turn **Calculate centerline** on only after marking inlets so
+        centerlines are not computed during exploration.
+
+        The **Remove openings** list mirrors each discovery row; checked openings are skipped on output
+        port 0 (seed points) and excluded from centerline seeds (treated as deleted). Assign **Inlets** only among
+        openings that remain unchecked here.
+
+        Changing **Threshold array**, **min/max**, or **all corners** clears prior inlet/outlet and
+        remove checks and rebuilds the opening list on the next Apply/update.
+
+        Output 0 is one vertex per **non-removed** opening with arrays OpeningArrayValue,
+        OpeningIndex, SurfacePointId, IsInlet; **SurfacePointId** is the active scalars array for display.
+        and at least one inlet and one outlet exist; otherwise it is empty (the filter shallow-copies the input internally for VMTK with point GlobalIds when centerlines are computed).
+
+        Requires VMTK compatible with this ParaView VTK (same as SHYX VMTK Centerlines).
+      </Documentation>
+
+      <OutputPort name="Opening seed points" index="0" id="port0"/>
+      <OutputPort name="Centerlines (optional)" index="1" id="port1"/>
+
+      <InputProperty name="Input" command="SetInputConnection">
+        <ProxyGroupDomain name="groups">
+          <Group name="sources"/>
+          <Group name="filters"/>
+        </ProxyGroupDomain>
+        <DataTypeDomain name="input_type">
+          <DataType value="vtkPolyData"/>
+        </DataTypeDomain>
+        <InputArrayDomain name="opening_threshold_arrays" optional="1"/>
+        <Documentation>Vessel lumen surface with point- or cell-centered scalars for thresholding openings.</Documentation>
+      </InputProperty>
+
+      <StringVectorProperty name="ThresholdArrayName"
+                            label="Threshold array"
+                            command="SetInputArrayToProcess"
+                            number_of_elements="5"
+                            element_types="0 0 0 0 2"
+                            animateable="0">
+        <ArrayListDomain name="opening_threshold_list"
+                         input_domain_name="opening_threshold_arrays">
+          <RequiredProperties>
+            <Property name="Input" function="Input"/>
+          </RequiredProperties>
+        </ArrayListDomain>
+        <Documentation>
+          Point- or cell-centered array (same name resolution as Remesh range in Adaptive Isotropic Remesher).
+          Uses standard VTK input-array selection (ParaView array picker).
+        </Documentation>
+        <Hints>
+          <ArraySelectionWidget/>
+        </Hints>
+      </StringVectorProperty>
+
+      <DoubleVectorProperty command="SetThresholdMin"
+                            name="ThresholdMin"
+                            label="Threshold min"
+                            number_of_elements="1"
+                            default_values="0"
+                            animateable="1">
+        <ArrayRangeDomain name="range" default_mode="min">
+          <RequiredProperties>
+            <Property name="Input" function="Input"/>
+            <Property name="ThresholdArrayName" function="ArraySelection"/>
+          </RequiredProperties>
+        </ArrayRangeDomain>
+        <Documentation>Inclusive lower bound on tuple magnitude for thresholded cells. Slider range follows the selected array’s actual min/max (information pipeline).</Documentation>
+      </DoubleVectorProperty>
+
+      <DoubleVectorProperty command="SetThresholdMax"
+                            name="ThresholdMax"
+                            label="Threshold max"
+                            number_of_elements="1"
+                            default_values="1"
+                            animateable="1">
+        <ArrayRangeDomain name="range" default_mode="max">
+          <RequiredProperties>
+            <Property name="Input" function="Input"/>
+            <Property name="ThresholdArrayName" function="ArraySelection"/>
+          </RequiredProperties>
+        </ArrayRangeDomain>
+        <Documentation>Inclusive upper bound; must be &gt;= Threshold min. Slider range follows the selected array’s actual min/max (information pipeline).</Documentation>
+      </DoubleVectorProperty>
+
+      <IntVectorProperty command="SetThresholdAllScalars"
+                         name="ThresholdAllScalars"
+                         label="Threshold: all corners (points)"
+                         number_of_elements="1"
+                         default_values="0"
+                         animateable="0">
+        <BooleanDomain name="bool"/>
+        <Documentation>
+          When the threshold array is point-centered: if ON, every corner of a cell must fall inside
+          the range; if OFF, one in-range corner is enough. Ignored for cell-centered arrays.
+        </Documentation>
+      </IntVectorProperty>
+
+      <PropertyGroup label="Opening threshold">
+        <Property name="ThresholdArrayName"/>
+        <Property name="ThresholdMin"/>
+        <Property name="ThresholdMax"/>
+        <Property name="ThresholdAllScalars"/>
+      </PropertyGroup>
+
+      <StringVectorProperty name="InletInfo"
+                            command="GetInletSelection"
+                            number_of_elements_per_command="2"
+                            information_only="1"
+                            si_class="vtkSIDataArraySelectionProperty" />
+
+      <!-- Bumped on each Apply when openings are recomputed; ties ArraySelectionDomain to pipeline updates. -->
+      <IntVectorProperty name="OpeningListRevision"
+                         command="GetOpeningListRevision"
+                         information_only="1"
+                         number_of_elements="1"
+                         default_values="0"
+                         animateable="0"
+                         panel_visibility="never">
+      </IntVectorProperty>
+
+      <StringVectorProperty name="InletStatus"
+                            command="GetInletSelection"
+                            information_property="InletInfo"
+                            number_of_elements_per_command="2"
+                            element_types="2 0"
+                            repeat_command="1"
+                            si_class="vtkSIDataArraySelectionProperty"
+                            label="Inlets (openings)">
+        <ArraySelectionDomain name="array_list">
+          <RequiredProperties>
+            <Property function="ArrayList" name="InletInfo" />
+            <Property function="OpeningRevision" name="OpeningListRevision" />
+          </RequiredProperties>
+        </ArraySelectionDomain>
+        <Documentation>
+          One entry per connected component after thresholding. Apply once to populate the list.
+          Checked = inlet (VMTK source seed); unchecked = outlet (target). Names reflect threshold
+          array magnitudes (mean per patch). Needs at least one of each when Calculate centerline is on.
+        </Documentation>
+      </StringVectorProperty>
+
+      <!-- Same opening names as InletInfo; excluded checks read from GetExcludedOpeningSelection (VESPA Endpoint pattern). -->
+      <StringVectorProperty name="ExcludedStatus"
+                            command="GetExcludedOpeningSelection"
+                            information_property="InletInfo"
+                            number_of_elements_per_command="2"
+                            element_types="2 0"
+                            repeat_command="1"
+                            si_class="vtkSIDataArraySelectionProperty"
+                            label="Remove openings">
+        <ArraySelectionDomain name="array_list_excluded">
+          <RequiredProperties>
+            <Property function="ArrayList" name="InletInfo" />
+            <Property function="OpeningRevision" name="OpeningListRevision" />
+          </RequiredProperties>
+        </ArraySelectionDomain>
+        <Documentation>
+          Checked openings are omitted from output seed points and from centerline source/target seeds
+          (treated as deleted). Unchecked openings remain available for inlet/outlet assignment.
+        </Documentation>
+      </StringVectorProperty>
+
+      <PropertyGroup label="Openings (inlets / removed)" panel_widget="shyx_openings_table">
+        <Property name="InletStatus" function="Inlet"/>
+        <Property name="ExcludedStatus" function="Excluded"/>
+      </PropertyGroup>
+
+      <IntVectorProperty name="CalculateCenterline"
+                         label="Calculate centerline"
+                         command="SetCalculateCenterline"
+                         number_of_elements="1"
+                         default_values="0">
+        <BooleanDomain name="bool"/>
+        <Documentation>
+          When off (default), only seed glyphs (port 0) and the opening lists are produced.
+          When on, runs vtkvmtkPolyDataCenterlines using non-removed checked openings as sources and non-removed unchecked as targets.
+        </Documentation>
+      </IntVectorProperty>
+
+      <IntVectorProperty name="FlipNormals"
+                         label="Flip Normals"
+                         command="SetFlipNormals"
+                         number_of_elements="1"
+                         default_values="0"
+                         panel_visibility="advanced">
+        <BooleanDomain name="bool"/>
+        <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="enabled_state"
+                                   property="CalculateCenterline"
+                                   value="0"
+                                   inverse="1"/>
+        </Hints>
+      </IntVectorProperty>
+
+      <IntVectorProperty name="StopFastMarchingOnReachingTarget"
+                         label="Stop FM at Target"
+                         command="SetStopFastMarchingOnReachingTarget"
+                         number_of_elements="1"
+                         default_values="0"
+                         panel_visibility="advanced">
+        <BooleanDomain name="bool"/>
+        <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="enabled_state"
+                                   property="CalculateCenterline"
+                                   value="0"
+                                   inverse="1"/>
+        </Hints>
+      </IntVectorProperty>
+
+      <PropertyGroup label="VMTK centerline (optional)">
+        <Property name="CalculateCenterline"/>
+        <Property name="FlipNormals"/>
+        <Property name="StopFastMarchingOnReachingTarget"/>
+      </PropertyGroup>
+
+      <Hints>
+        <!-- replace_input: 0 = Apply 后不隐藏上游输入（默认无此 Hint 时为 1 会隐藏） -->
+        <Visibility replace_input="0"/>
+        <!-- 端口 0（Opening seed points）首次显示时默认用 Point Label；端口 1 不受影响 -->
+        <RepresentationType view="RenderView" type="Point Label" port="0"/>
+        <ShowInMenu category="SHYX" icon=":/VESPA/SHYX_Radius_Neighbor_Count.png"/>
+      </Hints>
+    </SourceProxy>
+  </ProxyGroup>
+</ServerManagerConfiguration>

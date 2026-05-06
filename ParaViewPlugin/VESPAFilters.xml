@@ -1494,6 +1494,8 @@
       </PropertyGroup>
 
       <Hints>
+        <!-- 端口 1（Clip Planes）首次显示时默认 Point Label（与 PointLabelRepresentation.xml 中 text 一致） -->
+        <RepresentationType view="RenderView" type="Point Label" port="1"/>
         <ShowInMenu category="SHYX" icon=":/VESPA/SHYX_Vessel_End_Clipper.png"/>
       </Hints>
 
