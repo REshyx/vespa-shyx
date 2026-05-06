@@ -3,7 +3,8 @@
  * @brief Debug filter: evaluates FeatureAwareAdaptiveSizingField maps on the input surface (same
  *        constraint pipeline as vtkSHYXAdaptiveIsotropicRemesher) and writes per-point arrays
  *        VespaAdaptiveSizeGlobal / VespaAdaptiveSizeFeature (clamped), VespaAdaptiveSizeGlobalUncapped /
- *        VespaAdaptiveSizeFeatureUncapped (same tol formula without [min,max] clamp). `PrepareIccVertexNormalsForAdaptiveSizing`
+ *        VespaAdaptiveSizeFeatureUncapped (same tol formula without [min,max] clamp). AdaptiveSizingNeighborMaxRatio
+ *        (inherited property) smoothes bounded maps across edges when **> 1**. `PrepareIccVertexNormalsForAdaptiveSizing`
  *        supplies ICC with `v:vespa_icc_normal` internally and is unchanged from the remesher; **no** VTK array exports that vector.
  *        Vertex ICC curvature scalars
  *        (VespaIccPrincipalCurvatureMin/Max, VespaIccMeanCurvature, VespaIccGaussianCurvature), and

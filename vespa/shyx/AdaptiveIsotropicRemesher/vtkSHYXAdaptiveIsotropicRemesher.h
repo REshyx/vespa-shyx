@@ -8,7 +8,8 @@
  * per-vertex caps on dual named CGAL property maps — not CGAL `Adaptive_sizing_field`). After
  * `PrepareIccVertexNormalsForAdaptiveSizing` (CGAL area-weighted `v:vespa_icc_normal`, and dual
  * per-vertex normals when the Feature mask applies), curvature-driven targets mirror CGAL's ICC
- * sizing formula inside min/max bounds. When FeatureSizingStandAlone is OFF, values written to the
+ * sizing formula inside min/max bounds, with optional **AdaptiveSizingNeighborMaxRatio** smoothing
+ * of adjacent vertex targets (**> 1** reduces sharp spatial sizing jumps). When FeatureSizingStandAlone is OFF, values written to the
  * feature map reuse the global tolerance/min/max so `v:vespa_size_feature` equals
  * `v:vespa_size_global` everywhere.
  *
@@ -36,7 +37,8 @@
  * Feature mask, port 3 probes mask arrays from the input onto the preview mesh (`UpdateAttributes` ON)
  * and builds the same dual ICC normals as on the final output when evaluation succeeds.
  * (`v:vespa_icc_normal` is not exported.) Arrays: VespaAdaptiveSizeGlobal / VespaAdaptiveSizeFeature
- * from `v:vespa_size_*`, VespaIccPrincipalCurvatureMin/Max and uncapped sizing from a second ICC pass
+ * from `v:vespa_size_*` (after optional neighbor ratio limiting; AdaptiveSizingNeighborMaxRatio),
+ * VespaIccPrincipalCurvatureMin/Max and uncapped sizing from a second ICC pass
  * after preview `PrepareIcc`; feature uncapped uses the mirrored tolerance when FeatureSizingStandAlone is OFF.
  * **VespaIccNonMaskVertexNormal** (3-tuple point vectors) matches `v:vespa_icc_n_nonmask`, or the area blend
  * `v:vespa_icc_normal` when the dual bundle is absent.
@@ -176,6 +178,18 @@ public:
    */
   vtkGetMacro(FeatureAdaptiveTolerance, double);
   vtkSetMacro(FeatureAdaptiveTolerance, double);
+  //@}
+
+  //@{
+  /**
+   * Spatial cap on ICC sizing jumps: after per-vertex targets are clamped to min/max edge length,
+   * when **> 1**, relax both `v:vespa_size_global` and `v:vespa_size_feature` so across any mesh edge
+   * the ratio of larger to smaller endpoint target does not exceed this value (iterative symmetric
+   * lowering of the larger target only). Typical values ~1.2–2 soften abrupt coarsening next to refined
+   * regions. **0** (default) or **<= 1** disables — behavior matches the raw ICC sizing field only.
+   */
+  vtkGetMacro(AdaptiveSizingNeighborMaxRatio, double);
+  vtkSetClampMacro(AdaptiveSizingNeighborMaxRatio, double, 0.0, 1.0e6);
   //@}
 
   //@{
@@ -350,6 +364,7 @@ protected:
   double FeatureMinEdgeLength      = 0.0;
   double FeatureMaxEdgeLength      = 0.0;
   double FeatureAdaptiveTolerance  = 0.01;
+  double AdaptiveSizingNeighborMaxRatio = 0.0;
   bool   RemeshRecomputeCurvatureEachIteration = true;
   double ProtectAngle        = 70.0;
   int    NumberOfIterations  = 3;

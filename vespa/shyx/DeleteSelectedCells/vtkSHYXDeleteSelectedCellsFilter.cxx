@@ -5,7 +5,11 @@
 #include <vtkDataArray.h>
 #include <vtkDataObject.h>
 #include <vtkDataSet.h>
+#include <vtkDataSetAttributes.h>
+#include <vtkExplicitStructuredGrid.h>
+#include <vtkExtractCells.h>
 #include <vtkExtractSelection.h>
+#include <vtkGenericCell.h>
 #include <vtkIdList.h>
 #include <vtkIdTypeArray.h>
 #include <vtkInformation.h>
@@ -16,6 +20,9 @@
 #include <vtkPoints.h>
 #include <vtkPolyData.h>
 #include <vtkSelection.h>
+#include <vtkStructuredGrid.h>
+#include <vtkUnsignedCharArray.h>
+#include <vtkUnstructuredGrid.h>
 #include <set>
 #include <vector>
 
@@ -25,7 +32,7 @@ vtkStandardNewMacro(vtkSHYXDeleteSelectedCellsFilter);
 
 namespace
 {
-void CollectCellsFromExtracted(vtkPolyData* mesh, vtkDataSet* extracted, std::set<vtkIdType>& selected)
+void CollectCellsFromExtracted(vtkDataSet* mesh, vtkDataSet* extracted, std::set<vtkIdType>& selected)
 {
   if (!mesh || !extracted)
   {
@@ -72,14 +79,15 @@ void CollectCellsFromExtracted(vtkPolyData* mesh, vtkDataSet* extracted, std::se
   {
     return;
   }
-  vtkIdType npts;
-  const vtkIdType* pids;
+  vtkNew<vtkGenericCell> cell;
   for (vtkIdType cid = 0; cid < nMeshCells; ++cid)
   {
-    mesh->GetCellPoints(cid, npts, pids);
+    mesh->GetCell(cid, cell);
+    vtkIdList* ids = cell->GetPointIds();
+    const vtkIdType npts = ids->GetNumberOfIds();
     for (vtkIdType k = 0; k < npts; ++k)
     {
-      if (selPt.count(pids[k]) != 0u)
+      if (selPt.count(ids->GetId(k)) != 0u)
       {
         selected.insert(cid);
         break;
@@ -88,7 +96,7 @@ void CollectCellsFromExtracted(vtkPolyData* mesh, vtkDataSet* extracted, std::se
   }
 }
 
-/** Output mesh = input minus selected cells; unused points dropped. */
+/** Output mesh = input minus selected cells; unused points dropped (poly data only). */
 void BuildPolyDataWithoutCells(vtkPolyData* inMesh, const std::set<vtkIdType>& selected, vtkPolyData* out)
 {
   out->Initialize();
@@ -232,12 +240,138 @@ void BuildPolyDataWithoutCells(vtkPolyData* inMesh, const std::set<vtkIdType>& s
   out->Squeeze();
 }
 
+void BuildUnstructuredGridWithoutCells(
+  vtkUnstructuredGrid* inMesh, const std::set<vtkIdType>& selected, vtkUnstructuredGrid* out)
+{
+  out->Initialize();
+  if (!inMesh)
+  {
+    return;
+  }
+  const vtkIdType nCells = inMesh->GetNumberOfCells();
+  if (nCells == 0)
+  {
+    out->ShallowCopy(inMesh);
+    return;
+  }
+
+  vtkNew<vtkIdList> keep;
+  for (vtkIdType i = 0; i < nCells; ++i)
+  {
+    if (selected.count(i) == 0u)
+    {
+      keep->InsertNextId(i);
+    }
+  }
+  if (keep->GetNumberOfIds() == 0)
+  {
+    return;
+  }
+  if (keep->GetNumberOfIds() == nCells)
+  {
+    out->ShallowCopy(inMesh);
+    return;
+  }
+
+  vtkNew<vtkExtractCells> ex;
+  ex->SetInputData(inMesh);
+  ex->SetCellList(keep);
+  ex->Update();
+  out->DeepCopy(ex->GetOutput());
+}
+
+/** Structured grid: same concrete type; blank selected cells. */
+void BuildStructuredGridBlanked(
+  vtkStructuredGrid* inMesh, const std::set<vtkIdType>& selected, vtkStructuredGrid* out)
+{
+  if (!inMesh || !out)
+  {
+    return;
+  }
+  out->DeepCopy(inMesh);
+  if (selected.empty())
+  {
+    return;
+  }
+  const vtkIdType nCells = out->GetNumberOfCells();
+  for (vtkIdType cid : selected)
+  {
+    if (cid >= 0 && cid < nCells)
+    {
+      out->BlankCell(cid);
+    }
+  }
+}
+
+/** Explicit structured grid: same concrete type; blank selected cells. */
+void BuildExplicitStructuredGridBlanked(vtkExplicitStructuredGrid* inMesh,
+  const std::set<vtkIdType>& selected, vtkExplicitStructuredGrid* out)
+{
+  if (!inMesh || !out)
+  {
+    return;
+  }
+  out->DeepCopy(inMesh);
+  if (selected.empty())
+  {
+    return;
+  }
+  const vtkIdType nCells = out->GetNumberOfCells();
+  for (vtkIdType cid : selected)
+  {
+    if (cid >= 0 && cid < nCells)
+    {
+      out->BlankCell(cid);
+    }
+  }
+}
+
+/**
+ * Image / rectilinear / generic dataset: DeepCopy input and hide selected cells via the
+ * vtkDataSet cell ghost bit HIDDENCELL (topology and type unchanged).
+ */
+bool BuildDataSetWithHiddenCells(
+  vtkDataSet* inMesh, const std::set<vtkIdType>& selected, vtkDataSet* out)
+{
+  if (!inMesh || !out)
+  {
+    return false;
+  }
+  out->DeepCopy(inMesh);
+  if (selected.empty())
+  {
+    return true;
+  }
+  vtkUnsignedCharArray* ghosts = out->GetCellGhostArray();
+  if (!ghosts)
+  {
+    ghosts = out->AllocateCellGhostArray();
+  }
+  if (!ghosts)
+  {
+    return false;
+  }
+  const vtkIdType nCells = out->GetNumberOfCells();
+  for (vtkIdType cid : selected)
+  {
+    if (cid < 0 || cid >= nCells)
+    {
+      continue;
+    }
+    unsigned char v = ghosts->GetValue(cid);
+    v = static_cast<unsigned char>(v | vtkDataSetAttributes::HIDDENCELL);
+    ghosts->SetValue(cid, v);
+  }
+  return true;
+}
+
 } // namespace
 
 //------------------------------------------------------------------------------
 vtkSHYXDeleteSelectedCellsFilter::vtkSHYXDeleteSelectedCellsFilter()
 {
   this->SetNumberOfInputPorts(2);
+  this->SetNumberOfOutputPorts(1);
 }
 
 //------------------------------------------------------------------------------
@@ -265,7 +399,7 @@ int vtkSHYXDeleteSelectedCellsFilter::FillInputPortInformation(int port, vtkInfo
 {
   if (port == 0)
   {
-    info->Set(vtkAlgorithm::INPUT_REQUIRED_DATA_TYPE(), "vtkPolyData");
+    info->Set(vtkAlgorithm::INPUT_REQUIRED_DATA_TYPE(), "vtkDataSet");
     return 1;
   }
   if (port == 1)
@@ -281,23 +415,23 @@ int vtkSHYXDeleteSelectedCellsFilter::FillInputPortInformation(int port, vtkInfo
 int vtkSHYXDeleteSelectedCellsFilter::RequestData(
   vtkInformation* vtkNotUsed(request), vtkInformationVector** inputVector, vtkInformationVector* outputVector)
 {
-  vtkPolyData* mesh = vtkPolyData::GetData(inputVector[0], 0);
-  vtkPolyData* output = vtkPolyData::GetData(outputVector, 0);
+  vtkDataSet* input = vtkDataSet::GetData(inputVector[0], 0);
+  vtkDataSet* output = vtkDataSet::GetData(outputVector, 0);
 
-  if (!mesh)
+  if (!input)
   {
-    vtkErrorMacro("Input port 0 (vtkPolyData) is required.");
+    vtkErrorMacro("Input port 0 (vtkDataSet) is required.");
     return 0;
   }
   if (!output)
   {
-    vtkErrorMacro("Output poly data is null.");
+    vtkErrorMacro("Output data set is null.");
     return 0;
   }
 
-  if (mesh->GetNumberOfCells() == 0)
+  if (input->GetNumberOfCells() == 0)
   {
-    output->ShallowCopy(mesh);
+    output->ShallowCopy(input);
     return 1;
   }
 
@@ -312,14 +446,14 @@ int vtkSHYXDeleteSelectedCellsFilter::RequestData(
       if (inputSel && inputSel->GetNumberOfNodes() > 0)
       {
         vtkNew<vtkExtractSelection> extractSelection;
-        extractSelection->SetInputData(0, mesh);
+        extractSelection->SetInputData(0, input);
         extractSelection->SetInputData(1, inputSel);
         extractSelection->Update();
         vtkDataSet* extracted = vtkDataSet::SafeDownCast(extractSelection->GetOutputDataObject(0));
         if (extracted &&
           (extracted->GetNumberOfCells() > 0 || extracted->GetNumberOfPoints() > 0))
         {
-          CollectCellsFromExtracted(mesh, extracted, selected);
+          CollectCellsFromExtracted(input, extracted, selected);
         }
       }
     }
@@ -327,7 +461,7 @@ int vtkSHYXDeleteSelectedCellsFilter::RequestData(
 
   if (selected.empty() && this->SelectionCellArrayName && this->SelectionCellArrayName[0] != '\0')
   {
-    vtkDataArray* arr = mesh->GetCellData()->GetArray(this->SelectionCellArrayName);
+    vtkDataArray* arr = input->GetCellData()->GetArray(this->SelectionCellArrayName);
     if (!arr)
     {
       vtkWarningMacro("SelectionCellArrayName \""
@@ -335,7 +469,7 @@ int vtkSHYXDeleteSelectedCellsFilter::RequestData(
     }
     else
     {
-      const vtkIdType nc = mesh->GetNumberOfCells();
+      const vtkIdType nc = input->GetNumberOfCells();
       for (vtkIdType cid = 0; cid < nc; ++cid)
       {
         bool take = false;
@@ -357,12 +491,63 @@ int vtkSHYXDeleteSelectedCellsFilter::RequestData(
 
   if (selected.empty())
   {
-    vtkWarningMacro("No selection: output is a shallow copy of the input (no cells removed).");
-    output->ShallowCopy(mesh);
+    vtkWarningMacro("No selection: output is a shallow copy of the input.");
+    output->ShallowCopy(input);
     return 1;
   }
 
-  BuildPolyDataWithoutCells(mesh, selected, output);
+  if (auto* inPd = vtkPolyData::SafeDownCast(input))
+  {
+    auto* outPd = vtkPolyData::SafeDownCast(output);
+    if (!outPd)
+    {
+      vtkErrorMacro("Internal error: expected vtkPolyData output.");
+      return 0;
+    }
+    BuildPolyDataWithoutCells(inPd, selected, outPd);
+    return 1;
+  }
+  if (auto* inUg = vtkUnstructuredGrid::SafeDownCast(input))
+  {
+    auto* outUg = vtkUnstructuredGrid::SafeDownCast(output);
+    if (!outUg)
+    {
+      vtkErrorMacro("Internal error: expected vtkUnstructuredGrid output.");
+      return 0;
+    }
+    BuildUnstructuredGridWithoutCells(inUg, selected, outUg);
+    return 1;
+  }
+
+  if (auto* inSg = vtkStructuredGrid::SafeDownCast(input))
+  {
+    auto* outSg = vtkStructuredGrid::SafeDownCast(output);
+    if (!outSg)
+    {
+      vtkErrorMacro("Internal error: expected vtkStructuredGrid output.");
+      return 0;
+    }
+    BuildStructuredGridBlanked(inSg, selected, outSg);
+    return 1;
+  }
+
+  if (auto* inEsg = vtkExplicitStructuredGrid::SafeDownCast(input))
+  {
+    auto* outEsg = vtkExplicitStructuredGrid::SafeDownCast(output);
+    if (!outEsg)
+    {
+      vtkErrorMacro("Internal error: expected vtkExplicitStructuredGrid output.");
+      return 0;
+    }
+    BuildExplicitStructuredGridBlanked(inEsg, selected, outEsg);
+    return 1;
+  }
+
+  if (!BuildDataSetWithHiddenCells(input, selected, output))
+  {
+    vtkErrorMacro("Could not mark selected cells as hidden (cell ghost allocation failed).");
+    return 0;
+  }
   return 1;
 }
 

@@ -1,7 +1,7 @@
 NAME
   vtkSHYXDeleteSelectedCellsFilter
 DESCRIPTION
-  "Remove cells indicated by a vtkSelection (or optional cell data mask) from vtkPolyData."
+  "Remove or blank cells indicated by vtkSelection (or optional cell data mask); vtkDataSet input and matching output type."
 GROUPS
   Meshing
 DEPENDS

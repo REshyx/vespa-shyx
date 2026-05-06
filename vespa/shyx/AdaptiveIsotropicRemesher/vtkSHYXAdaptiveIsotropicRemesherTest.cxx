@@ -282,7 +282,8 @@ int vtkSHYXAdaptiveIsotropicRemesherTest::RequestData(
     {
       FeatureAwareAdaptiveSizingField<decltype(featureEdges)> sizing(this->AdaptiveTolerance,
         std::make_pair(minLen, maxLen), this->FeatureAdaptiveTolerance,
-        std::make_pair(featMinLen, featMaxLen), remeshFaces, cgalMesh->surface, featureEdges);
+        std::make_pair(featMinLen, featMaxLen), remeshFaces, cgalMesh->surface, featureEdges,
+        static_cast<double>(this->AdaptiveSizingNeighborMaxRatio));
       (void)sizing;
     }
     else
@@ -290,7 +291,7 @@ int vtkSHYXAdaptiveIsotropicRemesherTest::RequestData(
       FeatureAwareAdaptiveSizingField<decltype(featureEdges)> sizing(this->AdaptiveTolerance,
         std::make_pair(minLen, maxLen), this->FeatureAdaptiveTolerance,
         std::make_pair(featMinLen, featMaxLen), cgalMesh->surface.faces(), cgalMesh->surface,
-        featureEdges);
+        featureEdges, static_cast<double>(this->AdaptiveSizingNeighborMaxRatio));
       (void)sizing;
     }
 

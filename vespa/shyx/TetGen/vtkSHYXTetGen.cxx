@@ -2,6 +2,7 @@
 
 #include <vtkCell.h>
 #include <vtkDataObject.h>
+#include <vtkMassProperties.h>
 #include <vtkInformation.h>
 #include <vtkInformationVector.h>
 #include <vtkObjectFactory.h>
@@ -12,6 +13,7 @@
 #define TETLIBRARY
 #include "tetgen.h"
 
+#include <cmath>
 #include <cstdio>
 #include <cstring>
 #include <vector>
@@ -50,6 +52,7 @@ int vtkSHYXTetGen::FillOutputPortInformation(int port, vtkInformation* info)
 //------------------------------------------------------------------------------
 void vtkSHYXTetGen::PrintSelf(ostream& os, vtkIndent indent)
 {
+    os << indent << "LimitMaxVolume: " << (this->LimitMaxVolume ? "ON" : "OFF") << std::endl;
     os << indent << "MaxVolume: " << this->MaxVolume << std::endl;
     os << indent << "MaxRadiusEdgeRatio: " << this->MaxRadiusEdgeRatio << std::endl;
     os << indent << "MinDihedralAngle: " << this->MinDihedralAngle << std::endl;
@@ -133,6 +136,19 @@ static bool vtkToTetgenio(vtkPolyData* input, tetgenio& in)
     in.numberofregions = 0;
     in.regionlist = nullptr;
     return true;
+}
+
+//------------------------------------------------------------------------------
+static double vtkSHYXEnclosedBoundaryVolume(vtkPolyData* surface)
+{
+    if (!surface || surface->GetNumberOfCells() == 0)
+    {
+        return -1.0;
+    }
+    vtkNew<vtkMassProperties> mp;
+    mp->SetInputData(surface);
+    mp->Update();
+    return mp->GetVolume();
 }
 
 //------------------------------------------------------------------------------
@@ -234,6 +250,29 @@ int vtkSHYXTetGen::RequestData(
     char* sw = switches.data();
     int len = 0;
     len += std::snprintf(sw + len, 8, "p");
+
+    double effectiveMaxVolume = 0.0;
+    if (this->LimitMaxVolume)
+    {
+        effectiveMaxVolume = this->MaxVolume;
+        if (effectiveMaxVolume <= 0.0)
+        {
+            const double enclosed = vtkSHYXEnclosedBoundaryVolume(input);
+            const double absVol = std::fabs(enclosed);
+            if (absVol > 0.0)
+            {
+                effectiveMaxVolume = 0.1 * absVol;
+            }
+            else
+            {
+                vtkWarningMacro(
+                    "LimitMaxVolume is ON but enclosed volume could not be computed "
+                    "(expect a closed surface). TetGen volume limit (-a) is disabled.");
+                effectiveMaxVolume = 0.0;
+            }
+        }
+    }
+
     if (this->Nobisect)
     {
         len += std::snprintf(sw + len, 8, "Y");
@@ -258,9 +297,9 @@ int vtkSHYXTetGen::RequestData(
             static_cast<double>(radiusRatio),
             static_cast<double>(dihedralAngle));
     }
-    if (this->MaxVolume > 0.0)
+    if (effectiveMaxVolume > 0.0)
     {
-        len += std::snprintf(sw + len, 32, "a%g", this->MaxVolume);
+        len += std::snprintf(sw + len, 32, "a%g", effectiveMaxVolume);
     }
     if (this->DoCheck)
     {

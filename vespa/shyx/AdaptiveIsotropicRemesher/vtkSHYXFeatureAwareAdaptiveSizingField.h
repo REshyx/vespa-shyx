@@ -41,6 +41,10 @@ namespace pmp_sf = CGAL::Polygon_mesh_processing;
  * curvatures, vertex_size_sq = 6*tol/|kappa|max - 3*tol^2, clamped to [short, long]) but
  * stores the two per-vertex caches in DISTINCT named Surface_mesh property maps.
  *
+ * Optional neighbor ratio limit: when @a neighbor_max_ratio > 1 in the constructor, targets are relaxed
+ * so along every mesh edge neither endpoint exceeds R times the other (iterative symmetric reduction on
+ * both named maps independently), damping sharp ICC-driven jumps across the surface. R <= 1 disables.
+ *
  * Per-edge dispatch: is_too_long / is_too_short read both endpoints from the SAME map
  * (feature map if the edge is feature, global map otherwise). This keeps non-feature edges
  * fully decoupled from the feature targets even when they happen to share an endpoint with
@@ -84,7 +88,7 @@ public:
   template <typename FaceRange>
   FeatureAwareAdaptiveSizingField(FT tol_global, std::pair<FT, FT> bounds_global, FT tol_feature,
     std::pair<FT, FT> bounds_feature, const FaceRange& face_range, CGAL_Surface& mesh,
-    FeatureEdgeMap feat_map)
+    FeatureEdgeMap feat_map, FT neighbor_max_ratio = FT(0))
     : feat_(feat_map)
     , tol_g_(tol_global)
     , short_g_(bounds_global.first)
@@ -92,6 +96,7 @@ public:
     , tol_f_(tol_feature)
     , short_f_(bounds_feature.first)
     , long_f_(bounds_feature.second)
+    , neighbor_max_ratio_(neighbor_max_ratio)
   {
     map_g_ =
       mesh.template add_property_map<vertex_descriptor, FT>("v:vespa_size_global", FT(0)).first;
@@ -201,6 +206,8 @@ public:
   }
 
 private:
+  using VSizeMap = typename CGAL_Surface::template Property_map<vertex_descriptor, FT>;
+
   template <typename Principal>
   static FT max_abs_principal_(const Principal& vc)
   {
@@ -236,6 +243,7 @@ private:
       put(map_g_, v, vertex_size_(tol_g_, short_g_, long_g_, max_abs));
       put(map_f_, v, vertex_size_(tol_f_, short_f_, long_f_, max_abs));
     }
+    gradient_limit_vertex_sizes_(mesh);
   }
 
   static FT vertex_size_(FT tol, FT lo, FT hi, FT max_abs_curv)
@@ -290,7 +298,61 @@ private:
     return false;
   }
 
-  using VSizeMap = typename CGAL_Surface::template Property_map<vertex_descriptor, FT>;
+  /**
+   * After ICC per-vertex targets, optionally relax sharp spatial jumps: along every edge, neither
+   * endpoint map value may exceed R times the other's (symmetric reduction only). Vertices with
+   * non-positive map entries are skipped (patch-uncovered defaults). R <= 1 disables.
+   *
+   * Multiple passes approximate a gradient cap on log-size; tighter R needs more iterations but
+   * 32 sweeps are ample for typical meshes.
+   */
+  void gradient_limit_vertex_sizes_(CGAL_Surface& mesh)
+  {
+    if (!(neighbor_max_ratio_ > FT(1)))
+    {
+      return;
+    }
+    const FT R = neighbor_max_ratio_;
+    for (int sweep = 0; sweep < gradient_limit_sweeps_; ++sweep)
+    {
+      bool changed = false;
+      for (CGAL_Surface::Edge_index e : mesh.edges())
+      {
+        const halfedge_descriptor h = mesh.halfedge(e);
+        const vertex_descriptor va = mesh.source(h);
+        const vertex_descriptor vb = mesh.target(h);
+        changed |= limit_two_vertex_targets_(map_g_, va, vb, R);
+        changed |= limit_two_vertex_targets_(map_f_, va, vb, R);
+      }
+      if (!changed)
+      {
+        break;
+      }
+    }
+  }
+
+  static bool limit_two_vertex_targets_(VSizeMap& map, vertex_descriptor va, vertex_descriptor vb, FT R)
+  {
+    FT sa = get(map, va);
+    FT sb = get(map, vb);
+    if (!(sa > FT(0)) || !(sb > FT(0)))
+    {
+      return false;
+    }
+    bool changed = false;
+    if (sa > R * sb)
+    {
+      put(map, va, R * sb);
+      sa = R * sb;
+      changed = true;
+    }
+    if (sb > R * sa)
+    {
+      put(map, vb, R * sa);
+      changed = true;
+    }
+    return changed;
+  }
 
   FeatureEdgeMap feat_;
   VSizeMap map_g_;
@@ -301,6 +363,8 @@ private:
   FT tol_f_;
   FT short_f_;
   FT long_f_;
+  FT neighbor_max_ratio_;
+  static constexpr int gradient_limit_sweeps_ = 32;
 
 };
 

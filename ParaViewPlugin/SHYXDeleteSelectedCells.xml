@@ -4,8 +4,8 @@
                  class="vtkSHYXDeleteSelectedCellsFilter"
                  label="SHYX Delete Selected Cells">
       <Documentation
-          long_help="Removes cells from vtkPolyData that are included in the active selection (vtkSelection on the Selection port), matching SHYX Selection Extrude / VESPA Region Fairing conventions. vtkExtractSelection is used internally (vtkOriginalCellIds on extracted cells, or vtkOriginalPointIds with all incident cells). If there is no selection, you can instead set Selection Cell Array Name on the mesh. When nothing is selected, the filter passes the input through unchanged."
-          short_help="Delete selected cells from a surface or mesh (selection input)."/>
+          long_help="Applies to any vtkDataSet; the output is the same concrete type as the input. Cells included in the active selection (vtkSelection on the Selection port) are removed from vtkPolyData (unused points stripped) and vtkUnstructuredGrid (cell subset), using the same resolution rules as SHYX Selection Extrude (vtkExtractSelection: vtkOriginalCellIds on extracted cells, or vtkOriginalPointIds with all incident cells). For vtkStructuredGrid and vtkExplicitStructuredGrid, selected cells are blanked (BlankCell). For vtkImageData, vtkRectilinearGrid, and other vtkDataSet types, selected cells are hidden using the cell ghost HIDDENCELL bit (topology unchanged). With the VESPA ParaView plugin, the Selection port can be filled from the active selection when you open the filter panel. If there is no vtkSelection, set Selection Cell Array Name on cell data of the input. When nothing is selected, the filter passes the input through unchanged."
+          short_help="Delete or hide selected cells on any vtkDataSet (output type matches input)."/>
 
       <InputProperty name="Input" command="SetInputConnection">
         <ProxyGroupDomain name="groups">
@@ -13,9 +13,11 @@
           <Group name="filters"/>
         </ProxyGroupDomain>
         <DataTypeDomain name="input_type">
-          <DataType value="vtkPolyData"/>
+          <DataType value="vtkDataSet"/>
         </DataTypeDomain>
-        <Documentation>vtkPolyData whose selected cells are removed.</Documentation>
+        <Documentation>
+          Any vtkDataSet (output matches input). PolyData and unstructured grids lose cells; structured types use blanking/ghost hiding.
+        </Documentation>
       </InputProperty>
 
       <InputProperty name="Selection" label="Selection"

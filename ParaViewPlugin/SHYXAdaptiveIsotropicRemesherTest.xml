@@ -217,6 +217,18 @@
         </Documentation>
       </DoubleVectorProperty>
 
+      <DoubleVectorProperty command="SetAdaptiveSizingNeighborMaxRatio"
+                            name="AdaptiveSizingNeighborMaxRatio"
+                            label="Neighbor max size ratio"
+                            number_of_elements="1"
+                            default_values="0">
+        <DoubleRangeDomain name="range" min="0" max="1e6"/>
+        <Documentation>
+          Same as the main remesher: optional cap on adjacent-vertex target-length ratio after ICC
+          clamping (**0** or **≤ 1** = off; **> 1** enables gradient limiting on both `v:vespa_size_*` maps).
+        </Documentation>
+      </DoubleVectorProperty>
+
       <IntVectorProperty command="SetFeatureSizingStandAlone"
                          name="FeatureSizingStandAlone"
                          label="Feature sizing stand-alone"
@@ -299,6 +311,7 @@
         <Property name="MinEdgeLength"/>
         <Property name="MaxEdgeLength"/>
         <Property name="AdaptiveTolerance"/>
+        <Property name="AdaptiveSizingNeighborMaxRatio"/>
         <Property name="FeatureSizingStandAlone"/>
         <Property name="FeatureMinEdgeLength"/>
         <Property name="FeatureMaxEdgeLength"/>
