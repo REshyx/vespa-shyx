@@ -163,6 +163,9 @@ bool vtkCGALHelper::toVTK(vtkCGALHelper::Vespa_soup const* cgalMesh, vtkPolyData
 //------------------------------------------------------------------------------
 bool vtkCGALHelper::toVTK(vtkCGALHelper::Vespa_surface const* cgalMesh, vtkPolyData* vtkMesh)
 {
+  // VTK point ids follow CGAL::vertices iteration order — they are **not** the same thing as raw
+  // Vertex_index::idx() after Euler/remesh edits. Callers exporting per-vertex CGAL maps onto pd must
+  // iterate CGAL::vertices in lockstep rather than indexing by pid as Vertex_index(pid).
   // points (vertices in surfaceMesh are not contiguous)
   vtkNew<vtkPoints> pts;
   const vtkIdType   outNPts = num_vertices(cgalMesh->surface);

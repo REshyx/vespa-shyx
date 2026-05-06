@@ -136,6 +136,13 @@ public:
     compute_sizes_(mesh, mesh);
   }
 
+  /**
+   * Refill both target-length maps using the **current** `v:vespa_icc_normal` without modifying it.
+   * Use after PrepareIccVertexNormalsForAdaptiveSizing (e.g. sizing ICC preview port) so capped
+   * `v:vespa_size_*` match fresh normals; remesh-alone paths may leave maps stale relative to vn.
+   */
+  void recompute_sizes_from_current_icc_normals(CGAL_Surface& mesh) { compute_sizes_(mesh, mesh); }
+
   FT at(const vertex_descriptor v, const CGAL_Surface& sm) const
   {
     return is_vertex_feature_(v, sm) ? get(map_f_, v) : get(map_g_, v);

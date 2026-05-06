@@ -21,12 +21,19 @@
         constrain remeshing, and output port 1 is empty.
 
         Outputs:
-          0  Remeshed surface.
+          0  Remeshed surface. Point vectors **VespaIccNonMaskVertexNormal** (`v:vespa_icc_n_nonmask`,
+             or area blend `v:vespa_icc_normal` without mask dual) after ICC prep on the output.
           1  Sharp/feature edges as **lines** only (no vertex cells). Empty when Detect feature edges is OFF.
           2  Input geometry, faces passing the feature mask threshold.
-          3  Pre-remesh sizing/ICC preview (`v:vespa_icc_normal` remains internal). Capped
-             VespaAdaptiveSizeGlobal/Feature from `v:vespa_size_*` (identical per vertex when Feature
-             sizing stand-alone is OFF). Principal curvatures and uncapped sizes from a second ICC pass.
+          3  Sizing / ICC preview on the mesh **before the last remesh iteration**
+             (same as input topology when NumberOfIterations is 1). By default Recompute curvature each
+             iteration is ON — maps match a refresh immediately before that last iteration. Turn it OFF only
+             to trade accuracy for speed. `v:vespa_icc_normal` stays internal. Feature-mask dual ICC normals
+             on port 3: iterations==1 use the input mask; iterations>1 probe mask fields onto the preview
+             (same as port 0 path; requires **Transfer input arrays to output** / UpdateAttributes ON).
+             Capped VespaAdaptiveSizeGlobal/Feature from `v:vespa_size_*`; principal curvatures and
+             uncapped sizes from a second ICC pass on the preview geometry. **VespaIccNonMaskVertexNormal**
+             matches non-mask ICC vertex normals (`v:vespa_icc_n_nonmask`), or global blend when absent.
 
         Requires CGAL 6.0+.
       </Documentation>
@@ -34,7 +41,7 @@
       <OutputPort name="Remeshed surface"           index="0" id="port0"/>
       <OutputPort name="Sharp features"             index="1" id="port1"/>
       <OutputPort name="Mask patch (input)"         index="2" id="port2"/>
-      <OutputPort name="Sizing ICC preview (input)" index="3" id="port3"/>
+      <OutputPort name="Sizing ICC preview (pre-final pass)" index="3" id="port3"/>
 
       <!-- =================================================================
                                        INPUTS
@@ -341,16 +348,16 @@
                          name="RemeshRecomputeCurvatureEachIteration"
                          label="Recompute curvature each iteration"
                          number_of_elements="1"
-                         default_values="0"
+                         default_values="1"
                          animateable="0"
                          panel_visibility="advanced">
         <BooleanDomain name="bool"/>
         <Documentation>
-          When OFF (default), adaptive sizing computes ICC once in the Vespa sizing constructor before
-          remesh iterations; splits inherit targets by averaging incident neighbors (`register_split_vertex`).
-          When ON, each remesh iteration is run separately with FeatureAwareAdaptiveSizingField::recompute_curvature
-          on the updated mesh (**full surface** ICC after the initial pass). Much slower when Remesh iterations
-          is large.
+          When ON (default), each remesh iteration runs separately with
+          FeatureAwareAdaptiveSizingField::recompute_curvature on the updated mesh (**full surface** ICC after
+          the initial pass). When OFF, ICC is computed once in the Vespa sizing constructor before remesh iterations;
+          splits inherit targets by averaging incident neighbors (`register_split_vertex`). Turning OFF can be faster
+          when Remesh iterations is large.
         </Documentation>
       </IntVectorProperty>
 
@@ -660,7 +667,9 @@
                          default_values="1">
         <BooleanDomain name="bool"/>
         <Documentation>
-          If ON, point/cell data are interpolated onto the new mesh.
+          If ON, point/cell data are interpolated onto port 0 (and probed onto port 3 ICC preview when
+          Remesh iterations &gt; 1 with Feature mask enabled, so mask-driven ICC dual normals match current
+          geometry).
         </Documentation>
       </IntVectorProperty>
 

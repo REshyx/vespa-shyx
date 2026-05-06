@@ -23,6 +23,7 @@
 #include <boost/property_map/property_map.hpp>
 
 #include <CGAL/Kernel/global_functions.h>
+#include <CGAL/boost/graph/iterator.h>
 
 #include <algorithm>
 #include <cmath>
@@ -189,6 +190,12 @@ int vtkSHYXAdaptiveIsotropicRemesherTest::RequestData(
   std::vector<Graph_Faces> vtkCellToCgalFace;
   vtkCGALHelper::toCGAL(input, cgalMesh.get(), &vtkCellToCgalFace);
 
+  std::vector<vtkIdType> inputFaceSlotToVtkCell;
+  if (this->FeatureMaskEnabled && inputFeatureMaskOk)
+  {
+    BuildCgalFaceSlotToInputVtkCellId(cgalMesh->surface, vtkCellToCgalFace, inputFaceSlotToVtkCell);
+  }
+
   std::vector<Graph_Faces> remeshFaces;
   remeshFaces.reserve(selected.size());
   if (!selected.empty())
@@ -235,10 +242,8 @@ int vtkSHYXAdaptiveIsotropicRemesherTest::RequestData(
         cgalMesh->surface, this->ProtectAngle, this->SharpFeatureSideFilter, featureEdges);
       if (this->FeatureMaskEnabled && inputFeatureMaskOk)
       {
-        std::vector<vtkIdType> faceIdxToVtkIn;
-        BuildCgalFaceIndexToVtkCell(cgalMesh->surface, faceIdxToVtkIn);
         ApplyFeatureRegionMaskToSharpEdges(
-          cgalMesh->surface, featureEdges, inputFeatureMask, faceIdxToVtkIn);
+          cgalMesh->surface, featureEdges, inputFeatureMask, inputFaceSlotToVtkCell);
       }
 
       if (this->FeatureMaskEnabled && inputFeatureMaskOk &&
@@ -266,9 +271,8 @@ int vtkSHYXAdaptiveIsotropicRemesherTest::RequestData(
       const std::vector<char>* iccMaskPtr = nullptr;
       if (this->FeatureMaskEnabled && inputFeatureMaskOk)
       {
-        std::vector<vtkIdType> faceIdxToVtkIn;
-        BuildCgalFaceIndexToVtkCell(cgalMesh->surface, faceIdxToVtkIn);
-        BuildCgalFaceMaskFromVtkCells(cgalMesh->surface, inputFeatureMask, faceIdxToVtkIn, iccFaceMask);
+        BuildCgalFaceMaskFromVtkCells(cgalMesh->surface, inputFeatureMask, inputFaceSlotToVtkCell,
+          iccFaceMask);
         iccMaskPtr = &iccFaceMask;
       }
       PrepareIccVertexNormalsForAdaptiveSizing(cgalMesh->surface, iccMaskPtr);
@@ -301,11 +305,12 @@ int vtkSHYXAdaptiveIsotropicRemesherTest::RequestData(
       return 0;
     }
 
-    for (vtkIdType pid = 0; pid < nPts; ++pid)
+    vtkIdType pidx = 0;
+    for (CGAL_Surface::Vertex_index vx : CGAL::vertices(cgalMesh->surface))
     {
-      const CGAL_Surface::Vertex_index vx(static_cast<std::size_t>(pid));
-      szGlobal->SetValue(pid, boost::get(*optPg, vx));
-      szFeature->SetValue(pid, boost::get(*optPf, vx));
+      szGlobal->SetValue(pidx, boost::get(*optPg, vx));
+      szFeature->SetValue(pidx, boost::get(*optPf, vx));
+      ++pidx;
     }
 
     const auto optVn =
@@ -368,8 +373,10 @@ int vtkSHYXAdaptiveIsotropicRemesherTest::RequestData(
     std::vector<double> iccKgauss;
     const CGAL_Surface::Property_map<CGAL_Surface::Vertex_index, CGAL_Kernel::Vector_3>* vnForIcc =
       optVn.has_value() ? &(*optVn) : nullptr;
-    ComputeIccVertexCurvatureScalars(cgalMesh->surface, patchRemesh, remeshFaces, vnForIcc,
-      iccKmin, iccKmax, iccKmean, iccKgauss);
+    // Match remesher preview: full-mesh ICC for vertex principals + uncapped sizing (patch graph would
+    // leave most vertices NaN outside the localized remesh halo).
+    ComputeIccVertexCurvatureScalars(cgalMesh->surface, false, std::vector<CGAL_Surface::Face_index>{},
+      vnForIcc, iccKmin, iccKmax, iccKmean, iccKgauss);
 
     vtkNew<vtkDoubleArray> szGlobalUncapped;
     vtkNew<vtkDoubleArray> szFeatureUncapped;
@@ -396,24 +403,26 @@ int vtkSHYXAdaptiveIsotropicRemesherTest::RequestData(
     iccMeanH->SetNumberOfTuples(nPts);
     iccGaussianK->SetNumberOfComponents(1);
     iccGaussianK->SetNumberOfTuples(nPts);
-    for (vtkIdType pid = 0; pid < nPts; ++pid)
+    pidx = 0;
+    for (CGAL_Surface::Vertex_index vx : CGAL::vertices(cgalMesh->surface))
     {
-      const std::size_t i = static_cast<std::size_t>(pid);
+      const std::size_t i = static_cast<std::size_t>(vx.idx());
       const double km = (i < iccKmin.size()) ? iccKmin[i] : std::numeric_limits<double>::quiet_NaN();
       const double kM = (i < iccKmax.size()) ? iccKmax[i] : std::numeric_limits<double>::quiet_NaN();
       const double kmn =
         (i < iccKmean.size()) ? iccKmean[i] : std::numeric_limits<double>::quiet_NaN();
       const double kg =
         (i < iccKgauss.size()) ? iccKgauss[i] : std::numeric_limits<double>::quiet_NaN();
-      iccPrincipalMin->SetValue(pid, km);
-      iccPrincipalMax->SetValue(pid, kM);
-      iccMeanH->SetValue(pid, kmn);
-      iccGaussianK->SetValue(pid, kg);
+      iccPrincipalMin->SetValue(pidx, km);
+      iccPrincipalMax->SetValue(pidx, kM);
+      iccMeanH->SetValue(pidx, kmn);
+      iccGaussianK->SetValue(pidx, kg);
 
       szGlobalUncapped->SetValue(
-        pid, VespaUncappedAdaptiveEdgeLengthFromTol(this->AdaptiveTolerance, km, kM));
+        pidx, VespaUncappedAdaptiveEdgeLengthFromTol(this->AdaptiveTolerance, km, kM));
       szFeatureUncapped->SetValue(
-        pid, VespaUncappedAdaptiveEdgeLengthFromTol(this->FeatureAdaptiveTolerance, km, kM));
+        pidx, VespaUncappedAdaptiveEdgeLengthFromTol(this->FeatureAdaptiveTolerance, km, kM));
+      ++pidx;
     }
 
     output->DeepCopy(input);

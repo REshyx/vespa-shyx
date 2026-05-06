@@ -21,16 +21,25 @@
  * With an empty remesh region (no selection, invalid scalar-range setup, or no cells in range),
  * the whole surface is remeshed.
  *
- * Output port 0: remeshed vtkPolyData.
+ * Output port 0: remeshed vtkPolyData (point array **VespaIccNonMaskVertexNormal**: ICC non-mask-side
+ * vertex normal from `v:vespa_icc_n_nonmask`, or `v:vespa_icc_normal` when no mask dual exists; written
+ * after a final `PrepareIcc` on the output using the evaluated feature mask when enabled).
  * Output port 1: **Lines** only (sharp feature edges). Uses the **input** mask region (port 2) when
  * the feature mask is valid and non-empty; otherwise the full remeshed surface (with optional mask
  * filtering on the output). No vertex cells. Empty when Detect feature edges is OFF.
  * Output port 2: input geometry, faces passing the feature mask threshold (for remesh constraints).
- * Output port 3: **pre-remesh** copy of the input with diagnostic point arrays aligned with the
- * remesher/Test preview (`v:vespa_icc_normal` is not exported): VespaAdaptiveSizeGlobal /
- * VespaAdaptiveSizeFeature from named mesh maps (`v:vespa_size_*`, equal per vertex when
- * FeatureSizingStandAlone is OFF), VespaIccPrincipalCurvatureMin/Max plus uncapped sizing arrays from
- * a second ICC vertex pass (feature uncapped uses the mirrored feature tolerance when standalone is OFF).
+ * Output port 3: **Sizing / ICC preview immediately before the final remesh sub-step** —
+ * NumberOfIterations==1: same topology as the CGAL input (converted to VTK); NumberOfIterations>1:
+ * the mesh after NumberOfIterations-1 single-iteration CGAL passes. `RemeshRecomputeCurvatureEachIteration`
+ * matches the main path when enabled (default): curvature and `v:vespa_size_*` are refreshed immediately before
+ * this snapshot (and thus before the last iteration), as in the CGAL loop. With NumberOfIterations>1 and
+ * Feature mask, port 3 probes mask arrays from the input onto the preview mesh (`UpdateAttributes` ON)
+ * and builds the same dual ICC normals as on the final output when evaluation succeeds.
+ * (`v:vespa_icc_normal` is not exported.) Arrays: VespaAdaptiveSizeGlobal / VespaAdaptiveSizeFeature
+ * from `v:vespa_size_*`, VespaIccPrincipalCurvatureMin/Max and uncapped sizing from a second ICC pass
+ * after preview `PrepareIcc`; feature uncapped uses the mirrored tolerance when FeatureSizingStandAlone is OFF.
+ * **VespaIccNonMaskVertexNormal** (3-tuple point vectors) matches `v:vespa_icc_n_nonmask`, or the area blend
+ * `v:vespa_icc_normal` when the dual bundle is absent.
  *
  * Requires CGAL 6.0 or newer.
  */
@@ -171,11 +180,11 @@ public:
 
   //@{
   /**
-   * When true, CGAL isotropic remeshing performs **one CGAL iteration per pass** and calls
+   * When true (default), CGAL isotropic remeshing performs **one CGAL iteration per pass** and calls
    * FeatureAwareAdaptiveSizingField::recompute_curvature before each subsequent pass so ICC is
    * re-evaluated on the updated mesh (**full surface** ICC domain; see vtkSHYXFeatureAwareAdaptiveSizingField).
-   * When false (default), ICC runs in the sizing-field constructor immediately before multi-iteration remesh,
-   * and splits only interpolate neighbor targets. Much slower when the iteration count is large.
+   * When false, ICC runs in the sizing-field constructor immediately before multi-iteration remesh,
+   * and splits only interpolate neighbor targets (faster when the iteration count is large).
    */
   vtkGetMacro(RemeshRecomputeCurvatureEachIteration, bool);
   vtkSetMacro(RemeshRecomputeCurvatureEachIteration, bool);
@@ -341,7 +350,7 @@ protected:
   double FeatureMinEdgeLength      = 0.0;
   double FeatureMaxEdgeLength      = 0.0;
   double FeatureAdaptiveTolerance  = 0.01;
-  bool   RemeshRecomputeCurvatureEachIteration = false;
+  bool   RemeshRecomputeCurvatureEachIteration = true;
   double ProtectAngle        = 70.0;
   int    NumberOfIterations  = 3;
   int    NumberOfRelaxationSteps = 3;

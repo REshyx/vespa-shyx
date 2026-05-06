@@ -8,6 +8,7 @@
 #include <vtkCellType.h>
 #include <vtkDataArray.h>
 #include <vtkDataSet.h>
+#include <vtkDoubleArray.h>
 #include <vtkFieldData.h>
 #include <vtkIdList.h>
 #include <vtkIdTypeArray.h>
@@ -361,9 +362,55 @@ inline void ExtractMaskedFacesPolyData(vtkPolyData* inMesh, const std::vector<ch
   out->Squeeze();
 }
 
+/**
+ * Upper bound on CGAL face property slots keyed by \c Face_index::idx().
+ * Prefer this over number_of_faces() when indexing std::vectors by idx(): Euler ops can leave
+ * holes in idx space until garbage collection so max(idx)+1 may exceed the alive face count.
+ */
+inline std::size_t CgalFaceMaskSlotUpperBound(const CGAL_Surface& mesh)
+{
+  std::size_t ub = 0;
+  for (CGAL_Surface::Face_index f : mesh.faces())
+  {
+    ub = std::max(ub, static_cast<std::size_t>(f.idx()) + 1u);
+  }
+  return ub;
+}
+
+/**
+ * For meshes built via \c vtkCGALHelper::toCGAL(input, ..., vtkCellToCgalFace), map each used
+ * face slot to the VTK input cell id (\c cid) stored in vtkCellToCgalFace[\c cid]. Unused slots -1.
+ * Use with \c ApplyFeatureRegionMaskToSharpEdges / \c BuildCgalFaceMaskFromVtkCells when the VTK
+ * mask is indexed by that input PolyData cell id — not CGAL faces() visitation order alone.
+ */
+inline void BuildCgalFaceSlotToInputVtkCellId(const CGAL_Surface& mesh,
+  const std::vector<Graph_Faces>& vtkCellToCgalFace, std::vector<vtkIdType>& faceSlotToVtkCell)
+{
+  const std::size_t slotUb = CgalFaceMaskSlotUpperBound(mesh);
+  faceSlotToVtkCell.assign(slotUb, static_cast<vtkIdType>(-1));
+  for (vtkIdType cid = 0; cid < static_cast<vtkIdType>(vtkCellToCgalFace.size()); ++cid)
+  {
+    const Graph_Faces f = vtkCellToCgalFace[static_cast<size_t>(cid)];
+    if (!mesh.is_valid(f))
+    {
+      continue;
+    }
+    const std::size_t fi = static_cast<std::size_t>(f.idx());
+    if (fi < faceSlotToVtkCell.size())
+    {
+      faceSlotToVtkCell[fi] = cid;
+    }
+  }
+}
+
+/**
+ * Map each face slot \c f.idx() to VTK cell id in \c CGAL::faces(\a sm) visitation order
+ * (same order as \c vtkCGALHelper::toVTK on that mesh: VTK cell id 0,1,…).
+ */
 inline void BuildCgalFaceIndexToVtkCell(const CGAL_Surface& sm, std::vector<vtkIdType>& faceIdxToVtkCell)
 {
-  faceIdxToVtkCell.assign(static_cast<size_t>(sm.number_of_faces()), static_cast<vtkIdType>(-1));
+  const std::size_t slotUb = CgalFaceMaskSlotUpperBound(sm);
+  faceIdxToVtkCell.assign(slotUb, static_cast<vtkIdType>(-1));
   vtkIdType vtkCell = 0;
   for (CGAL_Surface::Face_index f : sm.faces())
   {
@@ -375,16 +422,17 @@ inline void BuildCgalFaceIndexToVtkCell(const CGAL_Surface& sm, std::vector<vtkI
   }
 }
 
-/** Per-CGAL-face mask from VTK cell mask (same indexing as BuildCgalFaceIndexToVtkCell). */
+/** Per-face mask indexed by CGAL \c Face_index::idx(): \c vtkCellMask[K] at VTK cell id K from \a faceIdxToVtkCell. */
 inline void BuildCgalFaceMaskFromVtkCells(const CGAL_Surface& mesh,
   const std::vector<char>& vtkCellMask, const std::vector<vtkIdType>& faceIdxToVtkCell,
   std::vector<char>& outCgalFaceMask)
 {
-  outCgalFaceMask.assign(static_cast<size_t>(mesh.number_of_faces()), 0);
+  const std::size_t slotUb = CgalFaceMaskSlotUpperBound(mesh);
+  outCgalFaceMask.assign(slotUb, 0);
   for (CGAL_Surface::Face_index f : mesh.faces())
   {
     const std::size_t fi = static_cast<std::size_t>(f.idx());
-    if (fi >= faceIdxToVtkCell.size())
+    if (fi >= faceIdxToVtkCell.size() || fi >= outCgalFaceMask.size())
     {
       continue;
     }
@@ -402,13 +450,18 @@ inline void BuildCgalFaceMaskFromVtkCells(const CGAL_Surface& mesh,
  *
  * 1) `compute_vertex_normals` — area-weighted blend of **all** incident triangle normals (CGAL
  *    default; no angle-based crease splitting).
- * 2) If @a faceInMaskByFaceIdx is set: writes `f:vespa_icc_in_mask` and **dual** vertex normals for ICC:
+ * 2) When @a faceInMaskByFaceIdx is omitted or empty after (1): if leftover dual maps (`f:vespa_icc_in_mask`,
+ *    `v:vespa_icc_n_*`) exist from a **previous** masked call on this mesh, they are reset — all faces
+ *    marked non-mask and both dual vertex normals copied from (1) — so ICC does not keep using stale
+ *    mask topology after remesh.
+ * 3) If @a faceInMaskByFaceIdx is set: writes `f:vespa_icc_in_mask` and **dual** vertex normals for ICC:
  *    `v:vespa_icc_n_mask` / `v:vespa_icc_n_nonmask` — each is the normalized sum of incident face normals
  *    restricted to masked / non-mask faces respectively; if that partial sum is degenerate, falls back
  *    to (1). Per-triangle ICC assembly picks corners via mask membership so mask interiors are not
  *    polluted by normals from the opposite side at region boundaries.
  *
  * @param faceInMaskByFaceIdx optional, indexed by `Face_index::idx()`, length ≥ face count.
+ *    Pass nullptr (or empty) only when no mask-driven ICC is intended; see (2).
  */
 inline void PrepareIccVertexNormalsForAdaptiveSizing(CGAL_Surface& mesh,
   const std::vector<char>* faceInMaskByFaceIdx)
@@ -426,6 +479,36 @@ inline void PrepareIccVertexNormalsForAdaptiveSizing(CGAL_Surface& mesh,
 
   if (faceInMaskByFaceIdx == nullptr || faceInMaskByFaceIdx->empty())
   {
+    // A prior masked PrepareIcc leaves `v:vespa_icc_n_*` + `f:vespa_icc_in_mask`; after topology
+    // changes (multi-iteration remesh) VTK cell indices no longer remap here, but CGAL still exposes
+    // those maps. interpolated_corrected_curvatures loads them via VespaIccTryLoadDualNormalBundle
+    // and then uses incompatible mask/normal data → bogus principals and NaN uncapped targets.
+    // Neutralise to "no masking": all-face non-mask corners use vn_nonmask == vn_primary; vn_mask ==
+    // vn_primary too (unused when every face is non-mask).
+    const auto stale_fm = mesh.template property_map<Face_index, bool>("f:vespa_icc_in_mask");
+    if (stale_fm.has_value())
+    {
+      for (Face_index f : mesh.faces())
+      {
+        put(*stale_fm, f, false);
+      }
+    }
+    const auto stale_vm = mesh.template property_map<Vertex_index, Vector_3>("v:vespa_icc_n_mask");
+    const auto stale_vnm = mesh.template property_map<Vertex_index, Vector_3>("v:vespa_icc_n_nonmask");
+    if (stale_vm.has_value())
+    {
+      for (Vertex_index v : mesh.vertices())
+      {
+        put(*stale_vm, v, get(vn_map, v));
+      }
+    }
+    if (stale_vnm.has_value())
+    {
+      for (Vertex_index v : mesh.vertices())
+      {
+        put(*stale_vnm, v, get(vn_map, v));
+      }
+    }
     return;
   }
 
@@ -480,6 +563,71 @@ inline void PrepareIccVertexNormalsForAdaptiveSizing(CGAL_Surface& mesh,
 
     put(vn_mask_map, v, normalizeOrFallback(sumMask));
     put(vn_nonmask_map, v, normalizeOrFallback(sumNonMask));
+  }
+}
+
+/**
+ * Export per-vertex **non-mask-side** ICC normals (`v:vespa_icc_n_nonmask`: area blend of incident
+ * face normals on faces outside the feature mask, unitized; falls back to `v:vespa_icc_normal` when
+ * the dual bundle was never built — whole surface counts as non-mask). VTK point order must match
+ * `vtkCGALHelper::toVTK` / `toCGAL`, i.e. the same order as `CGAL::vertices(mesh)`, **not** raw
+ * `Vertex_index::idx()` (they can diverge after local remesh topology changes).
+ */
+inline void AddVespaIccNonMaskNormalsAsPointArray(
+  const CGAL_Surface& mesh, vtkPolyData* pd, vtkObject* loggerOrNull = nullptr)
+{
+  if (!pd)
+  {
+    return;
+  }
+  if (static_cast<std::size_t>(pd->GetNumberOfPoints()) != mesh.number_of_vertices())
+  {
+    if (loggerOrNull != nullptr)
+    {
+      vtkWarningWithObjectMacro(loggerOrNull,
+        << "Skipping VespaIccNonMaskVertexNormal export: VTK point count "
+        << pd->GetNumberOfPoints() << " differs from CGAL vertex count "
+        << mesh.number_of_vertices() << '.');
+    }
+    return;
+  }
+  using Vertex_index = CGAL_Surface::Vertex_index;
+  const auto pmap_nm =
+    mesh.template property_map<Vertex_index, CGAL_Kernel::Vector_3>("v:vespa_icc_n_nonmask");
+  const auto pmap_gn =
+    mesh.template property_map<Vertex_index, CGAL_Kernel::Vector_3>("v:vespa_icc_normal");
+
+  auto emitFrom = [&](const CGAL_Surface::Property_map<Vertex_index, CGAL_Kernel::Vector_3>& m) {
+    vtkNew<vtkDoubleArray> ar;
+    ar->SetName("VespaIccNonMaskVertexNormal");
+    ar->SetNumberOfComponents(3);
+    vtkIdType nPts = pd->GetNumberOfPoints();
+    ar->SetNumberOfTuples(nPts);
+    vtkIdType pid = 0;
+    for (Vertex_index vtex : CGAL::vertices(mesh))
+    {
+      const CGAL_Kernel::Vector_3 nv = boost::get(m, vtex);
+      ar->SetTuple3(
+        pid, CGAL::to_double(nv.x()), CGAL::to_double(nv.y()), CGAL::to_double(nv.z()));
+      ++pid;
+    }
+    if (pid != nPts && loggerOrNull != nullptr)
+    {
+      vtkWarningWithObjectMacro(loggerOrNull,
+        << "VespaIccNonMaskVertexNormal: CGAL::vertices count " << pid << " != VTK tuples " << nPts
+        << ".");
+    }
+    pd->GetPointData()->AddArray(ar);
+  };
+
+  if (pmap_nm.has_value())
+  {
+    emitFrom(pmap_nm.value());
+    return;
+  }
+  if (pmap_gn.has_value())
+  {
+    emitFrom(pmap_gn.value());
   }
 }
 

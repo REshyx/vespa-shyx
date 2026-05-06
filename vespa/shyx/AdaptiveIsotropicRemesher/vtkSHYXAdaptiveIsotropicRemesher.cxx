@@ -34,6 +34,8 @@
 
 #include <boost/property_map/property_map.hpp>
 
+#include <optional>
+
 namespace
 {
 double VespaUncappedAdaptiveEdgeLengthFromTol(double tol, double kmin, double kmax)
@@ -308,6 +310,12 @@ int vtkSHYXAdaptiveIsotropicRemesher::RequestData(
   std::vector<Graph_Faces> vtkCellToCgalFace;
   vtkCGALHelper::toCGAL(input, cgalMesh.get(), &vtkCellToCgalFace);
 
+  std::vector<vtkIdType> inputFaceSlotToVtkCell;
+  if (this->FeatureMaskEnabled && inputFeatureMaskOk)
+  {
+    BuildCgalFaceSlotToInputVtkCellId(cgalMesh->surface, vtkCellToCgalFace, inputFaceSlotToVtkCell);
+  }
+
   std::vector<Graph_Faces> remeshFaces;
   remeshFaces.reserve(selected.size());
   if (!selected.empty())
@@ -342,10 +350,8 @@ int vtkSHYXAdaptiveIsotropicRemesher::RequestData(
         cgalMesh->surface, this->ProtectAngle, this->SharpFeatureSideFilter, featureEdges);
       if (this->FeatureMaskEnabled && inputFeatureMaskOk)
       {
-        std::vector<vtkIdType> faceIdxToVtkIn;
-        BuildCgalFaceIndexToVtkCell(cgalMesh->surface, faceIdxToVtkIn);
         ApplyFeatureRegionMaskToSharpEdges(
-          cgalMesh->surface, featureEdges, inputFeatureMask, faceIdxToVtkIn);
+          cgalMesh->surface, featureEdges, inputFeatureMask, inputFaceSlotToVtkCell);
       }
 
       if (this->FeatureMaskEnabled && inputFeatureMaskOk &&
@@ -373,9 +379,8 @@ int vtkSHYXAdaptiveIsotropicRemesher::RequestData(
       const std::vector<char>* iccMaskPtr = nullptr;
       if (this->FeatureMaskEnabled && inputFeatureMaskOk)
       {
-        std::vector<vtkIdType> faceIdxToVtkIn;
-        BuildCgalFaceIndexToVtkCell(cgalMesh->surface, faceIdxToVtkIn);
-        BuildCgalFaceMaskFromVtkCells(cgalMesh->surface, inputFeatureMask, faceIdxToVtkIn, iccFaceMask);
+        BuildCgalFaceMaskFromVtkCells(cgalMesh->surface, inputFeatureMask, inputFaceSlotToVtkCell,
+          iccFaceMask);
         iccMaskPtr = &iccFaceMask;
       }
       PrepareIccVertexNormalsForAdaptiveSizing(cgalMesh->surface, iccMaskPtr);
@@ -394,12 +399,83 @@ int vtkSHYXAdaptiveIsotropicRemesher::RequestData(
     };
 
     const unsigned int remeshIterations =
-      static_cast<unsigned int>(std::max(0, this->NumberOfIterations));
+      static_cast<unsigned int>(this->NumberOfIterations);
 
-    outputSizingDiag->DeepCopy(input);
+    using SizingTy = FeatureAwareAdaptiveSizingField<decltype(featureEdges)>;
+    std::optional<SizingTy> sizingStorage;
+    if (patchRemesh)
     {
+      sizingStorage.emplace(this->AdaptiveTolerance, std::make_pair(minLen, maxLen), sizingFeatTol,
+        std::make_pair(sizingFeatMin, sizingFeatMax), remeshFaces, cgalMesh->surface, featureEdges);
+    }
+    else
+    {
+      sizingStorage.emplace(this->AdaptiveTolerance, std::make_pair(minLen, maxLen), sizingFeatTol,
+        std::make_pair(sizingFeatMin, sizingFeatMax), cgalMesh->surface.faces(), cgalMesh->surface,
+        featureEdges);
+    }
+    SizingTy& sizing = *sizingStorage;
+
+    // Port 3: geometry is the CGAL mesh immediately before the last remesh sub-step —
+    // the input converted to VTK when NumberOfIterations==1; after NumberOfIterations-1
+    // single-iteration CGAL passes otherwise. ICC preview mask: iterations==1 uses the input VTK
+    // cell mask; iterations>1 probes input attributes onto port 3 then evaluates the same Feature
+    // mask rule on the preview (requires UpdateAttributes).
+    const auto fillSizingIccPreviewPort = [&]() {
       CGAL_Surface& smDiag = cgalMesh->surface;
-      const vtkIdType nPtsDiag = input->GetNumberOfPoints();
+      vtkNew<vtkPolyData> snap;
+      vtkCGALHelper::toVTK(cgalMesh.get(), snap);
+      outputSizingDiag->DeepCopy(snap);
+      const vtkIdType nPtsDiag = outputSizingDiag->GetNumberOfPoints();
+
+      {
+        std::vector<char> iccFaceMaskPv;
+        const std::vector<char>* iccMaskPtrPv = nullptr;
+        if (this->FeatureMaskEnabled)
+        {
+          if (remeshIterations <= 1u)
+          {
+            if (inputFeatureMaskOk)
+            {
+              BuildCgalFaceMaskFromVtkCells(
+                smDiag, inputFeatureMask, inputFaceSlotToVtkCell, iccFaceMaskPv);
+              iccMaskPtrPv = &iccFaceMaskPv;
+            }
+          }
+          else if (this->FeatureMaskArrayName != nullptr &&
+            this->FeatureMaskArrayName[0] != '\0')
+          {
+            if (!this->UpdateAttributes)
+            {
+              vtkWarningMacro(
+                "Feature mask ICC preview with Remesh iterations > 1 requires UpdateAttributes ON "
+                "(ParaView: transfer input arrays to output) so mask fields are probed onto port 3.");
+            }
+            else
+            {
+              this->interpolateAttributes(input, outputSizingDiag);
+              std::vector<char> evaluatedPreviewMask;
+              if (ComputeFeatureFaceMask(outputSizingDiag, this->FeatureMaskArrayName,
+                    this->FeatureMaskThreshold, this->FeatureMaskAllScalars, evaluatedPreviewMask))
+              {
+                std::vector<vtkIdType> faceIdxPv;
+                BuildCgalFaceIndexToVtkCell(smDiag, faceIdxPv);
+                BuildCgalFaceMaskFromVtkCells(
+                  smDiag, evaluatedPreviewMask, faceIdxPv, iccFaceMaskPv);
+                iccMaskPtrPv = &iccFaceMaskPv;
+              }
+              else
+              {
+                vtkWarningMacro("ICC sizing preview: could not evaluate Feature mask on the probed "
+                                "preview mesh (check array name and topology).");
+              }
+            }
+          }
+        }
+        PrepareIccVertexNormalsForAdaptiveSizing(smDiag, iccMaskPtrPv);
+      }
+
+      sizing.recompute_sizes_from_current_icc_normals(smDiag);
 
       const auto vnMapOpt =
         smDiag.property_map<CGAL_Surface::Vertex_index, CGAL_Kernel::Vector_3>("v:vespa_icc_normal");
@@ -414,32 +490,18 @@ int vtkSHYXAdaptiveIsotropicRemesher::RequestData(
       szFeatureDiag->SetNumberOfTuples(nPtsDiag);
 
       const double nanDiag = std::numeric_limits<double>::quiet_NaN();
-      if (patchRemesh)
-      {
-        FeatureAwareAdaptiveSizingField<decltype(featureEdges)> previewSizing(this->AdaptiveTolerance,
-          std::make_pair(minLen, maxLen), sizingFeatTol,
-          std::make_pair(sizingFeatMin, sizingFeatMax), remeshFaces, smDiag, featureEdges);
-        (void)previewSizing;
-      }
-      else
-      {
-        FeatureAwareAdaptiveSizingField<decltype(featureEdges)> previewSizing(this->AdaptiveTolerance,
-          std::make_pair(minLen, maxLen), sizingFeatTol,
-          std::make_pair(sizingFeatMin, sizingFeatMax), smDiag.faces(), smDiag, featureEdges);
-        (void)previewSizing;
-      }
-
       const auto optPg =
         smDiag.property_map<CGAL_Surface::Vertex_index, double>("v:vespa_size_global");
       const auto optPf =
         smDiag.property_map<CGAL_Surface::Vertex_index, double>("v:vespa_size_feature");
       if (optPg.has_value() && optPf.has_value())
       {
-        for (vtkIdType pid = 0; pid < nPtsDiag; ++pid)
+        vtkIdType pid = 0;
+        for (CGAL_Surface::Vertex_index vx : CGAL::vertices(smDiag))
         {
-          const CGAL_Surface::Vertex_index vx(static_cast<std::size_t>(pid));
           szGlobalDiag->SetValue(pid, boost::get(*optPg, vx));
           szFeatureDiag->SetValue(pid, boost::get(*optPf, vx));
+          ++pid;
         }
       }
       else
@@ -457,9 +519,13 @@ int vtkSHYXAdaptiveIsotropicRemesher::RequestData(
       std::vector<double> iccKgaussDiscard;
       const CGAL_Surface::Property_map<CGAL_Surface::Vertex_index, CGAL_Kernel::Vector_3>* vnPtrDiag =
         vnMapOpt.has_value() ? &(*vnMapOpt) : nullptr;
-      ComputeIccVertexCurvatureScalars(
-        smDiag, patchRemesh, remeshFaces, vnPtrDiag, iccKminDiag, iccKmaxDiag, iccKmeanDiscard,
-        iccKgaussDiscard);
+      // Principal + uncapped arrays are preview-only: use the **full** mesh as the ICC domain.
+      // Patch-local Face_filtered_graph (patchRemesh + remeshFaces) only covers the remesh selection
+      // plus a 1-ring halo; all other vertices keep initial NaN — often most of the surface (e.g. ~80%
+      // when a small region is remeshed). Actual remesh sizing still uses the patch-expanded graph in
+      // FeatureAwareAdaptiveSizingField's constructor; this path is intentionally global for VTK.
+      ComputeIccVertexCurvatureScalars(smDiag, false, std::vector<CGAL_Surface::Face_index>{},
+        vnPtrDiag, iccKminDiag, iccKmaxDiag, iccKmeanDiscard, iccKgaussDiscard);
       (void)iccKmeanDiscard;
       (void)iccKgaussDiscard;
 
@@ -480,21 +546,23 @@ int vtkSHYXAdaptiveIsotropicRemesher::RequestData(
       szGlobUncDiag->SetNumberOfTuples(nPtsDiag);
       szFeatUncDiag->SetNumberOfTuples(nPtsDiag);
 
-      for (vtkIdType pid = 0; pid < nPtsDiag; ++pid)
       {
-        const std::size_t ii = static_cast<std::size_t>(pid);
-        const double km = (ii < iccKminDiag.size())
-          ? iccKminDiag[ii]
-          : std::numeric_limits<double>::quiet_NaN();
-        const double kM = (ii < iccKmaxDiag.size())
-          ? iccKmaxDiag[ii]
-          : std::numeric_limits<double>::quiet_NaN();
-        iccPMinDiag->SetValue(pid, km);
-        iccPMaxDiag->SetValue(pid, kM);
-        szGlobUncDiag->SetValue(
-          pid, VespaUncappedAdaptiveEdgeLengthFromTol(this->AdaptiveTolerance, km, kM));
-        szFeatUncDiag->SetValue(
-          pid, VespaUncappedAdaptiveEdgeLengthFromTol(sizingFeatTol, km, kM));
+        vtkIdType pid = 0;
+        for (CGAL_Surface::Vertex_index vx : CGAL::vertices(smDiag))
+        {
+          const std::size_t idi = static_cast<std::size_t>(vx.idx());
+          const double km =
+            (idi < iccKminDiag.size()) ? iccKminDiag[idi] : nanDiag;
+          const double kM =
+            (idi < iccKmaxDiag.size()) ? iccKmaxDiag[idi] : nanDiag;
+          iccPMinDiag->SetValue(pid, km);
+          iccPMaxDiag->SetValue(pid, kM);
+          szGlobUncDiag->SetValue(
+            pid, VespaUncappedAdaptiveEdgeLengthFromTol(this->AdaptiveTolerance, km, kM));
+          szFeatUncDiag->SetValue(
+            pid, VespaUncappedAdaptiveEdgeLengthFromTol(sizingFeatTol, km, kM));
+          ++pid;
+        }
       }
 
       vtkPointData* pddiag = outputSizingDiag->GetPointData();
@@ -504,60 +572,44 @@ int vtkSHYXAdaptiveIsotropicRemesher::RequestData(
       pddiag->AddArray(szFeatUncDiag);
       pddiag->AddArray(iccPMinDiag);
       pddiag->AddArray(iccPMaxDiag);
-    }
+      AddVespaIccNonMaskNormalsAsPointArray(smDiag, outputSizingDiag, this);
+    };
 
-    // Sizing always uses Vespa FeatureAwareAdaptiveSizingField on named mesh maps after
-    // PrepareIccVertexNormalsForAdaptiveSizing. When FeatureSizingStandAlone is false, feature-side
-    // tolerance/min/max mirror the globals so global and feature maps match on every vertex.
-    if (this->RemeshRecomputeCurvatureEachIteration)
-    {
+    auto doRemeshSingleIteration = [&]() {
       if (patchRemesh)
       {
-        FeatureAwareAdaptiveSizingField<decltype(featureEdges)> sizing(this->AdaptiveTolerance,
-          std::make_pair(minLen, maxLen), sizingFeatTol,
-          std::make_pair(sizingFeatMin, sizingFeatMax), remeshFaces, cgalMesh->surface, featureEdges);
-        for (unsigned int pass = 0; pass < remeshIterations; ++pass)
-        {
-          if (pass > 0)
-          {
-            sizing.recompute_curvature(cgalMesh->surface);
-          }
-          pmp::isotropic_remeshing(
-            remeshFaces, sizing, cgalMesh->surface, remeshNp(1));
-        }
+        pmp::isotropic_remeshing(
+          remeshFaces, sizing, cgalMesh->surface, remeshNp(1));
       }
       else
       {
-        FeatureAwareAdaptiveSizingField<decltype(featureEdges)> sizing(this->AdaptiveTolerance,
-          std::make_pair(minLen, maxLen), sizingFeatTol,
-          std::make_pair(sizingFeatMin, sizingFeatMax), cgalMesh->surface.faces(), cgalMesh->surface,
-          featureEdges);
-        for (unsigned int pass = 0; pass < remeshIterations; ++pass)
-        {
-          if (pass > 0)
-          {
-            sizing.recompute_curvature(cgalMesh->surface);
-          }
-          pmp::isotropic_remeshing(
-            cgalMesh->surface.faces(), sizing, cgalMesh->surface, remeshNp(1));
-        }
+        pmp::isotropic_remeshing(
+          cgalMesh->surface.faces(), sizing, cgalMesh->surface, remeshNp(1));
       }
-    }
-    else if (patchRemesh)
+    };
+
+    if (remeshIterations <= 1u)
     {
-      FeatureAwareAdaptiveSizingField<decltype(featureEdges)> sizing(this->AdaptiveTolerance,
-        std::make_pair(minLen, maxLen), sizingFeatTol,
-        std::make_pair(sizingFeatMin, sizingFeatMax), remeshFaces, cgalMesh->surface, featureEdges);
-      pmp::isotropic_remeshing(remeshFaces, sizing, cgalMesh->surface, remeshNp(remeshIterations));
+      fillSizingIccPreviewPort();
+      doRemeshSingleIteration();
     }
     else
     {
-      FeatureAwareAdaptiveSizingField<decltype(featureEdges)> sizing(this->AdaptiveTolerance,
-        std::make_pair(minLen, maxLen), sizingFeatTol,
-        std::make_pair(sizingFeatMin, sizingFeatMax), cgalMesh->surface.faces(), cgalMesh->surface,
-        featureEdges);
-      pmp::isotropic_remeshing(
-        cgalMesh->surface.faces(), sizing, cgalMesh->surface, remeshNp(remeshIterations));
+      const unsigned int preliminaryPasses = remeshIterations - 1u;
+      for (unsigned int pass = 0; pass < preliminaryPasses; ++pass)
+      {
+        if (this->RemeshRecomputeCurvatureEachIteration && pass > 0)
+        {
+          sizing.recompute_curvature(cgalMesh->surface);
+        }
+        doRemeshSingleIteration();
+      }
+      if (this->RemeshRecomputeCurvatureEachIteration)
+      {
+        sizing.recompute_curvature(cgalMesh->surface);
+      }
+      fillSizingIccPreviewPort();
+      doRemeshSingleIteration();
     }
   }
   catch (std::exception& e)
@@ -568,6 +620,27 @@ int vtkSHYXAdaptiveIsotropicRemesher::RequestData(
 
   vtkCGALHelper::toVTK(cgalMesh.get(), output);
   this->interpolateAttributes(input, output);
+
+  {
+    CGAL_Surface& smFinal = cgalMesh->surface;
+    std::vector<char> outIccFaceMask;
+    const std::vector<char>* iccMaskPtrFinal = nullptr;
+    if (this->FeatureMaskEnabled)
+    {
+      std::vector<char> evaluatedFeatureMaskOut;
+      if (ComputeFeatureFaceMask(output, this->FeatureMaskArrayName,
+            this->FeatureMaskThreshold, this->FeatureMaskAllScalars, evaluatedFeatureMaskOut))
+      {
+        std::vector<vtkIdType> faceIdxToVtkOut;
+        BuildCgalFaceIndexToVtkCell(smFinal, faceIdxToVtkOut);
+        BuildCgalFaceMaskFromVtkCells(
+          smFinal, evaluatedFeatureMaskOut, faceIdxToVtkOut, outIccFaceMask);
+        iccMaskPtrFinal = &outIccFaceMask;
+      }
+    }
+    PrepareIccVertexNormalsForAdaptiveSizing(smFinal, iccMaskPtrFinal);
+    AddVespaIccNonMaskNormalsAsPointArray(smFinal, output, this);
+  }
 
   if (this->DetectFeatureEdges)
   {
