@@ -92,8 +92,6 @@ void vtkSHYXAdaptiveIsotropicRemesher::PrintSelf(ostream& os, vtkIndent indent)
   os << indent << "FeatureMinEdgeLength: " << this->FeatureMinEdgeLength << std::endl;
   os << indent << "FeatureMaxEdgeLength: " << this->FeatureMaxEdgeLength << std::endl;
   os << indent << "FeatureAdaptiveTolerance: " << this->FeatureAdaptiveTolerance << std::endl;
-  os << indent << "FeatureSizingUsePolylineCurvature: "
-     << (this->FeatureSizingUsePolylineCurvature ? "on" : "off") << std::endl;
   os << indent << "RemeshRecomputeCurvatureEachIteration: "
      << (this->RemeshRecomputeCurvatureEachIteration ? "on" : "off") << std::endl;
   os << indent << "ProtectAngle: " << this->ProtectAngle << std::endl;
@@ -407,8 +405,7 @@ int vtkSHYXAdaptiveIsotropicRemesher::RequestData(
         {
           FeatureAwareAdaptiveSizingField<decltype(featureEdges)> sizing(this->AdaptiveTolerance,
             std::make_pair(minLen, maxLen), this->FeatureAdaptiveTolerance,
-            std::make_pair(featMinLen, featMaxLen), remeshFaces, cgalMesh->surface, featureEdges,
-            this->FeatureSizingUsePolylineCurvature);
+            std::make_pair(featMinLen, featMaxLen), remeshFaces, cgalMesh->surface, featureEdges);
           for (unsigned int pass = 0; pass < remeshIterations; ++pass)
           {
             if (pass > 0)
@@ -437,7 +434,7 @@ int vtkSHYXAdaptiveIsotropicRemesher::RequestData(
           FeatureAwareAdaptiveSizingField<decltype(featureEdges)> sizing(this->AdaptiveTolerance,
             std::make_pair(minLen, maxLen), this->FeatureAdaptiveTolerance,
             std::make_pair(featMinLen, featMaxLen), cgalMesh->surface.faces(), cgalMesh->surface,
-            featureEdges, this->FeatureSizingUsePolylineCurvature);
+            featureEdges);
           for (unsigned int pass = 0; pass < remeshIterations; ++pass)
           {
             if (pass > 0)
@@ -466,8 +463,7 @@ int vtkSHYXAdaptiveIsotropicRemesher::RequestData(
       {
         FeatureAwareAdaptiveSizingField<decltype(featureEdges)> sizing(this->AdaptiveTolerance,
           std::make_pair(minLen, maxLen), this->FeatureAdaptiveTolerance,
-          std::make_pair(featMinLen, featMaxLen), remeshFaces, cgalMesh->surface, featureEdges,
-          this->FeatureSizingUsePolylineCurvature);
+          std::make_pair(featMinLen, featMaxLen), remeshFaces, cgalMesh->surface, featureEdges);
         pmp::isotropic_remeshing(remeshFaces, sizing, cgalMesh->surface, remeshNp(remeshIterations));
       }
       else
@@ -484,7 +480,7 @@ int vtkSHYXAdaptiveIsotropicRemesher::RequestData(
         FeatureAwareAdaptiveSizingField<decltype(featureEdges)> sizing(this->AdaptiveTolerance,
           std::make_pair(minLen, maxLen), this->FeatureAdaptiveTolerance,
           std::make_pair(featMinLen, featMaxLen), cgalMesh->surface.faces(), cgalMesh->surface,
-          featureEdges, this->FeatureSizingUsePolylineCurvature);
+          featureEdges);
         pmp::isotropic_remeshing(
           cgalMesh->surface.faces(), sizing, cgalMesh->surface, remeshNp(remeshIterations));
       }

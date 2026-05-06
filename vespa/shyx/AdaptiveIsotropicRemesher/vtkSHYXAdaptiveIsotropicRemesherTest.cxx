@@ -18,10 +18,14 @@
 #include <vtkPointData.h>
 #include <vtkPolyData.h>
 #include <vtkSelection.h>
+#include <vtkCellType.h>
 
 #include <boost/property_map/property_map.hpp>
 
+#include <CGAL/Kernel/global_functions.h>
+
 #include <exception>
+#include <limits>
 #include <memory>
 #include <set>
 #include <vector>
@@ -250,8 +254,7 @@ int vtkSHYXAdaptiveIsotropicRemesherTest::RequestData(
     {
       FeatureAwareAdaptiveSizingField<decltype(featureEdges)> sizing(this->AdaptiveTolerance,
         std::make_pair(minLen, maxLen), this->FeatureAdaptiveTolerance,
-        std::make_pair(featMinLen, featMaxLen), remeshFaces, cgalMesh->surface, featureEdges,
-        this->FeatureSizingUsePolylineCurvature);
+        std::make_pair(featMinLen, featMaxLen), remeshFaces, cgalMesh->surface, featureEdges);
       (void)sizing;
     }
     else
@@ -259,7 +262,7 @@ int vtkSHYXAdaptiveIsotropicRemesherTest::RequestData(
       FeatureAwareAdaptiveSizingField<decltype(featureEdges)> sizing(this->AdaptiveTolerance,
         std::make_pair(minLen, maxLen), this->FeatureAdaptiveTolerance,
         std::make_pair(featMinLen, featMaxLen), cgalMesh->surface.faces(), cgalMesh->surface,
-        featureEdges, this->FeatureSizingUsePolylineCurvature);
+        featureEdges);
       (void)sizing;
     }
 
@@ -281,9 +284,132 @@ int vtkSHYXAdaptiveIsotropicRemesherTest::RequestData(
       szFeature->SetValue(pid, boost::get(*optPf, vx));
     }
 
+    vtkNew<vtkDoubleArray> iccNormals;
+    iccNormals->SetName("VespaIccVertexNormal");
+    iccNormals->SetNumberOfComponents(3);
+    iccNormals->SetNumberOfTuples(nPts);
+    const auto optVn =
+      cgalMesh->surface.property_map<CGAL_Surface::Vertex_index, CGAL_Kernel::Vector_3>(
+        "v:vespa_icc_normal");
+    if (optVn.has_value())
+    {
+      for (vtkIdType pid = 0; pid < nPts; ++pid)
+      {
+        const CGAL_Surface::Vertex_index vx(static_cast<std::size_t>(pid));
+        const CGAL_Kernel::Vector_3 nvec = boost::get(*optVn, vx);
+        iccNormals->SetTuple3(pid, CGAL::to_double(nvec.x()), CGAL::to_double(nvec.y()),
+          CGAL::to_double(nvec.z()));
+      }
+    }
+    else
+    {
+      for (vtkIdType pid = 0; pid < nPts; ++pid)
+      {
+        iccNormals->SetTuple3(pid, 0.0, 0.0, 0.0);
+      }
+    }
+
+    const vtkIdType nCells = input->GetNumberOfCells();
+    vtkNew<vtkDoubleArray> mu0Cell;
+    vtkNew<vtkDoubleArray> mu1Cell;
+    vtkNew<vtkDoubleArray> mu2Cell;
+    mu0Cell->SetName("VespaIccTriangleMu0");
+    mu1Cell->SetName("VespaIccTriangleMu1");
+    mu2Cell->SetName("VespaIccTriangleMu2");
+    mu0Cell->SetNumberOfComponents(1);
+    mu1Cell->SetNumberOfComponents(1);
+    mu2Cell->SetNumberOfComponents(1);
+    mu0Cell->SetNumberOfTuples(nCells);
+    mu1Cell->SetNumberOfTuples(nCells);
+    mu2Cell->SetNumberOfTuples(nCells);
+
+    const double nanCell = std::numeric_limits<double>::quiet_NaN();
+    for (vtkIdType cid = 0; cid < nCells; ++cid)
+    {
+      mu0Cell->SetValue(cid, nanCell);
+      mu1Cell->SetValue(cid, nanCell);
+      mu2Cell->SetValue(cid, nanCell);
+      if (input->GetCellType(cid) != VTK_TRIANGLE)
+      {
+        continue;
+      }
+      if (cid < 0 || static_cast<size_t>(cid) >= vtkCellToCgalFace.size())
+      {
+        continue;
+      }
+      const CGAL_Surface::Face_index fd = vtkCellToCgalFace[static_cast<size_t>(cid)];
+      if (!cgalMesh->surface.is_valid(fd))
+      {
+        continue;
+      }
+      if (!optVn.has_value())
+      {
+        continue;
+      }
+      vespa_shyx::VespaIccDualNormalBundle dualBundle;
+      vespa_shyx::VespaIccTryLoadDualNormalBundle(&cgalMesh->surface, dualBundle);
+      const vespa_shyx::VespaIccDualNormalBundle* dualPtr =
+        dualBundle.active ? &dualBundle : nullptr;
+      double m0 = nanCell;
+      double m1 = nanCell;
+      double m2 = nanCell;
+      ComputeIccClosedFormMeasuresForFace(cgalMesh->surface, fd, dualPtr, *optVn, m0, m1, m2);
+      mu0Cell->SetValue(cid, m0);
+      mu1Cell->SetValue(cid, m1);
+      mu2Cell->SetValue(cid, m2);
+    }
+
+    std::vector<double> iccKmin;
+    std::vector<double> iccKmax;
+    std::vector<double> iccKmean;
+    std::vector<double> iccKgauss;
+    const CGAL_Surface::Property_map<CGAL_Surface::Vertex_index, CGAL_Kernel::Vector_3>* vnForIcc =
+      optVn.has_value() ? &(*optVn) : nullptr;
+    ComputeIccVertexCurvatureScalars(cgalMesh->surface, patchRemesh, remeshFaces, vnForIcc,
+      iccKmin, iccKmax, iccKmean, iccKgauss);
+
+    vtkNew<vtkDoubleArray> iccPrincipalMin;
+    vtkNew<vtkDoubleArray> iccPrincipalMax;
+    vtkNew<vtkDoubleArray> iccMeanH;
+    vtkNew<vtkDoubleArray> iccGaussianK;
+    iccPrincipalMin->SetName("VespaIccPrincipalCurvatureMin");
+    iccPrincipalMax->SetName("VespaIccPrincipalCurvatureMax");
+    iccMeanH->SetName("VespaIccMeanCurvature");
+    iccGaussianK->SetName("VespaIccGaussianCurvature");
+    iccPrincipalMin->SetNumberOfComponents(1);
+    iccPrincipalMin->SetNumberOfTuples(nPts);
+    iccPrincipalMax->SetNumberOfComponents(1);
+    iccPrincipalMax->SetNumberOfTuples(nPts);
+    iccMeanH->SetNumberOfComponents(1);
+    iccMeanH->SetNumberOfTuples(nPts);
+    iccGaussianK->SetNumberOfComponents(1);
+    iccGaussianK->SetNumberOfTuples(nPts);
+    for (vtkIdType pid = 0; pid < nPts; ++pid)
+    {
+      const std::size_t i = static_cast<std::size_t>(pid);
+      const double km = (i < iccKmin.size()) ? iccKmin[i] : std::numeric_limits<double>::quiet_NaN();
+      const double kM = (i < iccKmax.size()) ? iccKmax[i] : std::numeric_limits<double>::quiet_NaN();
+      const double kmn =
+        (i < iccKmean.size()) ? iccKmean[i] : std::numeric_limits<double>::quiet_NaN();
+      const double kg =
+        (i < iccKgauss.size()) ? iccKgauss[i] : std::numeric_limits<double>::quiet_NaN();
+      iccPrincipalMin->SetValue(pid, km);
+      iccPrincipalMax->SetValue(pid, kM);
+      iccMeanH->SetValue(pid, kmn);
+      iccGaussianK->SetValue(pid, kg);
+    }
+
     output->DeepCopy(input);
     output->GetPointData()->AddArray(szGlobal);
     output->GetPointData()->AddArray(szFeature);
+    output->GetPointData()->AddArray(iccNormals);
+    output->GetPointData()->AddArray(iccPrincipalMin);
+    output->GetPointData()->AddArray(iccPrincipalMax);
+    output->GetPointData()->AddArray(iccMeanH);
+    output->GetPointData()->AddArray(iccGaussianK);
+    output->GetCellData()->AddArray(mu0Cell);
+    output->GetCellData()->AddArray(mu1Cell);
+    output->GetCellData()->AddArray(mu2Cell);
 
     if (this->DetectFeatureEdges)
     {

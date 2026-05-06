@@ -167,20 +167,6 @@ public:
 
   //@{
   /**
-   * When FeatureSizingStandAlone is true: if ON, the feature-edge sizing map uses
-   * **3D polyline curvature** (Menger / circumcircle curvature) at vertices incident to
-   * constrained feature edges, so creases are treated as space curves. If OFF (default),
-   * feature and global maps both use **surface** principal curvatures from
-   * interpolated_corrected_curvatures (legacy behavior). Ignored when FeatureSizingStandAlone is
-   * false.
-   */
-  vtkGetMacro(FeatureSizingUsePolylineCurvature, bool);
-  vtkSetMacro(FeatureSizingUsePolylineCurvature, bool);
-  vtkBooleanMacro(FeatureSizingUsePolylineCurvature, bool);
-  //@}
-
-  //@{
-  /**
    * When true, CGAL isotropic remeshing runs one iteration at a time and **re-evaluates**
    * interpolated_corrected_curvatures before each iteration after the first (refreshing the
    * adaptive sizing targets on the current mesh). When FeatureSizingStandAlone is OFF, a new
@@ -372,7 +358,6 @@ protected:
   double FeatureMinEdgeLength      = 0.0;
   double FeatureMaxEdgeLength      = 0.0;
   double FeatureAdaptiveTolerance  = 0.01;
-  bool   FeatureSizingUsePolylineCurvature = false;
   bool   RemeshRecomputeCurvatureEachIteration = false;
   double ProtectAngle        = 70.0;
   int    NumberOfIterations  = 3;

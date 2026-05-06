@@ -318,27 +318,6 @@
         </Hints>
       </DoubleVectorProperty>
 
-      <IntVectorProperty command="SetFeatureSizingUsePolylineCurvature"
-                         name="FeatureSizingUsePolylineCurvature"
-                         label="Feature sizing: polyline curvature"
-                         number_of_elements="1"
-                         default_values="0"
-                         animateable="0">
-        <BooleanDomain name="bool"/>
-        <Documentation>
-          When Feature sizing stand-alone is ON: if ON, target edge lengths on constrained
-          feature edges use **3D polyline (Menger) curvature** at crease vertices instead of
-          surface principal curvatures. If OFF (default), feature sizing uses the same
-          interpolated_corrected surface curvatures as the global field (previous behavior).
-        </Documentation>
-        <Hints>
-          <PropertyWidgetDecorator type="GenericDecorator"
-                                   mode="visibility"
-                                   property="FeatureSizingStandAlone"
-                                   value="1"/>
-        </Hints>
-      </IntVectorProperty>
-
       <PropertyGroup label="Sizing">
         <Property name="MinEdgeLength"/>
         <Property name="MaxEdgeLength"/>
@@ -347,7 +326,6 @@
         <Property name="FeatureMinEdgeLength"/>
         <Property name="FeatureMaxEdgeLength"/>
         <Property name="FeatureAdaptiveTolerance"/>
-        <Property name="FeatureSizingUsePolylineCurvature"/>
       </PropertyGroup>
 
       <!-- =================================================================

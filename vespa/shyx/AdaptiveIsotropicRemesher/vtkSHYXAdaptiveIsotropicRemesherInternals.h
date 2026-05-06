@@ -18,10 +18,15 @@
 #include <vtkSetGet.h>
 
 #include <CGAL/Kernel/global_functions.h>
+#include <CGAL/Kernel_traits.h>
+#include <CGAL/Origin.h>
 #include <CGAL/Polygon_mesh_processing/compute_normal.h>
 #include <CGAL/Polygon_mesh_processing/detect_features.h>
+#include "custom_interpolated_corrected_curvatures.h"
+#include <CGAL/boost/graph/Face_filtered_graph.h>
 #include <CGAL/boost/graph/helpers.h>
 #include <CGAL/boost/graph/iterator.h>
+#include <CGAL/boost/graph/selection.h>
 #include <CGAL/property_map.h>
 
 #include <boost/property_map/property_map.hpp>
@@ -30,6 +35,7 @@
 #include <array>
 #include <cmath>
 #include <cstdint>
+#include <limits>
 #include <map>
 #include <set>
 #include <unordered_map>
@@ -396,14 +402,16 @@ inline void BuildCgalFaceMaskFromVtkCells(const CGAL_Surface& mesh,
  *
  * 1) `compute_vertex_normals` — area-weighted blend of **all** incident triangle normals (CGAL
  *    default; no angle-based crease splitting).
- * 2) If @a faceInMaskByFaceIdx is set: every vertex incident to at least one masked face gets
- *    its normal **replaced** by the normalized sum of normals of **masked incident faces only**
- *    (non-mask faces touching that vertex are ignored).
+ * 2) If @a faceInMaskByFaceIdx is set: writes `f:vespa_icc_in_mask` and **dual** vertex normals for ICC:
+ *    `v:vespa_icc_n_mask` / `v:vespa_icc_n_nonmask` — each is the normalized sum of incident face normals
+ *    restricted to masked / non-mask faces respectively; if that partial sum is degenerate, falls back
+ *    to (1). Per-triangle ICC assembly picks corners via mask membership so mask interiors are not
+ *    polluted by normals from the opposite side at region boundaries.
  *
  * @param faceInMaskByFaceIdx optional, indexed by `Face_index::idx()`, length ≥ face count.
  */
-inline void PrepareIccVertexNormalsForAdaptiveSizing(
-  CGAL_Surface& mesh, const std::vector<char>* faceInMaskByFaceIdx)
+inline void PrepareIccVertexNormalsForAdaptiveSizing(CGAL_Surface& mesh,
+  const std::vector<char>* faceInMaskByFaceIdx)
 {
   using Vertex_index = CGAL_Surface::Vertex_index;
   using Face_index = CGAL_Surface::Face_index;
@@ -422,10 +430,26 @@ inline void PrepareIccVertexNormalsForAdaptiveSizing(
   }
 
   const std::size_t maskSz = faceInMaskByFaceIdx->size();
+
+  auto fm_pair = mesh.template add_property_map<Face_index, bool>("f:vespa_icc_in_mask", false);
+  const auto fm_map = fm_pair.first;
+  for (Face_index f : mesh.faces())
+  {
+    const std::size_t fi = static_cast<std::size_t>(f.idx());
+    put(fm_map, f, fi < maskSz && (*faceInMaskByFaceIdx)[fi] != 0);
+  }
+
+  const auto vn_mask_pair =
+    mesh.template add_property_map<Vertex_index, Vector_3>("v:vespa_icc_n_mask", Vector_3(0, 0, 0));
+  const auto vn_nonmask_pair =
+    mesh.template add_property_map<Vertex_index, Vector_3>("v:vespa_icc_n_nonmask", Vector_3(0, 0, 0));
+  const auto vn_mask_map = vn_mask_pair.first;
+  const auto vn_nonmask_map = vn_nonmask_pair.first;
+
   for (Vertex_index v : mesh.vertices())
   {
-    Vector_3 maskSum(0, 0, 0);
-    bool touchesMask = false;
+    Vector_3 sumMask(0, 0, 0);
+    Vector_3 sumNonMask(0, 0, 0);
     for (CGAL_Surface::Halfedge_index h : CGAL::halfedges_around_target(v, mesh))
     {
       const Face_index f = mesh.face(h);
@@ -433,25 +457,167 @@ inline void PrepareIccVertexNormalsForAdaptiveSizing(
       {
         continue;
       }
-      const std::size_t fi = static_cast<std::size_t>(f.idx());
-      if (fi >= maskSz || !(*faceInMaskByFaceIdx)[fi])
+      const Vector_3 fn = pmp_int::compute_face_normal(f, mesh);
+      if (get(fm_map, f))
       {
-        continue;
+        sumMask = sumMask + fn;
       }
-      touchesMask = true;
-      maskSum = maskSum + pmp_int::compute_face_normal(f, mesh);
+      else
+      {
+        sumNonMask = sumNonMask + fn;
+      }
     }
-    if (!touchesMask)
-    {
-      continue;
-    }
-    const double sl = CGAL::to_double(maskSum.squared_length());
-    if (!(sl > 1e-30))
-    {
-      continue;
-    }
-    put(vn_map, v, maskSum / std::sqrt(sl));
+
+    const Vector_3 global_n = get(vn_map, v);
+    auto normalizeOrFallback = [&](const Vector_3& partial) -> Vector_3 {
+      const double sl = CGAL::to_double(partial.squared_length());
+      if (sl > 1e-30)
+      {
+        return partial / std::sqrt(sl);
+      }
+      return global_n;
+    };
+
+    put(vn_mask_map, v, normalizeOrFallback(sumMask));
+    put(vn_nonmask_map, v, normalizeOrFallback(sumNonMask));
   }
+}
+
+/**
+ * Per-triangle ICC interpolated corrected measures mu^(0), mu^(1), mu^(2) (CGAL closed forms).
+ * Uses halfedge order on @a f. When @a dual_bundle is active (mask maps from PrepareIccVertexNormalsForAdaptiveSizing),
+ * each corner normal matches CGAL ICC per-face assembly; otherwise @a vn_map is used for all three corners.
+ */
+inline void ComputeIccClosedFormMeasuresForFace(const CGAL_Surface& mesh, CGAL_Surface::Face_index f,
+  const vespa_shyx::VespaIccDualNormalBundle* dual_bundle,
+  const CGAL_Surface::Property_map<CGAL_Surface::Vertex_index, CGAL_Kernel::Vector_3>& vn_map,
+  double& mu0, double& mu1, double& mu2)
+{
+  using Vertex_index = CGAL_Surface::Vertex_index;
+  using Vector_3 = CGAL_Kernel::Vector_3;
+  using Point_3 = CGAL_Kernel::Point_3;
+
+  const CGAL_Surface::Halfedge_index h = mesh.halfedge(f);
+  const Vertex_index vi = mesh.source(h);
+  const Vertex_index vj = mesh.target(h);
+  const Vertex_index vk = mesh.target(mesh.next(h));
+
+  const Point_3 pi = mesh.point(vi);
+  const Point_3 pj = mesh.point(vj);
+  const Point_3 pk = mesh.point(vk);
+
+  const Vector_3 ui = vespa_shyx::VespaIccCornerNormalForFace(dual_bundle, vn_map, f, vi);
+  const Vector_3 uj = vespa_shyx::VespaIccCornerNormalForFace(dual_bundle, vn_map, f, vj);
+  const Vector_3 uk = vespa_shyx::VespaIccCornerNormalForFace(dual_bundle, vn_map, f, vk);
+
+  const Vector_3 ubar = (ui + uj + uk) * (1.0 / 3.0);
+
+  const Vector_3 Xi = pi - CGAL::ORIGIN;
+  const Vector_3 Xj = pj - CGAL::ORIGIN;
+  const Vector_3 Xk = pk - CGAL::ORIGIN;
+
+  const Vector_3 cross_jk = CGAL::cross_product(pj - pi, pk - pi);
+  mu0 = 0.5 * CGAL::to_double(CGAL::scalar_product(ubar, cross_jk));
+
+  const Vector_3 tmu1 =
+    CGAL::cross_product(uk - uj, Xi) + CGAL::cross_product(ui - uk, Xj) + CGAL::cross_product(uj - ui, Xk);
+  mu1 = 0.5 * CGAL::to_double(CGAL::scalar_product(ubar, tmu1));
+
+  mu2 = 0.5 * CGAL::to_double(CGAL::scalar_product(ui, CGAL::cross_product(uj, uk)));
+}
+
+namespace detail
+{
+template <typename FaceGraph>
+inline void RunIccFillVertexCurvatureScalars(FaceGraph& fg, std::size_t num_vertices,
+  const CGAL_Surface::Property_map<CGAL_Surface::Vertex_index, CGAL_Kernel::Vector_3>* vn_map,
+  const CGAL_Surface* vespa_dual_normal_property_host,
+  std::vector<double>& out_kmin, std::vector<double>& out_kmax,
+  std::vector<double>& out_kmean, std::vector<double>& out_kgauss)
+{
+  namespace pmp_sf = CGAL::Polygon_mesh_processing;
+  using Vertex_index = CGAL_Surface::Vertex_index;
+  using Point_3      = CGAL_Surface::Point;
+  using Kernel       = typename CGAL::Kernel_traits<Point_3>::Kernel;
+  using Principal    = vespa_shyx::Custom_principal_curvatures_and_directions<Kernel>;
+  using CTag         = CGAL::dynamic_vertex_property_t<Principal>;
+
+  auto curv_map = get(CTag(), fg);
+  if (vn_map != nullptr)
+  {
+    vespa_shyx::custom_interpolated_corrected_curvatures(fg,
+      pmp_sf::parameters::vertex_principal_curvatures_and_directions_map(curv_map)
+        .vertex_normal_map(*vn_map),
+      vespa_dual_normal_property_host);
+  }
+  else
+  {
+    vespa_shyx::custom_interpolated_corrected_curvatures(
+      fg, pmp_sf::parameters::vertex_principal_curvatures_and_directions_map(curv_map),
+      vespa_dual_normal_property_host);
+  }
+
+  for (Vertex_index v : vertices(fg))
+  {
+    const std::size_t i = static_cast<std::size_t>(v.idx());
+    if (i >= num_vertices)
+    {
+      continue;
+    }
+    const Principal vc = get(curv_map, v);
+    const double km = CGAL::to_double(vc.min_curvature);
+    const double kM = CGAL::to_double(vc.max_curvature);
+    out_kmin[i]    = km;
+    out_kmax[i]    = kM;
+    out_kmean[i]   = 0.5 * (km + kM);
+    out_kgauss[i]  = km * kM;
+  }
+}
+} // namespace detail
+
+/**
+ * Vertex ICC principal curvatures (custom_interpolated_corrected_curvatures fork), using optional
+ * `v:vespa_icc_normal` when @a vn_map is non-null; dual-region maps on @a mesh drive per-face corner
+ * normals when present, and per-vertex aggregates ignore masked faces. Domain matches
+ * FeatureAwareAdaptiveSizingField: whole mesh unless
+ * @a patch_domain with non-empty @a patchFaces (expanded 1-ring patch). Vertices outside the
+ * Face_filtered_graph patch remain NaN.
+ */
+inline void ComputeIccVertexCurvatureScalars(CGAL_Surface& mesh, bool patch_domain,
+  const std::vector<CGAL_Surface::Face_index>& patchFaces,
+  const CGAL_Surface::Property_map<CGAL_Surface::Vertex_index, CGAL_Kernel::Vector_3>* vn_map,
+  std::vector<double>& out_kmin, std::vector<double>& out_kmax,
+  std::vector<double>& out_kmean, std::vector<double>& out_kgauss)
+{
+  using Face_index = CGAL_Surface::Face_index;
+  const std::size_t nv = mesh.number_of_vertices();
+  const double nan = std::numeric_limits<double>::quiet_NaN();
+  out_kmin.assign(nv, nan);
+  out_kmax.assign(nv, nan);
+  out_kmean.assign(nv, nan);
+  out_kgauss.assign(nv, nan);
+
+  if (!patch_domain || patchFaces.empty() || patchFaces.size() == mesh.number_of_faces())
+  {
+    detail::RunIccFillVertexCurvatureScalars(mesh, nv, vn_map, &mesh, out_kmin, out_kmax, out_kmean,
+      out_kgauss);
+    return;
+  }
+
+  std::vector<Face_index> sel(patchFaces.begin(), patchFaces.end());
+  auto is_sel = get(CGAL::dynamic_face_property_t<bool>(), mesh);
+  for (Face_index f : faces(mesh))
+  {
+    put(is_sel, f, false);
+  }
+  for (Face_index f : patchFaces)
+  {
+    put(is_sel, f, true);
+  }
+  CGAL::expand_face_selection(sel, mesh, 1, is_sel, std::back_inserter(sel));
+  CGAL::Face_filtered_graph<CGAL_Surface> ffg(mesh, sel);
+  detail::RunIccFillVertexCurvatureScalars(ffg, nv, vn_map, &mesh, out_kmin, out_kmax, out_kmean,
+    out_kgauss);
 }
 
 template <typename EdgeBoolMap>

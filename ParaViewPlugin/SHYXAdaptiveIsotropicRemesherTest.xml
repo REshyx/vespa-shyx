@@ -4,10 +4,19 @@
     <SourceProxy class="vtkSHYXAdaptiveIsotropicRemesherTest"
                  label="SHYX Adaptive Isotropic Remesher Test"
                  name="SHYXAdaptiveIsotropicRemesherTest">
-      <Documentation short_help="Preview dual adaptive sizing maps (global/feature) without remeshing.">
+      <Documentation short_help="Preview sizing, ICC normals, vertex ICC curvature, and per-triangle ICC measures (debug) without remeshing.">
         Builds the same CGAL constrained-edge graph and evaluates the dual per-vertex sizing maps
         (VespaAdaptiveSizeGlobal / VespaAdaptiveSizeFeature) used when FeatureSizingStandAlone is ON
-        in vtkSHYXAdaptiveIsotropicRemesher. Input geometry is unchanged (no isotropic remeshing,
+        in vtkSHYXAdaptiveIsotropicRemesher. Also writes VespaIccVertexNormal (3-vector): vertex
+        normals passed to interpolated_corrected_curvatures after PrepareIccVertexNormalsForAdaptiveSizing
+        (global area-weighted `v:vespa_icc_normal`, and when the Feature mask is valid: `f:vespa_icc_in_mask`
+        plus per-vertex mask/non-mask blended normals so each triangle uses corners consistent with its mask side).
+        Point scalars VespaIccPrincipalCurvatureMin/Max,
+        VespaIccMeanCurvature (H = (κ_min+κ_max)/2), and VespaIccGaussianCurvature (K = κ_min κ_max)
+        come from CGAL interpolated_corrected_curvatures with the same vertex_normal_map and patch
+        domain as the sizing preview (NaN outside an expanded patch when a remesh region is set).
+        Cell arrays VespaIccTriangleMu0/Mu1/Mu2 are the CGAL per-triangle interpolated corrected
+        measures mu^(0/1/2) before vertex aggregation. Input geometry is unchanged (no isotropic remeshing,
         no smooth_shape). Requires positive Feature Min/Max Edge Length and Feature Adaptive Tolerance
         plus global sizing parameters.
 
@@ -16,8 +25,10 @@
         Face_filtered_graph semantics).
 
         Outputs:
-          0  Copy of the input surface with point arrays VespaAdaptiveSizeGlobal and
-             VespaAdaptiveSizeFeature.
+          0  Copy of the input surface: point arrays VespaAdaptiveSizeGlobal,
+             VespaAdaptiveSizeFeature, VespaIccVertexNormal, VespaIccPrincipalCurvatureMin/Max,
+             VespaIccMeanCurvature, VespaIccGaussianCurvature; cell arrays VespaIccTriangleMu0,
+             VespaIccTriangleMu1, VespaIccTriangleMu2 (triangles only; NaN on non-triangles).
           1  Sharp/feature constraint edges as lines (same detection pipeline as the remesher when
              Detect feature edges is ON); never adds vertex cells.
           2  Input geometry restricted by the feature mask threshold (same as remesher).
@@ -291,27 +302,6 @@
         </Hints>
       </DoubleVectorProperty>
 
-      <IntVectorProperty command="SetFeatureSizingUsePolylineCurvature"
-                         name="FeatureSizingUsePolylineCurvature"
-                         label="Feature sizing: polyline curvature"
-                         number_of_elements="1"
-                         default_values="0"
-                         animateable="0">
-        <BooleanDomain name="bool"/>
-        <Documentation>
-          When Feature sizing stand-alone is ON: if ON, target edge lengths on constrained
-          feature edges use **3D polyline (Menger) curvature** at crease vertices instead of
-          surface principal curvatures. If OFF (default), feature sizing uses the same
-          interpolated_corrected surface curvatures as the global field (previous behavior).
-        </Documentation>
-        <Hints>
-          <PropertyWidgetDecorator type="GenericDecorator"
-                                   mode="visibility"
-                                   property="FeatureSizingStandAlone"
-                                   value="1"/>
-        </Hints>
-      </IntVectorProperty>
-
       <PropertyGroup label="Sizing">
         <Property name="MinEdgeLength"/>
         <Property name="MaxEdgeLength"/>
@@ -320,7 +310,6 @@
         <Property name="FeatureMinEdgeLength"/>
         <Property name="FeatureMaxEdgeLength"/>
         <Property name="FeatureAdaptiveTolerance"/>
-        <Property name="FeatureSizingUsePolylineCurvature"/>
       </PropertyGroup>
 
       <!-- =================================================================
