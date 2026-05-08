@@ -186,7 +186,8 @@ public:
    * when **> 1**, relax both `v:vespa_size_global` and `v:vespa_size_feature` so across any mesh edge
    * the ratio of larger to smaller endpoint target does not exceed this value (iterative symmetric
    * lowering of the larger target only). Typical values ~1.2–2 soften abrupt coarsening next to refined
-   * regions. **0** (default) or **<= 1** disables — behavior matches the raw ICC sizing field only.
+   * regions. **<= 1** disables — behavior matches the raw ICC sizing field only. Default **1.6**;
+   * set **0** to disable.
    */
   vtkGetMacro(AdaptiveSizingNeighborMaxRatio, double);
   vtkSetClampMacro(AdaptiveSizingNeighborMaxRatio, double, 0.0, 1.0e6);
@@ -364,7 +365,7 @@ protected:
   double FeatureMinEdgeLength      = 0.0;
   double FeatureMaxEdgeLength      = 0.0;
   double FeatureAdaptiveTolerance  = 0.01;
-  double AdaptiveSizingNeighborMaxRatio = 0.0;
+  double AdaptiveSizingNeighborMaxRatio = 1.6;
   bool   RemeshRecomputeCurvatureEachIteration = true;
   double ProtectAngle        = 70.0;
   int    NumberOfIterations  = 3;

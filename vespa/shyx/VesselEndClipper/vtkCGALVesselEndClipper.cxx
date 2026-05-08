@@ -211,7 +211,6 @@ static void EnsureCellEndpointIndexArray(vtkPolyData* pd, int fillValue = -1)
     vtkIntArray* existing = vtkIntArray::SafeDownCast(pd->GetCellData()->GetArray("EndpointIndex"));
     if (existing && existing->GetNumberOfTuples() == nCells)
     {
-        pd->GetCellData()->SetActiveScalars("EndpointIndex");
         return;
     }
     vtkNew<vtkIntArray> arr;
@@ -220,7 +219,6 @@ static void EnsureCellEndpointIndexArray(vtkPolyData* pd, int fillValue = -1)
     arr->Fill(fillValue);
     pd->GetCellData()->RemoveArray("EndpointIndex");
     pd->GetCellData()->AddArray(arr);
-    pd->GetCellData()->SetActiveScalars("EndpointIndex");
 }
 
 //------------------------------------------------------------------------------
@@ -266,7 +264,6 @@ static void ExportVespaSurfaceToVTK(
     vtkMesh->SetPoints(pts);
     vtkMesh->SetPolys(cells);
     vtkMesh->GetCellData()->AddArray(epCell);
-    vtkMesh->GetCellData()->SetActiveScalars("EndpointIndex");
 }
 
 //------------------------------------------------------------------------------
@@ -734,7 +731,6 @@ int vtkCGALVesselEndClipper::RequestData(
     if (this->CapEndpoints)
     {
         output->ShallowCopy(currentMesh);
-        output->GetCellData()->SetActiveScalars("EndpointIndex");
     }
     else
     {

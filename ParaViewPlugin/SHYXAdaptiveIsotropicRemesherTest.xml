@@ -221,11 +221,11 @@
                             name="AdaptiveSizingNeighborMaxRatio"
                             label="Neighbor max size ratio"
                             number_of_elements="1"
-                            default_values="0">
+                            default_values="1.6">
         <DoubleRangeDomain name="range" min="0" max="1e6"/>
         <Documentation>
           Same as the main remesher: optional cap on adjacent-vertex target-length ratio after ICC
-          clamping (**0** or **≤ 1** = off; **> 1** enables gradient limiting on both `v:vespa_size_*` maps).
+          clamping (**≤ 1** = off; default **1.6** enables gradient limiting on both `v:vespa_size_*` maps).
         </Documentation>
       </DoubleVectorProperty>
 
