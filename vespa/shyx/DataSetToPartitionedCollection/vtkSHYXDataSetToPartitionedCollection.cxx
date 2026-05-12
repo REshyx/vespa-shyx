@@ -6,6 +6,7 @@
 #include <vtkCellData.h>
 #include <vtkCompositeDataSet.h>
 #include <vtkDataAssembly.h>
+#include <vtkDataArray.h>
 #include <vtkDataObject.h>
 #include <vtkDataSet.h>
 #include <vtkDataSetSurfaceFilter.h>
@@ -33,7 +34,11 @@
 
 #include <algorithm>
 #include <array>
+#include <cmath>
+#include <limits>
+#include <map>
 #include <numeric>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -481,6 +486,199 @@ void ApplyCustomPostReorder(std::vector<vtkSmartPointer<vtkPolyData>>* pieces)
   v = std::move(out);
 }
 
+/** Sub-mesh containing only the listed cell ids (e.g. one EndpointIndex bucket). */
+void BuildPolyDataWithCellIds(vtkPolyData* inMesh, const std::vector<vtkIdType>& keepCells, vtkPolyData* out)
+{
+  out->Initialize();
+  if (!inMesh || keepCells.empty())
+  {
+    return;
+  }
+
+  const vtkIdType nPts = inMesh->GetNumberOfPoints();
+  const vtkIdType nCells = inMesh->GetNumberOfCells();
+  if (nCells == 0)
+  {
+    return;
+  }
+
+  std::set<vtkIdType> keepSet(keepCells.begin(), keepCells.end());
+  std::vector<char> usedPt(static_cast<size_t>(nPts), 0);
+  vtkIdType npts;
+  const vtkIdType* pids;
+  for (vtkIdType cid : keepSet)
+  {
+    if (cid < 0 || cid >= nCells)
+    {
+      continue;
+    }
+    inMesh->GetCellPoints(cid, npts, pids);
+    for (vtkIdType k = 0; k < npts; ++k)
+    {
+      if (pids[k] >= 0 && pids[k] < nPts)
+      {
+        usedPt[static_cast<size_t>(pids[k])] = 1;
+      }
+    }
+  }
+
+  vtkPoints* inPts = inMesh->GetPoints();
+  vtkNew<vtkPoints> newPts;
+  std::vector<vtkIdType> old2new(static_cast<size_t>(nPts), -1);
+  if (inPts)
+  {
+    double x[3];
+    for (vtkIdType i = 0; i < nPts; ++i)
+    {
+      if (!usedPt[static_cast<size_t>(i)])
+      {
+        continue;
+      }
+      inPts->GetPoint(i, x);
+      old2new[static_cast<size_t>(i)] = newPts->InsertNextPoint(x);
+    }
+  }
+
+  vtkNew<vtkCellArray> newVerts;
+  vtkNew<vtkCellArray> newLines;
+  vtkNew<vtkCellArray> newPolys;
+  vtkNew<vtkCellArray> newStrips;
+  vtkNew<vtkIdList> remapped;
+  std::vector<vtkIdType> keptOrig;
+
+  for (vtkIdType cid : keepSet)
+  {
+    if (cid < 0 || cid >= nCells)
+    {
+      continue;
+    }
+    const int ctype = inMesh->GetCellType(cid);
+    inMesh->GetCellPoints(cid, npts, pids);
+    remapped->SetNumberOfIds(npts);
+    bool ok = true;
+    for (vtkIdType k = 0; k < npts; ++k)
+    {
+      const vtkIdType m = old2new[static_cast<size_t>(pids[k])];
+      if (m < 0)
+      {
+        ok = false;
+        break;
+      }
+      remapped->SetId(k, m);
+    }
+    if (!ok)
+    {
+      continue;
+    }
+
+    vtkCellArray* target = nullptr;
+    switch (ctype)
+    {
+      case VTK_VERTEX:
+      case VTK_POLY_VERTEX:
+        target = newVerts;
+        break;
+      case VTK_LINE:
+      case VTK_POLY_LINE:
+        target = newLines;
+        break;
+      case VTK_TRIANGLE:
+      case VTK_QUAD:
+      case VTK_POLYGON:
+      case VTK_PIXEL:
+        target = newPolys;
+        break;
+      case VTK_TRIANGLE_STRIP:
+        target = newStrips;
+        break;
+      default:
+        target = newPolys;
+        break;
+    }
+    if (target)
+    {
+      target->InsertNextCell(remapped);
+      keptOrig.push_back(cid);
+    }
+  }
+
+  out->SetPoints(newPts);
+  out->SetVerts(newVerts);
+  out->SetLines(newLines);
+  out->SetPolys(newPolys);
+  out->SetStrips(newStrips);
+
+  const vtkIdType nOutCells = static_cast<vtkIdType>(keptOrig.size());
+  out->GetCellData()->CopyAllocate(inMesh->GetCellData(), nOutCells);
+  for (vtkIdType j = 0; j < nOutCells; ++j)
+  {
+    out->GetCellData()->CopyData(inMesh->GetCellData(), keptOrig[static_cast<size_t>(j)], j);
+  }
+
+  const vtkIdType nOutPts = newPts->GetNumberOfPoints();
+  out->GetPointData()->CopyAllocate(inMesh->GetPointData(), nOutPts);
+  for (vtkIdType oldIdx = 0; oldIdx < nPts; ++oldIdx)
+  {
+    const vtkIdType newIdx = old2new[static_cast<size_t>(oldIdx)];
+    if (newIdx >= 0)
+    {
+      out->GetPointData()->CopyData(inMesh->GetPointData(), oldIdx, newIdx);
+    }
+  }
+
+  out->GetFieldData()->PassData(inMesh->GetFieldData());
+  out->Squeeze();
+}
+
+/**
+ * One surface patch per distinct partition id (first array component, rounded to long long).
+ * Patch order follows ascending key (std::map), e.g. EndpointIndex -1, 1, 2, …
+ */
+void CollectSurfacePiecesByCellArray(vtkPolyData* surface, const char* arrayName,
+  std::vector<vtkSmartPointer<vtkPolyData>>* outPieces)
+{
+  outPieces->clear();
+  if (!surface || surface->GetNumberOfCells() == 0 || !arrayName || !arrayName[0])
+  {
+    return;
+  }
+
+  vtkDataArray* arr = vtkDataArray::SafeDownCast(surface->GetCellData()->GetAbstractArray(arrayName));
+  if (!arr || arr->GetNumberOfTuples() != surface->GetNumberOfCells() || arr->GetNumberOfComponents() < 1)
+  {
+    return;
+  }
+
+  const vtkIdType nc = surface->GetNumberOfCells();
+  std::map<long long, std::vector<vtkIdType>> buckets;
+  constexpr long long kNonFiniteKey = std::numeric_limits<long long>::min();
+  for (vtkIdType cid = 0; cid < nc; ++cid)
+  {
+    const double comp = arr->GetComponent(cid, 0);
+    const long long key =
+      std::isfinite(comp) ? static_cast<long long>(std::llround(comp)) : kNonFiniteKey;
+    buckets[key].push_back(cid);
+  }
+
+  for (const auto& kv : buckets)
+  {
+    if (kv.second.empty())
+    {
+      continue;
+    }
+    vtkNew<vtkPolyData> piece;
+    BuildPolyDataWithCellIds(surface, kv.second, piece.GetPointer());
+    if (piece->GetNumberOfCells() == 0)
+    {
+      continue;
+    }
+    vtkSmartPointer<vtkPolyData> copy = vtkSmartPointer<vtkPolyData>::New();
+    copy->DeepCopy(piece);
+    StripUnreferencedPoints(copy);
+    outPieces->push_back(copy);
+  }
+}
+
 void CollectCuspConnectedSurfacePieces(vtkPolyData* surface, double featureAngle,
   std::vector<vtkSmartPointer<vtkPolyData>>* outPieces)
 {
@@ -605,16 +803,22 @@ vtkSHYXDataSetToPartitionedCollection::vtkSHYXDataSetToPartitionedCollection()
 {
   this->SetNumberOfInputPorts(1);
   this->SetNumberOfOutputPorts(1);
+  this->SetPartitionCellArrayName("EndpointIndex");
 }
 
 //------------------------------------------------------------------------------
-vtkSHYXDataSetToPartitionedCollection::~vtkSHYXDataSetToPartitionedCollection() = default;
+vtkSHYXDataSetToPartitionedCollection::~vtkSHYXDataSetToPartitionedCollection()
+{
+  this->SetPartitionCellArrayName(nullptr);
+}
 
 //------------------------------------------------------------------------------
 void vtkSHYXDataSetToPartitionedCollection::PrintSelf(ostream& os, vtkIndent indent)
 {
   this->Superclass::PrintSelf(os, indent);
   os << indent << "FeatureAngle: " << this->FeatureAngle << "\n";
+  os << indent << "PartitionCellArrayName: "
+     << (this->PartitionCellArrayName ? this->PartitionCellArrayName : "(null)") << "\n";
   os << indent << "SortByArea: " << this->SortByArea << "\n";
   os << indent << "CustomPostReorder: " << this->CustomPostReorder << "\n";
 }
@@ -722,7 +926,33 @@ int vtkSHYXDataSetToPartitionedCollection::RequestData(vtkInformation* vtkNotUse
   }
 
   std::vector<vtkSmartPointer<vtkPolyData>> sidePieces;
-  CollectCuspConnectedSurfacePieces(surfaceWork.GetPointer(), this->FeatureAngle, &sidePieces);
+  const char* partName = this->PartitionCellArrayName;
+  vtkDataArray* partArr = nullptr;
+  if (partName && partName[0] != '\0')
+  {
+    partArr = vtkDataArray::SafeDownCast(surfaceWork->GetCellData()->GetAbstractArray(partName));
+    if (!partArr || partArr->GetNumberOfTuples() != surfaceWork->GetNumberOfCells())
+    {
+      vtkWarningMacro(<< "Cell data array \"" << partName << "\" is missing, not numeric, or has length "
+                      << (partArr ? partArr->GetNumberOfTuples() : static_cast<vtkIdType>(-1))
+                      << " != number of cells " << surfaceWork->GetNumberOfCells()
+                      << ". Using feature-angle / connectivity split instead.");
+      partArr = nullptr;
+    }
+  }
+  if (partArr)
+  {
+    CollectSurfacePiecesByCellArray(surfaceWork.GetPointer(), partName, &sidePieces);
+    if (sidePieces.empty())
+    {
+      vtkWarningMacro(<< "Cell-array split produced no patches; using feature-angle / connectivity split instead.");
+      CollectCuspConnectedSurfacePieces(surfaceWork.GetPointer(), this->FeatureAngle, &sidePieces);
+    }
+  }
+  else
+  {
+    CollectCuspConnectedSurfacePieces(surfaceWork.GetPointer(), this->FeatureAngle, &sidePieces);
+  }
   if (this->SortByArea)
   {
     SortSidePiecesByAreaDescending(&sidePieces);

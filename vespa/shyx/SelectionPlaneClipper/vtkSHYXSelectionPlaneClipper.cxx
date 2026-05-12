@@ -448,11 +448,12 @@ void SetNewCellTupleFromCell0(vtkAbstractArray* postArr, vtkAbstractArray* preAr
 /**
  * vtkFillHolesFilter keeps input polys first (DeepCopy) then appends new triangles; it does not pass
  * cell data through. Rebuild output cell data from the pre-fill mesh for cells [0, nPre). On new
- * cells, the stamp scalar array receives FillHoleNewCellDataMarkerValue; other arrays copy tuple
- * from cell 0 of the pre-fill mesh.
+ * cells, the stamp scalar array receives the effective marker (see implementation); other arrays
+ * copy tuple from cell 0 of the pre-fill mesh.
  */
-void RestoreCellDataAfterFillHoles(vtkPolyData* preFill, vtkPolyData* postFill, double markerValue,
-  const char* stampArrayNameFromUser, vtkSHYXSelectionPlaneClipper* self)
+void RestoreCellDataAfterFillHoles(vtkPolyData* preFill, vtkPolyData* postFill,
+  bool useCustomMarker, double markerValue, const char* stampArrayNameFromUser,
+  vtkSHYXSelectionPlaneClipper* self)
 {
   if (!preFill || !postFill)
   {
@@ -472,7 +473,34 @@ void RestoreCellDataAfterFillHoles(vtkPolyData* preFill, vtkPolyData* postFill, 
   const bool userNamed = (stampArrayNameFromUser && stampArrayNameFromUser[0] != '\0');
   const std::string effStampName =
     userNamed ? std::string(stampArrayNameFromUser) : std::string(kDefaultFillHoleStampArrayName);
-  const bool stampExisted = (preCD->GetAbstractArray(effStampName.c_str()) != nullptr);
+  vtkAbstractArray* existingStampArr = preCD->GetAbstractArray(effStampName.c_str());
+  const bool stampExisted = (existingStampArr != nullptr);
+
+  double effMarker = markerValue;
+  if (!useCustomMarker)
+  {
+    // Auto mode: max(existing)+1 when reusing an existing numeric array, else 1 (pre-fill cells get 0).
+    if (stampExisted)
+    {
+      if (auto* da = vtkDataArray::SafeDownCast(existingStampArr))
+      {
+        if (da->GetNumberOfTuples() > 0)
+        {
+          double range[2];
+          da->GetRange(range);
+          effMarker = range[1] + 1.0;
+        }
+        else
+        {
+          effMarker = 1.0;
+        }
+      }
+    }
+    else
+    {
+      effMarker = 1.0;
+    }
+  }
 
   postCD->Initialize();
   postCD->CopyAllocate(preCD, nPost);
@@ -496,7 +524,7 @@ void RestoreCellDataAfterFillHoles(vtkPolyData* preFill, vtkPolyData* postFill, 
       const bool isStamp = stampExisted && (effStampName == preArr->GetName());
       if (isStamp)
       {
-        FillStampNewCellWithMarker(postArr, i, markerValue);
+        FillStampNewCellWithMarker(postArr, i, effMarker);
       }
       else
       {
@@ -517,7 +545,7 @@ void RestoreCellDataAfterFillHoles(vtkPolyData* preFill, vtkPolyData* postFill, 
     }
     for (vtkIdType i = nPre; i < nPost; ++i)
     {
-      stamp->SetTuple1(i, markerValue);
+      stamp->SetTuple1(i, effMarker);
     }
     postCD->AddArray(stamp);
   }
@@ -554,6 +582,7 @@ void vtkSHYXSelectionPlaneClipper::PrintSelf(ostream& os, vtkIndent indent)
   os << indent << "UseInteractiveCutPlanes: " << this->UseInteractiveCutPlanes << "\n";
   os << indent << "FillHoles: " << this->FillHoles << "\n";
   os << indent << "FillHolesMaximumSize: " << this->FillHolesMaximumSize << "\n";
+  os << indent << "UseCustomFillHoleMarkerValue: " << this->UseCustomFillHoleMarkerValue << "\n";
   os << indent << "FillHoleNewCellDataMarkerValue: " << this->FillHoleNewCellDataMarkerValue << "\n";
   os << indent << "FillHoleStampCellArrayName: "
      << (this->FillHoleStampCellArrayName ? this->FillHoleStampCellArrayName : "(null)") << "\n";
@@ -695,7 +724,9 @@ int vtkSHYXSelectionPlaneClipper::RequestData(
   double origin[3] = { centroid[0] + this->ClipOffset * planeNormal[0],
     centroid[1] + this->ClipOffset * planeNormal[1], centroid[2] + this->ClipOffset * planeNormal[2] };
 
-  if (this->UseInteractiveCutPlanes)
+  // Interactive plane state is stored in InteractiveCutPackedString (ParaView widget). When it
+  // parses, it always drives the clip plane; UseInteractiveCutPlanes is a client/UI hint to show
+  // the 3D widget, not whether to use the edited plane after Apply.
   {
     std::vector<double> packed;
     if (ParseInteractivePacked(this->InteractiveCutPackedString, packed))
@@ -831,7 +862,8 @@ int vtkSHYXSelectionPlaneClipper::RequestData(
     filler->SetInputData(cleaned);
     filler->SetHoleSize(holeSize);
     filler->Update();
-    RestoreCellDataAfterFillHoles(cleaned, filler->GetOutput(), this->FillHoleNewCellDataMarkerValue,
+    RestoreCellDataAfterFillHoles(cleaned, filler->GetOutput(),
+      this->UseCustomFillHoleMarkerValue != 0, this->FillHoleNewCellDataMarkerValue,
       this->FillHoleStampCellArrayName, this);
     vtkNew<vtkCleanPolyData> postClean;
     postClean->SetInputConnection(filler->GetOutputPort());

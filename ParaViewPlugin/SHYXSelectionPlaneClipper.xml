@@ -12,9 +12,10 @@
         Optional Selection Cell Array Name selects triangles on port 0 when no selection is provided.
         Fill Holes (default ON) runs vtkFillHolesFilter on the clip boundary using an automatic maximum hole size
         from the result bounds unless you set Fill Holes Maximum Size. Cell data from the clipped surface is
-        restored after filling. New triangles: the cell array named Fill Hole Stamp Array Name (default
-        EndpointIndex) receives Fill Hole New Cell Marker Value if that array already exists before filling;
-        otherwise a new vtkDoubleArray with that name is created. Other cell arrays copy tuple from cell 0.
+        restored after filling. New fill-hole triangles are stamped on the cell array named Fill Hole Stamp
+        Array Name (default EndpointIndex). By default the marker is max(existing values)+1; enable
+        Use Custom Marker Value to supply an explicit number instead.
+        Other cell arrays copy tuple from cell 0.
         Field data array SHYX_SelectionPlaneClipper_PlanePacked (six values: plane origin and direction handle)
         is attached to port 0 for the interactive plane widget and for scripting.
       </Documentation>
@@ -123,16 +124,32 @@
         </Documentation>
       </DoubleVectorProperty>
 
+      <IntVectorProperty command="SetUseCustomFillHoleMarkerValue"
+                         name="UseCustomFillHoleMarkerValue"
+                         label="Use Custom Marker Value"
+                         number_of_elements="1"
+                         default_values="0">
+        <BooleanDomain name="bool"/>
+        <Documentation>
+          When OFF (default), new fill-hole triangles receive max(existing values)+1 automatically, or 1
+          when the stamp array does not yet exist. When ON, Fill Hole New Cell Marker Value is used instead.
+        </Documentation>
+      </IntVectorProperty>
+
       <DoubleVectorProperty command="SetFillHoleNewCellDataMarkerValue"
                             name="FillHoleNewCellDataMarkerValue"
                             label="Fill Hole New Cell Marker Value"
                             number_of_elements="1"
-                            default_values="9999"
-                            panel_visibility="advanced">
+                            default_values="0">
         <Documentation>
-          Value written on each new fill-hole triangle in the array named Fill Hole Stamp Array Name.
-          Newly created stamp arrays use this value on new triangles and 0 on pre-fill cells.
+          Explicit marker written on each new fill-hole triangle when Use Custom Marker Value is ON.
         </Documentation>
+        <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="visibility"
+                                   property="UseCustomFillHoleMarkerValue"
+                                   value="1"/>
+        </Hints>
       </DoubleVectorProperty>
 
       <StringVectorProperty name="FillHoleStampCellArrayName"
@@ -140,25 +157,26 @@
                             command="SetFillHoleStampCellArrayName"
                             number_of_elements="1"
                             default_values="EndpointIndex"
-                            animateable="0"
-                            panel_visibility="advanced">
+                            animateable="0">
         <Documentation>
-          Name of the cell array that receives Fill Hole New Cell Marker Value on each new fill-hole triangle.
-          If a cell array with this name already exists on the mesh before vtkFillHolesFilter, it is reused;
-          otherwise a new vtkDoubleArray (one component) is created. Empty string falls back to EndpointIndex.
-          Other cell arrays on new triangles copy tuple from cell 0 of the pre-fill mesh.
+          Name of the cell array that marks new fill-hole triangles. If the array already exists before
+          filling, it is reused and new triangles receive max(existing)+1 (or the custom marker when
+          Use Custom Marker Value is ON). If the array does not exist, a new vtkDoubleArray is created
+          (pre-fill cells = 0, new cells = 1 or custom marker). Empty string falls back to EndpointIndex.
         </Documentation>
       </StringVectorProperty>
 
       <IntVectorProperty command="SetUseInteractiveCutPlanes"
                          name="UseInteractiveCutPlanes"
-                         label="Use Interactive Cut Plane"
+                         label="Show Interactive Cut Plane"
                          number_of_elements="1"
                          default_values="0">
         <BooleanDomain name="bool"/>
         <Documentation>
-          When enabled, a yellow plane widget overrides the automatic plane from the selection.
-          Apply once so port 0 is generated (including the plane hint in field data), then drag the plane and Apply again to clip.
+          When ON, the yellow plane widget is shown so you can edit the cut plane in the view.
+          Turning it OFF only hides the widget; clipping still uses the last plane from the widget
+          (InteractiveCutPacked) when present. Apply once so port 0 is generated (including the plane
+          hint in field data), then drag the plane and Apply again to clip.
         </Documentation>
       </IntVectorProperty>
 

@@ -88,13 +88,14 @@ pqVESPASelectionPlaneClipperWidget::pqVESPASelectionPlaneClipperWidget(
 
   auto* vbox = new QVBoxLayout(this);
   this->InfoLabel = new QLabel(
-    tr("Enable the interactive plane, Apply once to generate output, then drag the yellow plane. "
-       "Apply again (or use auto-apply) to clip with the edited plane."),
+    tr("Show the interactive plane to adjust the cut in the view. Apply once to generate output, then "
+       "drag the yellow plane. Apply again (or use auto-apply) to clip. Hiding the plane only removes "
+       "the widget; clipping still uses the last adjusted plane when its state is present."),
     this);
   this->InfoLabel->setWordWrap(true);
   vbox->addWidget(this->InfoLabel);
 
-  this->UseInteractiveCheckbox = new QCheckBox(tr("Use interactive cut plane"), this);
+  this->UseInteractiveCheckbox = new QCheckBox(tr("Show interactive cut plane"), this);
   vbox->addWidget(this->UseInteractiveCheckbox);
 
   this->addPropertyLink(this->UseInteractiveCheckbox, "UseInteractiveCutPlanes");
@@ -515,15 +516,19 @@ void pqVESPASelectionPlaneClipperWidget::rebuildPlaneWidgetsIfNeeded()
 {
   if (!this->UseInteractiveCheckbox || !this->UseInteractiveCheckbox->isChecked())
   {
-    const QPointer<pqRenderView> hostSnap = this->LastPlaneHostRenderView;
-    this->tearDownPlaneWidgets();
+    // Hide the widget only; keep the representation proxy and packed string so Apply still clips
+    // with the last interactive plane (server no longer gates on UseInteractiveCutPlanes).
+    if (this->PlaneWidget)
+    {
+      this->detachPlaneWidgetsFromView();
+    }
     if (pqView* v = this->view())
     {
       v->render();
     }
-    if (hostSnap)
+    if (this->LastPlaneHostRenderView)
     {
-      hostSnap->render();
+      this->LastPlaneHostRenderView->render();
     }
     return;
   }

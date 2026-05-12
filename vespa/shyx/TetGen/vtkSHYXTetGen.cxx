@@ -2,7 +2,6 @@
 
 #include <vtkCell.h>
 #include <vtkDataObject.h>
-#include <vtkMassProperties.h>
 #include <vtkInformation.h>
 #include <vtkInformationVector.h>
 #include <vtkObjectFactory.h>
@@ -139,19 +138,6 @@ static bool vtkToTetgenio(vtkPolyData* input, tetgenio& in)
 }
 
 //------------------------------------------------------------------------------
-static double vtkSHYXEnclosedBoundaryVolume(vtkPolyData* surface)
-{
-    if (!surface || surface->GetNumberOfCells() == 0)
-    {
-        return -1.0;
-    }
-    vtkNew<vtkMassProperties> mp;
-    mp->SetInputData(surface);
-    mp->Update();
-    return mp->GetVolume();
-}
-
-//------------------------------------------------------------------------------
 static bool tetgenioToVtk(tetgenio& out, vtkUnstructuredGrid* output)
 {
     if (out.numberofpoints == 0 || out.numberoftetrahedra == 0 || !out.pointlist || !out.tetrahedronlist)
@@ -252,25 +238,9 @@ int vtkSHYXTetGen::RequestData(
     len += std::snprintf(sw + len, 8, "p");
 
     double effectiveMaxVolume = 0.0;
-    if (this->LimitMaxVolume)
+    if (this->LimitMaxVolume && this->MaxVolume > 0.0)
     {
         effectiveMaxVolume = this->MaxVolume;
-        if (effectiveMaxVolume <= 0.0)
-        {
-            const double enclosed = vtkSHYXEnclosedBoundaryVolume(input);
-            const double absVol = std::fabs(enclosed);
-            if (absVol > 0.0)
-            {
-                effectiveMaxVolume = 0.1 * absVol;
-            }
-            else
-            {
-                vtkWarningMacro(
-                    "LimitMaxVolume is ON but enclosed volume could not be computed "
-                    "(expect a closed surface). TetGen volume limit (-a) is disabled.");
-                effectiveMaxVolume = 0.0;
-            }
-        }
     }
 
     if (this->Nobisect)

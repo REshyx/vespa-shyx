@@ -2,6 +2,8 @@
  * @class   vtkSHYXSelectionPlaneClipper
  * @brief   Clip a surface mesh using a plane derived from the active selection (centroid + average normal),
  *          with optional interactive plane editing (same packed-string convention as Vessel End Clipper).
+ *          The ParaView property UseInteractiveCutPlanes only controls whether the plane widget is shown;
+ *          whenever InteractiveCutPackedString parses, it drives the clip plane.
  *
  * Port 1 accepts vtkSelection (ParaView Selection port with SelectionInput); vtkExtractSelection is run
  * internally. Alternatively set SelectionCellArrayName on port 0 when no selection is connected.
@@ -61,6 +63,7 @@ public:
 
   vtkGetStringMacro(InteractiveCutPackedString);
   vtkSetStringMacro(InteractiveCutPackedString);
+  /** ParaView UI: show the implicit-plane widget; does not disable use of InteractiveCutPackedString. */
   vtkGetMacro(UseInteractiveCutPlanes, int);
   vtkSetMacro(UseInteractiveCutPlanes, int);
   vtkBooleanMacro(UseInteractiveCutPlanes, int);
@@ -81,10 +84,15 @@ public:
   /**
    * vtkFillHolesFilter does not pass input cell data to the output. After filling, we restore cell
    * arrays for pre-fill cells, then on new fill-hole triangles: the cell array named
-   * FillHoleStampCellArrayName (default EndpointIndex) is set to FillHoleNewCellDataMarkerValue
-   * if it already exists on the pre-fill mesh; otherwise a new vtkDoubleArray with that name is
-   * created. Other cell arrays on new triangles copy tuple from cell 0 of the pre-fill mesh.
+   * FillHoleStampCellArrayName (default EndpointIndex) receives a marker value.
+   * - UseCustomFillHoleMarkerValue OFF (default): new triangles get max(existing)+1 when the array
+   *   already exists, or 1 when the array is newly created (pre-fill cells get 0).
+   * - UseCustomFillHoleMarkerValue ON: FillHoleNewCellDataMarkerValue is always used.
+   * Other cell arrays on new triangles copy tuple from cell 0 of the pre-fill mesh.
    */
+  vtkGetMacro(UseCustomFillHoleMarkerValue, int);
+  vtkSetMacro(UseCustomFillHoleMarkerValue, int);
+  vtkBooleanMacro(UseCustomFillHoleMarkerValue, int);
   vtkGetMacro(FillHoleNewCellDataMarkerValue, double);
   vtkSetMacro(FillHoleNewCellDataMarkerValue, double);
   vtkSetStringMacro(FillHoleStampCellArrayName);
@@ -109,7 +117,8 @@ protected:
   int FillHoles = 1;
   double FillHolesMaximumSize = 0.0;
 
-  double FillHoleNewCellDataMarkerValue = 9999.0;
+  int UseCustomFillHoleMarkerValue = 0;
+  double FillHoleNewCellDataMarkerValue = 0.0;
 
   char* FillHoleStampCellArrayName = nullptr;
   char* SelectionCellArrayName = nullptr;

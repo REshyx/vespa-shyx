@@ -22,11 +22,11 @@
                          name="LimitMaxVolume"
                          label="Use max volume"
                          number_of_elements="1"
-                         default_values="1">
+                         default_values="0">
         <BooleanDomain name="bool"/>
         <Documentation>
-          When ON, TetGen applies a maximum tetrahedron volume (-a). When OFF, no volume limit is used.
-          Turn OFF for coarse meshing without an explicit volume bound.
+          When ON, TetGen applies a maximum tetrahedron volume (-a) if Max volume is positive.
+          Default OFF (no volume limit); turn ON and set Max volume to refine by tet size.
         </Documentation>
       </IntVectorProperty>
 
@@ -35,17 +35,16 @@
                            label="Max volume"
                            number_of_elements="1"
                            default_values="0">
-        <BoundsDomain mode="scaled_extent" name="bounds_max_tet_volume" scale_factor="1000">
+        <BoundsDomain mode="scaled_extent" name="bounds_max_tet_volume" scale_factor="1">
           <RequiredProperties>
             <Property function="Input" name="Input"/>
           </RequiredProperties>
         </BoundsDomain>
         <Documentation>
-          Maximum tetrahedron volume passed to TetGen (-a). When Use max volume is ON
-          and this value is 0 or negative, the filter uses 10% of the enclosed volume of the input
-          boundary mesh (vtkMassProperties). ParaView BoundsDomain ties the slider range to the
-          input axis-aligned bounding box (updates when the boundary input changes); use Scale/Reset
-          for a suggested magnitude.
+          Maximum tetrahedron volume passed to TetGen (-a). When Use max volume is ON,
+          set a positive value; 0 or negative omits -a (same as TetGen without a volume bound).
+          ParaView BoundsDomain ties the slider range to the input axis-aligned bounding box
+          (updates when the boundary input changes); use Scale/Reset for a suggested magnitude.
         </Documentation>
         <Hints>
           <PropertyWidgetDecorator type="GenericDecorator"

@@ -27,8 +27,8 @@ public:
 
     ///@{
     /**
-     * When ON (default), apply a maximum tetrahedron volume constraint (TetGen -a).
-     * When OFF, no volume limit is passed to TetGen.
+     * When ON, apply a maximum tetrahedron volume constraint (TetGen -a) if MaxVolume is positive.
+     * Default OFF: no volume limit is passed to TetGen.
      */
     vtkGetMacro(LimitMaxVolume, bool);
     vtkSetMacro(LimitMaxVolume, bool);
@@ -37,9 +37,8 @@ public:
 
     ///@{
     /**
-     * Maximum tetrahedron volume constraint. TetGen refines tets larger than this.
-     * When LimitMaxVolume is ON and this value is <= 0, the filter uses 10% of the
-     * enclosed volume of the input boundary (vtkMassProperties).
+     * Maximum tetrahedron volume constraint. TetGen refines tets larger than this (-a).
+     * When LimitMaxVolume is ON, a positive value is required; otherwise -a is not passed.
      */
     vtkGetMacro(MaxVolume, double);
     vtkSetMacro(MaxVolume, double);
@@ -109,7 +108,7 @@ protected:
     int FillOutputPortInformation(int port, vtkInformation* info) override;
     int RequestData(vtkInformation*, vtkInformationVector**, vtkInformationVector*) override;
 
-    bool LimitMaxVolume = true;
+    bool LimitMaxVolume = false;
     double MaxVolume = 0.0;
     double MaxRadiusEdgeRatio = 1.8;
     double MinDihedralAngle = 0.0;
