@@ -3,8 +3,8 @@ name: vespa-paraview-shyx
 description: >-
   Maps the VESPA/vespa “shyx” ParaView plugin layout (VTK modules, CMake, server-manager XML) and
   the steps to add filters like those under vespa/shyx. Use when building or extending SHYX ParaView
-  filters, vtkSHYX* classes, ParaViewPlugin XML, or when the user asks how shyx plugins are wired
-  into VESPAPlugin.
+  filters, vtkSHYX* classes, ParaViewPlugin XML, RepresentationType default representation hints, or
+  when the user asks how shyx plugins are wired into VESPAPlugin.
 ---
 
 # VESPA: SHYX-style ParaView 插件架构
@@ -34,6 +34,7 @@ description: >-
 | ParaView UI/proxy 定义 | `ParaViewPlugin/SHYX<Name>.xml`（`SourceProxy` 的 `class="vtkSHYX..."` 与属性） |
 | 哪些 XML 已挂进插件 | `ParaViewPlugin/CMakeLists.txt` → `paraview_add_plugin` → `SERVER_MANAGER_XML` 列表 |
 | 菜单/图标 | XML 里 `<Hints><ShowInMenu category="SHYX" .../></Hints>`；资源常挂在 `ParaViewPlugin/VESPAIcons.qrc` |
+| 某输出端口默认表示法（如 Point Gaussian） | `<Hints>` 里 `<RepresentationType view="RenderView" type="..." port="N"/>`；**§8.6.7** |
 | 需要 Qt 的客户端逻辑 | 少数在 `vespa/shyx/...` 的 `pq*` 源文件，在 `ParaViewPlugin/CMakeLists.txt` 里以 `paraview_plugin_add_auto_start` 或 `UI_INTERFACES` / `SOURCES` 显式列出；并 `target_link_libraries(VESPAPlugin ... ParaView::...)` |
 | 可选的聚合 XML | 例如 `ParaViewPlugin/VESPAFilters.xml`：是否要把新算子也列进去取决于项目惯例，以现有同类型算子为准 |
 
@@ -236,6 +237,28 @@ description: >-
 - 标签简洁化：分组标题已暗含上下文，单属性 `label` 可去掉 `"Remesh:" / "Shape Smooth:"` 之类前缀。
 - 修改面板布局时**不要**改 `name=""` / `command=""` / `default_values=""`，否则破坏现有 state 文件 / Python 脚本兼容性。
 
+#### 8.6.7 指定某输出端口在视图中的默认 Representation
+
+在对应 `ParaViewPlugin/SHYX*.xml` 的 `<SourceProxy>` 末尾 `<Hints>` 里写 **`RepresentationType`**（见 [ParaView Proxy Hints：RepresentationType](https://www.paraview.org/paraview-docs/latest/cxx/ProxyHints.html)）：控制**首次把该 filter 的输出显示到视图里时**，representation 子代理上 **「Representation」属性的默认值**（通过 `vtkSMRepresentationProxy::SetRepresentationType()`），不是改「创建哪个 representation 代理」。
+
+| 属性 | 说明 |
+|------|------|
+| `view` | 可选；常见为 `RenderView`；省略则匹配所有视图类型。 |
+| `type` | **必须与 ParaView 该视图下表示法列表里的字符串一致**（与 UI 下拉框文案一致）。例如 `Point Gaussian`、`Point Label`、`Surface`。注意 **带空格** 的写法（`Point Gaussian`），不要写成驼峰 `PointGaussian`。若字符串不匹配，Hint 无效，仍会退回视图默认（多为 Surface）。 |
+| `port` | 可选；**多输出端口**时用 `port="0"`、`port="1"` 等绑定到具体 `<OutputPort index="..."/>`；省略则对所有输出端口生效。 |
+
+多个 `<RepresentationType>` 可按**从窄到宽**的顺序写（先带 `view`+`port`，再只带 `port`），与上游文档「hints are processed in order」一致。
+
+示例（端口 0 首次显示为点高斯；端口 1 不受影响，除非另写一条）：
+
+```xml
+<Hints>
+  <RepresentationType view="RenderView" type="Point Gaussian" port="0"/>
+</Hints>
+```
+
+仓库内参考：`ParaViewPlugin/SHYXVmtkOpeningCenterlines.xml`（Opening seed points → `Point Gaussian`）；`ParaViewPlugin/VESPAFilters.xml`（某端口 → `Point Label`）。
+
 ### 8.7 `BoundsDomain` 与「自动刷新」（示例：`MinEdgeLength` / `MaxEdgeLength`）
 
 - XML：`BoundsDomain mode="scaled_extent"` + `scale_factor` + `RequiredProperties` 绑定 **`Input`**。
@@ -246,7 +269,7 @@ description: >-
 
 - **`PropertyGroup`**：分节标签、`panel_visibility`、`panel_widget` 自定义整组 UI。
 - **`panel_visibility`**：`default` / `advanced` / `never`。
-- **`Hints`**：`ShowInMenu`、`ArraySelectionWidget`、`SelectionInput`、`panel_widget` 等。
+- **`Hints`**：`ShowInMenu`、`RepresentationType`（默认表示法，见 **§8.6.7**）、`ArraySelectionWidget`、`SelectionInput`、`panel_widget` 等。
 - **输入与数据域**：`InputProperty`、`DataTypeDomain`、`InputArrayDomain`。
 
 ### 8.9 本地对照源码

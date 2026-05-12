@@ -88,13 +88,37 @@ vtkSHYXAdaptiveIsotropicRemesher::vtkSHYXAdaptiveIsotropicRemesher()
 {
   this->SetNumberOfInputPorts(2);
   this->SetNumberOfOutputPorts(4);
+  this->SetInputArrayToProcess(0, 0, 0, vtkDataObject::FIELD_ASSOCIATION_NONE, nullptr);
 }
 
 //------------------------------------------------------------------------------
 vtkSHYXAdaptiveIsotropicRemesher::~vtkSHYXAdaptiveIsotropicRemesher()
 {
   this->SetFeatureMaskArrayName(nullptr);
-  this->SetRemeshRangeArrayName(nullptr);
+}
+
+//------------------------------------------------------------------------------
+void vtkSHYXAdaptiveIsotropicRemesher::SetRemeshRangeArrayName(const char* name)
+{
+  const bool hasName = (name != nullptr && name[0] != '\0');
+  this->SetInputArrayToProcess(0, 0, 0,
+    hasName ? vtkDataObject::FIELD_ASSOCIATION_POINTS : vtkDataObject::FIELD_ASSOCIATION_NONE,
+    hasName ? name : nullptr);
+}
+
+//------------------------------------------------------------------------------
+const char* vtkSHYXAdaptiveIsotropicRemesher::GetRemeshRangeArrayName()
+{
+  vtkInformation* const ai = this->GetInputArrayInformation(0);
+  if (ai && ai->Has(vtkDataObject::FIELD_NAME()))
+  {
+    const char* const n = ai->Get(vtkDataObject::FIELD_NAME());
+    if (n && n[0] != '\0')
+    {
+      return n;
+    }
+  }
+  return nullptr;
 }
 
 //------------------------------------------------------------------------------
@@ -134,8 +158,14 @@ void vtkSHYXAdaptiveIsotropicRemesher::PrintSelf(ostream& os, vtkIndent indent)
   os << indent << "FeatureMaskThreshold: " << this->FeatureMaskThreshold << std::endl;
   os << indent << "FeatureMaskAllScalars: " << (this->FeatureMaskAllScalars ? "on" : "off") << std::endl;
   os << indent << "RemeshRegionMode: " << this->RemeshRegionMode << std::endl;
-  os << indent << "RemeshRangeArrayName: "
-     << (this->RemeshRangeArrayName ? this->RemeshRangeArrayName : "(null)") << std::endl;
+  if (const char* const rra = this->GetRemeshRangeArrayName())
+  {
+    os << indent << "RemeshRangeArrayName: " << rra << std::endl;
+  }
+  else
+  {
+    os << indent << "RemeshRangeArrayName: (null)" << std::endl;
+  }
   os << indent << "RemeshRangeMin: " << this->RemeshRangeMin << std::endl;
   os << indent << "RemeshRangeMax: " << this->RemeshRangeMax << std::endl;
   os << indent << "RemeshRangeAllScalars: " << (this->RemeshRangeAllScalars ? "on" : "off") << std::endl;
@@ -276,7 +306,7 @@ int vtkSHYXAdaptiveIsotropicRemesher::RequestData(
   std::set<vtkIdType> selected;
   if (this->RemeshRegionMode == 1)
   {
-    if (!CollectCellsByScalarValueRange(input, this->RemeshRangeArrayName, this->RemeshRangeMin,
+    if (!CollectCellsByScalarValueRange(input, this->GetRemeshRangeArrayName(), this->RemeshRangeMin,
           this->RemeshRangeMax, this->RemeshRangeAllScalars, selected))
     {
       vtkWarningMacro("Remesh region mode is scalar range but the range could not be applied "

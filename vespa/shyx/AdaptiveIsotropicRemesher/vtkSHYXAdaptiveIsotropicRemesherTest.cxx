@@ -154,7 +154,7 @@ int vtkSHYXAdaptiveIsotropicRemesherTest::RequestData(
   std::set<vtkIdType> selected;
   if (this->RemeshRegionMode == 1)
   {
-    if (!CollectCellsByScalarValueRange(input, this->RemeshRangeArrayName, this->RemeshRangeMin,
+    if (!CollectCellsByScalarValueRange(input, this->GetRemeshRangeArrayName(), this->RemeshRangeMin,
           this->RemeshRangeMax, this->RemeshRangeAllScalars, selected))
     {
       vtkWarningMacro("Remesh region mode is scalar range but the range could not be applied "

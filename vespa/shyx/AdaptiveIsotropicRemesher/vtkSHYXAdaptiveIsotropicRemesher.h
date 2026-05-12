@@ -76,8 +76,12 @@ public:
   vtkSetClampMacro(RemeshRegionMode, int, 0, 1);
   //@}
 
-  vtkSetStringMacro(RemeshRangeArrayName);
-  vtkGetStringMacro(RemeshRangeArrayName);
+  /**
+   * Remesh-range array name for RemeshRegionMode == 1. Stored on vtkAlgorithm input-array slot 0
+   * so ParaView can use ArrayListDomain + ArrayRangeDomain (5-tuple SetInputArrayToProcess).
+   */
+  void SetRemeshRangeArrayName(const char* name);
+  const char* GetRemeshRangeArrayName();
 
   //@{
   /**
@@ -385,7 +389,6 @@ protected:
   bool   FeatureMaskAllScalars   = false;
 
   int    RemeshRegionMode        = 0;
-  char*  RemeshRangeArrayName    = nullptr;
   double RemeshRangeMin          = 0.0;
   double RemeshRangeMax          = 1.0;
   bool   RemeshRangeAllScalars   = false;

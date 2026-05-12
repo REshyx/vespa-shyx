@@ -93,9 +93,9 @@
 
       <StringVectorProperty name="RemeshRangeArrayName"
                             label="Range array"
-                            command="SetRemeshRangeArrayName"
-                            number_of_elements="1"
-                            default_values=""
+                            command="SetInputArrayToProcess"
+                            number_of_elements="5"
+                            element_types="0 0 0 0 2"
                             animateable="0">
         <ArrayListDomain name="remesh_range_list"
                          input_domain_name="remesh_range_arrays">
@@ -104,7 +104,7 @@
           </RequiredProperties>
         </ArrayListDomain>
         <Documentation>
-          Point- or cell array for scalar range mode (same rules as the main remesher).
+          Point- or cell array for scalar range mode (same rules as the main remesher). VTK input-array slot 0.
         </Documentation>
         <Hints>
           <PropertyWidgetDecorator type="GenericDecorator"
@@ -121,7 +121,12 @@
                             number_of_elements="1"
                             default_values="0"
                             animateable="1">
-        <DoubleRangeDomain name="range" min="-1e308" max="1e308"/>
+        <ArrayRangeDomain name="range" default_mode="min">
+          <RequiredProperties>
+            <Property name="Input" function="Input"/>
+            <Property name="RemeshRangeArrayName" function="ArraySelection"/>
+          </RequiredProperties>
+        </ArrayRangeDomain>
         <Hints>
           <PropertyWidgetDecorator type="GenericDecorator"
                                    mode="visibility"
@@ -136,7 +141,12 @@
                             number_of_elements="1"
                             default_values="1"
                             animateable="1">
-        <DoubleRangeDomain name="range" min="-1e308" max="1e308"/>
+        <ArrayRangeDomain name="range" default_mode="max">
+          <RequiredProperties>
+            <Property name="Input" function="Input"/>
+            <Property name="RemeshRangeArrayName" function="ArraySelection"/>
+          </RequiredProperties>
+        </ArrayRangeDomain>
         <Hints>
           <PropertyWidgetDecorator type="GenericDecorator"
                                    mode="visibility"

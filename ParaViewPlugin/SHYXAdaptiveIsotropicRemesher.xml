@@ -103,9 +103,9 @@
 
       <StringVectorProperty name="RemeshRangeArrayName"
                             label="Range array"
-                            command="SetRemeshRangeArrayName"
-                            number_of_elements="1"
-                            default_values=""
+                            command="SetInputArrayToProcess"
+                            number_of_elements="5"
+                            element_types="0 0 0 0 2"
                             animateable="0">
         <ArrayListDomain name="remesh_range_list"
                          input_domain_name="remesh_range_arrays">
@@ -116,7 +116,7 @@
         <Documentation>
           Point- or cell-centered array on the input. If both exist with the same name, cell data
           is used. A cell is in the remesh region when tuple magnitude is between Remesh range min
-          and max (inclusive).
+          and max (inclusive). Stored on VTK input-array slot 0 for ParaView ArrayRangeDomain.
         </Documentation>
         <Hints>
           <PropertyWidgetDecorator type="GenericDecorator"
@@ -133,9 +133,15 @@
                             number_of_elements="1"
                             default_values="0"
                             animateable="1">
-        <DoubleRangeDomain name="range" min="-1e308" max="1e308"/>
+        <ArrayRangeDomain name="range" default_mode="min">
+          <RequiredProperties>
+            <Property name="Input" function="Input"/>
+            <Property name="RemeshRangeArrayName" function="ArraySelection"/>
+          </RequiredProperties>
+        </ArrayRangeDomain>
         <Documentation>
           Inclusive lower bound on tuple magnitude for cells in the remesh region (scalar range mode).
+          Domain min/max follow the selected array; use **Reset** next to the property to adopt the suggested bound.
         </Documentation>
         <Hints>
           <PropertyWidgetDecorator type="GenericDecorator"
@@ -151,9 +157,15 @@
                             number_of_elements="1"
                             default_values="1"
                             animateable="1">
-        <DoubleRangeDomain name="range" min="-1e308" max="1e308"/>
+        <ArrayRangeDomain name="range" default_mode="max">
+          <RequiredProperties>
+            <Property name="Input" function="Input"/>
+            <Property name="RemeshRangeArrayName" function="ArraySelection"/>
+          </RequiredProperties>
+        </ArrayRangeDomain>
         <Documentation>
-          Inclusive upper bound; must be &gt;= Remesh range min.
+          Inclusive upper bound; must be &gt;= Remesh range min. Domain min/max follow the selected array;
+          use **Reset** to adopt the suggested bound.
         </Documentation>
         <Hints>
           <PropertyWidgetDecorator type="GenericDecorator"
