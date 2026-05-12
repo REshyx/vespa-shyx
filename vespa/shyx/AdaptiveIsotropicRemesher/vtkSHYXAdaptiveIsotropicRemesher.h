@@ -5,13 +5,11 @@
  *
  * Uses CGAL Polygon_mesh_processing isotropic remeshing with **Vespa
  * FeatureAwareAdaptiveSizingField** always (custom interpolated_corrected_curvatures math with
- * per-vertex caps on dual named CGAL property maps — not CGAL `Adaptive_sizing_field`). After
+ * per-vertex caps on a named CGAL property map — not CGAL `Adaptive_sizing_field`). After
  * `PrepareIccVertexNormalsForAdaptiveSizing` (CGAL area-weighted `v:vespa_icc_normal`, and dual
  * per-vertex normals when the Feature mask applies), curvature-driven targets mirror CGAL's ICC
  * sizing formula inside min/max bounds, with optional **AdaptiveSizingNeighborMaxRatio** smoothing
- * of adjacent vertex targets (**> 1** reduces sharp spatial sizing jumps). When FeatureSizingStandAlone is OFF, values written to the
- * feature map reuse the global tolerance/min/max so `v:vespa_size_feature` equals
- * `v:vespa_size_global` everywhere.
+ * of adjacent vertex targets (**> 1** reduces sharp spatial sizing jumps).
  *
  * Remesh region: either an optional vtkSelection on port 1 (copied/active selection) or a scalar
  * value-range on the input polydata (point- or cell-centered array; same name resolution as the
@@ -22,9 +20,8 @@
  * With an empty remesh region (no selection, invalid scalar-range setup, or no cells in range),
  * the whole surface is remeshed.
  *
- * Output port 0: remeshed vtkPolyData (point array **VespaIccNonMaskVertexNormal**: ICC non-mask-side
- * vertex normal from `v:vespa_icc_n_nonmask`, or `v:vespa_icc_normal` when no mask dual exists; written
- * after a final `PrepareIcc` on the output using the evaluated feature mask when enabled).
+ * Output port 0: remeshed vtkPolyData (no **VespaIccNonMaskVertexNormal** export; interpolated point/cell
+ * arrays only when UpdateAttributes is enabled).
  * Output port 1: **Lines** only (sharp feature edges). Uses the **input** mask region (port 2) when
  * the feature mask is valid and non-empty; otherwise the full remeshed surface (with optional mask
  * filtering on the output). No vertex cells. Empty when Detect feature edges is OFF.
@@ -32,16 +29,15 @@
  * Output port 3: **Sizing / ICC preview immediately before the final remesh sub-step** —
  * NumberOfIterations==1: same topology as the CGAL input (converted to VTK); NumberOfIterations>1:
  * the mesh after NumberOfIterations-1 single-iteration CGAL passes. `RemeshRecomputeCurvatureEachIteration`
- * matches the main path when enabled (default): curvature and `v:vespa_size_*` are refreshed immediately before
- * this snapshot (and thus before the last iteration), as in the CGAL loop. With NumberOfIterations>1 and
- * Feature mask, port 3 probes mask arrays from the input onto the preview mesh (`UpdateAttributes` ON)
- * and builds the same dual ICC normals as on the final output when evaluation succeeds.
- * (`v:vespa_icc_normal` is not exported.) Arrays: VespaAdaptiveSizeGlobal / VespaAdaptiveSizeFeature
- * from `v:vespa_size_*` (after optional neighbor ratio limiting; AdaptiveSizingNeighborMaxRatio),
- * VespaIccPrincipalCurvatureMin/Max and uncapped sizing from a second ICC pass
- * after preview `PrepareIcc`; feature uncapped uses the mirrored tolerance when FeatureSizingStandAlone is OFF.
- * **VespaIccNonMaskVertexNormal** (3-tuple point vectors) matches `v:vespa_icc_n_nonmask`, or the area blend
- * `v:vespa_icc_normal` when the dual bundle is absent.
+ * matches the main path when enabled (default): curvature and `v:vespa_size_global` are refreshed immediately
+ * before this snapshot (and thus before the last iteration), as in the CGAL loop. With NumberOfIterations>1
+ * and Feature mask, port 3 probes mask arrays from the input onto the preview mesh (`UpdateAttributes` ON)
+ * and builds dual ICC normals for the preview (exported there) when evaluation succeeds.
+ * (`v:vespa_icc_normal` is not exported.) Arrays: VespaAdaptiveSizeGlobal from `v:vespa_size_global`
+ * (after optional neighbor ratio limiting; AdaptiveSizingNeighborMaxRatio),
+ * VespaIccPrincipalCurvatureMin/Max and uncapped sizing from a second ICC pass after preview `PrepareIcc`.
+ * **VespaIccNonMaskVertexNormal** (3-tuple point vectors) on port 3 only: matches `v:vespa_icc_n_nonmask`, or
+ * the area blend `v:vespa_icc_normal` when the dual bundle is absent. Active scalars default to **VespaAdaptiveSizeGlobal**.
  *
  * Requires CGAL 6.0 or newer.
  */
@@ -135,53 +131,6 @@ public:
    */
   vtkGetMacro(AdaptiveTolerance, double);
   vtkSetMacro(AdaptiveTolerance, double);
-  //@}
-
-  //@{
-  /**
-   * When true, constrained/feature edges dispatch to **`v:vespa_size_feature`** built from
-   * FeatureMinEdgeLength / FeatureMaxEdgeLength / FeatureAdaptiveTolerance while other edges use the
-   * global sizing map (**`v:vespa_size_global`** from MinEdgeLength / MaxEdgeLength /
-   * AdaptiveTolerance). When false, the constructor receives the global tolerances/length bounds for
-   * both maps **so vertex targets are identical** on every vertex (dual maps still exist; CGAL
-   * remesh only picks one map per edge by feature flag).
-   *
-   * RemeshProtectConstraints / collapse / relaxation / flip / split options are unchanged.
-   * With RemeshProtectConstraints=true, differing feature sizing has little effect on splits/collapses
-   * because constrained edges do not subdivide/compress (only tangential relaxation sees `at()`).
-   * Default false.
-   */
-  vtkGetMacro(FeatureSizingStandAlone, bool);
-  vtkSetMacro(FeatureSizingStandAlone, bool);
-  vtkBooleanMacro(FeatureSizingStandAlone, bool);
-  //@}
-
-  //@{
-  /**
-   * Minimum allowed edge length mapped into **`v:vespa_size_feature`** when FeatureSizingStandAlone
-   * is true (must be strictly positive in that mode). When standalone is false this property is ignored
-   * and the global MinEdgeLength is reused for the feature map.
-   */
-  vtkGetMacro(FeatureMinEdgeLength, double);
-  vtkSetMacro(FeatureMinEdgeLength, double);
-  //@}
-
-  //@{
-  /**
-   * Maximum allowed edge length for the feature sizing map when FeatureSizingStandAlone is true
-   * (must be greater than FeatureMinEdgeLength). Ignored when standalone is false; globals are reused.
-   */
-  vtkGetMacro(FeatureMaxEdgeLength, double);
-  vtkSetMacro(FeatureMaxEdgeLength, double);
-  //@}
-
-  //@{
-  /**
-   * Tolerance for the feature sizing map when FeatureSizingStandAlone is true (strictly positive).
-   * When standalone is false AdaptiveTolerance is reused for both maps.
-   */
-  vtkGetMacro(FeatureAdaptiveTolerance, double);
-  vtkSetMacro(FeatureAdaptiveTolerance, double);
   //@}
 
   //@{
@@ -365,10 +314,6 @@ protected:
   double MinEdgeLength       = 0.0;
   double MaxEdgeLength       = 0.0;
   double AdaptiveTolerance   = 0.01;
-  bool   FeatureSizingStandAlone   = false;
-  double FeatureMinEdgeLength      = 0.0;
-  double FeatureMaxEdgeLength      = 0.0;
-  double FeatureAdaptiveTolerance  = 0.01;
   double AdaptiveSizingNeighborMaxRatio = 1.6;
   bool   RemeshRecomputeCurvatureEachIteration = true;
   double ProtectAngle        = 70.0;

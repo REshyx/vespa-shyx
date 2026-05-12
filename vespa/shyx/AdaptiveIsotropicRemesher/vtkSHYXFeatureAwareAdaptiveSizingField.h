@@ -24,58 +24,32 @@ namespace vespa_shyx_air_remesh_internals
 namespace pmp_sf = CGAL::Polygon_mesh_processing;
 
 /**
- * Curvature-driven sizing field that holds TWO independent per-vertex target-length maps:
- * one for the global region and one for feature/constrained edges. Behaves like CGAL's
- * Adaptive_sizing_field except that the per-edge / per-vertex sizing is dispatched based on
- * whether the edge is in `featureEdges` (the same edge_is_constrained_map fed to
- * isotropic_remeshing).
+ * Curvature-driven sizing field with a single per-vertex target-length map
+ * (`v:vespa_size_global`). Mirrors CGAL's Adaptive_sizing_field math
+ * (interpolated corrected curvatures, vertex_size_sq = 6*tol/|kappa|max - 3*tol^2, clamped to
+ * [short, long]) but stores the cache in a **distinct named** Surface_mesh property map to avoid
+ * the dynamic_vertex_property_t key collision in CGAL's own class.
  *
- * Why we cannot reuse two CGAL::Polygon_mesh_processing::Adaptive_sizing_field instances:
- * CGAL's class stores its per-vertex sizing in dynamic_vertex_property_t<FT>, which is
- * keyed only by the value type. Two instances on the same mesh therefore share storage
- * and the second-constructed field overwrites the first's targets, causing a global
- * over-refinement (and bad_alloc) when the feature targets are smaller than the global
- * targets.
+ * Optional neighbor ratio limit: when @a neighbor_max_ratio > 1 in the constructor, targets are
+ * relaxed so along every mesh edge neither endpoint exceeds R times the other (iterative symmetric
+ * reduction), damping sharp ICC-driven jumps. R <= 1 disables.
  *
- * Implementation mirrors CGAL's Adaptive_sizing_field math (interpolated corrected
- * curvatures, vertex_size_sq = 6*tol/|kappa|max - 3*tol^2, clamped to [short, long]) but
- * stores the two per-vertex caches in DISTINCT named Surface_mesh property maps.
+ * Copy semantics: copy-constructible; the only non-trivial member is a property-map handle that
+ * refers to data living on the surface mesh, exactly like CGAL's Adaptive_sizing_field. The named
+ * property map is cleaned up when the mesh itself is destroyed (each RequestData call constructs a
+ * fresh CGAL_Surface via vtkCGALHelper, so nothing leaks across runs).
  *
- * Optional neighbor ratio limit: when @a neighbor_max_ratio > 1 in the constructor, targets are relaxed
- * so along every mesh edge neither endpoint exceeds R times the other (iterative symmetric reduction on
- * both named maps independently), damping sharp ICC-driven jumps across the surface. R <= 1 disables.
- *
- * Per-edge dispatch: is_too_long / is_too_short read both endpoints from the SAME map
- * (feature map if the edge is feature, global map otherwise). This keeps non-feature edges
- * fully decoupled from the feature targets even when they happen to share an endpoint with
- * a feature edge -- matching the user requirement that feature edges have their own
- * independent adaptive field.
- *
- * Copy semantics: the class must be copy-constructible because CGAL's Named_function_parameters
- * machinery (CGAL/Named_function_parameters.h:68) stores non-copyable parameters wrapped in
- * std::reference_wrapper<const T>, after which sizing.at(...) inside tangential_relaxation
- * fails to compile (reference_wrapper has no .at member). Default copy is fine: the only
- * non-trivial members are property-map handles that all refer to data living on the surface
- * mesh, exactly like CGAL's own Adaptive_sizing_field. The two named property maps are
- * therefore left on the mesh; they are cleaned up when the mesh itself is destroyed (each
- * RequestData call constructs a fresh CGAL_Surface via vtkCGALHelper, so nothing leaks
- * across runs).
- *
- * Between CGAL remesh iterations, `recompute_curvature(mesh)` may be called to run ICC again on the
- * **current full mesh** and refill both maps. Patch remesh still uses the expanded
+ * Between CGAL remesh iterations, `recompute_curvature(mesh)` may be called to run ICC again on
+ * the **current full mesh** and refill the map. Patch remesh still uses the expanded
  * Face_filtered_graph only for the **initial** constructor pass; refresh uses the whole surface so
  * face indices stay valid after topology changes.
  *
- * ICC vertex normals: build `v:vespa_icc_normal` (global area blend) plus, when the feature mask is
- * enabled, `f:vespa_icc_in_mask`, `v:vespa_icc_n_mask`, and `v:vespa_icc_n_nonmask` via
- * `PrepareIccVertexNormalsForAdaptiveSizing` before constructing this object. Interpolated corrected
- * curvature uses **per-face corner normals** consistent with each triangle's mask side so mask
- * interiors are not biased by boundary folds. With those maps loaded, **per-vertex** ICC aggregates
- * sum only **non-mask** incident faces (ball neighborhoods still traverse mask triangles without
- * counting them). `recompute_curvature` refreshes `v:vespa_icc_normal`
- * only with plain `compute_vertex_normals` (dual-region maps are not rebuilt across remesh topology).
+ * ICC vertex normals: build `v:vespa_icc_normal` (global area blend) plus, when the feature mask
+ * is enabled, `f:vespa_icc_in_mask`, `v:vespa_icc_n_mask`, and `v:vespa_icc_n_nonmask` via
+ * `PrepareIccVertexNormalsForAdaptiveSizing` before constructing this object. `recompute_curvature`
+ * refreshes `v:vespa_icc_normal` only with plain `compute_vertex_normals` (dual-region maps are
+ * not rebuilt across remesh topology).
  */
-template <typename FeatureEdgeMap>
 class FeatureAwareAdaptiveSizingField
 {
 public:
@@ -86,22 +60,15 @@ public:
   using face_descriptor     = CGAL_Surface::Face_index;
 
   template <typename FaceRange>
-  FeatureAwareAdaptiveSizingField(FT tol_global, std::pair<FT, FT> bounds_global, FT tol_feature,
-    std::pair<FT, FT> bounds_feature, const FaceRange& face_range, CGAL_Surface& mesh,
-    FeatureEdgeMap feat_map, FT neighbor_max_ratio = FT(0))
-    : feat_(feat_map)
-    , tol_g_(tol_global)
-    , short_g_(bounds_global.first)
-    , long_g_(bounds_global.second)
-    , tol_f_(tol_feature)
-    , short_f_(bounds_feature.first)
-    , long_f_(bounds_feature.second)
+  FeatureAwareAdaptiveSizingField(FT tol, std::pair<FT, FT> bounds, const FaceRange& face_range,
+    CGAL_Surface& mesh, FT neighbor_max_ratio = FT(0))
+    : tol_g_(tol)
+    , short_g_(bounds.first)
+    , long_g_(bounds.second)
     , neighbor_max_ratio_(neighbor_max_ratio)
   {
     map_g_ =
       mesh.template add_property_map<vertex_descriptor, FT>("v:vespa_size_global", FT(0)).first;
-    map_f_ =
-      mesh.template add_property_map<vertex_descriptor, FT>("v:vespa_size_feature", FT(0)).first;
 
     if (face_range.size() == faces(mesh).size())
     {
@@ -126,7 +93,7 @@ public:
   }
 
   /**
-   * Re-run custom_interpolated_corrected_curvatures on the current geometry and refill map_g_ / map_f_.
+   * Re-run custom_interpolated_corrected_curvatures on the current geometry and refill map_g_.
    * Uses the entire mesh as the curvature domain (see class comment for patch vs refresh).
    * Refreshes `v:vespa_icc_normal` with CGAL `compute_vertex_normals` when present.
    */
@@ -142,22 +109,18 @@ public:
   }
 
   /**
-   * Refill both target-length maps using the **current** `v:vespa_icc_normal` without modifying it.
+   * Refill the target-length map using the **current** `v:vespa_icc_normal` without modifying it.
    * Use after PrepareIccVertexNormalsForAdaptiveSizing (e.g. sizing ICC preview port) so capped
-   * `v:vespa_size_*` match fresh normals; remesh-alone paths may leave maps stale relative to vn.
+   * `v:vespa_size_global` matches fresh normals; remesh-alone paths may leave the map stale.
    */
   void recompute_sizes_from_current_icc_normals(CGAL_Surface& mesh) { compute_sizes_(mesh, mesh); }
 
-  FT at(const vertex_descriptor v, const CGAL_Surface& sm) const
-  {
-    return is_vertex_feature_(v, sm) ? get(map_f_, v) : get(map_g_, v);
-  }
+  FT at(const vertex_descriptor v, const CGAL_Surface& /*sm*/) const { return get(map_g_, v); }
 
-  std::optional<FT> is_too_long(const vertex_descriptor va, const vertex_descriptor vb,
-    const CGAL_Surface& sm) const
+  std::optional<FT> is_too_long(
+    const vertex_descriptor va, const vertex_descriptor vb, const CGAL_Surface& sm) const
   {
-    const bool feat = is_edge_feature_(va, vb, sm);
-    const FT s = (CGAL::min)(get_size_(va, feat), get_size_(vb, feat));
+    const FT s = (CGAL::min)(get(map_g_, va), get(map_g_, vb));
     const FT sqlen = CGAL::squared_distance(sm.point(va), sm.point(vb));
     const FT sqt = CGAL::square((FT(4) / FT(3)) * s);
     if (sqt > FT(0) && sqlen > sqt)
@@ -169,10 +132,9 @@ public:
 
   std::optional<FT> is_too_short(const halfedge_descriptor h, const CGAL_Surface& sm) const
   {
-    const bool feat = boost::get(feat_, sm.edge(h));
     const auto va = sm.source(h);
     const auto vb = sm.target(h);
-    const FT s = (CGAL::min)(get_size_(va, feat), get_size_(vb, feat));
+    const FT s = (CGAL::min)(get(map_g_, va), get(map_g_, vb));
     const FT sqlen = CGAL::squared_distance(sm.point(va), sm.point(vb));
     const FT sqt = CGAL::square((FT(4) / FT(5)) * s);
     if (sqt > FT(0) && sqlen < sqt)
@@ -190,18 +152,15 @@ public:
   void register_split_vertex(const vertex_descriptor v, const CGAL_Surface& sm)
   {
     FT sg = 0;
-    FT sf = 0;
     std::size_t n = 0;
     for (halfedge_descriptor ha : CGAL::halfedges_around_target(v, sm))
     {
       sg += get(map_g_, sm.source(ha));
-      sf += get(map_f_, sm.source(ha));
       ++n;
     }
     if (n > 0)
     {
       put(map_g_, v, sg / FT(n));
-      put(map_f_, v, sf / FT(n));
     }
   }
 
@@ -217,10 +176,10 @@ private:
   template <typename FaceGraph>
   void compute_sizes_(FaceGraph& fg, CGAL_Surface& mesh)
   {
-    using Kernel = typename CGAL::Kernel_traits<Point_3>::Kernel;
+    using Kernel    = typename CGAL::Kernel_traits<Point_3>::Kernel;
     using Principal = vespa_shyx::Custom_principal_curvatures_and_directions<Kernel>;
-    using CTag = CGAL::dynamic_vertex_property_t<Principal>;
-    auto curv_map = get(CTag(), fg);
+    using CTag      = CGAL::dynamic_vertex_property_t<Principal>;
+    auto curv_map   = get(CTag(), fg);
     const auto vn_opt =
       mesh.property_map<vertex_descriptor, CGAL_Kernel::Vector_3>("v:vespa_icc_normal");
     if (vn_opt.has_value())
@@ -238,10 +197,9 @@ private:
 
     for (auto v : vertices(fg))
     {
-      const Principal vc = get(curv_map, v);
-      const FT max_abs = max_abs_principal_(vc);
+      const Principal vc  = get(curv_map, v);
+      const FT        max_abs = max_abs_principal_(vc);
       put(map_g_, v, vertex_size_(tol_g_, short_g_, long_g_, max_abs));
-      put(map_f_, v, vertex_size_(tol_f_, short_f_, long_f_, max_abs));
     }
     gradient_limit_vertex_sizes_(mesh);
   }
@@ -264,47 +222,10 @@ private:
     return CGAL::approximate_sqrt(vsq);
   }
 
-  FT get_size_(vertex_descriptor v, bool feature) const
-  {
-    return feature ? get(map_f_, v) : get(map_g_, v);
-  }
-
-  bool is_vertex_feature_(vertex_descriptor v, const CGAL_Surface& sm) const
-  {
-    const auto h0 = sm.halfedge(v);
-    if (h0 == CGAL_Surface::null_halfedge())
-    {
-      return false;
-    }
-    for (halfedge_descriptor h : CGAL::halfedges_around_target(h0, sm))
-    {
-      if (boost::get(feat_, sm.edge(h)))
-      {
-        return true;
-      }
-    }
-    return false;
-  }
-
-  bool is_edge_feature_(vertex_descriptor va, vertex_descriptor vb, const CGAL_Surface& sm) const
-  {
-    for (halfedge_descriptor h : halfedges_around_source(va, sm))
-    {
-      if (sm.target(h) == vb)
-      {
-        return boost::get(feat_, sm.edge(h));
-      }
-    }
-    return false;
-  }
-
   /**
    * After ICC per-vertex targets, optionally relax sharp spatial jumps: along every edge, neither
    * endpoint map value may exceed R times the other's (symmetric reduction only). Vertices with
    * non-positive map entries are skipped (patch-uncovered defaults). R <= 1 disables.
-   *
-   * Multiple passes approximate a gradient cap on log-size; tighter R needs more iterations but
-   * 32 sweeps are ample for typical meshes.
    */
   void gradient_limit_vertex_sizes_(CGAL_Surface& mesh)
   {
@@ -318,11 +239,10 @@ private:
       bool changed = false;
       for (CGAL_Surface::Edge_index e : mesh.edges())
       {
-        const halfedge_descriptor h = mesh.halfedge(e);
-        const vertex_descriptor va = mesh.source(h);
-        const vertex_descriptor vb = mesh.target(h);
+        const halfedge_descriptor h  = mesh.halfedge(e);
+        const vertex_descriptor   va = mesh.source(h);
+        const vertex_descriptor   vb = mesh.target(h);
         changed |= limit_two_vertex_targets_(map_g_, va, vb, R);
-        changed |= limit_two_vertex_targets_(map_f_, va, vb, R);
       }
       if (!changed)
       {
@@ -331,7 +251,8 @@ private:
     }
   }
 
-  static bool limit_two_vertex_targets_(VSizeMap& map, vertex_descriptor va, vertex_descriptor vb, FT R)
+  static bool limit_two_vertex_targets_(
+    VSizeMap& map, vertex_descriptor va, vertex_descriptor vb, FT R)
   {
     FT sa = get(map, va);
     FT sb = get(map, vb);
@@ -354,18 +275,12 @@ private:
     return changed;
   }
 
-  FeatureEdgeMap feat_;
   VSizeMap map_g_;
-  VSizeMap map_f_;
-  FT tol_g_;
-  FT short_g_;
-  FT long_g_;
-  FT tol_f_;
-  FT short_f_;
-  FT long_f_;
-  FT neighbor_max_ratio_;
+  FT       tol_g_;
+  FT       short_g_;
+  FT       long_g_;
+  FT       neighbor_max_ratio_;
   static constexpr int gradient_limit_sweeps_ = 32;
-
 };
 
 } // namespace vespa_shyx_air_remesh_internals

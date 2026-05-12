@@ -21,8 +21,7 @@
         constrain remeshing, and output port 1 is empty.
 
         Outputs:
-          0  Remeshed surface. Point vectors **VespaIccNonMaskVertexNormal** (`v:vespa_icc_n_nonmask`,
-             or area blend `v:vespa_icc_normal` without mask dual) after ICC prep on the output.
+          0  Remeshed surface (no **VespaIccNonMaskVertexNormal** on this port; use port 3 preview for ICC normals).
           1  Sharp/feature edges as **lines** only (no vertex cells). Empty when Detect feature edges is OFF.
           2  Input geometry, faces passing the feature mask threshold.
           3  Sizing / ICC preview on the mesh **before the last remesh iteration**
@@ -30,10 +29,11 @@
              iteration is ON — maps match a refresh immediately before that last iteration. Turn it OFF only
              to trade accuracy for speed. `v:vespa_icc_normal` stays internal. Feature-mask dual ICC normals
              on port 3: iterations==1 use the input mask; iterations>1 probe mask fields onto the preview
-             (same as port 0 path; requires **Transfer input arrays to output** / UpdateAttributes ON).
-             Capped VespaAdaptiveSizeGlobal/Feature from `v:vespa_size_*`; principal curvatures and
-             uncapped sizes from a second ICC pass on the preview geometry. **VespaIccNonMaskVertexNormal**
-             matches non-mask ICC vertex normals (`v:vespa_icc_n_nonmask`), or global blend when absent.
+             (same mask-driven ICC prep as the remesh pass; requires **Transfer input arrays to output** / UpdateAttributes ON).
+             Capped VespaAdaptiveSizeGlobal from `v:vespa_size_global`; principal curvatures and
+             uncapped size from a second ICC pass on the preview geometry. **VespaIccNonMaskVertexNormal**
+             (port 3 only) matches non-mask ICC vertex normals (`v:vespa_icc_n_nonmask`), or global blend when absent.
+             Default coloring on port 3: **VespaAdaptiveSizeGlobal**.
 
         Requires CGAL 6.0+.
       </Documentation>
@@ -265,96 +265,11 @@
         </Documentation>
       </DoubleVectorProperty>
 
-      <IntVectorProperty command="SetFeatureSizingStandAlone"
-                         name="FeatureSizingStandAlone"
-                         label="Feature sizing stand-alone"
-                         number_of_elements="1"
-                         default_values="0"
-                         animateable="0">
-        <BooleanDomain name="bool"/>
-        <Documentation>
-          When OFF (default), **`v:vespa_size_feature` is built with the same tolerance/min/max as
-          the global map** (values match `VespaAdaptiveSizeGlobal` everywhere; only per-edge dispatch differs).
-          When ON, constrained/feature edges use Feature min/max edge length and Feature adaptive tolerance
-          for `v:vespa_size_feature`. Other remesh options unchanged. With Protect constraints ON, differing
-          feature sizing mostly affects tangential relaxation at feature vertices, not split/collapse of
-          protected edges.
-        </Documentation>
-      </IntVectorProperty>
-
-      <DoubleVectorProperty command="SetFeatureMinEdgeLength"
-                            name="FeatureMinEdgeLength"
-                            label="Feature min edge length"
-                            number_of_elements="1"
-                            default_values="0">
-        <BoundsDomain mode="scaled_extent" name="bounds_feat_min" scale_factor="0.001">
-          <RequiredProperties>
-            <Property function="Input" name="Input"/>
-          </RequiredProperties>
-        </BoundsDomain>
-        <Documentation>
-          Minimum edge length on feature/constrained edges (used only when Feature sizing
-          stand-alone is ON); must be &gt; 0. ParaView BoundsDomain (scaled_extent 0.001)
-          suggests 0.1% of the input axis-aligned bounding box longest side.
-        </Documentation>
-        <Hints>
-          <PropertyWidgetDecorator type="GenericDecorator"
-                                   mode="visibility"
-                                   property="FeatureSizingStandAlone"
-                                   value="1"/>
-        </Hints>
-      </DoubleVectorProperty>
-
-      <DoubleVectorProperty command="SetFeatureMaxEdgeLength"
-                            name="FeatureMaxEdgeLength"
-                            label="Feature max edge length"
-                            number_of_elements="1"
-                            default_values="0">
-        <BoundsDomain mode="scaled_extent" name="bounds_feat_max" scale_factor="0.05">
-          <RequiredProperties>
-            <Property function="Input" name="Input"/>
-          </RequiredProperties>
-        </BoundsDomain>
-        <Documentation>
-          Maximum edge length on feature/constrained edges (used only when Feature sizing
-          stand-alone is ON); must be &gt; Feature min edge length. ParaView BoundsDomain
-          (scaled_extent 0.05) suggests 5% of the input axis-aligned bounding box longest side.
-        </Documentation>
-        <Hints>
-          <PropertyWidgetDecorator type="GenericDecorator"
-                                   mode="visibility"
-                                   property="FeatureSizingStandAlone"
-                                   value="1"/>
-        </Hints>
-      </DoubleVectorProperty>
-
-      <DoubleVectorProperty command="SetFeatureAdaptiveTolerance"
-                            name="FeatureAdaptiveTolerance"
-                            label="Feature adaptive tolerance"
-                            number_of_elements="1"
-                            default_values="0.01">
-        <DoubleRangeDomain name="range" min="0"/>
-        <Documentation>
-          Vespa ICC tolerance for **`v:vespa_size_feature`** (used only when Feature sizing stand-alone
-          is ON). Smaller values refine feature-associated targets more within their Feature min/max bounds.
-        </Documentation>
-        <Hints>
-          <PropertyWidgetDecorator type="GenericDecorator"
-                                   mode="visibility"
-                                   property="FeatureSizingStandAlone"
-                                   value="1"/>
-        </Hints>
-      </DoubleVectorProperty>
-
       <PropertyGroup label="Sizing">
         <Property name="MinEdgeLength"/>
         <Property name="MaxEdgeLength"/>
         <Property name="AdaptiveTolerance"/>
         <Property name="AdaptiveSizingNeighborMaxRatio"/>
-        <Property name="FeatureSizingStandAlone"/>
-        <Property name="FeatureMinEdgeLength"/>
-        <Property name="FeatureMaxEdgeLength"/>
-        <Property name="FeatureAdaptiveTolerance"/>
       </PropertyGroup>
 
       <!-- =================================================================
@@ -695,8 +610,8 @@
         <BooleanDomain name="bool"/>
         <Documentation>
           If ON, point/cell data are interpolated onto port 0 (and probed onto port 3 ICC preview when
-          Remesh iterations &gt; 1 with Feature mask enabled, so mask-driven ICC dual normals match current
-          geometry).
+          Remesh iterations &gt; 1 with Feature mask enabled, so mask-driven ICC on the preview matches the
+          evolving geometry).
         </Documentation>
       </IntVectorProperty>
 
@@ -706,6 +621,7 @@
 
       <Hints>
         <ShowInMenu category="SHYX" icon=":/VESPA/SHYX_Adaptive_Isotropic_Remesher.png"/>
+        <RepresentationType view="RenderView" type="Surface With Edges" port="0"/>
       </Hints>
 
     </SourceProxy>
