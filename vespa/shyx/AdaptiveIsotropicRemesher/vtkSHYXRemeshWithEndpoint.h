@@ -6,7 +6,8 @@
  * Intended for surfaces tagged by vtkCGALVesselEndClipper (cell \c EndpointIndex: cap triangles
  * &gt; 0, bulk typically -1). **vtkThreshold** + **vtkGeometryFilter** yield a standalone surface of
  * the negative side only; optionally only the **largest** triangle-connected patch is kept.
- * CGAL remeshes that surface in full (no patch-on-full-mesh bookkeeping).
+ * CGAL remeshes that surface in full (no patch-on-full-mesh bookkeeping), unless wall remesh is
+ * disabled to export the ICC sizing field on vertices only.
  * Output is **only** the remeshed extracted patch (not the full vessel with caps). Same ICC sizing
  * stack as vtkSHYXAdaptiveIsotropicRemesher, without selection, feature detection, or mask logic.
  * CGAL split/collapse/flip follow CGAL defaults (all enabled); only protect/collapse/relax
@@ -74,6 +75,18 @@ public:
     vtkSetMacro(NumberOfIterations, int);
     vtkGetMacro(NumberOfRelaxationSteps, int);
     vtkSetMacro(NumberOfRelaxationSteps, int);
+
+    //@{
+    /**
+     * When ON (default), run CGAL isotropic remesh on the extracted wall patch; optional cap remesh
+     * follows when EnableCapRemesh is ON. When OFF, skip wall remesh and all cap/hole-fill stages;
+     * the ICC sizing field is still computed and written to output point data as **VespaSizeGlobal**
+     * (same as CGAL `v:vespa_size_global`) on the unchanged extracted geometry for inspection.
+     */
+    vtkGetMacro(EnableWallRemesh, bool);
+    vtkSetMacro(EnableWallRemesh, bool);
+    vtkBooleanMacro(EnableWallRemesh, bool);
+    //@}
 
     vtkGetMacro(RemeshProtectConstraints, bool);
     vtkSetMacro(RemeshProtectConstraints, bool);
@@ -145,6 +158,7 @@ protected:
     bool RemeshRecomputeCurvatureEachIteration = true;
     int NumberOfIterations = 3;
     int NumberOfRelaxationSteps = 3;
+    bool EnableWallRemesh = true;
 
     bool RemeshProtectConstraints = false;
     bool RemeshCollapseConstraints = true;

@@ -4,9 +4,11 @@
 
 #include <vtkAlgorithm.h>
 #include <vtkBoundingBox.h>
+#include <vtkCleanPolyData.h>
 #include <vtkCellData.h>
 #include <vtkDataArray.h>
 #include <vtkDataObject.h>
+#include <vtkDoubleArray.h>
 #include <vtkGeometryFilter.h>
 #include <vtkInformation.h>
 #include <vtkInformationVector.h>
@@ -407,6 +409,7 @@ void vtkSHYXRemeshWithEndpoint::PrintSelf(ostream& os, vtkIndent indent)
        << (this->RemeshRecomputeCurvatureEachIteration ? "on" : "off") << std::endl;
     os << indent << "NumberOfIterations: " << this->NumberOfIterations << std::endl;
     os << indent << "NumberOfRelaxationSteps: " << this->NumberOfRelaxationSteps << std::endl;
+    os << indent << "EnableWallRemesh: " << (this->EnableWallRemesh ? "on" : "off") << std::endl;
     os << indent << "RemeshProtectConstraints: " << (this->RemeshProtectConstraints ? "on" : "off")
        << std::endl;
     os << indent << "RemeshCollapseConstraints: " << (this->RemeshCollapseConstraints ? "on" : "off")
@@ -452,15 +455,19 @@ int vtkSHYXRemeshWithEndpoint::RequestData(
         vtkErrorMacro("AdaptiveTolerance must be positive, got " << this->AdaptiveTolerance);
         return 0;
     }
-    if (this->NumberOfIterations < 1)
+    if (this->EnableWallRemesh)
     {
-        vtkErrorMacro("NumberOfIterations must be >= 1.");
-        return 0;
-    }
-    if (this->NumberOfRelaxationSteps < 0)
-    {
-        vtkErrorMacro("NumberOfRelaxationSteps must be >= 0, got " << this->NumberOfRelaxationSteps);
-        return 0;
+        if (this->NumberOfIterations < 1)
+        {
+            vtkErrorMacro("NumberOfIterations must be >= 1.");
+            return 0;
+        }
+        if (this->NumberOfRelaxationSteps < 0)
+        {
+            vtkErrorMacro(
+                "NumberOfRelaxationSteps must be >= 0, got " << this->NumberOfRelaxationSteps);
+            return 0;
+        }
     }
 
     const char* epName = this->GetEndpointIndexArrayName();
@@ -499,12 +506,24 @@ int vtkSHYXRemeshWithEndpoint::RequestData(
     triangle->Update();
     vtkPolyData* patchIn = vtkPolyData::SafeDownCast(triangle->GetOutputDataObject(0));
     vtkNew<vtkPolyDataConnectivityFilter> largestRegionFilter;
+    vtkNew<vtkCleanPolyData> largestRegionCleanUnused;
     if (this->LargestConnectedRegionOnly && patchIn && patchIn->GetNumberOfCells() > 0)
     {
         largestRegionFilter->SetInputData(patchIn);
         largestRegionFilter->SetExtractionModeToLargestRegion();
         largestRegionFilter->Update();
-        patchIn = vtkPolyData::SafeDownCast(largestRegionFilter->GetOutput());
+        // vtkPolyDataConnectivityFilter keeps the full input point list; drop vertices not
+        // referenced by any output cell (vtkCleanPolyData). Point merging is OFF so no coincident
+        // points are collapsed—only unused points are removed.
+        largestRegionCleanUnused->SetInputConnection(largestRegionFilter->GetOutputPort());
+        largestRegionCleanUnused->PointMergingOff();
+        largestRegionCleanUnused->SetTolerance(0.0);
+        largestRegionCleanUnused->SetToleranceIsAbsolute(true);
+        largestRegionCleanUnused->ConvertPolysToLinesOff();
+        largestRegionCleanUnused->ConvertLinesToPointsOff();
+        largestRegionCleanUnused->ConvertStripsToPolysOff();
+        largestRegionCleanUnused->Update();
+        patchIn = vtkPolyData::SafeDownCast(largestRegionCleanUnused->GetOutput());
     }
     if (!patchIn || patchIn->GetNumberOfCells() == 0)
     {
@@ -543,27 +562,7 @@ int vtkSHYXRemeshWithEndpoint::RequestData(
 
     try
     {
-        auto featureEdges = get(CGAL::edge_is_feature, cgalMesh->surface);
-        for (CGAL_Surface::Edge_index e : cgalMesh->surface.edges())
-        {
-            boost::put(featureEdges, e, false);
-        }
-
         PrepareIccVertexNormalsForAdaptiveSizing(cgalMesh->surface, nullptr);
-
-        const auto remeshNp = [&](unsigned int iteration_count) {
-            return pmp::parameters::number_of_iterations(iteration_count)
-                .number_of_relaxation_steps(static_cast<unsigned int>(this->NumberOfRelaxationSteps))
-                .protect_constraints(this->RemeshProtectConstraints)
-                .collapse_constraints(this->RemeshCollapseConstraints)
-                .relax_constraints(this->RemeshRelaxConstraints)
-                .do_split(true)
-                .do_collapse(true)
-                .do_flip(true)
-                .edge_is_constrained_map(featureEdges);
-        };
-
-        const unsigned int remeshIterations = static_cast<unsigned int>(this->NumberOfIterations);
 
         using SizingTy = FeatureAwareAdaptiveSizingField;
         std::optional<SizingTy> sizingStorage;
@@ -571,250 +570,273 @@ int vtkSHYXRemeshWithEndpoint::RequestData(
             cgalMesh->surface.faces(), cgalMesh->surface,
             static_cast<double>(this->AdaptiveSizingNeighborMaxRatio),
             this->ScaleToRange);
-        SizingTy& sizing = *sizingStorage;
 
-        auto doRemeshSingleIteration = [&]() {
-            pmp::isotropic_remeshing(
-                cgalMesh->surface.faces(), sizing, cgalMesh->surface, remeshNp(1));
-        };
-
-        if (remeshIterations <= 1u)
+        if (this->EnableWallRemesh)
         {
-            doRemeshSingleIteration();
-        }
-        else
-        {
-            const unsigned int preliminaryPasses = remeshIterations - 1u;
-            for (unsigned int pass = 0; pass < preliminaryPasses; ++pass)
-            {
-                if (this->RemeshRecomputeCurvatureEachIteration && pass > 0)
-                {
-                    sizing.recompute_curvature(cgalMesh->surface);
-                }
-                doRemeshSingleIteration();
-            }
-            if (this->RemeshRecomputeCurvatureEachIteration)
-            {
-                sizing.recompute_curvature(cgalMesh->surface);
-            }
-            doRemeshSingleIteration();
-        }
-
-        // === Phase 2: Hole fill (FairingContinuity=0) + Cap remesh ===
-        if (this->EnableCapRemesh)
-        {
-            // Reset feature edges after wall remesh (new edges default to false already,
-            // but be explicit for safety).
+            auto featureEdges = get(CGAL::edge_is_feature, cgalMesh->surface);
             for (CGAL_Surface::Edge_index e : cgalMesh->surface.edges())
             {
                 boost::put(featureEdges, e, false);
             }
 
-            // Collect one representative border halfedge per open boundary loop.
-            std::vector<CGAL_Surface::Halfedge_index> holeStarters;
+            SizingTy& sizing = *sizingStorage;
+            const auto remeshNp = [&](unsigned int iteration_count) {
+                return pmp::parameters::number_of_iterations(iteration_count)
+                    .number_of_relaxation_steps(static_cast<unsigned int>(this->NumberOfRelaxationSteps))
+                    .protect_constraints(this->RemeshProtectConstraints)
+                    .collapse_constraints(this->RemeshCollapseConstraints)
+                    .relax_constraints(this->RemeshRelaxConstraints)
+                    .do_split(true)
+                    .do_collapse(true)
+                    .do_flip(true)
+                    .edge_is_constrained_map(featureEdges);
+            };
+
+            const unsigned int remeshIterations = static_cast<unsigned int>(this->NumberOfIterations);
+
+            auto doRemeshSingleIteration = [&]() {
+                pmp::isotropic_remeshing(
+                    cgalMesh->surface.faces(), sizing, cgalMesh->surface, remeshNp(1));
+            };
+
+            if (remeshIterations <= 1u)
             {
-                std::set<CGAL_Surface::Halfedge_index> visited;
-                for (CGAL_Surface::Halfedge_index h : cgalMesh->surface.halfedges())
+                doRemeshSingleIteration();
+            }
+            else
+            {
+                const unsigned int preliminaryPasses = remeshIterations - 1u;
+                for (unsigned int pass = 0; pass < preliminaryPasses; ++pass)
                 {
-                    if (cgalMesh->surface.is_border(h) && visited.find(h) == visited.end())
+                    if (this->RemeshRecomputeCurvatureEachIteration && pass > 0)
                     {
-                        holeStarters.push_back(h);
-                        CGAL_Surface::Halfedge_index cur = h;
-                        do
-                        {
-                            visited.insert(cur);
-                            cur = cgalMesh->surface.next(cur);
-                        } while (cur != h);
+                        sizing.recompute_curvature(cgalMesh->surface);
                     }
+                    doRemeshSingleIteration();
                 }
+                if (this->RemeshRecomputeCurvatureEachIteration)
+                {
+                    sizing.recompute_curvature(cgalMesh->surface);
+                }
+                doRemeshSingleIteration();
             }
 
-            if (!holeStarters.empty())
+            // === Phase 2: Hole fill (FairingContinuity=0) + Cap remesh ===
+            if (this->EnableCapRemesh)
             {
-                std::vector<CGAL_Surface::Face_index> allCapFaces;
-                std::vector<CGAL_Surface::Vertex_index> allCapVertices;
-
-                for (CGAL_Surface::Halfedge_index bh : holeStarters)
+                // Reset feature edges after wall remesh (new edges default to false already,
+                // but be explicit for safety).
+                for (CGAL_Surface::Edge_index e : cgalMesh->surface.edges())
                 {
-                    std::vector<CGAL_Surface::Face_index> hf;
-                    std::vector<CGAL_Surface::Vertex_index> hv;
-                    pmp::triangulate_refine_and_fair_hole(
-                        cgalMesh->surface, bh,
-                        std::back_inserter(hf),
-                        std::back_inserter(hv),
-                        pmp::parameters::fairing_continuity(0u));
-                    allCapFaces.insert(allCapFaces.end(), hf.begin(), hf.end());
-                    allCapVertices.insert(allCapVertices.end(), hv.begin(), hv.end());
+                    boost::put(featureEdges, e, false);
                 }
 
-                if (!allCapFaces.empty())
+                // Collect one representative border halfedge per open boundary loop.
+                std::vector<CGAL_Surface::Halfedge_index> holeStarters;
                 {
-                    // Build cap face index set (used for seam marking and sizing field).
-                    std::unordered_set<std::size_t> capFaceIdx;
-                    capFaceIdx.reserve(allCapFaces.size());
-                    for (CGAL_Surface::Face_index f : allCapFaces)
+                    std::set<CGAL_Surface::Halfedge_index> visited;
+                    for (CGAL_Surface::Halfedge_index h : cgalMesh->surface.halfedges())
                     {
-                        capFaceIdx.insert(static_cast<std::size_t>(f));
-                    }
-
-                    // Mark seam edges (wall ↔ cap boundary) as constrained so that
-                    // protect_constraints keeps the cap stitched to the wall mesh.
-                    for (CGAL_Surface::Edge_index e : cgalMesh->surface.edges())
-                    {
-                        const CGAL_Surface::Halfedge_index h0 = cgalMesh->surface.halfedge(e);
-                        const CGAL_Surface::Halfedge_index h1 = cgalMesh->surface.opposite(h0);
-                        const bool f0Cap = capFaceIdx.count(
-                            static_cast<std::size_t>(cgalMesh->surface.face(h0))) > 0;
-                        const bool f1Cap = capFaceIdx.count(
-                            static_cast<std::size_t>(cgalMesh->surface.face(h1))) > 0;
-                        boost::put(featureEdges, e, f0Cap != f1Cap);
-                    }
-
-                    // Expansion sizing field: seam size = adjacent wall edge length,
-                    // grows by CapExpansionRatio per BFS hop into the cap interior.
-                    CapExpansionSizingField capSizing(
-                        cgalMesh->surface, capFaceIdx, this->CapExpansionRatio);
-
-                    const unsigned int capIters =
-                        static_cast<unsigned int>(this->CapNumberOfIterations);
-
-                    // Named-parameter builder (always single iteration, loops managed below).
-                    const auto capNp = [&]() {
-                        return pmp::parameters::number_of_iterations(1u)
-                            .number_of_relaxation_steps(
-                                static_cast<unsigned int>(this->CapNumberOfRelaxationSteps))
-                            .protect_constraints(this->CapRemeshProtectConstraints)
-                            .do_split(true)
-                            .do_collapse(true)
-                            .do_flip(true)
-                            .edge_is_constrained_map(featureEdges);
-                    };
-
-                    // First iteration always uses the original allCapFaces range.
-                    pmp::isotropic_remeshing(allCapFaces, capSizing, cgalMesh->surface, capNp());
-
-                    // Remaining iterations: optionally recompute BFS before each pass.
-                    for (unsigned int pass = 1; pass < capIters; ++pass)
-                    {
-                        if (this->CapRefineSizingField)
+                        if (cgalMesh->surface.is_border(h) && visited.find(h) == visited.end())
                         {
-                            capSizing.recompute(cgalMesh->surface);
-                        }
-                        auto currentCapFaces = capSizing.collectCapFaces(cgalMesh->surface);
-                        pmp::isotropic_remeshing(
-                            currentCapFaces, capSizing, cgalMesh->surface, capNp());
-                    }
-
-                    // Tag each disconnected cap patch with ids 1..n (multiple holes),
-                    // ordered by total cap area descending (largest patch → 1).
-                    const std::vector<CGAL_Surface::Face_index> capFaceList =
-                        capSizing.collectCapFaces(cgalMesh->surface);
-                    std::unordered_set<std::size_t> capFaceSetForCC;
-                    capFaceSetForCC.reserve(capFaceList.size());
-                    for (CGAL_Surface::Face_index f : capFaceList)
-                    {
-                        capFaceSetForCC.insert(static_cast<std::size_t>(f));
-                    }
-                    auto capFaceTagMap = cgalMesh->surface
-                        .add_property_map<CGAL_Surface::Face_index, int>(
-                            "f:vespa_cap_idx", 0)
-                        .first;
-                    std::unordered_set<std::size_t> visitedCapFace;
-                    visitedCapFace.reserve(capFaceList.size());
-                    int componentId = 0;
-                    for (CGAL_Surface::Face_index f : capFaceList)
-                    {
-                        const std::size_t fi = static_cast<std::size_t>(f);
-                        if (visitedCapFace.count(fi) > 0)
-                        {
-                            continue;
-                        }
-                        ++componentId;
-                        std::queue<CGAL_Surface::Face_index> fq;
-                        visitedCapFace.insert(fi);
-                        fq.push(f);
-                        while (!fq.empty())
-                        {
-                            const CGAL_Surface::Face_index cf = fq.front();
-                            fq.pop();
-                            put(capFaceTagMap, cf, componentId);
-                            for (CGAL_Surface::Halfedge_index h :
-                                CGAL::halfedges_around_face(
-                                    cgalMesh->surface.halfedge(cf), cgalMesh->surface))
+                            holeStarters.push_back(h);
+                            CGAL_Surface::Halfedge_index cur = h;
+                            do
                             {
-                                const CGAL_Surface::Halfedge_index hop =
-                                    cgalMesh->surface.opposite(h);
-                                const CGAL_Surface::Face_index adj =
-                                    cgalMesh->surface.face(hop);
-                                if (adj == CGAL_Surface::null_face())
-                                {
-                                    continue;
-                                }
-                                const std::size_t ai = static_cast<std::size_t>(adj);
-                                if (capFaceSetForCC.count(ai) == 0 ||
-                                    visitedCapFace.count(ai) > 0)
-                                {
-                                    continue;
-                                }
-                                visitedCapFace.insert(ai);
-                                fq.push(adj);
-                            }
+                                visited.insert(cur);
+                                cur = cgalMesh->surface.next(cur);
+                            } while (cur != h);
                         }
                     }
+                }
 
-                    // Remap component ids 1..n by total cap area (largest → 1).
-                    if (componentId > 0)
+                if (!holeStarters.empty())
+                {
+                    std::vector<CGAL_Surface::Face_index> allCapFaces;
+                    std::vector<CGAL_Surface::Vertex_index> allCapVertices;
+
+                    for (CGAL_Surface::Halfedge_index bh : holeStarters)
                     {
-                        const auto triangleArea = [](const CGAL_Surface& sm,
-                                                      CGAL_Surface::Face_index f) -> double {
-                            CGAL_Surface::Halfedge_index h = sm.halfedge(f);
-                            const CGAL_Surface::Point& pa = sm.point(sm.source(h));
-                            h = sm.next(h);
-                            const CGAL_Surface::Point& pb = sm.point(sm.source(h));
-                            h = sm.next(h);
-                            const CGAL_Surface::Point& pc = sm.point(sm.source(h));
-                            const double sq =
-                                CGAL::to_double(CGAL::squared_area(pa, pb, pc));
-                            return std::sqrt((std::max)(0.0, sq));
+                        std::vector<CGAL_Surface::Face_index> hf;
+                        std::vector<CGAL_Surface::Vertex_index> hv;
+                        pmp::triangulate_refine_and_fair_hole(
+                            cgalMesh->surface, bh,
+                            std::back_inserter(hf),
+                            std::back_inserter(hv),
+                            pmp::parameters::fairing_continuity(0u));
+                        allCapFaces.insert(allCapFaces.end(), hf.begin(), hf.end());
+                        allCapVertices.insert(allCapVertices.end(), hv.begin(), hv.end());
+                    }
+
+                    if (!allCapFaces.empty())
+                    {
+                        // Build cap face index set (used for seam marking and sizing field).
+                        std::unordered_set<std::size_t> capFaceIdx;
+                        capFaceIdx.reserve(allCapFaces.size());
+                        for (CGAL_Surface::Face_index f : allCapFaces)
+                        {
+                            capFaceIdx.insert(static_cast<std::size_t>(f));
+                        }
+
+                        // Mark seam edges (wall ↔ cap boundary) as constrained so that
+                        // protect_constraints keeps the cap stitched to the wall mesh.
+                        for (CGAL_Surface::Edge_index e : cgalMesh->surface.edges())
+                        {
+                            const CGAL_Surface::Halfedge_index h0 = cgalMesh->surface.halfedge(e);
+                            const CGAL_Surface::Halfedge_index h1 = cgalMesh->surface.opposite(h0);
+                            const bool f0Cap = capFaceIdx.count(
+                                static_cast<std::size_t>(cgalMesh->surface.face(h0))) > 0;
+                            const bool f1Cap = capFaceIdx.count(
+                                static_cast<std::size_t>(cgalMesh->surface.face(h1))) > 0;
+                            boost::put(featureEdges, e, f0Cap != f1Cap);
+                        }
+
+                        // Expansion sizing field: seam size = adjacent wall edge length,
+                        // grows by CapExpansionRatio per BFS hop into the cap interior.
+                        CapExpansionSizingField capSizing(
+                            cgalMesh->surface, capFaceIdx, this->CapExpansionRatio);
+
+                        const unsigned int capIters =
+                            static_cast<unsigned int>(this->CapNumberOfIterations);
+
+                        // Named-parameter builder (always single iteration, loops managed below).
+                        const auto capNp = [&]() {
+                            return pmp::parameters::number_of_iterations(1u)
+                                .number_of_relaxation_steps(
+                                    static_cast<unsigned int>(this->CapNumberOfRelaxationSteps))
+                                .protect_constraints(this->CapRemeshProtectConstraints)
+                                .do_split(true)
+                                .do_collapse(true)
+                                .do_flip(true)
+                                .edge_is_constrained_map(featureEdges);
                         };
 
-                        std::vector<double> areaByComp(
-                            static_cast<std::size_t>(componentId + 1), 0.0);
+                        // First iteration always uses the original allCapFaces range.
+                        pmp::isotropic_remeshing(allCapFaces, capSizing, cgalMesh->surface, capNp());
+
+                        // Remaining iterations: optionally recompute BFS before each pass.
+                        for (unsigned int pass = 1; pass < capIters; ++pass)
+                        {
+                            if (this->CapRefineSizingField)
+                            {
+                                capSizing.recompute(cgalMesh->surface);
+                            }
+                            auto currentCapFaces = capSizing.collectCapFaces(cgalMesh->surface);
+                            pmp::isotropic_remeshing(
+                                currentCapFaces, capSizing, cgalMesh->surface, capNp());
+                        }
+
+                        // Tag each disconnected cap patch with ids 1..n (multiple holes),
+                        // ordered by total cap area descending (largest patch → 1).
+                        const std::vector<CGAL_Surface::Face_index> capFaceList =
+                            capSizing.collectCapFaces(cgalMesh->surface);
+                        std::unordered_set<std::size_t> capFaceSetForCC;
+                        capFaceSetForCC.reserve(capFaceList.size());
                         for (CGAL_Surface::Face_index f : capFaceList)
                         {
-                            const int tid = get(capFaceTagMap, f);
-                            if (tid > 0 && tid <= componentId)
+                            capFaceSetForCC.insert(static_cast<std::size_t>(f));
+                        }
+                        auto capFaceTagMap = cgalMesh->surface
+                            .add_property_map<CGAL_Surface::Face_index, int>(
+                                "f:vespa_cap_idx", 0)
+                            .first;
+                        std::unordered_set<std::size_t> visitedCapFace;
+                        visitedCapFace.reserve(capFaceList.size());
+                        int componentId = 0;
+                        for (CGAL_Surface::Face_index f : capFaceList)
+                        {
+                            const std::size_t fi = static_cast<std::size_t>(f);
+                            if (visitedCapFace.count(fi) > 0)
                             {
-                                areaByComp[static_cast<std::size_t>(tid)] +=
-                                    triangleArea(cgalMesh->surface, f);
+                                continue;
+                            }
+                            ++componentId;
+                            std::queue<CGAL_Surface::Face_index> fq;
+                            visitedCapFace.insert(fi);
+                            fq.push(f);
+                            while (!fq.empty())
+                            {
+                                const CGAL_Surface::Face_index cf = fq.front();
+                                fq.pop();
+                                put(capFaceTagMap, cf, componentId);
+                                for (CGAL_Surface::Halfedge_index h :
+                                    CGAL::halfedges_around_face(
+                                        cgalMesh->surface.halfedge(cf), cgalMesh->surface))
+                                {
+                                    const CGAL_Surface::Halfedge_index hop =
+                                        cgalMesh->surface.opposite(h);
+                                    const CGAL_Surface::Face_index adj =
+                                        cgalMesh->surface.face(hop);
+                                    if (adj == CGAL_Surface::null_face())
+                                    {
+                                        continue;
+                                    }
+                                    const std::size_t ai = static_cast<std::size_t>(adj);
+                                    if (capFaceSetForCC.count(ai) == 0 ||
+                                        visitedCapFace.count(ai) > 0)
+                                    {
+                                        continue;
+                                    }
+                                    visitedCapFace.insert(ai);
+                                    fq.push(adj);
+                                }
                             }
                         }
 
-                        std::vector<int> order(static_cast<std::size_t>(componentId));
-                        for (int i = 0; i < componentId; ++i)
+                        // Remap component ids 1..n by total cap area (largest → 1).
+                        if (componentId > 0)
                         {
-                            order[static_cast<std::size_t>(i)] = i + 1;
-                        }
-                        std::sort(order.begin(), order.end(),
-                            [&](int a, int b) {
-                                return areaByComp[static_cast<std::size_t>(a)] >
-                                    areaByComp[static_cast<std::size_t>(b)];
-                            });
+                            const auto triangleArea = [](const CGAL_Surface& sm,
+                                                          CGAL_Surface::Face_index f) -> double {
+                                CGAL_Surface::Halfedge_index h = sm.halfedge(f);
+                                const CGAL_Surface::Point& pa = sm.point(sm.source(h));
+                                h = sm.next(h);
+                                const CGAL_Surface::Point& pb = sm.point(sm.source(h));
+                                h = sm.next(h);
+                                const CGAL_Surface::Point& pc = sm.point(sm.source(h));
+                                const double sq =
+                                    CGAL::to_double(CGAL::squared_area(pa, pb, pc));
+                                return std::sqrt((std::max)(0.0, sq));
+                            };
 
-                        std::vector<int> remap(
-                            static_cast<std::size_t>(componentId + 1), 0);
-                        for (int newId = 0; newId < componentId; ++newId)
-                        {
-                            remap[static_cast<std::size_t>(
-                                order[static_cast<std::size_t>(newId)])] = newId + 1;
-                        }
-
-                        for (CGAL_Surface::Face_index f : capFaceList)
-                        {
-                            const int tid = get(capFaceTagMap, f);
-                            if (tid > 0 && tid <= componentId)
+                            std::vector<double> areaByComp(
+                                static_cast<std::size_t>(componentId + 1), 0.0);
+                            for (CGAL_Surface::Face_index f : capFaceList)
                             {
-                                put(capFaceTagMap, f, remap[static_cast<std::size_t>(tid)]);
+                                const int tid = get(capFaceTagMap, f);
+                                if (tid > 0 && tid <= componentId)
+                                {
+                                    areaByComp[static_cast<std::size_t>(tid)] +=
+                                        triangleArea(cgalMesh->surface, f);
+                                }
+                            }
+
+                            std::vector<int> order(static_cast<std::size_t>(componentId));
+                            for (int i = 0; i < componentId; ++i)
+                            {
+                                order[static_cast<std::size_t>(i)] = i + 1;
+                            }
+                            std::sort(order.begin(), order.end(),
+                                [&](int a, int b) {
+                                    return areaByComp[static_cast<std::size_t>(a)] >
+                                        areaByComp[static_cast<std::size_t>(b)];
+                                });
+
+                            std::vector<int> remap(
+                                static_cast<std::size_t>(componentId + 1), 0);
+                            for (int newId = 0; newId < componentId; ++newId)
+                            {
+                                remap[static_cast<std::size_t>(
+                                    order[static_cast<std::size_t>(newId)])] = newId + 1;
+                            }
+
+                            for (CGAL_Surface::Face_index f : capFaceList)
+                            {
+                                const int tid = get(capFaceTagMap, f);
+                                if (tid > 0 && tid <= componentId)
+                                {
+                                    put(capFaceTagMap, f, remap[static_cast<std::size_t>(tid)]);
+                                }
                             }
                         }
                     }
@@ -830,6 +852,26 @@ int vtkSHYXRemeshWithEndpoint::RequestData(
 
     vtkCGALHelper::toVTK(cgalMesh.get(), output);
     this->interpolateAttributes(patchIn, output);
+
+    if (!this->EnableWallRemesh)
+    {
+        const auto szMapOpt =
+            cgalMesh->surface.property_map<CGAL_Surface::Vertex_index, double>("v:vespa_size_global");
+        if (szMapOpt.has_value())
+        {
+            vtkNew<vtkDoubleArray> vespaSize;
+            vespaSize->SetName("VespaSizeGlobal");
+            vespaSize->SetNumberOfComponents(1);
+            const vtkIdType nPts = output->GetNumberOfPoints();
+            vespaSize->SetNumberOfTuples(nPts);
+            vtkIdType pid = 0;
+            for (CGAL_Surface::Vertex_index v : cgalMesh->surface.vertices())
+            {
+                vespaSize->SetValue(pid++, CGAL::to_double(get(*szMapOpt, v)));
+            }
+            output->GetPointData()->AddArray(vespaSize);
+        }
+    }
 
     // --- Fix up EndpointIndex for cap cells/vertices ----------------------------
     // interpolateAttributes probes from patchIn (wall-only, all EndpointIndex < 0),

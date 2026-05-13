@@ -75,7 +75,9 @@
         <BooleanDomain name="bool"/>
         <Documentation>
           When ON (default), after extracting cells with **EndpointIndex** &lt; 0, keep only the **largest**
-          triangle-connected surface patch (**vtkPolyDataConnectivityFilter**, largest region).
+          triangle-connected surface patch (**vtkPolyDataConnectivityFilter**, largest region), then
+          **vtkCleanPolyData** with **point merging off** removes vertices not used by any output triangle
+          (no merging of geometrically coincident points); point lists then match the kept region only.
           Use when the thresholded side contains several disjoint pieces and you want the main bulk.
         </Documentation>
       </IntVectorProperty>
@@ -161,6 +163,21 @@
         <Property name="ScaleToRange"/>
       </PropertyGroup>
 
+      <IntVectorProperty command="SetEnableWallRemesh"
+                         name="EnableWallRemesh"
+                         label="Enable wall remesh"
+                         number_of_elements="1"
+                         default_values="1"
+                         animateable="0">
+        <BooleanDomain name="bool"/>
+        <Documentation>
+          When ON (default), run CGAL isotropic remesh on the extracted wall patch; **Enable cap remesh**
+          and wall iteration settings apply only when this is ON. When OFF, skip remesh and cap;
+          output keeps the extracted geometry and adds point array **VespaSizeGlobal** (ICC target edge
+          length per vertex, same as CGAL `v:vespa_size_global`) for visualization.
+        </Documentation>
+      </IntVectorProperty>
+
       <IntVectorProperty command="SetNumberOfIterations"
                          name="NumberOfIterations"
                          label="Remesh iterations"
@@ -168,6 +185,12 @@
                          default_values="3">
         <IntRangeDomain name="range" min="1" max="20"/>
         <Documentation>Number of CGAL isotropic_remeshing iterations on the negative patch.</Documentation>
+        <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="enabled_state"
+                                   property="EnableWallRemesh"
+                                   value="1"/>
+        </Hints>
       </IntVectorProperty>
 
       <IntVectorProperty command="SetRemeshRecomputeCurvatureEachIteration"
@@ -181,6 +204,12 @@
         <Documentation>
           When ON (default), ICC is refreshed on the updated mesh before each iteration after the first.
         </Documentation>
+        <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="enabled_state"
+                                   property="EnableWallRemesh"
+                                   value="1"/>
+        </Hints>
       </IntVectorProperty>
 
       <IntVectorProperty command="SetNumberOfRelaxationSteps"
@@ -190,9 +219,16 @@
                          default_values="3">
         <IntRangeDomain name="range" min="0" max="20"/>
         <Documentation>CGAL vertex relocation steps per remesh iteration.</Documentation>
+        <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="enabled_state"
+                                   property="EnableWallRemesh"
+                                   value="1"/>
+        </Hints>
       </IntVectorProperty>
 
       <PropertyGroup label="Iterations">
+        <Property name="EnableWallRemesh"/>
         <Property name="NumberOfIterations"/>
         <Property name="RemeshRecomputeCurvatureEachIteration"/>
         <Property name="NumberOfRelaxationSteps"/>
@@ -207,6 +243,12 @@
                          panel_visibility="advanced">
         <BooleanDomain name="bool"/>
         <Documentation>CGAL protect_constraints (default OFF). When ON, constrained edges are not split or collapsed.</Documentation>
+        <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="enabled_state"
+                                   property="EnableWallRemesh"
+                                   value="1"/>
+        </Hints>
       </IntVectorProperty>
 
       <IntVectorProperty command="SetRemeshCollapseConstraints"
@@ -223,6 +265,10 @@
                                    mode="enabled_state"
                                    property="RemeshProtectConstraints"
                                    value="0"/>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="enabled_state"
+                                   property="EnableWallRemesh"
+                                   value="1"/>
         </Hints>
       </IntVectorProperty>
 
@@ -235,6 +281,12 @@
                          panel_visibility="advanced">
         <BooleanDomain name="bool"/>
         <Documentation>CGAL relax_constraints during tangential relaxation.</Documentation>
+        <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="enabled_state"
+                                   property="EnableWallRemesh"
+                                   value="1"/>
+        </Hints>
       </IntVectorProperty>
 
       <PropertyGroup label="Remesh constraints (CGAL)">
@@ -254,10 +306,16 @@
                          animateable="0">
         <BooleanDomain name="bool"/>
         <Documentation>
-          When ON (default), after wall remesh each open boundary loop is filled with
+          When ON (default) and **Enable wall remesh** is ON, after wall remesh each open boundary loop is filled with
           **triangulate_refine_and_fair_hole** (FairingContinuity = 0, C0 only), then the
           filled cap patch is isotropic-remeshed with a uniform target edge length.
         </Documentation>
+        <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="enabled_state"
+                                   property="EnableWallRemesh"
+                                   value="1"/>
+        </Hints>
       </IntVectorProperty>
 
       <DoubleVectorProperty command="SetCapExpansionRatio"
@@ -278,6 +336,10 @@
                                    mode="enabled_state"
                                    property="EnableCapRemesh"
                                    value="1"/>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="enabled_state"
+                                   property="EnableWallRemesh"
+                                   value="1"/>
         </Hints>
       </DoubleVectorProperty>
 
@@ -293,6 +355,10 @@
                                    mode="enabled_state"
                                    property="EnableCapRemesh"
                                    value="1"/>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="enabled_state"
+                                   property="EnableWallRemesh"
+                                   value="1"/>
         </Hints>
       </IntVectorProperty>
 
@@ -307,6 +373,10 @@
           <PropertyWidgetDecorator type="GenericDecorator"
                                    mode="enabled_state"
                                    property="EnableCapRemesh"
+                                   value="1"/>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="enabled_state"
+                                   property="EnableWallRemesh"
                                    value="1"/>
         </Hints>
       </IntVectorProperty>
@@ -328,6 +398,10 @@
           <PropertyWidgetDecorator type="GenericDecorator"
                                    mode="enabled_state"
                                    property="EnableCapRemesh"
+                                   value="1"/>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="enabled_state"
+                                   property="EnableWallRemesh"
                                    value="1"/>
         </Hints>
       </IntVectorProperty>
@@ -351,6 +425,10 @@
           <PropertyWidgetDecorator type="GenericDecorator"
                                    mode="enabled_state"
                                    property="EnableCapRemesh"
+                                   value="1"/>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="enabled_state"
+                                   property="EnableWallRemesh"
                                    value="1"/>
         </Hints>
       </IntVectorProperty>
