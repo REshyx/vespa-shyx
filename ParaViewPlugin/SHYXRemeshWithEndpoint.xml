@@ -57,7 +57,8 @@
                          label="All corners negative (points)"
                          number_of_elements="1"
                          default_values="0"
-                         animateable="0">
+                         animateable="0"
+                         panel_visibility="advanced">
         <BooleanDomain name="bool"/>
         <Documentation>
           When the array is point-centered: if ON, **vtkThreshold** requires every corner to satisfy
@@ -65,9 +66,24 @@
         </Documentation>
       </IntVectorProperty>
 
+      <IntVectorProperty command="SetLargestConnectedRegionOnly"
+                         name="LargestConnectedRegionOnly"
+                         label="Largest connected region only"
+                         number_of_elements="1"
+                         default_values="1"
+                         animateable="0">
+        <BooleanDomain name="bool"/>
+        <Documentation>
+          When ON (default), after extracting cells with **EndpointIndex** &lt; 0, keep only the **largest**
+          triangle-connected surface patch (**vtkPolyDataConnectivityFilter**, largest region).
+          Use when the thresholded side contains several disjoint pieces and you want the main bulk.
+        </Documentation>
+      </IntVectorProperty>
+
       <PropertyGroup label="Endpoint region">
         <Property name="EndpointIndexArrayName"/>
         <Property name="EndpointIndexAllScalars"/>
+        <Property name="LargestConnectedRegionOnly"/>
       </PropertyGroup>
 
       <DoubleVectorProperty command="SetMinEdgeLength"
@@ -171,8 +187,7 @@
                          name="NumberOfRelaxationSteps"
                          label="Relaxation steps"
                          number_of_elements="1"
-                         default_values="3"
-                         panel_visibility="advanced">
+                         default_values="3">
         <IntRangeDomain name="range" min="0" max="20"/>
         <Documentation>CGAL vertex relocation steps per remesh iteration.</Documentation>
       </IntVectorProperty>
@@ -187,7 +202,9 @@
                          name="RemeshProtectConstraints"
                          label="Protect constraints"
                          number_of_elements="1"
-                         default_values="0">
+                         default_values="0"
+                         animateable="0"
+                         panel_visibility="advanced">
         <BooleanDomain name="bool"/>
         <Documentation>CGAL protect_constraints (default OFF). When ON, constrained edges are not split or collapsed.</Documentation>
       </IntVectorProperty>
@@ -196,7 +213,9 @@
                          name="RemeshCollapseConstraints"
                          label="Collapse constraints"
                          number_of_elements="1"
-                         default_values="1">
+                         default_values="1"
+                         animateable="0"
+                         panel_visibility="advanced">
         <BooleanDomain name="bool"/>
         <Documentation>CGAL collapse_constraints when protect is OFF.</Documentation>
         <Hints>
@@ -211,7 +230,9 @@
                          name="RemeshRelaxConstraints"
                          label="Relax constraints"
                          number_of_elements="1"
-                         default_values="0">
+                         default_values="0"
+                         animateable="0"
+                         panel_visibility="advanced">
         <BooleanDomain name="bool"/>
         <Documentation>CGAL relax_constraints during tangential relaxation.</Documentation>
       </IntVectorProperty>
@@ -220,6 +241,127 @@
         <Property name="RemeshProtectConstraints"/>
         <Property name="RemeshCollapseConstraints"/>
         <Property name="RemeshRelaxConstraints"/>
+      </PropertyGroup>
+
+      <!-- ============================================================ -->
+      <!-- Cap remesh: hole fill (FairingContinuity=0) + uniform remesh -->
+      <!-- ============================================================ -->
+      <IntVectorProperty command="SetEnableCapRemesh"
+                         name="EnableCapRemesh"
+                         label="Enable cap remesh"
+                         number_of_elements="1"
+                         default_values="1"
+                         animateable="0">
+        <BooleanDomain name="bool"/>
+        <Documentation>
+          When ON (default), after wall remesh each open boundary loop is filled with
+          **triangulate_refine_and_fair_hole** (FairingContinuity = 0, C0 only), then the
+          filled cap patch is isotropic-remeshed with a uniform target edge length.
+        </Documentation>
+      </IntVectorProperty>
+
+      <DoubleVectorProperty command="SetCapExpansionRatio"
+                            name="CapExpansionRatio"
+                            label="Cap expansion ratio"
+                            number_of_elements="1"
+                            default_values="1.5">
+        <DoubleRangeDomain name="range" min="1.0"/>
+        <Documentation>
+          Size multiplier per BFS hop from the seam into the cap interior.
+          At each seam vertex the target size equals the average adjacent wall edge length;
+          moving one hop inward multiplies that size by this ratio.
+          **1.0** produces a uniform mesh matching the wall density; larger values give a
+          progressively coarser mesh toward the cap centre. No curvature field is computed.
+        </Documentation>
+        <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="enabled_state"
+                                   property="EnableCapRemesh"
+                                   value="1"/>
+        </Hints>
+      </DoubleVectorProperty>
+
+      <IntVectorProperty command="SetCapNumberOfIterations"
+                         name="CapNumberOfIterations"
+                         label="Cap remesh iterations"
+                         number_of_elements="1"
+                         default_values="3">
+        <IntRangeDomain name="range" min="1" max="20"/>
+        <Documentation>Number of CGAL isotropic_remeshing iterations on the filled cap patch.</Documentation>
+        <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="enabled_state"
+                                   property="EnableCapRemesh"
+                                   value="1"/>
+        </Hints>
+      </IntVectorProperty>
+
+      <IntVectorProperty command="SetCapNumberOfRelaxationSteps"
+                         name="CapNumberOfRelaxationSteps"
+                         label="Cap relaxation steps"
+                         number_of_elements="1"
+                         default_values="3">
+        <IntRangeDomain name="range" min="0" max="20"/>
+        <Documentation>CGAL vertex relocation steps per cap remesh iteration.</Documentation>
+        <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="enabled_state"
+                                   property="EnableCapRemesh"
+                                   value="1"/>
+        </Hints>
+      </IntVectorProperty>
+
+      <IntVectorProperty command="SetCapRemeshProtectConstraints"
+                         name="CapRemeshProtectConstraints"
+                         label="Cap protect constraints"
+                         number_of_elements="1"
+                         default_values="1"
+                         animateable="0"
+                         panel_visibility="advanced">
+        <BooleanDomain name="bool"/>
+        <Documentation>
+          CGAL protect_constraints for the cap remesh (default **ON**). The seam edges between
+          the filled cap and the surrounding wall mesh are marked as constrained; with this ON
+          they are never split or collapsed, keeping the cap stitched cleanly to the wall.
+        </Documentation>
+        <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="enabled_state"
+                                   property="EnableCapRemesh"
+                                   value="1"/>
+        </Hints>
+      </IntVectorProperty>
+
+      <IntVectorProperty command="SetCapRefineSizingField"
+                         name="CapRefineSizingField"
+                         label="Recompute BFS each iteration"
+                         number_of_elements="1"
+                         default_values="1"
+                         animateable="0"
+                         panel_visibility="advanced">
+        <BooleanDomain name="bool"/>
+        <Documentation>
+          When ON (default), the BFS expansion field is recomputed from seam vertices **before each
+          iteration after the first**. New vertices created in previous iterations receive
+          sizes anchored to their actual hop-distance from the seam rather than accumulating
+          interpolation drift. Costs one extra BFS pass per iteration; turn OFF for a faster path
+          when interpolation drift is acceptable.
+        </Documentation>
+        <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="enabled_state"
+                                   property="EnableCapRemesh"
+                                   value="1"/>
+        </Hints>
+      </IntVectorProperty>
+
+      <PropertyGroup label="Cap remesh (hole fill)">
+        <Property name="EnableCapRemesh"/>
+        <Property name="CapExpansionRatio"/>
+        <Property name="CapNumberOfIterations"/>
+        <Property name="CapNumberOfRelaxationSteps"/>
+        <Property name="CapRemeshProtectConstraints"/>
+        <Property name="CapRefineSizingField"/>
       </PropertyGroup>
 
       <IntVectorProperty name="UseUpdateAttributes"
@@ -240,6 +382,7 @@
 
       <Hints>
         <ShowInMenu category="SHYX" icon=":/VESPA/SHYX_Adaptive_Isotropic_Remesher.png"/>
+        <RepresentationType view="RenderView" type="Surface With Edges" port="0"/>
       </Hints>
     </SourceProxy>
   </ProxyGroup>

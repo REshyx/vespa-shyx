@@ -5,7 +5,8 @@
  *
  * Intended for surfaces tagged by vtkCGALVesselEndClipper (cell \c EndpointIndex: cap triangles
  * &gt; 0, bulk typically -1). **vtkThreshold** + **vtkGeometryFilter** yield a standalone surface of
- * the negative side only; CGAL remeshes that surface in full (no patch-on-full-mesh bookkeeping).
+ * the negative side only; optionally only the **largest** triangle-connected patch is kept.
+ * CGAL remeshes that surface in full (no patch-on-full-mesh bookkeeping).
  * Output is **only** the remeshed extracted patch (not the full vessel with caps). Same ICC sizing
  * stack as vtkSHYXAdaptiveIsotropicRemesher, without selection, feature detection, or mask logic.
  * CGAL split/collapse/flip follow CGAL defaults (all enabled); only protect/collapse/relax
@@ -45,6 +46,16 @@ public:
     vtkBooleanMacro(EndpointIndexAllScalars, bool);
     //@}
 
+    //@{
+    /**
+     * When ON, after threshold + geometry + triangulation, keep only the largest surface-connected
+     * component (vtkPolyDataConnectivityFilter, largest region). Default ON.
+     */
+    vtkGetMacro(LargestConnectedRegionOnly, bool);
+    vtkSetMacro(LargestConnectedRegionOnly, bool);
+    vtkBooleanMacro(LargestConnectedRegionOnly, bool);
+    //@}
+
     vtkGetMacro(MinEdgeLength, double);
     vtkSetMacro(MinEdgeLength, double);
     vtkGetMacro(MaxEdgeLength, double);
@@ -74,6 +85,48 @@ public:
     vtkSetMacro(RemeshRelaxConstraints, bool);
     vtkBooleanMacro(RemeshRelaxConstraints, bool);
 
+    //@{
+    /**
+     * When ON (default), after wall remesh the open boundary loops are filled with
+     * triangulate_refine_and_fair_hole (FairingContinuity = 0, C0), then the filled
+     * cap patch is isotropic-remeshed with a uniform target edge length.
+     */
+    vtkGetMacro(EnableCapRemesh, bool);
+    vtkSetMacro(EnableCapRemesh, bool);
+    vtkBooleanMacro(EnableCapRemesh, bool);
+    //@}
+
+    /**
+     * Expansion ratio per BFS hop from the seam for cap remesh sizing. At the seam the target
+     * size equals the adjacent wall edge length; each hop into the cap multiplies by this factor.
+     * Values > 1 produce a coarser mesh towards the cap centre; 1.0 gives uniform sizing.
+     */
+    vtkGetMacro(CapExpansionRatio, double);
+    vtkSetClampMacro(CapExpansionRatio, double, 1.0, 1.0e6);
+
+    vtkGetMacro(CapNumberOfIterations, int);
+    vtkSetMacro(CapNumberOfIterations, int);
+    vtkGetMacro(CapNumberOfRelaxationSteps, int);
+    vtkSetMacro(CapNumberOfRelaxationSteps, int);
+
+    /** Default ON: CGAL protect_constraints for the cap remesh (seam edges are never split/collapsed). */
+    vtkGetMacro(CapRemeshProtectConstraints, bool);
+    vtkSetMacro(CapRemeshProtectConstraints, bool);
+    vtkBooleanMacro(CapRemeshProtectConstraints, bool);
+
+    //@{
+    /**
+     * When ON, the BFS expansion field is recomputed from seam vertices before each
+     * iteration after the first.  New vertices added by previous splits receive sizes
+     * anchored to their actual hop-distance from the seam rather than interpolation drift.
+     * Default ON (one BFS refresh per iteration after the first; turn OFF for a faster path when
+     * interpolation drift is acceptable).
+     */
+    vtkGetMacro(CapRefineSizingField, bool);
+    vtkSetMacro(CapRefineSizingField, bool);
+    vtkBooleanMacro(CapRefineSizingField, bool);
+    //@}
+
 protected:
     vtkSHYXRemeshWithEndpoint();
     ~vtkSHYXRemeshWithEndpoint() override = default;
@@ -82,6 +135,7 @@ protected:
     int FillInputPortInformation(int port, vtkInformation* info) override;
 
     bool EndpointIndexAllScalars = false;
+    bool LargestConnectedRegionOnly = true;
 
     double MinEdgeLength = 0.0;
     double MaxEdgeLength = 0.0;
@@ -95,6 +149,13 @@ protected:
     bool RemeshProtectConstraints = false;
     bool RemeshCollapseConstraints = true;
     bool RemeshRelaxConstraints = false;
+
+    bool EnableCapRemesh = true;
+    double CapExpansionRatio = 1.5;
+    int CapNumberOfIterations = 3;
+    int CapNumberOfRelaxationSteps = 3;
+    bool CapRemeshProtectConstraints = true;
+    bool CapRefineSizingField = true;
 
 private:
     vtkSHYXRemeshWithEndpoint(const vtkSHYXRemeshWithEndpoint&) = delete;
