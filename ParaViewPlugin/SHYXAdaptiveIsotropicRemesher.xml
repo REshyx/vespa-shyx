@@ -253,23 +253,39 @@
 
       <DoubleVectorProperty command="SetAdaptiveSizingNeighborMaxRatio"
                             name="AdaptiveSizingNeighborMaxRatio"
-                            label="Neighbor max size ratio"
+                            label="Expansion ratio"
                             number_of_elements="1"
                             default_values="1.6">
         <DoubleRangeDomain name="range" min="0" max="1e6"/>
         <Documentation>
-          Caps spatial jumps of the Vespa ICC sizing maps: **≤ 1** disables (raw per-vertex ICC targets).
+          **Expansion ratio** R caps spatial jumps of the Vespa ICC sizing maps: **≤ 1** disables (raw per-vertex ICC targets).
           Default **1.6** relaxes `v:vespa_size_global` and `v:vespa_size_feature` so along any mesh edge the
           larger vertex target does not exceed R times the smaller (e.g. 1.3–2 to tame abrupt coarsening
           next to fine regions). Set **0** to disable.
         </Documentation>
       </DoubleVectorProperty>
 
+      <IntVectorProperty command="SetScaleToRange"
+                         name="ScaleToRange"
+                         label="Scale to range"
+                         number_of_elements="1"
+                         default_values="0"
+                         animateable="0">
+        <BooleanDomain name="bool"/>
+        <Documentation>
+          When ON, the computed per-vertex ICC sizing targets are linearly remapped so the actual
+          minimum maps to **Min edge length** and the actual maximum maps to **Max edge length**.
+          This stretches a clustering curvature distribution to always fill the full sizing interval.
+          Applied after expansion ratio limiting. Default OFF.
+        </Documentation>
+      </IntVectorProperty>
+
       <PropertyGroup label="Sizing">
         <Property name="MinEdgeLength"/>
         <Property name="MaxEdgeLength"/>
         <Property name="AdaptiveTolerance"/>
         <Property name="AdaptiveSizingNeighborMaxRatio"/>
+        <Property name="ScaleToRange"/>
       </PropertyGroup>
 
       <!-- =================================================================

@@ -148,6 +148,17 @@ public:
 
   //@{
   /**
+   * When true, the computed per-vertex ICC sizing targets are linearly remapped so the actual
+   * minimum maps to MinEdgeLength and the actual maximum maps to MaxEdgeLength, stretching the
+   * curvature distribution to fill the full sizing interval. Default false.
+   */
+  vtkGetMacro(ScaleToRange, bool);
+  vtkSetMacro(ScaleToRange, bool);
+  vtkBooleanMacro(ScaleToRange, bool);
+  //@}
+
+  //@{
+  /**
    * When true (default), CGAL isotropic remeshing performs **one CGAL iteration per pass** and calls
    * FeatureAwareAdaptiveSizingField::recompute_curvature before each subsequent pass so ICC is
    * re-evaluated on the updated mesh (**full surface** ICC domain; see vtkSHYXFeatureAwareAdaptiveSizingField).
@@ -315,6 +326,7 @@ protected:
   double MaxEdgeLength       = 0.0;
   double AdaptiveTolerance   = 0.01;
   double AdaptiveSizingNeighborMaxRatio = 1.6;
+  bool   ScaleToRange                          = false;
   bool   RemeshRecomputeCurvatureEachIteration = true;
   double ProtectAngle        = 70.0;
   int    NumberOfIterations  = 3;

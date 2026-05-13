@@ -12,7 +12,8 @@ endif()
 set(ADAPTIVE_REMESHING_SERVER_MANAGER_XML "")
 if (${VESPA_ADAPTIVE_REMESHING})
   list(APPEND ADAPTIVE_REMESHING_SERVER_MANAGER_XML
-    "SHYXAdaptiveIsotropicRemesher.xml")
+    "SHYXAdaptiveIsotropicRemesher.xml"
+    "SHYXRemeshWithEndpoint.xml")
 endif()
 
 if(VESPA_USE_VMTK)

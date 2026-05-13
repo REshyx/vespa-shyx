@@ -13,6 +13,8 @@
 
 #include <boost/property_map/property_map.hpp>
 
+#include <algorithm>
+#include <limits>
 #include <optional>
 #include <utility>
 #include <vector>
@@ -33,6 +35,12 @@ namespace pmp_sf = CGAL::Polygon_mesh_processing;
  * Optional neighbor ratio limit: when @a neighbor_max_ratio > 1 in the constructor, targets are
  * relaxed so along every mesh edge neither endpoint exceeds R times the other (iterative symmetric
  * reduction), damping sharp ICC-driven jumps. R <= 1 disables.
+ *
+ * Optional scale-to-range: when @a scale_to_range is true, after all per-vertex targets (and
+ * neighbor ratio limiting) are computed, the values are linearly remapped so the actual min maps
+ * to short (MinEdgeLength) and the actual max maps to long (MaxEdgeLength). Vertices with a
+ * zero-initialised target (uncovered by the face range) are excluded from the min/max scan and
+ * left at zero. This stretches the curvature-derived distribution to fill the full sizing interval.
  *
  * Copy semantics: copy-constructible; the only non-trivial member is a property-map handle that
  * refers to data living on the surface mesh, exactly like CGAL's Adaptive_sizing_field. The named
@@ -61,11 +69,12 @@ public:
 
   template <typename FaceRange>
   FeatureAwareAdaptiveSizingField(FT tol, std::pair<FT, FT> bounds, const FaceRange& face_range,
-    CGAL_Surface& mesh, FT neighbor_max_ratio = FT(0))
+    CGAL_Surface& mesh, FT neighbor_max_ratio = FT(0), bool scale_to_range = false)
     : tol_g_(tol)
     , short_g_(bounds.first)
     , long_g_(bounds.second)
     , neighbor_max_ratio_(neighbor_max_ratio)
+    , scale_to_range_(scale_to_range)
   {
     map_g_ =
       mesh.template add_property_map<vertex_descriptor, FT>("v:vespa_size_global", FT(0)).first;
@@ -202,6 +211,7 @@ private:
       put(map_g_, v, vertex_size_(tol_g_, short_g_, long_g_, max_abs));
     }
     gradient_limit_vertex_sizes_(mesh);
+    scale_to_range_map_(mesh);
   }
 
   static FT vertex_size_(FT tol, FT lo, FT hi, FT max_abs_curv)
@@ -275,11 +285,50 @@ private:
     return changed;
   }
 
+  /**
+   * Linearly remap all positive map_g_ values from their current [actual_min, actual_max] into
+   * [short_g_, long_g_]. Vertices with value <= 0 (uncovered by the face range) are skipped.
+   * No-op when scale_to_range_ is false or when actual_min == actual_max.
+   */
+  void scale_to_range_map_(CGAL_Surface& mesh)
+  {
+    if (!scale_to_range_)
+    {
+      return;
+    }
+    FT actual_min = std::numeric_limits<FT>::max();
+    FT actual_max = FT(0);
+    for (vertex_descriptor v : vertices(mesh))
+    {
+      const FT s = get(map_g_, v);
+      if (s > FT(0))
+      {
+        actual_min = (std::min)(actual_min, s);
+        actual_max = (std::max)(actual_max, s);
+      }
+    }
+    if (!(actual_max > actual_min))
+    {
+      return;
+    }
+    const FT span_in  = actual_max - actual_min;
+    const FT span_out = long_g_ - short_g_;
+    for (vertex_descriptor v : vertices(mesh))
+    {
+      const FT s = get(map_g_, v);
+      if (s > FT(0))
+      {
+        put(map_g_, v, short_g_ + (s - actual_min) * span_out / span_in);
+      }
+    }
+  }
+
   VSizeMap map_g_;
   FT       tol_g_;
   FT       short_g_;
   FT       long_g_;
   FT       neighbor_max_ratio_;
+  bool     scale_to_range_   = false;
   static constexpr int gradient_limit_sweeps_ = 32;
 };
 

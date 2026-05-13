@@ -1,0 +1,246 @@
+<?xml version="1.0" ?>
+<ServerManagerConfiguration>
+  <ProxyGroup name="filters">
+    <SourceProxy class="vtkSHYXRemeshWithEndpoint"
+                 label="SHYX Remesh With Endpoint"
+                 name="SHYXRemeshWithEndpoint">
+      <Documentation short_help="Threshold EndpointIndex &lt; 0, then Vespa ICC remesh that patch only.">
+        Uses **vtkThreshold** (interval on the first component) plus **vtkGeometryFilter** to extract
+        the surface cells whose **first tuple component is strictly below zero** (default **EndpointIndex**
+        from vtkCGALVesselEndClipper: caps positive, bulk **-1**). CGAL then remeshes **only that
+        extracted patch** with the same Vespa ICC sizing as SHYX Adaptive Isotropic Remesher. The
+        filter output is **the remeshed patch alone**, not the full vessel; rejoin caps in ParaView if
+        needed. No vtkSelection, no feature-angle detection, no feature mask. CGAL split/collapse/flip
+        use defaults (all on); only protect / collapse / relax **constraints** are exposed besides
+        sizing and iteration controls.
+      </Documentation>
+
+      <OutputPort name="Remeshed surface" index="0" id="port0"/>
+
+      <InputProperty name="Input"
+                     command="SetInputConnection">
+        <ProxyGroupDomain name="groups">
+          <Group name="sources"/>
+          <Group name="filters"/>
+        </ProxyGroupDomain>
+        <DataTypeDomain name="input_type">
+          <DataType value="vtkPolyData"/>
+        </DataTypeDomain>
+        <InputArrayDomain name="endpoint_arrays" optional="1"/>
+      </InputProperty>
+
+      <StringVectorProperty name="EndpointIndexArrayName"
+                            label="Endpoint array"
+                            command="SetInputArrayToProcess"
+                            number_of_elements="5"
+                            element_types="0 0 0 0 2"
+                            default_values="0 0 0 0 EndpointIndex"
+                            animateable="0">
+        <ArrayListDomain name="endpoint_array_list"
+                         input_domain_name="endpoint_arrays">
+          <RequiredProperties>
+            <Property name="Input" function="Input"/>
+          </RequiredProperties>
+        </ArrayListDomain>
+        <Documentation>
+          Point- or cell-centered array. If both exist with the same name, cell data is used.
+          **vtkThreshold** keeps cells whose **first component** lies in (-1e200, -1e-9), i.e. strictly
+          negative for typical integer tags (e.g. **-1** from vtkCGALVesselEndClipper).
+        </Documentation>
+        <Hints>
+          <ArraySelectionWidget/>
+        </Hints>
+      </StringVectorProperty>
+
+      <IntVectorProperty command="SetEndpointIndexAllScalars"
+                         name="EndpointIndexAllScalars"
+                         label="All corners negative (points)"
+                         number_of_elements="1"
+                         default_values="0"
+                         animateable="0">
+        <BooleanDomain name="bool"/>
+        <Documentation>
+          When the array is point-centered: if ON, **vtkThreshold** requires every corner to satisfy
+          the interval; if OFF, one corner is enough. Ignored for cell-centered arrays.
+        </Documentation>
+      </IntVectorProperty>
+
+      <PropertyGroup label="Endpoint region">
+        <Property name="EndpointIndexArrayName"/>
+        <Property name="EndpointIndexAllScalars"/>
+      </PropertyGroup>
+
+      <DoubleVectorProperty command="SetMinEdgeLength"
+                            name="MinEdgeLength"
+                            label="Min edge length"
+                            number_of_elements="1"
+                            default_values="0">
+        <BoundsDomain mode="scaled_extent" name="bounds_min" scale_factor="0.001">
+          <RequiredProperties>
+            <Property function="Input" name="Input"/>
+          </RequiredProperties>
+        </BoundsDomain>
+        <Documentation>
+          Minimum edge length; must be &gt; 0. BoundsDomain suggests 0.1% of the longest bbox edge.
+        </Documentation>
+      </DoubleVectorProperty>
+
+      <DoubleVectorProperty command="SetMaxEdgeLength"
+                            name="MaxEdgeLength"
+                            label="Max edge length"
+                            number_of_elements="1"
+                            default_values="0">
+        <BoundsDomain mode="scaled_extent" name="bounds_max" scale_factor="0.05">
+          <RequiredProperties>
+            <Property function="Input" name="Input"/>
+          </RequiredProperties>
+        </BoundsDomain>
+        <Documentation>
+          Maximum edge length; must be &gt; Min edge length. BoundsDomain suggests 5% of bbox longest edge.
+        </Documentation>
+      </DoubleVectorProperty>
+
+      <DoubleVectorProperty command="SetAdaptiveTolerance"
+                            name="AdaptiveTolerance"
+                            label="Adaptive tolerance"
+                            number_of_elements="1"
+                            default_values="0.01">
+        <DoubleRangeDomain name="range" min="0"/>
+        <Documentation>
+          Vespa ICC adaptive sizing tolerance (same role as SHYX Adaptive Isotropic Remesher).
+        </Documentation>
+      </DoubleVectorProperty>
+
+      <DoubleVectorProperty command="SetAdaptiveSizingNeighborMaxRatio"
+                            name="AdaptiveSizingNeighborMaxRatio"
+                            label="Expansion ratio"
+                            number_of_elements="1"
+                            default_values="1.6">
+        <DoubleRangeDomain name="range" min="0" max="1e6"/>
+        <Documentation>
+          **Expansion ratio** R caps ICC sizing jumps along edges; **≤ 1** disables. Set **0** to disable (same semantics as SHYX Adaptive Isotropic Remesher).
+        </Documentation>
+      </DoubleVectorProperty>
+
+      <IntVectorProperty command="SetScaleToRange"
+                         name="ScaleToRange"
+                         label="Scale to range"
+                         number_of_elements="1"
+                         default_values="0"
+                         animateable="0">
+        <BooleanDomain name="bool"/>
+        <Documentation>
+          When ON, the computed per-vertex ICC sizing targets are linearly remapped so the actual
+          minimum maps to **Min edge length** and the actual maximum maps to **Max edge length**.
+          This stretches a clustering curvature distribution to always fill the full sizing interval.
+          Default OFF (raw ICC values, clamped to [Min, Max] as usual).
+        </Documentation>
+      </IntVectorProperty>
+
+      <PropertyGroup label="Sizing">
+        <Property name="MinEdgeLength"/>
+        <Property name="MaxEdgeLength"/>
+        <Property name="AdaptiveTolerance"/>
+        <Property name="AdaptiveSizingNeighborMaxRatio"/>
+        <Property name="ScaleToRange"/>
+      </PropertyGroup>
+
+      <IntVectorProperty command="SetNumberOfIterations"
+                         name="NumberOfIterations"
+                         label="Remesh iterations"
+                         number_of_elements="1"
+                         default_values="3">
+        <IntRangeDomain name="range" min="1" max="20"/>
+        <Documentation>Number of CGAL isotropic_remeshing iterations on the negative patch.</Documentation>
+      </IntVectorProperty>
+
+      <IntVectorProperty command="SetRemeshRecomputeCurvatureEachIteration"
+                         name="RemeshRecomputeCurvatureEachIteration"
+                         label="Recompute curvature each iteration"
+                         number_of_elements="1"
+                         default_values="1"
+                         animateable="0"
+                         panel_visibility="advanced">
+        <BooleanDomain name="bool"/>
+        <Documentation>
+          When ON (default), ICC is refreshed on the updated mesh before each iteration after the first.
+        </Documentation>
+      </IntVectorProperty>
+
+      <IntVectorProperty command="SetNumberOfRelaxationSteps"
+                         name="NumberOfRelaxationSteps"
+                         label="Relaxation steps"
+                         number_of_elements="1"
+                         default_values="3"
+                         panel_visibility="advanced">
+        <IntRangeDomain name="range" min="0" max="20"/>
+        <Documentation>CGAL vertex relocation steps per remesh iteration.</Documentation>
+      </IntVectorProperty>
+
+      <PropertyGroup label="Iterations">
+        <Property name="NumberOfIterations"/>
+        <Property name="RemeshRecomputeCurvatureEachIteration"/>
+        <Property name="NumberOfRelaxationSteps"/>
+      </PropertyGroup>
+
+      <IntVectorProperty command="SetRemeshProtectConstraints"
+                         name="RemeshProtectConstraints"
+                         label="Protect constraints"
+                         number_of_elements="1"
+                         default_values="0">
+        <BooleanDomain name="bool"/>
+        <Documentation>CGAL protect_constraints (default OFF). When ON, constrained edges are not split or collapsed.</Documentation>
+      </IntVectorProperty>
+
+      <IntVectorProperty command="SetRemeshCollapseConstraints"
+                         name="RemeshCollapseConstraints"
+                         label="Collapse constraints"
+                         number_of_elements="1"
+                         default_values="1">
+        <BooleanDomain name="bool"/>
+        <Documentation>CGAL collapse_constraints when protect is OFF.</Documentation>
+        <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="enabled_state"
+                                   property="RemeshProtectConstraints"
+                                   value="0"/>
+        </Hints>
+      </IntVectorProperty>
+
+      <IntVectorProperty command="SetRemeshRelaxConstraints"
+                         name="RemeshRelaxConstraints"
+                         label="Relax constraints"
+                         number_of_elements="1"
+                         default_values="0">
+        <BooleanDomain name="bool"/>
+        <Documentation>CGAL relax_constraints during tangential relaxation.</Documentation>
+      </IntVectorProperty>
+
+      <PropertyGroup label="Remesh constraints (CGAL)">
+        <Property name="RemeshProtectConstraints"/>
+        <Property name="RemeshCollapseConstraints"/>
+        <Property name="RemeshRelaxConstraints"/>
+      </PropertyGroup>
+
+      <IntVectorProperty name="UseUpdateAttributes"
+                         command="SetUpdateAttributes"
+                         label="Transfer input arrays to output"
+                         number_of_elements="1"
+                         default_values="1"
+                         animateable="0">
+        <BooleanDomain name="bool"/>
+        <Documentation>
+          When ON (default), point data is probed onto the output and cell data is mapped from the nearest input cell.
+        </Documentation>
+      </IntVectorProperty>
+
+      <PropertyGroup label="Attributes">
+        <Property name="UseUpdateAttributes"/>
+      </PropertyGroup>
+
+      <Hints>
+        <ShowInMenu category="SHYX" icon=":/VESPA/SHYX_Adaptive_Isotropic_Remesher.png"/>
+      </Hints>
+    </SourceProxy>
+  </ProxyGroup>
+</ServerManagerConfiguration>

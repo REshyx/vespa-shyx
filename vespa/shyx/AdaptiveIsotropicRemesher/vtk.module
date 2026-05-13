@@ -12,3 +12,4 @@ PRIVATE_DEPENDS
   VTK::CommonDataModel
   VTK::CommonExecutionModel
   VTK::FiltersExtraction
+  VTK::FiltersGeometry

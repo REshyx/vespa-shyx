@@ -134,6 +134,7 @@ void vtkSHYXAdaptiveIsotropicRemesher::PrintSelf(ostream& os, vtkIndent indent)
   os << indent << "MaxEdgeLength: " << this->MaxEdgeLength << std::endl;
   os << indent << "AdaptiveTolerance: " << this->AdaptiveTolerance << std::endl;
   os << indent << "AdaptiveSizingNeighborMaxRatio: " << this->AdaptiveSizingNeighborMaxRatio << std::endl;
+  os << indent << "ScaleToRange: " << (this->ScaleToRange ? "on" : "off") << std::endl;
   os << indent << "RemeshRecomputeCurvatureEachIteration: "
      << (this->RemeshRecomputeCurvatureEachIteration ? "on" : "off") << std::endl;
   os << indent << "ProtectAngle: " << this->ProtectAngle << std::endl;
@@ -407,13 +408,15 @@ int vtkSHYXAdaptiveIsotropicRemesher::RequestData(
     if (patchRemesh)
     {
       sizingStorage.emplace(this->AdaptiveTolerance, std::make_pair(minLen, maxLen), remeshFaces,
-        cgalMesh->surface, static_cast<double>(this->AdaptiveSizingNeighborMaxRatio));
+        cgalMesh->surface, static_cast<double>(this->AdaptiveSizingNeighborMaxRatio),
+        this->ScaleToRange);
     }
     else
     {
       sizingStorage.emplace(this->AdaptiveTolerance, std::make_pair(minLen, maxLen),
         cgalMesh->surface.faces(), cgalMesh->surface,
-        static_cast<double>(this->AdaptiveSizingNeighborMaxRatio));
+        static_cast<double>(this->AdaptiveSizingNeighborMaxRatio),
+        this->ScaleToRange);
     }
     SizingTy& sizing = *sizingStorage;
 

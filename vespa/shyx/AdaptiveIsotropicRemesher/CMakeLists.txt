@@ -1,5 +1,6 @@
 set(classes
-  vtkSHYXAdaptiveIsotropicRemesher)
+  vtkSHYXAdaptiveIsotropicRemesher
+  vtkSHYXRemeshWithEndpoint)
 vtk_module_add_module(vtkSHYXAdaptiveIsotropicRemesher
   FORCE_STATIC
   CLASSES ${classes})
