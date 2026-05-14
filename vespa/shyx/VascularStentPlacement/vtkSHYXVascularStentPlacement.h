@@ -6,10 +6,15 @@
  * vtkLine / vtkPolyLine cells). Given an anchor vertex id on the centerline, the filter walks
  * along the line graph for half the stent length on each side of the anchor (when two branches
  * exist), builds a polyline segment, then for each input mesh point whose closest point lies on
- * that segment and within an internal influence band (multiple of StentRadius), replaces the
+ * that segment and within perpendicular distance StentRadius of the axis (cylindrical support),
+ * replaces the
  * point with \f$ c + R \hat{r}_\perp \f$ where \f$c\f$ is the closest point on the axis,
  * \f$R\f$ is StentRadius, and \f$\hat{r}_\perp\f$ is the unit vector obtained by removing the
  * local tangent component from \f$(x-c)\f$.
+ *
+ * Optional StentAxisSampleSpacing (>0) subdivides the walked stent axis polyline so consecutive
+ * samples are at most that arc length apart, before closest-point queries (denser axis, smoother
+ * projection).
  */
 
 #ifndef vtkSHYXVascularStentPlacement_h
@@ -39,6 +44,10 @@ public:
     vtkGetMacro(StentRadius, double);
     vtkSetClampMacro(StentRadius, double, 0.0, VTK_DOUBLE_MAX);
 
+    /** Maximum arc length between consecutive samples on the stent axis polyline; 0 disables densification. */
+    vtkGetMacro(StentAxisSampleSpacing, double);
+    vtkSetClampMacro(StentAxisSampleSpacing, double, 0.0, VTK_DOUBLE_MAX);
+
     /** Point-data array name on Centerline; when non-empty, snapped widget updates StentRadius from
      *  tuple at AnchorCenterlinePointId (default: MaximumInscribedSphereRadius, e.g. VMTK). */
     vtkGetStringMacro(CenterlineRadiusArrayName);
@@ -62,6 +71,7 @@ protected:
     vtkIdType AnchorCenterlinePointId = 0;
     double StentLength = 10.0;
     double StentRadius = 1.0;
+    double StentAxisSampleSpacing = 0.0;
     double StentWidgetCenter[3] = { 0.0, 0.0, 0.0 };
     double StentWidgetAxis[3] = { 0.0, 0.0, 1.0 };
     char* CenterlineRadiusArrayName = nullptr;

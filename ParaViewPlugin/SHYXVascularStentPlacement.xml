@@ -4,7 +4,7 @@
                  class="vtkSHYXVascularStentPlacement"
                  label="SHYX Vascular Stent Placement">
       <Documentation
-          long_help="Deforms a vessel surface toward a target radius along a short centerline segment for thrombosis stent placement visualization. Port 0 is the vessel vtkPolyData; port 1 is a centerline vtkPolyData (line/polyline cells). AnchorCenterlinePointId selects the centerline vertex at the stent midpoint. StentLength is the total arc length along the graph walked from that vertex (split across the two incident branches when degree ≥ 2; if the anchor is degree 1, the full length is walked along the single branch). StentRadius is the target perpendicular distance from the local axis: each affected surface point is moved to c + R·r̂, where c is its closest point on the axis segment and r̂ is the component of (x−c) orthogonal to the local tangent. Only points within an internal band (max(5·R, 0.25·L) from the axis) are updated."
+          long_help="Deforms a vessel surface toward a target radius along a short centerline segment for thrombosis stent placement visualization. Port 0 is the vessel vtkPolyData; port 1 is a centerline vtkPolyData (line/polyline cells). AnchorCenterlinePointId selects the centerline vertex at the stent midpoint. StentLength is the total arc length along the graph walked from that vertex (split across the two incident branches when degree ≥ 2; if the anchor is degree 1, the full length is walked along the single branch). StentRadius is the target perpendicular distance from the local axis: each surface point within perpendicular distance R of the walked axis segment is moved to c + R·r̂, where c is its closest point on the axis polyline and r̂ is the component of (x−c) orthogonal to the local tangent. StentAxisSampleSpacing (>0) optionally subdivides the axis polyline so consecutive samples are at most that arc length apart before closest-point queries (denser axis)."
           short_help="Radial expansion along a centerline window (geometry + centerline)."/>
 
       <InputProperty name="Input" command="SetInputConnection">
@@ -61,6 +61,20 @@
                             animateable="1">
         <DoubleRangeDomain name="range" min="0.0" max="1e12"/>
         <Documentation>Target perpendicular distance from the local centerline tangent (world units).</Documentation>
+      </DoubleVectorProperty>
+
+      <DoubleVectorProperty name="StentAxisSampleSpacing"
+                            label="Stent Axis Sample Spacing"
+                            command="SetStentAxisSampleSpacing"
+                            number_of_elements="1"
+                            default_values="0.0"
+                            animateable="1">
+        <DoubleRangeDomain name="range" min="0.0" max="1e12"/>
+        <Documentation>
+          Maximum arc length between consecutive samples on the internal stent axis polyline. Zero keeps
+          only graph-walk vertices; a positive value subdivides each axis segment so the piecewise-linear
+          axis used for closest-point queries is denser (often smoother deformation near bends).
+        </Documentation>
       </DoubleVectorProperty>
 
       <StringVectorProperty name="CenterlineRadiusArrayName"

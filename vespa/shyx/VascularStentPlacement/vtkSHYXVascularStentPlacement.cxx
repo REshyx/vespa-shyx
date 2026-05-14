@@ -1,6 +1,7 @@
 #include "vtkSHYXVascularStentPlacement.h"
 
 #include <vtkCellArray.h>
+#include <vtkCellData.h>
 #include <vtkCellLocator.h>
 #include <vtkDataObject.h>
 #include <vtkGenericCell.h>
@@ -212,6 +213,67 @@ void PickTwoSideNeighbors(vtkIdType anchor, const AdjMap& adj, vtkIdType& nA, vt
     }
 }
 
+/**
+ * Subdivide each segment of the axis polyline so consecutive samples are at most |maxSpacing|
+ * apart (arc length). maxSpacing <= kEps copies |in| to |out|.
+ */
+void DensifyAxisPolyline(const std::vector<std::array<double, 3>>& in, double maxSpacing,
+    std::vector<std::array<double, 3>>& out)
+{
+    out.clear();
+    if (in.size() < 2)
+    {
+        out = in;
+        return;
+    }
+    if (maxSpacing <= kEps)
+    {
+        out = in;
+        return;
+    }
+
+    auto pushIfDistinct = [&out](const std::array<double, 3>& q) {
+        if (out.empty())
+        {
+            out.push_back(q);
+            return;
+        }
+        double d[3];
+        Sub(d, q.data(), out.back().data());
+        if (Norm(d) > kEps)
+        {
+            out.push_back(q);
+        }
+    };
+
+    for (size_t i = 0; i + 1 < in.size(); ++i)
+    {
+        const double* p0 = in[i].data();
+        const double* p1 = in[i + 1].data();
+        double e[3];
+        Sub(e, p1, p0);
+        const double L = Norm(e);
+        if (L < kEps)
+        {
+            continue;
+        }
+        int nIntervals = static_cast<int>(std::ceil(L / maxSpacing));
+        nIntervals = std::max(1, nIntervals);
+        for (int k = 0; k <= nIntervals; ++k)
+        {
+            const double t = static_cast<double>(k) / static_cast<double>(nIntervals);
+            std::array<double, 3> q{};
+            LinInterp3(q.data(), p0, p1, t);
+            pushIfDistinct(q);
+        }
+    }
+
+    if (out.size() < 2)
+    {
+        out = in;
+    }
+}
+
 vtkSmartPointer<vtkPolyData> BuildAxisPolyline(const std::vector<std::array<double, 3>>& poly)
 {
     auto out = vtkSmartPointer<vtkPolyData>::New();
@@ -257,6 +319,7 @@ void vtkSHYXVascularStentPlacement::PrintSelf(ostream& os, vtkIndent indent)
     os << indent << "AnchorCenterlinePointId: " << this->AnchorCenterlinePointId << "\n";
     os << indent << "StentLength: " << this->StentLength << "\n";
     os << indent << "StentRadius: " << this->StentRadius << "\n";
+    os << indent << "StentAxisSampleSpacing: " << this->StentAxisSampleSpacing << "\n";
     os << indent << "StentWidgetCenter: (" << this->StentWidgetCenter[0] << ", " << this->StentWidgetCenter[1] << ", "
        << this->StentWidgetCenter[2] << ")\n";
     os << indent << "StentWidgetAxis: (" << this->StentWidgetAxis[0] << ", " << this->StentWidgetAxis[1] << ", "
@@ -376,6 +439,16 @@ int vtkSHYXVascularStentPlacement::RequestData(vtkInformation* vtkNotUsed(reques
         poly.push_back(p);
     }
 
+    if (this->StentAxisSampleSpacing > kEps)
+    {
+        std::vector<std::array<double, 3>> densePoly;
+        DensifyAxisPolyline(poly, this->StentAxisSampleSpacing, densePoly);
+        if (densePoly.size() >= 2)
+        {
+            poly.swap(densePoly);
+        }
+    }
+
     vtkSmartPointer<vtkPolyData> axisPd = BuildAxisPolyline(poly);
     if (!axisPd || axisPd->GetNumberOfPoints() < 2)
     {
@@ -390,10 +463,12 @@ int vtkSHYXVascularStentPlacement::RequestData(vtkInformation* vtkNotUsed(reques
     locator->BuildLocator();
 
     vtkNew<vtkGenericCell> cell;
-    const double influence = std::max(this->StentRadius * 5.0, this->StentLength * 0.25);
+    const double R = this->StentRadius;
+    const double R2 = R * R;
 
     output->CopyStructure(surface);
     output->GetPointData()->PassData(surface->GetPointData());
+    output->GetCellData()->PassData(surface->GetCellData());
 
     vtkNew<vtkPoints> outPts;
     outPts->DeepCopy(surface->GetPoints());
@@ -410,7 +485,8 @@ int vtkSHYXVascularStentPlacement::RequestData(vtkInformation* vtkNotUsed(reques
         int subId = -1;
         locator->FindClosestPoint(x, closest, cell, cellId, subId, dist2);
 
-        if (cellId < 0 || dist2 > influence * influence)
+        // Only points within cylindrical support radius R of the stent axis are extruded.
+        if (cellId < 0 || dist2 > R2)
         {
             continue;
         }
@@ -453,9 +529,9 @@ int vtkSHYXVascularStentPlacement::RequestData(vtkInformation* vtkNotUsed(reques
         radial[2] /= rlen;
 
         double newx[3];
-        newx[0] = closest[0] + this->StentRadius * radial[0];
-        newx[1] = closest[1] + this->StentRadius * radial[1];
-        newx[2] = closest[2] + this->StentRadius * radial[2];
+        newx[0] = closest[0] + R * radial[0];
+        newx[1] = closest[1] + R * radial[1];
+        newx[2] = closest[2] + R * radial[2];
         outPts->SetPoint(pid, newx);
     }
 
