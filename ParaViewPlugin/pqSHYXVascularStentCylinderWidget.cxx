@@ -30,6 +30,11 @@
 
 #include <cassert>
 
+#include "vtkCallbackCommand.h"
+#include "vtkCommand.h"
+
+#include <QMetaObject>
+
 #include <algorithm>
 #include <cctype>
 #include <cmath>
@@ -40,6 +45,37 @@
 namespace
 {
 constexpr double kEps = 1e-12;
+
+void SHYXOnStentLengthPropertyEvent(vtkObject*, unsigned long, void* clientData, void*)
+{
+    auto* self = static_cast<pqSHYXVascularStentCylinderWidget*>(clientData);
+    if (self)
+    {
+        QMetaObject::invokeMethod(self, "onStentLengthPropertyModified", Qt::QueuedConnection);
+    }
+}
+
+/** Prefer SM unchecked StentLength (Properties panel draft before Apply), else checked. */
+double SHYXGetStentLengthFromFilter(vtkSMProxy* filter)
+{
+    if (!filter || !filter->GetProperty("StentLength"))
+    {
+        return 10.0;
+    }
+    vtkSMPropertyHelper h(filter, "StentLength");
+    h.SetUseUnchecked(true);
+    double L = h.GetAsDouble(0);
+    if (!std::isfinite(L) || L <= 0.0)
+    {
+        h.SetUseUnchecked(false);
+        L = h.GetAsDouble(0);
+    }
+    if (!std::isfinite(L) || L <= 0.0)
+    {
+        return 1e-9;
+    }
+    return L;
+}
 
 std::string TrimAscii(std::string s)
 {
@@ -256,10 +292,39 @@ pqSHYXVascularStentCylinderWidget::pqSHYXVascularStentCylinderWidget(
     QObject::connect(static_cast<pqInteractivePropertyWidgetAbstract*>(this),
         &pqInteractivePropertyWidgetAbstract::endInteraction, this,
         &pqSHYXVascularStentCylinderWidget::onCylinderEndInteraction);
+
+    if (vtkSMProperty* stentLength = smproxy->GetProperty("StentLength"))
+    {
+        this->StentLengthPropertyCallback = vtkSmartPointer<vtkCallbackCommand>::New();
+        this->StentLengthPropertyCallback->SetClientData(this);
+        this->StentLengthPropertyCallback->SetCallback(SHYXOnStentLengthPropertyEvent);
+        this->StentLengthUncheckedObserverTag = stentLength->AddObserver(
+            vtkCommand::UncheckedPropertyModifiedEvent, this->StentLengthPropertyCallback);
+        this->StentLengthModifiedObserverTag =
+            stentLength->AddObserver(vtkCommand::ModifiedEvent, this->StentLengthPropertyCallback);
+    }
 }
 
 //-----------------------------------------------------------------------------
-pqSHYXVascularStentCylinderWidget::~pqSHYXVascularStentCylinderWidget() = default;
+pqSHYXVascularStentCylinderWidget::~pqSHYXVascularStentCylinderWidget()
+{
+    if (vtkSMProxy* px = this->proxy())
+    {
+        if (vtkSMProperty* p = px->GetProperty("StentLength"))
+        {
+            if (this->StentLengthUncheckedObserverTag)
+            {
+                p->RemoveObserver(this->StentLengthUncheckedObserverTag);
+                this->StentLengthUncheckedObserverTag = 0;
+            }
+            if (this->StentLengthModifiedObserverTag)
+            {
+                p->RemoveObserver(this->StentLengthModifiedObserverTag);
+                this->StentLengthModifiedObserverTag = 0;
+            }
+        }
+    }
+}
 
 //-----------------------------------------------------------------------------
 void pqSHYXVascularStentCylinderWidget::select()
@@ -286,8 +351,13 @@ void pqSHYXVascularStentCylinderWidget::placeWidget()
         axis[1] = 0.0;
         axis[2] = 1.0;
     }
-    const double R = vtkSMPropertyHelper(filter, "StentRadius").GetAsDouble();
-    const double L = vtkSMPropertyHelper(filter, "StentLength").GetAsDouble();
+    // Bounds must cover the geometry VTK clips against; use the larger of filter vs widget radius
+    // so a brief SM desync cannot make the box tighter than the drawn cylinder.
+    const double rF = vtkSMPropertyHelper(filter, "StentRadius").GetAsDouble();
+    const double rW = vtkSMPropertyHelper(w, "Radius").GetAsDouble();
+    const double R = std::max(
+        (std::isfinite(rF) && rF > 0.0) ? rF : 0.0, (std::isfinite(rW) && rW > 0.0) ? rW : 0.0);
+    const double L = SHYXGetStentLengthFromFilter(filter);
     double bds[6];
     pqSHYXVascularStentCylinderWidget::finiteCylinderWorldAABB(center, axis, R, L, bds);
     vtkSMPropertyHelper(w, "WidgetBounds").Set(bds, 6);
@@ -452,7 +522,9 @@ void pqSHYXVascularStentCylinderWidget::finiteCylinderWorldAABB(
             }
         }
     }
-    const double pad = std::max(1e-3, 0.02 * std::max(R, halfL));
+    // vtkImplicitCylinderRepresentation clips the cylinder mesh to this box; keep a bit of slack
+    // beyond the analytic finite cylinder so tubing / tessellation does not sit on the clip plane.
+    const double pad = std::max(1e-3, 0.06 * std::max(R, halfL));
     for (int i = 0; i < 3; ++i)
     {
         minC[i] -= pad;
@@ -646,6 +718,17 @@ void pqSHYXVascularStentCylinderWidget::onCylinderEndInteraction()
 }
 
 //-----------------------------------------------------------------------------
+void pqSHYXVascularStentCylinderWidget::onStentLengthPropertyModified()
+{
+    if (!this->widgetProxy() || !this->proxy())
+    {
+        return;
+    }
+    this->placeWidget();
+    this->render();
+}
+
+//-----------------------------------------------------------------------------
 void pqSHYXVascularStentCylinderWidget::syncFiniteLengthHintFromFilter()
 {
     vtkSMNewWidgetRepresentationProxy* w = this->widgetProxy();
@@ -664,7 +747,7 @@ void pqSHYXVascularStentCylinderWidget::syncFiniteLengthHintFromFilter()
     {
         return;
     }
-    shyx->SetFiniteStentLengthHint(vtkSMPropertyHelper(filter, "StentLength").GetAsDouble());
+    shyx->SetFiniteStentLengthHint(SHYXGetStentLengthFromFilter(filter));
 }
 
 //-----------------------------------------------------------------------------

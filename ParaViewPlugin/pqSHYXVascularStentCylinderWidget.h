@@ -4,7 +4,11 @@
 #include "pqInteractivePropertyWidget.h"
 #include "pqPropertyLinks.h"
 
+#include "vtkSmartPointer.h"
+
 #include <QWidget>
+
+class vtkCallbackCommand;
 
 class vtkPolyData;
 class vtkPoints;
@@ -42,6 +46,8 @@ public Q_SLOTS:
     void useZAxis() { this->setAxis(0, 0, 1); }
     void resetCameraToAxis();
     void useCameraAxis();
+    /** Invoked (queued) when filter StentLength SM property changes from the main Properties panel. */
+    void onStentLengthPropertyModified();
 
 protected Q_SLOTS:
     void placeWidget() override;
@@ -65,6 +71,10 @@ private:
 
     pqPropertyLinks WidgetLinks;
     QWidget* AdvancedPropertyWidgets[2] = { nullptr, nullptr };
+
+    vtkSmartPointer<vtkCallbackCommand> StentLengthPropertyCallback;
+    unsigned long StentLengthUncheckedObserverTag = 0;
+    unsigned long StentLengthModifiedObserverTag = 0;
 };
 
 #endif

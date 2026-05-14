@@ -1,6 +1,8 @@
 /**
  * @class   vtkSHYXImplicitCylinderRepresentation
- * @brief   Implicit cylinder representation where axis handles adjust finite length instead of rotating the axis.
+ * @brief   Finite-length stent cylinder: axis handles change length (not axis rotation), and the
+ *          shaded cylinder mesh is a true finite tube along the axis (not an infinite cylinder
+ *          clipped by the outline box like vtkImplicitCylinderRepresentation::BuildCylinder).
  */
 
 #ifndef vtkSHYXImplicitCylinderRepresentation_h
@@ -25,10 +27,14 @@ public:
     void SetFiniteStentLengthHint(double L);
 
     void WidgetInteraction(double newEventPos[2]) override;
+    void BuildRepresentation() override;
 
 protected:
     vtkSHYXImplicitCylinderRepresentation();
     ~vtkSHYXImplicitCylinderRepresentation() override = default;
+
+    /** Forward to vtkImplicitCylinderRepresentation so material defaults stay VTK-identical. */
+    void CreateDefaultProperties() override;
 
     static void FiniteCylinderWorldAABB(
         const double center[3], const double axis[3], double radius, double length, double bds[6]);
@@ -38,6 +44,9 @@ protected:
 private:
     vtkSHYXImplicitCylinderRepresentation(const vtkSHYXImplicitCylinderRepresentation&) = delete;
     void operator=(const vtkSHYXImplicitCylinderRepresentation&) = delete;
+
+    /** Side quads of a finite right circular cylinder [center-halfL, center+halfL] along axis (no box clip). */
+    void BuildFiniteStentCylinder();
 
     double FiniteStentLength = 10.0;
 };
