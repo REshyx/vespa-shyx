@@ -22,6 +22,7 @@
 #include "vtkSMProperty.h"
 #include "vtkSMPropertyGroup.h"
 #include "vtkSMPropertyHelper.h"
+#include "vtkSMUncheckedPropertyHelper.h"
 #include "vtkSMProxy.h"
 #include "vtkSMRenderViewProxy.h"
 #include "vtkSMSourceProxy.h"
@@ -77,6 +78,24 @@ double SHYXGetStentLengthFromFilter(vtkSMProxy* filter)
     return L;
 }
 
+/** Prefer SM unchecked StentRadius (draft before Apply), else checked. */
+double SHYXGetStentRadiusFromFilter(vtkSMProxy* filter)
+{
+    if (!filter || !filter->GetProperty("StentRadius"))
+    {
+        return 0.0;
+    }
+    vtkSMPropertyHelper h(filter, "StentRadius");
+    h.SetUseUnchecked(true);
+    double R = h.GetAsDouble(0);
+    if (!std::isfinite(R) || R <= 0.0)
+    {
+        h.SetUseUnchecked(false);
+        R = h.GetAsDouble(0);
+    }
+    return R;
+}
+
 std::string TrimAscii(std::string s)
 {
     while (!s.empty() && std::isspace(static_cast<unsigned char>(s.front())))
@@ -123,7 +142,7 @@ bool ApplyStentRadiusFromCenterlinePointArray(
     {
         return false;
     }
-    vtkSMPropertyHelper(filter, "StentRadius").Set(r);
+    vtkSMUncheckedPropertyHelper(filter, "StentRadius").Set(r);
     vtkSMPropertyHelper(wdg, "Radius").Set(r);
     return true;
 }
@@ -353,7 +372,7 @@ void pqSHYXVascularStentCylinderWidget::placeWidget()
     }
     // Bounds must cover the geometry VTK clips against; use the larger of filter vs widget radius
     // so a brief SM desync cannot make the box tighter than the drawn cylinder.
-    const double rF = vtkSMPropertyHelper(filter, "StentRadius").GetAsDouble();
+    const double rF = SHYXGetStentRadiusFromFilter(filter);
     const double rW = vtkSMPropertyHelper(w, "Radius").GetAsDouble();
     const double R = std::max(
         (std::isfinite(rF) && rF > 0.0) ? rF : 0.0, (std::isfinite(rW) && rW > 0.0) ? rW : 0.0);
@@ -587,15 +606,14 @@ void pqSHYXVascularStentCylinderWidget::syncStentWidgetFromAnchorOnSelect()
     double ax[3];
     pqSHYXVascularStentCylinderWidget::tangentAtCenterlineVertex(cl, aid, ax);
 
-    vtkSMPropertyHelper(filter, "StentWidgetCenter").Set(c, 3);
-    vtkSMPropertyHelper(filter, "StentWidgetAxis").Set(ax, 3);
-    filter->UpdateVTKObjects();
+    vtkSMUncheckedPropertyHelper(filter, "StentWidgetCenter").Set(c, 3);
+    vtkSMUncheckedPropertyHelper(filter, "StentWidgetAxis").Set(ax, 3);
 
     vtkSMPropertyHelper(wdg, "Center").Set(c, 3);
     vtkSMPropertyHelper(wdg, "Axis").Set(ax, 3);
     if (!ApplyStentRadiusFromCenterlinePointArray(cl, filter, wdg, aid))
     {
-        vtkSMPropertyHelper(wdg, "Radius").Set(vtkSMPropertyHelper(filter, "StentRadius").GetAsDouble());
+        vtkSMPropertyHelper(wdg, "Radius").Set(SHYXGetStentRadiusFromFilter(filter));
     }
     wdg->UpdateVTKObjects();
 }
@@ -625,7 +643,7 @@ void pqSHYXVascularStentCylinderWidget::onCylinderEndInteraction()
         {
             if (auto* shyx = vtkSHYXImplicitCylinderRepresentation::SafeDownCast(cylRep))
             {
-                vtkSMPropertyHelper(filter, "StentLength").Set(shyx->GetFiniteStentLength());
+                vtkSMUncheckedPropertyHelper(filter, "StentLength").Set(shyx->GetFiniteStentLength());
             }
         }
         double c[3], ax[3];
@@ -637,11 +655,10 @@ void pqSHYXVascularStentCylinderWidget::onCylinderEndInteraction()
             ax[1] = 0.0;
             ax[2] = 1.0;
         }
-        vtkSMPropertyHelper(filter, "StentWidgetCenter").Set(c, 3);
-        vtkSMPropertyHelper(filter, "StentWidgetAxis").Set(ax, 3);
+        vtkSMUncheckedPropertyHelper(filter, "StentWidgetCenter").Set(c, 3);
+        vtkSMUncheckedPropertyHelper(filter, "StentWidgetAxis").Set(ax, 3);
         const double R = vtkSMPropertyHelper(wdg, "Radius").GetAsDouble();
-        vtkSMPropertyHelper(filter, "StentRadius").Set(R);
-        filter->UpdateVTKObjects();
+        vtkSMUncheckedPropertyHelper(filter, "StentRadius").Set(R);
         wdg->UpdateVTKObjects();
         this->placeWidget();
         this->render();
@@ -663,10 +680,10 @@ void pqSHYXVascularStentCylinderWidget::onCylinderEndInteraction()
         if (vtkPoints* pts = cl->GetPoints())
         {
             snappedId = pqSHYXVascularStentCylinderWidget::nearestPointId(pts, centerRelease);
-            vtkSMPropertyHelper(filter, "AnchorCenterlinePointId").Set(static_cast<int>(snappedId));
+            vtkSMUncheckedPropertyHelper(filter, "AnchorCenterlinePointId").Set(static_cast<int>(snappedId));
             double snapped[3];
             cl->GetPoint(snappedId, snapped);
-            vtkSMPropertyHelper(filter, "StentWidgetCenter").Set(snapped, 3);
+            vtkSMUncheckedPropertyHelper(filter, "StentWidgetCenter").Set(snapped, 3);
             vtkSMPropertyHelper(wdg, "Center").Set(snapped, 3);
             clSnap = cl;
         }
@@ -683,7 +700,7 @@ void pqSHYXVascularStentCylinderWidget::onCylinderEndInteraction()
             axis[2] = 1.0;
         }
         vtkSMPropertyHelper(wdg, "Axis").Set(axis, 3);
-        vtkSMPropertyHelper(filter, "StentWidgetAxis").Set(axis, 3);
+        vtkSMUncheckedPropertyHelper(filter, "StentWidgetAxis").Set(axis, 3);
     }
     else
     {
@@ -694,7 +711,7 @@ void pqSHYXVascularStentCylinderWidget::onCylinderEndInteraction()
             axis[1] = 0.0;
             axis[2] = 1.0;
         }
-        vtkSMPropertyHelper(filter, "StentWidgetAxis").Set(axis, 3);
+        vtkSMUncheckedPropertyHelper(filter, "StentWidgetAxis").Set(axis, 3);
     }
 
     if (snappedId >= 0 && clSnap)
@@ -702,16 +719,15 @@ void pqSHYXVascularStentCylinderWidget::onCylinderEndInteraction()
         if (!ApplyStentRadiusFromCenterlinePointArray(clSnap, filter, wdg, snappedId))
         {
             const double R = vtkSMPropertyHelper(wdg, "Radius").GetAsDouble();
-            vtkSMPropertyHelper(filter, "StentRadius").Set(R);
+            vtkSMUncheckedPropertyHelper(filter, "StentRadius").Set(R);
         }
     }
     else
     {
         const double R = vtkSMPropertyHelper(wdg, "Radius").GetAsDouble();
-        vtkSMPropertyHelper(filter, "StentRadius").Set(R);
+        vtkSMUncheckedPropertyHelper(filter, "StentRadius").Set(R);
     }
 
-    filter->UpdateVTKObjects();
     wdg->UpdateVTKObjects();
     this->placeWidget();
     this->render();
