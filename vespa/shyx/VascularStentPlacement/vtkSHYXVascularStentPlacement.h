@@ -1,20 +1,20 @@
 /**
  * @class   vtkSHYXVascularStentPlacement
- * @brief   Moves vessel surface points to a target tubular radius along a centerline window.
+ * @brief   Stent-like radial correction along a walked centerline segment: flat-capped strict zone plus
+ *          smooth cap-side blending, displacement primarily along point normals.
  *
- * Port 0 is the vessel surface (vtkPolyData). Port 1 is a polyline centerline (vtkPolyData with
- * vtkLine / vtkPolyLine cells). Given an anchor vertex id on the centerline, the filter walks
- * along the line graph for half the stent length on each side of the anchor (when two branches
- * exist), builds a polyline segment, then for each input mesh point whose closest point lies on
- * that segment and within perpendicular distance StentRadius of the axis (cylindrical support),
- * replaces the
- * point with \f$ c + R \hat{r}_\perp \f$ where \f$c\f$ is the closest point on the axis,
- * \f$R\f$ is StentRadius, and \f$\hat{r}_\perp\f$ is the unit vector obtained by removing the
- * local tangent component from \f$(x-c)\f$.
+ * Port 0 is the vessel surface (vtkPolyData). Port 1 is a centerline polyline (vtkPolyData with
+ * vtkLine / vtkPolyLine cells). The filter walks a stent-length window from AnchorCenterlinePointId,
+ * optionally densifies the axis (StentAxisSampleSpacing), then:
  *
- * Optional StentAxisSampleSpacing (>0) subdivides the walked stent axis polyline so consecutive
- * samples are at most that arc length apart, before closest-point queries (denser axis, smoother
- * projection).
+ * - **Strict region**: intersection of perpendicular distance ≤ StentRadius to the axis polyline with
+ *   the two half-spaces of a **flat-ended** stent (planes through the first/last axis points along the
+ *   first/last segment tangents). Inside this slab, each vertex is moved along its **surface point
+ *   normal** so that its distance to the axis becomes StentRadius (numerical solve along the normal).
+ *
+ * - **Cap-side smooth bands**: vertices still within distance R of the axis but lying **outside** the
+ *   flat slab on the start and/or end (hemisphere-side of the capsule) are partially moved toward the
+ *   same normal-based stent target; the axial influence width is CapSideSmoothInfluenceRange (smoothstep).
  */
 
 #ifndef vtkSHYXVascularStentPlacement_h
@@ -48,6 +48,19 @@ public:
     vtkGetMacro(StentAxisSampleSpacing, double);
     vtkSetClampMacro(StentAxisSampleSpacing, double, 0.0, VTK_DOUBLE_MAX);
 
+    /**
+     * Axial half-width (world units) on each flat-cap side over which cap-side points (still within
+     * distance R of the axis but outside the flat slab) blend from no motion to full stent alignment
+     * (smoothstep). Zero disables cap-side smoothing (only the strict flat-capped cylinder is updated).
+     */
+    vtkGetMacro(CapSideSmoothInfluenceRange, double);
+    vtkSetClampMacro(CapSideSmoothInfluenceRange, double, 0.0, VTK_DOUBLE_MAX);
+
+    /** If true, use point normals from the input surface when a "Normals" point array exists. */
+    vtkGetMacro(PreferInputPointNormals, bool);
+    vtkSetMacro(PreferInputPointNormals, bool);
+    vtkBooleanMacro(PreferInputPointNormals, bool);
+
     /** Point-data array name on Centerline; when non-empty, snapped widget updates StentRadius from
      *  tuple at AnchorCenterlinePointId (default: MaximumInscribedSphereRadius, e.g. VMTK). */
     vtkGetStringMacro(CenterlineRadiusArrayName);
@@ -72,6 +85,8 @@ protected:
     double StentLength = 10.0;
     double StentRadius = 1.0;
     double StentAxisSampleSpacing = 0.0;
+    double CapSideSmoothInfluenceRange = 1.0;
+    bool PreferInputPointNormals = false;
     double StentWidgetCenter[3] = { 0.0, 0.0, 0.0 };
     double StentWidgetAxis[3] = { 0.0, 0.0, 1.0 };
     char* CenterlineRadiusArrayName = nullptr;

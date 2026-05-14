@@ -3,16 +3,18 @@
 #include <vtkCellArray.h>
 #include <vtkCellData.h>
 #include <vtkCellLocator.h>
+#include <vtkDataArray.h>
 #include <vtkDataObject.h>
 #include <vtkGenericCell.h>
 #include <vtkInformation.h>
 #include <vtkInformationVector.h>
 #include <vtkNew.h>
 #include <vtkObjectFactory.h>
-#include <vtkSmartPointer.h>
 #include <vtkPointData.h>
 #include <vtkPoints.h>
 #include <vtkPolyData.h>
+#include <vtkPolyDataNormals.h>
+#include <vtkSmartPointer.h>
 
 #include <algorithm>
 #include <array>
@@ -27,6 +29,7 @@ vtkStandardNewMacro(vtkSHYXVascularStentPlacement);
 namespace
 {
 constexpr double kEps = 1e-12;
+constexpr double kTolDist = 1e-7;
 
 void Sub(double a[3], const double b[3], const double c[3])
 {
@@ -42,6 +45,13 @@ void Copy3(double d[3], const double s[3])
     d[2] = s[2];
 }
 
+void ScaleAdd(double y[3], const double x[3], double s, const double d[3])
+{
+    y[0] = x[0] + s * d[0];
+    y[1] = x[1] + s * d[1];
+    y[2] = x[2] + s * d[2];
+}
+
 double Norm(const double v[3])
 {
     return std::sqrt(v[0] * v[0] + v[1] * v[1] + v[2] * v[2]);
@@ -50,6 +60,19 @@ double Norm(const double v[3])
 double Dot(const double a[3], const double b[3])
 {
     return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+}
+
+double SmoothStep01(double t)
+{
+    if (t <= 0.0)
+    {
+        return 0.0;
+    }
+    if (t >= 1.0)
+    {
+        return 1.0;
+    }
+    return t * t * (3.0 - 2.0 * t);
 }
 
 void LinInterp3(double o[3], const double p0[3], const double p1[3], double t)
@@ -124,14 +147,8 @@ vtkIdType PickNextNeighbor(const AdjMap& adj, vtkIdType cur, vtkIdType prev)
     return -1;
 }
 
-/**
- * Walk polyline graph from edge (prev -> cur) accumulating at most maxDist geometric length.
- * Appends sampled 3D points along the path starting with the first point reached past |prev|
- * (may be interior to the first edge). Does not include |prev|'s coordinates as first output
- * unless the walk stops inside the first edge (then one interior point).
- */
-void WalkGeodesic(vtkPoints* centerPts, const AdjMap& adj, vtkIdType prev, vtkIdType cur,
-    double maxDist, std::vector<std::array<double, 3>>& outPts)
+void WalkGeodesic(vtkPoints* centerPts, const AdjMap& adj, vtkIdType prev, vtkIdType cur, double maxDist,
+    std::vector<std::array<double, 3>>& outPts)
 {
     outPts.clear();
     if (maxDist <= kEps)
@@ -213,10 +230,6 @@ void PickTwoSideNeighbors(vtkIdType anchor, const AdjMap& adj, vtkIdType& nA, vt
     }
 }
 
-/**
- * Subdivide each segment of the axis polyline so consecutive samples are at most |maxSpacing|
- * apart (arc length). maxSpacing <= kEps copies |in| to |out|.
- */
 void DensifyAxisPolyline(const std::vector<std::array<double, 3>>& in, double maxSpacing,
     std::vector<std::array<double, 3>>& out)
 {
@@ -298,6 +311,183 @@ vtkSmartPointer<vtkPolyData> BuildAxisPolyline(const std::vector<std::array<doub
     return out;
 }
 
+double DistanceToAxis(vtkCellLocator* locator, vtkGenericCell* cell, const double p[3], double closestOut[3],
+    vtkIdType& cellIdOut)
+{
+    double dist2 = 0.0;
+    int subId = -1;
+    cellIdOut = -1;
+    locator->FindClosestPoint(p, closestOut, cell, cellIdOut, subId, dist2);
+    if (cellIdOut < 0)
+    {
+        return VTK_DOUBLE_MAX;
+    }
+    return std::sqrt(dist2);
+}
+
+void SegmentTangentFromCell(vtkPolyData* axisPd, vtkIdType cellId, double tdir[3])
+{
+    vtkIdType nLinePts = 0;
+    const vtkIdType* lineIds = nullptr;
+    axisPd->GetCellPoints(cellId, nLinePts, lineIds);
+    tdir[0] = 1.0;
+    tdir[1] = 0.0;
+    tdir[2] = 0.0;
+    if (nLinePts != 2 || !lineIds)
+    {
+        return;
+    }
+    double p0[3], p1[3];
+    axisPd->GetPoint(lineIds[0], p0);
+    axisPd->GetPoint(lineIds[1], p1);
+    Sub(tdir, p1, p0);
+    const double tlen = Norm(tdir);
+    if (tlen < kEps)
+    {
+        return;
+    }
+    tdir[0] /= tlen;
+    tdir[1] /= tlen;
+    tdir[2] /= tlen;
+}
+
+void RadialPerpendicular(const double x[3], const double closest[3], const double tdir[3], double radial[3],
+    double& rlenOut)
+{
+    double xc[3];
+    Sub(xc, x, closest);
+    const double axial = Dot(xc, tdir);
+    radial[0] = xc[0] - axial * tdir[0];
+    radial[1] = xc[1] - axial * tdir[1];
+    radial[2] = xc[2] - axial * tdir[2];
+    rlenOut = Norm(radial);
+}
+
+/** Move along ±n until distance to axis is R (bisection). n must be unit. */
+bool SolveAlongNormalForRadius(vtkCellLocator* locator, vtkGenericCell* cell, vtkPolyData* axisPd,
+    const double x[3], const double n[3], double R, const double closest0[3], vtkIdType cellId0, double yOut[3])
+{
+    double tdir0[3];
+    SegmentTangentFromCell(axisPd, cellId0, tdir0);
+    double rh[3];
+    double rlen = 0.0;
+    RadialPerpendicular(x, closest0, tdir0, rh, rlen);
+    if (rlen < kEps)
+    {
+        return false;
+    }
+    double ndir[3];
+    Copy3(ndir, n);
+    if (Dot(ndir, rh) < 0.0)
+    {
+        ndir[0] = -n[0];
+        ndir[1] = -n[1];
+        ndir[2] = -n[2];
+    }
+
+    auto distMinusR = [&](double t) -> double {
+        double p[3];
+        ScaleAdd(p, x, t, ndir);
+        double ctmp[3];
+        vtkIdType cid = -1;
+        return DistanceToAxis(locator, cell, p, ctmp, cid) - R;
+    };
+
+    const double f0 = distMinusR(0.0);
+    if (std::fabs(f0) < kTolDist * std::max(1.0, R))
+    {
+        Copy3(yOut, x);
+        return true;
+    }
+
+    double tHi = std::max(8.0 * R, 1e-6);
+    double fHi = distMinusR(tHi);
+    int guard = 0;
+    while (f0 * fHi > 0.0 && guard < 28)
+    {
+        tHi *= 1.6;
+        fHi = distMinusR(tHi);
+        ++guard;
+    }
+    if (f0 * fHi > 0.0)
+    {
+        return false;
+    }
+
+    double lo = 0.0;
+    double hi = tHi;
+    double flo = f0;
+    double fhi = fHi;
+    for (int it = 0; it < 48; ++it)
+    {
+        const double mid = 0.5 * (lo + hi);
+        const double fm = distMinusR(mid);
+        if (std::fabs(fm) < kTolDist * std::max(1.0, R))
+        {
+            ScaleAdd(yOut, x, mid, ndir);
+            return true;
+        }
+        if (flo * fm <= 0.0)
+        {
+            hi = mid;
+            fhi = fm;
+        }
+        else
+        {
+            lo = mid;
+            flo = fm;
+        }
+    }
+    const double tSol = 0.5 * (lo + hi);
+    ScaleAdd(yOut, x, tSol, ndir);
+    return true;
+}
+
+void FallbackCylinderPoint(vtkPolyData* axisPd, vtkCellLocator* locator, vtkGenericCell* cell, const double x[3],
+    vtkIdType cellId, double R, double yOut[3])
+{
+    vtkIdType nLinePts = 0;
+    const vtkIdType* lineIds = nullptr;
+    axisPd->GetCellPoints(cellId, nLinePts, lineIds);
+    if (nLinePts != 2 || !lineIds)
+    {
+        Copy3(yOut, x);
+        return;
+    }
+    double p0[3], p1[3];
+    axisPd->GetPoint(lineIds[0], p0);
+    axisPd->GetPoint(lineIds[1], p1);
+    double tdir[3];
+    Sub(tdir, p1, p0);
+    const double tlen = Norm(tdir);
+    if (tlen < kEps)
+    {
+        Copy3(yOut, x);
+        return;
+    }
+    tdir[0] /= tlen;
+    tdir[1] /= tlen;
+    tdir[2] /= tlen;
+    double closest[3];
+    double dist2 = 0.0;
+    int subId = -1;
+    locator->FindClosestPoint(x, closest, cell, cellId, subId, dist2);
+    double rlen = 0.0;
+    double radial[3];
+    RadialPerpendicular(x, closest, tdir, radial, rlen);
+    if (rlen < kEps)
+    {
+        Copy3(yOut, x);
+        return;
+    }
+    radial[0] /= rlen;
+    radial[1] /= rlen;
+    radial[2] /= rlen;
+    yOut[0] = closest[0] + R * radial[0];
+    yOut[1] = closest[1] + R * radial[1];
+    yOut[2] = closest[2] + R * radial[2];
+}
+
 } // namespace
 
 vtkSHYXVascularStentPlacement::vtkSHYXVascularStentPlacement()
@@ -320,6 +510,8 @@ void vtkSHYXVascularStentPlacement::PrintSelf(ostream& os, vtkIndent indent)
     os << indent << "StentLength: " << this->StentLength << "\n";
     os << indent << "StentRadius: " << this->StentRadius << "\n";
     os << indent << "StentAxisSampleSpacing: " << this->StentAxisSampleSpacing << "\n";
+    os << indent << "CapSideSmoothInfluenceRange: " << this->CapSideSmoothInfluenceRange << "\n";
+    os << indent << "PreferInputPointNormals: " << (this->PreferInputPointNormals ? "on" : "off") << "\n";
     os << indent << "StentWidgetCenter: (" << this->StentWidgetCenter[0] << ", " << this->StentWidgetCenter[1] << ", "
        << this->StentWidgetCenter[2] << ")\n";
     os << indent << "StentWidgetAxis: (" << this->StentWidgetAxis[0] << ", " << this->StentWidgetAxis[1] << ", "
@@ -423,7 +615,6 @@ int vtkSHYXVascularStentPlacement::RequestData(vtkInformation* vtkNotUsed(reques
     }
     else if (nA >= 0)
     {
-        // Degree-1 at anchor: put full stent length into the single available direction.
         WalkGeodesic(cpts, adj, anchor, nA, this->StentLength, negBranch);
     }
 
@@ -456,6 +647,69 @@ int vtkSHYXVascularStentPlacement::RequestData(vtkInformation* vtkNotUsed(reques
         return 0;
     }
 
+    double capP0[3] = { 0.0, 0.0, 0.0 };
+    double capPlast[3] = { 0.0, 0.0, 0.0 };
+    double capTStart[3] = { 1.0, 0.0, 0.0 };
+    double capTEnd[3] = { 1.0, 0.0, 0.0 };
+    bool axisEndsValid = false;
+    {
+        vtkPoints* axPts = axisPd->GetPoints();
+        const vtkIdType nAx = axisPd->GetNumberOfPoints();
+        if (axPts && nAx >= 2)
+        {
+            double pSecond[3], pPrev[3];
+            axPts->GetPoint(0, capP0);
+            axPts->GetPoint(nAx - 1, capPlast);
+            axPts->GetPoint(1, pSecond);
+            axPts->GetPoint(nAx - 2, pPrev);
+            Sub(capTStart, pSecond, capP0);
+            Sub(capTEnd, capPlast, pPrev);
+            const double lenS = Norm(capTStart);
+            const double lenE = Norm(capTEnd);
+            if (lenS >= kEps && lenE >= kEps)
+            {
+                capTStart[0] /= lenS;
+                capTStart[1] /= lenS;
+                capTStart[2] /= lenS;
+                capTEnd[0] /= lenE;
+                capTEnd[1] /= lenE;
+                capTEnd[2] /= lenE;
+                axisEndsValid = true;
+            }
+        }
+    }
+    if (!axisEndsValid)
+    {
+        vtkErrorMacro(<< "Could not build axis end tangents for flat stent slab.");
+        return 0;
+    }
+
+    vtkNew<vtkPolyDataNormals> normalsFilter;
+    vtkSmartPointer<vtkDataArray> pointNormals;
+    if (this->PreferInputPointNormals && surface->GetPointData()->GetNormals())
+    {
+        vtkDataArray* src = surface->GetPointData()->GetNormals();
+        pointNormals.TakeReference(src->NewInstance());
+        pointNormals->DeepCopy(src);
+    }
+    else
+    {
+        normalsFilter->SetInputData(surface);
+        normalsFilter->SplittingOff();
+        normalsFilter->ConsistencyOn();
+        normalsFilter->AutoOrientNormalsOn();
+        normalsFilter->ComputePointNormalsOn();
+        normalsFilter->ComputeCellNormalsOff();
+        normalsFilter->Update();
+        vtkPolyData* nout = normalsFilter->GetOutput();
+        pointNormals = nout->GetPointData()->GetNormals();
+        if (!pointNormals)
+        {
+            vtkErrorMacro(<< "vtkPolyDataNormals failed to produce point normals.");
+            return 0;
+        }
+    }
+
     vtkNew<vtkCellLocator> locator;
     locator->SetDataSet(axisPd);
     locator->CacheCellBoundsOn();
@@ -465,6 +719,7 @@ int vtkSHYXVascularStentPlacement::RequestData(vtkInformation* vtkNotUsed(reques
     vtkNew<vtkGenericCell> cell;
     const double R = this->StentRadius;
     const double R2 = R * R;
+    const double W = this->CapSideSmoothInfluenceRange;
 
     output->CopyStructure(surface);
     output->GetPointData()->PassData(surface->GetPointData());
@@ -474,64 +729,78 @@ int vtkSHYXVascularStentPlacement::RequestData(vtkInformation* vtkNotUsed(reques
     outPts->DeepCopy(surface->GetPoints());
 
     const vtkIdType nSurfPts = surface->GetNumberOfPoints();
+    if (pointNormals->GetNumberOfTuples() != nSurfPts)
+    {
+        vtkErrorMacro(<< "Point normal count does not match surface points.");
+        return 0;
+    }
+
     for (vtkIdType pid = 0; pid < nSurfPts; ++pid)
     {
         double x[3];
         surface->GetPoint(pid, x);
+        double n[3];
+        pointNormals->GetTuple(pid, n);
+        const double nlen = Norm(n);
+        if (nlen < kEps)
+        {
+            continue;
+        }
+        n[0] /= nlen;
+        n[1] /= nlen;
+        n[2] /= nlen;
 
         double closest[3];
         double dist2 = 0.0;
         vtkIdType cellId = -1;
         int subId = -1;
         locator->FindClosestPoint(x, closest, cell, cellId, subId, dist2);
-
-        // Only points within cylindrical support radius R of the stent axis are extruded.
         if (cellId < 0 || dist2 > R2)
         {
             continue;
         }
 
-        vtkIdType nLinePts = 0;
-        const vtkIdType* lineIds = nullptr;
-        axisPd->GetCellPoints(cellId, nLinePts, lineIds);
-        if (nLinePts != 2 || !lineIds)
-        {
-            continue;
-        }
-        const vtkIdType i0 = lineIds[0];
-        const vtkIdType i1 = lineIds[1];
-        double p0[3], p1[3];
-        axisPd->GetPoint(i0, p0);
-        axisPd->GetPoint(i1, p1);
+        double v0[3];
+        Sub(v0, x, capP0);
+        const double s0 = Dot(v0, capTStart);
+        double vL[3];
+        Sub(vL, x, capPlast);
+        const double sE = Dot(vL, capTEnd);
 
-        double tdir[3];
-        Sub(tdir, p1, p0);
-        const double tlen = Norm(tdir);
-        if (tlen < kEps)
-        {
-            continue;
-        }
-        tdir[0] /= tlen;
-        tdir[1] /= tlen;
-        tdir[2] /= tlen;
+        const bool inStrict = (dist2 <= R2) && (s0 >= 0.0) && (sE <= 0.0);
+        const bool inStartBand =
+            (dist2 <= R2) && (s0 < 0.0) && (W > kEps) && (s0 > -W) && (sE <= 0.0);
+        const bool inEndBand = (dist2 <= R2) && (sE > 0.0) && (W > kEps) && (sE < W) && (s0 >= 0.0);
 
-        double xc[3];
-        Sub(xc, x, closest);
-        const double axial = Dot(xc, tdir);
-        double radial[3] = { xc[0] - axial * tdir[0], xc[1] - axial * tdir[1], xc[2] - axial * tdir[2] };
-        const double rlen = Norm(radial);
-        if (rlen < kEps)
+        if (!inStrict && !inStartBand && !inEndBand)
         {
             continue;
         }
-        radial[0] /= rlen;
-        radial[1] /= rlen;
-        radial[2] /= rlen;
+
+        double yTarget[3];
+        if (!SolveAlongNormalForRadius(locator, cell, axisPd, x, n, R, closest, cellId, yTarget))
+        {
+            FallbackCylinderPoint(axisPd, locator, cell, x, cellId, R, yTarget);
+        }
+
+        double alpha = 1.0;
+        if (!inStrict)
+        {
+            alpha = 1.0;
+            if (inStartBand)
+            {
+                alpha *= SmoothStep01((s0 + W) / W);
+            }
+            if (inEndBand)
+            {
+                alpha *= SmoothStep01((W - sE) / W);
+            }
+        }
 
         double newx[3];
-        newx[0] = closest[0] + R * radial[0];
-        newx[1] = closest[1] + R * radial[1];
-        newx[2] = closest[2] + R * radial[2];
+        newx[0] = x[0] + alpha * (yTarget[0] - x[0]);
+        newx[1] = x[1] + alpha * (yTarget[1] - x[1]);
+        newx[2] = x[2] + alpha * (yTarget[2] - x[2]);
         outPts->SetPoint(pid, newx);
     }
 
