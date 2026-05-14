@@ -39,6 +39,11 @@ public:
     vtkGetMacro(StentRadius, double);
     vtkSetClampMacro(StentRadius, double, 0.0, VTK_DOUBLE_MAX);
 
+    /** Point-data array name on Centerline; when non-empty, snapped widget updates StentRadius from
+     *  tuple at AnchorCenterlinePointId (default: MaximumInscribedSphereRadius, e.g. VMTK). */
+    vtkGetStringMacro(CenterlineRadiusArrayName);
+    vtkSetStringMacro(CenterlineRadiusArrayName);
+
     /** Linked to the ImplicitCylinder 3D widget center (ParaView UI). */
     vtkGetVector3Macro(StentWidgetCenter, double);
     vtkSetVector3Macro(StentWidgetCenter, double);
@@ -48,7 +53,7 @@ public:
 
 protected:
     vtkSHYXVascularStentPlacement();
-    ~vtkSHYXVascularStentPlacement() override = default;
+    ~vtkSHYXVascularStentPlacement() override;
 
     int FillInputPortInformation(int port, vtkInformation* info) override;
     int FillOutputPortInformation(int port, vtkInformation* info) override;
@@ -59,6 +64,7 @@ protected:
     double StentRadius = 1.0;
     double StentWidgetCenter[3] = { 0.0, 0.0, 0.0 };
     double StentWidgetAxis[3] = { 0.0, 0.0, 1.0 };
+    char* CenterlineRadiusArrayName = nullptr;
 
 private:
     vtkSHYXVascularStentPlacement(const vtkSHYXVascularStentPlacement&) = delete;

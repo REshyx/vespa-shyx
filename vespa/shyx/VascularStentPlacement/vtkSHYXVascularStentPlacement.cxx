@@ -242,6 +242,13 @@ vtkSHYXVascularStentPlacement::vtkSHYXVascularStentPlacement()
 {
     this->SetNumberOfInputPorts(2);
     this->SetNumberOfOutputPorts(1);
+    this->CenterlineRadiusArrayName = nullptr;
+    this->SetCenterlineRadiusArrayName("MaximumInscribedSphereRadius");
+}
+
+vtkSHYXVascularStentPlacement::~vtkSHYXVascularStentPlacement()
+{
+    this->SetCenterlineRadiusArrayName(nullptr);
 }
 
 void vtkSHYXVascularStentPlacement::PrintSelf(ostream& os, vtkIndent indent)
@@ -254,6 +261,8 @@ void vtkSHYXVascularStentPlacement::PrintSelf(ostream& os, vtkIndent indent)
        << this->StentWidgetCenter[2] << ")\n";
     os << indent << "StentWidgetAxis: (" << this->StentWidgetAxis[0] << ", " << this->StentWidgetAxis[1] << ", "
        << this->StentWidgetAxis[2] << ")\n";
+    os << indent << "CenterlineRadiusArrayName: "
+       << (this->CenterlineRadiusArrayName ? this->CenterlineRadiusArrayName : "") << "\n";
 }
 
 void vtkSHYXVascularStentPlacement::SetCenterlineConnection(vtkAlgorithmOutput* algOutput)

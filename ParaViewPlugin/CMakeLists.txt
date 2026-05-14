@@ -147,6 +147,7 @@ paraview_add_plugin(VESPAPlugin
     "SHYXVortexCriteria.xml"
     "SHYXVortexCoreTest.xml"
     "SHYXVascularStentPlacement.xml"
+    "SHYXImplicitCylinderWidgetRepresentation.xml"
     "SHYXVectorFieldTopology.xml"
     "SHYXArrayCurveMapper.xml"
     "SHYXAutorefineSelfIntersectionFilter.xml"
@@ -170,10 +171,19 @@ paraview_add_plugin(VESPAPlugin
     pqVESPAEndClipperPlaneHandlesWidget.h
     pqVESPASelectionPlaneClipperWidget.cxx
     pqVESPASelectionPlaneClipperWidget.h
+    Resources/UI/pqCylinderPropertyWidget.ui
     vespa_qrc_init.cxx
     vespa_qrc_init.h
     ${vespa_plugin_qt_auto_sources}
 )
+
+# pqSHYXVascularStentCylinderWidget includes ui_pqCylinderPropertyWidget.h; the .ui lives under
+# Resources/UI/. ParaView plugin targets may not enable AUTOUIC or search that path by default.
+if (PARAVIEW_USE_QT)
+  set_target_properties(VESPAPlugin PROPERTIES AUTOUIC ON)
+  set_property(TARGET VESPAPlugin APPEND PROPERTY
+    AUTOUIC_SEARCH_PATHS "${CMAKE_CURRENT_SOURCE_DIR}/Resources/UI")
+endif ()
 
 target_link_libraries(VESPAPlugin
   PRIVATE
@@ -186,7 +196,9 @@ if (PARAVIEW_USE_QT)
   target_link_libraries(VESPAPlugin
     PRIVATE
       ParaView::RemotingViews
-      ParaView::pqApplicationComponents)
+      ParaView::pqApplicationComponents
+      VTK::InteractionWidgets
+      vtkSHYXVascularStentPlacement)
 endif ()
 
 if (BUILD_TESTING AND BUILD_SHARED_LIBS)

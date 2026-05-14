@@ -1,0 +1,56 @@
+<?xml version="1.0" ?>
+<ServerManagerConfiguration>
+  <ProxyGroup name="3d_widget_representations">
+    <Proxy name="SHYXImplicitCylinderRepresentation"
+           class="vtkSHYXImplicitCylinderRepresentation"
+           base_proxygroup="3d_widget_representations"
+           base_proxyname="ImplicitCylinderRepresentation" />
+  </ProxyGroup>
+  <ProxyGroup name="representations">
+    <NewWidgetRepresentationProxy class="vtk3DWidgetRepresentation"
+                                  name="SHYXImplicitCylinderWidgetRepresentation">
+      <Documentation>
+        Same as ImplicitCylinderWidgetRepresentation, but the VTK representation uses
+        vtkSHYXImplicitCylinderRepresentation so axis handles adjust finite length along the axis
+        instead of rotating it.
+      </Documentation>
+      <IntVectorProperty command="SetEnabled"
+                         default_values="0"
+                         name="Enabled"
+                         number_of_elements="1">
+        <BooleanDomain name="bool" />
+        <Documentation>Enable/Disable widget interaction.</Documentation>
+      </IntVectorProperty>
+      <SubProxy>
+        <Proxy name="Prop"
+               proxygroup="3d_widget_representations"
+               proxyname="SHYXImplicitCylinderRepresentation"></Proxy>
+        <ExposedProperties>
+          <Property name="Visibility" />
+          <Property name="ConstrainToWidgetBounds" />
+          <Property name="WidgetBounds" />
+          <Property name="PlaceFactor" />
+          <Property name="Center" />
+          <Property name="CenterInfo" />
+          <Property name="Axis" />
+          <Property name="AxisInfo" />
+          <Property name="Radius" />
+          <Property name="RadiusInfo" />
+          <Property name="DrawCylinder" />
+          <Property name="Tubing" />
+          <Property name="OutlineTranslation" />
+          <Property name="OutsideBounds" />
+          <Property name="ScaleEnabled" />
+          <Property name="ForegroundWidgetColor" />
+          <Property name="InteractiveWidgetColor" />
+          <Property name="WidgetColor" />
+        </ExposedProperties>
+      </SubProxy>
+      <SubProxy>
+        <Proxy name="Widget"
+               proxygroup="3d_widgets"
+               proxyname="ImplicitCylinderWidget"></Proxy>
+      </SubProxy>
+    </NewWidgetRepresentationProxy>
+  </ProxyGroup>
+</ServerManagerConfiguration>

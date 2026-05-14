@@ -8,5 +8,6 @@ DEPENDS
   VTK::FiltersCore
   VTK::CommonDataModel
   VTK::CommonExecutionModel
+  VTK::InteractionWidgets
 PRIVATE_DEPENDS
   VTK::CommonCore

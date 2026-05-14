@@ -2,23 +2,95 @@
 
 #include "pqActiveObjects.h"
 #include "pqInteractivePropertyWidgetAbstract.h"
+#include "pqRenderView.h"
+
+#include <QtCore/QCoreApplication>
+#include "ui_pqCylinderPropertyWidget.h"
 
 #include "vtkAlgorithm.h"
+#include "vtkBoundingBox.h"
+#include "vtkCamera.h"
 #include "vtkCellArray.h"
+#include "vtkDataArray.h"
+#include "vtkImplicitCylinderRepresentation.h"
+#include "vtkImplicitCylinderWidget.h"
 #include "vtkMath.h"
 #include "vtkPoints.h"
+#include "vtkPointData.h"
 #include "vtkPolyData.h"
 #include "vtkSMNewWidgetRepresentationProxy.h"
+#include "vtkSMProperty.h"
+#include "vtkSMPropertyGroup.h"
 #include "vtkSMPropertyHelper.h"
+#include "vtkSMProxy.h"
+#include "vtkSMRenderViewProxy.h"
 #include "vtkSMSourceProxy.h"
 
+#include "vtkSHYXImplicitCylinderRepresentation.h"
+
+#include <cassert>
+
 #include <algorithm>
+#include <cctype>
+#include <cmath>
+#include <string>
 #include <unordered_map>
 #include <vector>
 
 namespace
 {
 constexpr double kEps = 1e-12;
+
+std::string TrimAscii(std::string s)
+{
+    while (!s.empty() && std::isspace(static_cast<unsigned char>(s.front())))
+    {
+        s.erase(0, 1);
+    }
+    while (!s.empty() && std::isspace(static_cast<unsigned char>(s.back())))
+    {
+        s.pop_back();
+    }
+    return s;
+}
+
+/** If CenterlineRadiusArrayName is set on \a filter, copy scalar at \a pid into StentRadius + widget Radius. */
+bool ApplyStentRadiusFromCenterlinePointArray(
+    vtkPolyData* cl, vtkSMProxy* filter, vtkSMNewWidgetRepresentationProxy* wdg, vtkIdType pid)
+{
+    if (!cl || !filter || !wdg || pid < 0 || pid >= cl->GetNumberOfPoints())
+    {
+        return false;
+    }
+    vtkSMProperty* prop = filter->GetProperty("CenterlineRadiusArrayName");
+    if (!prop)
+    {
+        return false;
+    }
+    const char* raw = vtkSMPropertyHelper(prop).GetAsString();
+    if (!raw)
+    {
+        return false;
+    }
+    const std::string name = TrimAscii(std::string(raw));
+    if (name.empty())
+    {
+        return false;
+    }
+    vtkDataArray* arr = cl->GetPointData()->GetArray(name.c_str());
+    if (!arr || arr->GetNumberOfTuples() <= pid || arr->GetNumberOfComponents() < 1)
+    {
+        return false;
+    }
+    const double r = arr->GetComponent(pid, 0);
+    if (!std::isfinite(r) || r <= 0.0)
+    {
+        return false;
+    }
+    vtkSMPropertyHelper(filter, "StentRadius").Set(r);
+    vtkSMPropertyHelper(wdg, "Radius").Set(r);
+    return true;
+}
 
 void AddEdge(std::unordered_map<vtkIdType, std::vector<vtkIdType>>& adj, vtkIdType a, vtkIdType b)
 {
@@ -64,13 +136,109 @@ void BuildAdjacency(vtkPolyData* cl, std::unordered_map<vtkIdType, std::vector<v
     }
 }
 
+void pqAdjustBounds(vtkBoundingBox& bbox, double scaleFactor)
+{
+    double min_point[3], max_point[3];
+    bbox.GetMinPoint(min_point[0], min_point[1], min_point[2]);
+    bbox.GetMaxPoint(max_point[0], max_point[1], max_point[2]);
+
+    for (int i = 0; i < 3; ++i)
+    {
+        const double mid = (min_point[i] + max_point[i]) / 2.0;
+        min_point[i] = mid + scaleFactor * (min_point[i] - mid);
+        max_point[i] = mid + scaleFactor * (max_point[i] - mid);
+    }
+    bbox.SetMinPoint(min_point);
+    bbox.SetMaxPoint(max_point);
+}
+
 } // namespace
 
 //-----------------------------------------------------------------------------
 pqSHYXVascularStentCylinderWidget::pqSHYXVascularStentCylinderWidget(
     vtkSMProxy* smproxy, vtkSMPropertyGroup* smgroup, QWidget* parent)
-    : pqCylinderPropertyWidget(smproxy, smgroup, parent)
+    : pqInteractivePropertyWidget(
+          "representations", "SHYXImplicitCylinderWidgetRepresentation", smproxy, smgroup, parent)
 {
+    Ui::CylinderPropertyWidget ui;
+    ui.setupUi(this);
+
+    if (vtkSMProperty* center = smgroup->GetProperty("Center"))
+    {
+        this->addPropertyLink(ui.centerX, "text2", SIGNAL(textChangedAndEditingFinished()), center, 0);
+        this->addPropertyLink(ui.centerY, "text2", SIGNAL(textChangedAndEditingFinished()), center, 1);
+        this->addPropertyLink(ui.centerZ, "text2", SIGNAL(textChangedAndEditingFinished()), center, 2);
+        ui.centerLabel->setText(QCoreApplication::translate("ServerManagerXML", center->GetXMLLabel()));
+        const QString tooltip = this->getTooltip(center);
+        ui.centerX->setToolTip(tooltip);
+        ui.centerY->setToolTip(tooltip);
+        ui.centerZ->setToolTip(tooltip);
+        ui.centerLabel->setToolTip(tooltip);
+    }
+    else
+    {
+        qCritical("Missing required property for function 'Center'.");
+    }
+
+    if (vtkSMProperty* axis = smgroup->GetProperty("Axis"))
+    {
+        this->addPropertyLink(ui.axisX, "text2", SIGNAL(textChangedAndEditingFinished()), axis, 0);
+        this->addPropertyLink(ui.axisY, "text2", SIGNAL(textChangedAndEditingFinished()), axis, 1);
+        this->addPropertyLink(ui.axisZ, "text2", SIGNAL(textChangedAndEditingFinished()), axis, 2);
+        ui.axisLabel->setText(QCoreApplication::translate("ServerManagerXML", axis->GetXMLLabel()));
+        const QString tooltip = this->getTooltip(axis);
+        ui.axisX->setToolTip(tooltip);
+        ui.axisY->setToolTip(tooltip);
+        ui.axisZ->setToolTip(tooltip);
+        ui.axisLabel->setToolTip(tooltip);
+    }
+    else
+    {
+        qCritical("Missing required property for function 'Axis'.");
+    }
+
+    if (vtkSMProperty* radius = smgroup->GetProperty("Radius"))
+    {
+        this->addPropertyLink(ui.radius, "text2", SIGNAL(textChangedAndEditingFinished()), radius);
+        ui.radiusLabel->setText(QCoreApplication::translate("ServerManagerXML", radius->GetXMLLabel()));
+        const QString tooltip = this->getTooltip(radius);
+        ui.radius->setToolTip(tooltip);
+        ui.radiusLabel->setToolTip(tooltip);
+    }
+    else
+    {
+        qCritical("Missing required property for function 'Radius'.");
+    }
+
+    if (smgroup->GetProperty("Input"))
+    {
+        this->connect(ui.resetBounds, SIGNAL(clicked()), SLOT(resetBounds()));
+    }
+    else
+    {
+        ui.resetBounds->hide();
+    }
+
+    this->connect(ui.useXAxis, SIGNAL(clicked()), SLOT(useXAxis()));
+    this->connect(ui.useYAxis, SIGNAL(clicked()), SLOT(useYAxis()));
+    this->connect(ui.useZAxis, SIGNAL(clicked()), SLOT(useZAxis()));
+    this->connect(ui.useCameraAxis, SIGNAL(clicked()), SLOT(useCameraAxis()));
+    this->connect(ui.resetCameraToAxis, SIGNAL(clicked()), SLOT(resetCameraToAxis()));
+
+    vtkSMProxy* wdgProxy = this->widgetProxy();
+    this->WidgetLinks.addPropertyLink(
+        ui.scaling, "checked", SIGNAL(toggled(bool)), wdgProxy, wdgProxy->GetProperty("ScaleEnabled"));
+    this->WidgetLinks.addPropertyLink(ui.outlineTranslation, "checked", SIGNAL(toggled(bool)), wdgProxy,
+        wdgProxy->GetProperty("OutlineTranslation"));
+    this->connect(&this->WidgetLinks, SIGNAL(qtWidgetChanged()), SLOT(render()));
+
+    this->connect(ui.show3DWidget, SIGNAL(toggled(bool)), SLOT(setWidgetVisible(bool)));
+    ui.show3DWidget->connect(this, SIGNAL(widgetVisibilityToggled(bool)), SLOT(setChecked(bool)));
+    this->setWidgetVisible(ui.show3DWidget->isChecked());
+
+    this->AdvancedPropertyWidgets[0] = ui.scaling;
+    this->AdvancedPropertyWidgets[1] = ui.outlineTranslation;
+
     QObject::disconnect(&pqActiveObjects::instance(), &pqActiveObjects::dataUpdated, this, nullptr);
     QObject::connect(&pqActiveObjects::instance(), &pqActiveObjects::dataUpdated, this,
         &pqSHYXVascularStentCylinderWidget::placeWidget);
@@ -97,7 +265,7 @@ pqSHYXVascularStentCylinderWidget::~pqSHYXVascularStentCylinderWidget() = defaul
 void pqSHYXVascularStentCylinderWidget::select()
 {
     this->syncStentWidgetFromAnchorOnSelect();
-    this->pqCylinderPropertyWidget::select();
+    this->Superclass::select();
 }
 
 //-----------------------------------------------------------------------------
@@ -124,6 +292,7 @@ void pqSHYXVascularStentCylinderWidget::placeWidget()
     pqSHYXVascularStentCylinderWidget::finiteCylinderWorldAABB(center, axis, R, L, bds);
     vtkSMPropertyHelper(w, "WidgetBounds").Set(bds, 6);
     w->UpdateVTKObjects();
+    this->syncFiniteLengthHintFromFilter();
 }
 
 //-----------------------------------------------------------------------------
@@ -166,10 +335,55 @@ void pqSHYXVascularStentCylinderWidget::tangentAtCenterlineVertex(
     {
         return;
     }
+    std::vector<vtkIdType> neighbors = it->second;
+    std::sort(neighbors.begin(), neighbors.end());
+
     double ach[3];
     cl->GetPoint(anchor, ach);
+
+    auto setChordAxis = [&](vtkIdType na, vtkIdType nb) -> bool {
+        double pa[3], pb[3];
+        cl->GetPoint(na, pa);
+        cl->GetPoint(nb, pb);
+        double chord[3] = { pb[0] - pa[0], pb[1] - pa[1], pb[2] - pa[2] };
+        if (vtkMath::Normalize(chord) < kEps)
+        {
+            return false;
+        }
+        axisOut[0] = chord[0];
+        axisOut[1] = chord[1];
+        axisOut[2] = chord[2];
+        return true;
+    };
+
+    if (neighbors.size() == 1)
+    {
+        double nh[3];
+        cl->GetPoint(neighbors[0], nh);
+        double e[3] = { nh[0] - ach[0], nh[1] - ach[1], nh[2] - ach[2] };
+        if (vtkMath::Normalize(e) < kEps)
+        {
+            return;
+        }
+        axisOut[0] = e[0];
+        axisOut[1] = e[1];
+        axisOut[2] = e[2];
+        return;
+    }
+
+    if (neighbors.size() == 2)
+    {
+        if (!setChordAxis(neighbors[0], neighbors[1]))
+        {
+            return;
+        }
+        return;
+    }
+
+    // Degree >= 3: average outgoing unit directions (bifurcation). If nearly opposite pairs cancel,
+    // fall back to chord between lowest and highest neighbor id.
     double tsum[3] = { 0.0, 0.0, 0.0 };
-    for (vtkIdType nx : it->second)
+    for (vtkIdType nx : neighbors)
     {
         double nh[3];
         cl->GetPoint(nx, nh);
@@ -181,13 +395,17 @@ void pqSHYXVascularStentCylinderWidget::tangentAtCenterlineVertex(
             tsum[2] += e[2];
         }
     }
-    if (vtkMath::Normalize(tsum) < kEps)
+    if (vtkMath::Normalize(tsum) >= kEps)
+    {
+        axisOut[0] = tsum[0];
+        axisOut[1] = tsum[1];
+        axisOut[2] = tsum[2];
+        return;
+    }
+    if (!setChordAxis(neighbors.front(), neighbors.back()))
     {
         return;
     }
-    axisOut[0] = tsum[0];
-    axisOut[1] = tsum[1];
-    axisOut[2] = tsum[2];
 }
 
 //-----------------------------------------------------------------------------
@@ -303,7 +521,10 @@ void pqSHYXVascularStentCylinderWidget::syncStentWidgetFromAnchorOnSelect()
 
     vtkSMPropertyHelper(wdg, "Center").Set(c, 3);
     vtkSMPropertyHelper(wdg, "Axis").Set(ax, 3);
-    vtkSMPropertyHelper(wdg, "Radius").Set(vtkSMPropertyHelper(filter, "StentRadius").GetAsDouble());
+    if (!ApplyStentRadiusFromCenterlinePointArray(cl, filter, wdg, aid))
+    {
+        vtkSMPropertyHelper(wdg, "Radius").Set(vtkSMPropertyHelper(filter, "StentRadius").GetAsDouble());
+    }
     wdg->UpdateVTKObjects();
 }
 
@@ -317,37 +538,217 @@ void pqSHYXVascularStentCylinderWidget::onCylinderEndInteraction()
         return;
     }
 
-    double center[3];
-    vtkSMPropertyHelper(wdg, "Center").Get(center, 3);
+    // vtkImplicitCylinderRepresentation::EndWidgetInteraction() resets RepresentationState but
+    // leaves InteractionState set to the handle that was active; use that to distinguish outline
+    // (bounding box) drags from radius / axis / center manipulations (see vtkImplicitCylinderWidget).
+    vtkImplicitCylinderWidget* cylW = vtkImplicitCylinderWidget::SafeDownCast(wdg->GetWidget());
+    vtkImplicitCylinderRepresentation* cylRep = cylW ? cylW->GetCylinderRepresentation() : nullptr;
+    const int interactionState = cylRep ? cylRep->GetInteractionState() : vtkImplicitCylinderRepresentation::Outside;
+    const bool snapToCenterline =
+        (interactionState == vtkImplicitCylinderRepresentation::MovingOutline);
 
+    if (!snapToCenterline)
+    {
+        if (interactionState == vtkImplicitCylinderRepresentation::RotatingAxis)
+        {
+            if (auto* shyx = vtkSHYXImplicitCylinderRepresentation::SafeDownCast(cylRep))
+            {
+                vtkSMPropertyHelper(filter, "StentLength").Set(shyx->GetFiniteStentLength());
+            }
+        }
+        double c[3], ax[3];
+        vtkSMPropertyHelper(wdg, "Center").Get(c, 3);
+        vtkSMPropertyHelper(wdg, "Axis").Get(ax, 3);
+        if (vtkMath::Normalize(ax) < kEps)
+        {
+            ax[0] = 0.0;
+            ax[1] = 0.0;
+            ax[2] = 1.0;
+        }
+        vtkSMPropertyHelper(filter, "StentWidgetCenter").Set(c, 3);
+        vtkSMPropertyHelper(filter, "StentWidgetAxis").Set(ax, 3);
+        const double R = vtkSMPropertyHelper(wdg, "Radius").GetAsDouble();
+        vtkSMPropertyHelper(filter, "StentRadius").Set(R);
+        filter->UpdateVTKObjects();
+        wdg->UpdateVTKObjects();
+        this->placeWidget();
+        this->render();
+        return;
+    }
+
+    // Do not write StentLength from WidgetBounds: projecting an axis-aligned box onto the cylinder
+    // axis gives |ax|dx+|ay|dy+|az|dz, which is strictly greater than the true finite-cylinder length
+    // whenever the axis is oblique to world axes, so every snap would inflate StentLength. Length is
+    // driven from the filter property (Properties panel); placeWidget() rebuilds bounds from it.
+
+    double centerRelease[3];
+    vtkSMPropertyHelper(wdg, "Center").Get(centerRelease, 3);
+
+    vtkIdType snappedId = -1;
+    vtkPolyData* clSnap = nullptr;
     if (vtkPolyData* cl = this->centerlineClientPoly())
     {
         if (vtkPoints* pts = cl->GetPoints())
         {
-            const vtkIdType nid = pqSHYXVascularStentCylinderWidget::nearestPointId(pts, center);
-            vtkSMPropertyHelper(filter, "AnchorCenterlinePointId").Set(static_cast<int>(nid));
+            snappedId = pqSHYXVascularStentCylinderWidget::nearestPointId(pts, centerRelease);
+            vtkSMPropertyHelper(filter, "AnchorCenterlinePointId").Set(static_cast<int>(snappedId));
             double snapped[3];
-            cl->GetPoint(nid, snapped);
+            cl->GetPoint(snappedId, snapped);
             vtkSMPropertyHelper(filter, "StentWidgetCenter").Set(snapped, 3);
             vtkSMPropertyHelper(wdg, "Center").Set(snapped, 3);
+            clSnap = cl;
         }
     }
 
     double axis[3];
-    vtkSMPropertyHelper(wdg, "Axis").Get(axis, 3);
-    if (vtkMath::Normalize(axis) < kEps)
+    if (snappedId >= 0 && clSnap)
     {
-        axis[0] = 0.0;
-        axis[1] = 0.0;
-        axis[2] = 1.0;
+        pqSHYXVascularStentCylinderWidget::tangentAtCenterlineVertex(clSnap, snappedId, axis);
+        if (vtkMath::Normalize(axis) < kEps)
+        {
+            axis[0] = 0.0;
+            axis[1] = 0.0;
+            axis[2] = 1.0;
+        }
+        vtkSMPropertyHelper(wdg, "Axis").Set(axis, 3);
+        vtkSMPropertyHelper(filter, "StentWidgetAxis").Set(axis, 3);
     }
-    vtkSMPropertyHelper(filter, "StentWidgetAxis").Set(axis, 3);
+    else
+    {
+        vtkSMPropertyHelper(wdg, "Axis").Get(axis, 3);
+        if (vtkMath::Normalize(axis) < kEps)
+        {
+            axis[0] = 0.0;
+            axis[1] = 0.0;
+            axis[2] = 1.0;
+        }
+        vtkSMPropertyHelper(filter, "StentWidgetAxis").Set(axis, 3);
+    }
 
-    const double R = vtkSMPropertyHelper(wdg, "Radius").GetAsDouble();
-    vtkSMPropertyHelper(filter, "StentRadius").Set(R);
+    if (snappedId >= 0 && clSnap)
+    {
+        if (!ApplyStentRadiusFromCenterlinePointArray(clSnap, filter, wdg, snappedId))
+        {
+            const double R = vtkSMPropertyHelper(wdg, "Radius").GetAsDouble();
+            vtkSMPropertyHelper(filter, "StentRadius").Set(R);
+        }
+    }
+    else
+    {
+        const double R = vtkSMPropertyHelper(wdg, "Radius").GetAsDouble();
+        vtkSMPropertyHelper(filter, "StentRadius").Set(R);
+    }
 
     filter->UpdateVTKObjects();
     wdg->UpdateVTKObjects();
     this->placeWidget();
     this->render();
+}
+
+//-----------------------------------------------------------------------------
+void pqSHYXVascularStentCylinderWidget::syncFiniteLengthHintFromFilter()
+{
+    vtkSMNewWidgetRepresentationProxy* w = this->widgetProxy();
+    vtkSMProxy* filter = this->proxy();
+    if (!w || !filter)
+    {
+        return;
+    }
+    vtkImplicitCylinderWidget* cylW = vtkImplicitCylinderWidget::SafeDownCast(w->GetWidget());
+    if (!cylW)
+    {
+        return;
+    }
+    auto* shyx = vtkSHYXImplicitCylinderRepresentation::SafeDownCast(cylW->GetCylinderRepresentation());
+    if (!shyx)
+    {
+        return;
+    }
+    shyx->SetFiniteStentLengthHint(vtkSMPropertyHelper(filter, "StentLength").GetAsDouble());
+}
+
+//-----------------------------------------------------------------------------
+void pqSHYXVascularStentCylinderWidget::resetBounds()
+{
+    vtkSMNewWidgetRepresentationProxy* wdgProxy = this->widgetProxy();
+    assert(wdgProxy);
+
+    vtkBoundingBox bbox = this->dataBounds();
+    if (!bbox.IsValid())
+    {
+        return;
+    }
+
+    const double scaleFactor = vtkSMPropertyHelper(wdgProxy, "PlaceFactor").GetAsDouble();
+    pqAdjustBounds(bbox, scaleFactor);
+
+    double center[3];
+    bbox.GetCenter(center);
+    double bnds[6];
+    bbox.GetBounds(bnds);
+
+    vtkSMPropertyHelper(wdgProxy, "Center").Set(center, 3);
+    vtkSMPropertyHelper(wdgProxy, "WidgetBounds").Set(bnds, 6);
+    wdgProxy->UpdateProperty("WidgetBounds", true);
+
+    Q_EMIT this->changeAvailable();
+    this->render();
+}
+
+//-----------------------------------------------------------------------------
+void pqSHYXVascularStentCylinderWidget::resetCameraToAxis()
+{
+    if (pqRenderView* renView = qobject_cast<pqRenderView*>(this->view()))
+    {
+        vtkCamera* camera = renView->getRenderViewProxy()->GetActiveCamera();
+        vtkSMProxy* wdgProxy = this->widgetProxy();
+        double up[3], forward[3];
+        camera->GetViewUp(up);
+        vtkSMPropertyHelper(wdgProxy, "Axis").Get(forward, 3);
+        vtkMath::Cross(up, forward, up);
+        vtkMath::Cross(forward, up, up);
+        renView->resetViewDirection(forward[0], forward[1], forward[2], up[0], up[1], up[2]);
+        renView->render();
+    }
+}
+
+//-----------------------------------------------------------------------------
+void pqSHYXVascularStentCylinderWidget::useCameraAxis()
+{
+    vtkSMRenderViewProxy* viewProxy =
+        this->view() ? vtkSMRenderViewProxy::SafeDownCast(this->view()->getProxy()) : nullptr;
+    if (viewProxy)
+    {
+        vtkCamera* camera = viewProxy->GetActiveCamera();
+
+        double camera_normal[3];
+        camera->GetViewPlaneNormal(camera_normal);
+        camera_normal[0] = -camera_normal[0];
+        camera_normal[1] = -camera_normal[1];
+        camera_normal[2] = -camera_normal[2];
+        this->setAxis(camera_normal[0], camera_normal[1], camera_normal[2]);
+    }
+}
+
+//-----------------------------------------------------------------------------
+void pqSHYXVascularStentCylinderWidget::setAxis(double wx, double wy, double wz)
+{
+    vtkSMProxy* wdgProxy = this->widgetProxy();
+    double axis[3] = { wx, wy, wz };
+    vtkSMPropertyHelper(wdgProxy, "Axis").Set(axis, 3);
+    wdgProxy->UpdateVTKObjects();
+    Q_EMIT this->changeAvailable();
+    this->render();
+}
+
+//-----------------------------------------------------------------------------
+void pqSHYXVascularStentCylinderWidget::updateWidget(bool showing_advanced_properties)
+{
+    for (int i = 0; i < 2; ++i)
+    {
+        if (this->AdvancedPropertyWidgets[i])
+        {
+            this->AdvancedPropertyWidgets[i]->setVisible(showing_advanced_properties);
+        }
+    }
 }

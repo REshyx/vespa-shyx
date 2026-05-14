@@ -63,6 +63,19 @@
         <Documentation>Target perpendicular distance from the local centerline tangent (world units).</Documentation>
       </DoubleVectorProperty>
 
+      <StringVectorProperty name="CenterlineRadiusArrayName"
+                            label="Centerline radius array"
+                            command="SetCenterlineRadiusArrayName"
+                            number_of_elements="1"
+                            default_values="MaximumInscribedSphereRadius"
+                            animateable="0">
+        <Documentation>
+          Point-data array on port 1 (Centerline). After each interactive snap to a centerline vertex,
+          StentRadius is set from this array at that point id (first component). Clear the name to keep
+          the radius from the widget only. Typical VMTK output: MaximumInscribedSphereRadius.
+        </Documentation>
+      </StringVectorProperty>
+
       <DoubleVectorProperty name="StentWidgetCenter"
                             command="SetStentWidgetCenter"
                             default_values="0 0 0"
