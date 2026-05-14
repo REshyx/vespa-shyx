@@ -1,20 +1,25 @@
 /**
  * @class   vtkSHYXVascularStentPlacement
- * @brief   Stent-like radial correction along a walked centerline segment: flat-capped strict zone plus
- *          smooth cap-side blending, displacement primarily along point normals.
+ * @brief   Stent-like radial correction along a walked centerline segment inside the flat-capped strict
+ *          zone only; displacement primarily along point normals.
  *
  * Port 0 is the vessel surface (vtkPolyData). Port 1 is a centerline polyline (vtkPolyData with
  * vtkLine / vtkPolyLine cells). The filter walks a stent-length window from AnchorCenterlinePointId,
  * optionally densifies the axis (StentAxisSampleSpacing), then:
  *
- * - **Strict region**: intersection of perpendicular distance ≤ StentRadius to the axis polyline with
+ * - **Strict region only**: intersection of perpendicular distance ≤ StentRadius to the axis polyline with
  *   the two half-spaces of a **flat-ended** stent (planes through the first/last axis points along the
  *   first/last segment tangents). Inside this slab, each vertex is moved along its **surface point
  *   normal** so that its distance to the axis becomes StentRadius (numerical solve along the normal).
+ *   Vertices within distance R of the axis but outside the flat slab (capsule hemispheres) are unchanged.
  *
- * - **Cap-side smooth bands**: vertices still within distance R of the axis but lying **outside** the
- *   flat slab on the start and/or end (hemisphere-side of the capsule) are partially moved toward the
- *   same normal-based stent target; the axial influence width is CapSideSmoothInfluenceRange (smoothstep).
+ * Output point data includes an int array (AffectMaskArrayName, default StentPlacementAffectMask): 0 at
+ * vertices updated in the strict region, -1 elsewhere. Values are set when applying each vertex move,
+ * not by post-comparing coordinates.
+ *
+ * A vtkDoubleArray (GeodesicToZeroRegionArrayName, default StentGeodesicToZeroRegion) stores surface
+ * geodesic distance along mesh edges (edge length in deformed geometry) from each mask≠0 vertex to the
+ * nearest mask==0 vertex; mask==0 vertices get 0; unreachable components get -1.
  */
 
 #ifndef vtkSHYXVascularStentPlacement_h
@@ -48,14 +53,6 @@ public:
     vtkGetMacro(StentAxisSampleSpacing, double);
     vtkSetClampMacro(StentAxisSampleSpacing, double, 0.0, VTK_DOUBLE_MAX);
 
-    /**
-     * Axial half-width (world units) on each flat-cap side over which cap-side points (still within
-     * distance R of the axis but outside the flat slab) blend from no motion to full stent alignment
-     * (smoothstep). Zero disables cap-side smoothing (only the strict flat-capped cylinder is updated).
-     */
-    vtkGetMacro(CapSideSmoothInfluenceRange, double);
-    vtkSetClampMacro(CapSideSmoothInfluenceRange, double, 0.0, VTK_DOUBLE_MAX);
-
     /** If true, use point normals from the input surface when a "Normals" point array exists. */
     vtkGetMacro(PreferInputPointNormals, bool);
     vtkSetMacro(PreferInputPointNormals, bool);
@@ -65,6 +62,14 @@ public:
      *  tuple at AnchorCenterlinePointId (default: MaximumInscribedSphereRadius, e.g. VMTK). */
     vtkGetStringMacro(CenterlineRadiusArrayName);
     vtkSetStringMacro(CenterlineRadiusArrayName);
+
+    /** Point-data int array on output: 0 = vertex moved in strict region, -1 = untouched. */
+    vtkGetStringMacro(AffectMaskArrayName);
+    vtkSetStringMacro(AffectMaskArrayName);
+
+    /** vtkDoubleArray on output: geodesic distance to mask==0 region (see class doc). */
+    vtkGetStringMacro(GeodesicToZeroRegionArrayName);
+    vtkSetStringMacro(GeodesicToZeroRegionArrayName);
 
     /** Linked to the ImplicitCylinder 3D widget center (ParaView UI). */
     vtkGetVector3Macro(StentWidgetCenter, double);
@@ -85,11 +90,12 @@ protected:
     double StentLength = 10.0;
     double StentRadius = 1.0;
     double StentAxisSampleSpacing = 0.0;
-    double CapSideSmoothInfluenceRange = 1.0;
     bool PreferInputPointNormals = false;
     double StentWidgetCenter[3] = { 0.0, 0.0, 0.0 };
     double StentWidgetAxis[3] = { 0.0, 0.0, 1.0 };
     char* CenterlineRadiusArrayName = nullptr;
+    char* AffectMaskArrayName = nullptr;
+    char* GeodesicToZeroRegionArrayName = nullptr;
 
 private:
     vtkSHYXVascularStentPlacement(const vtkSHYXVascularStentPlacement&) = delete;

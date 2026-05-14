@@ -3,11 +3,13 @@
 #include <vtkCellArray.h>
 #include <vtkCellData.h>
 #include <vtkCellLocator.h>
+#include <vtkDoubleArray.h>
 #include <vtkDataArray.h>
 #include <vtkDataObject.h>
 #include <vtkGenericCell.h>
 #include <vtkInformation.h>
 #include <vtkInformationVector.h>
+#include <vtkIntArray.h>
 #include <vtkNew.h>
 #include <vtkObjectFactory.h>
 #include <vtkPointData.h>
@@ -20,7 +22,10 @@
 #include <array>
 #include <cmath>
 #include <cstdlib>
+#include <limits>
+#include <queue>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 VTK_ABI_NAMESPACE_BEGIN
@@ -30,6 +35,182 @@ namespace
 {
 constexpr double kEps = 1e-12;
 constexpr double kTolDist = 1e-7;
+
+const char* EffectiveAffectMaskName(const char* nm)
+{
+    return (nm && nm[0]) ? nm : "StentPlacementAffectMask";
+}
+
+const char* EffectiveGeodesicToZeroName(const char* nm)
+{
+    return (nm && nm[0]) ? nm : "StentGeodesicToZeroRegion";
+}
+
+/** Builds undirected weighted graph from polygon edges; weights are Euclidean edge lengths in pts. */
+bool BuildSurfaceWeightedAdjacency(vtkPolyData* pd, vtkPoints* pts,
+    std::vector<std::vector<std::pair<vtkIdType, double>>>& weightedAdj)
+{
+    weightedAdj.clear();
+    if (!pd || !pts)
+    {
+        return false;
+    }
+    const vtkIdType n = pd->GetNumberOfPoints();
+    if (n <= 0 || pts->GetNumberOfPoints() != n)
+    {
+        return false;
+    }
+    if (pd->GetNumberOfPolys() == 0)
+    {
+        weightedAdj.assign(static_cast<size_t>(n), {});
+        return false;
+    }
+    weightedAdj.assign(static_cast<size_t>(n), {});
+    auto addEdge = [&](vtkIdType a, vtkIdType b) {
+        if (a == b || a < 0 || b < 0 || a >= n || b >= n)
+        {
+            return;
+        }
+        double pa[3], pb[3];
+        pts->GetPoint(a, pa);
+        pts->GetPoint(b, pb);
+        const double dx = pa[0] - pb[0];
+        const double dy = pa[1] - pb[1];
+        const double dz = pa[2] - pb[2];
+        const double w = std::sqrt(dx * dx + dy * dy + dz * dz);
+        if (w < kEps)
+        {
+            return;
+        }
+        weightedAdj[static_cast<size_t>(a)].emplace_back(b, w);
+        weightedAdj[static_cast<size_t>(b)].emplace_back(a, w);
+    };
+    vtkCellArray* polys = pd->GetPolys();
+    vtkIdType nptsCell = 0;
+    const vtkIdType* cellPts = nullptr;
+    polys->InitTraversal();
+    while (polys->GetNextCell(nptsCell, cellPts))
+    {
+        if (nptsCell < 2)
+        {
+            continue;
+        }
+        for (vtkIdType i = 0; i < nptsCell; ++i)
+        {
+            addEdge(cellPts[i], cellPts[(i + 1) % nptsCell]);
+        }
+    }
+    return true;
+}
+
+/** For mask==0: 0. For mask!=0: geodesic distance to nearest mask==0 vertex on mesh graph, or -1 if none/unreachable. */
+void ComputeGeodesicDistanceToZeroRegion(vtkPolyData* topology, vtkPoints* deformedPts,
+    vtkIntArray* affectMask, const char* geoArrayName, vtkPolyData* output)
+{
+    const vtkIdType n = topology->GetNumberOfPoints();
+    vtkNew<vtkDoubleArray> geo;
+    geo->SetName(geoArrayName);
+    geo->SetNumberOfComponents(1);
+    geo->SetNumberOfTuples(n);
+    constexpr double kUnreach = -1.0;
+
+    if (!affectMask || affectMask->GetNumberOfTuples() != n)
+    {
+        for (vtkIdType i = 0; i < n; ++i)
+        {
+            geo->SetValue(i, kUnreach);
+        }
+        output->GetPointData()->RemoveArray(geoArrayName);
+        output->GetPointData()->AddArray(geo);
+        return;
+    }
+
+    std::vector<std::vector<std::pair<vtkIdType, double>>> adj;
+    if (!BuildSurfaceWeightedAdjacency(topology, deformedPts, adj))
+    {
+        for (vtkIdType i = 0; i < n; ++i)
+        {
+            geo->SetValue(i, kUnreach);
+        }
+        output->GetPointData()->RemoveArray(geoArrayName);
+        output->GetPointData()->AddArray(geo);
+        return;
+    }
+
+    std::vector<vtkIdType> seeds;
+    seeds.reserve(static_cast<size_t>(n));
+    for (vtkIdType i = 0; i < n; ++i)
+    {
+        if (affectMask->GetValue(i) == 0)
+        {
+            seeds.push_back(i);
+        }
+    }
+
+    if (seeds.empty())
+    {
+        for (vtkIdType i = 0; i < n; ++i)
+        {
+            geo->SetValue(i, kUnreach);
+        }
+        output->GetPointData()->RemoveArray(geoArrayName);
+        output->GetPointData()->AddArray(geo);
+        return;
+    }
+
+    const size_t nsz = static_cast<size_t>(n);
+    std::vector<double> dist(nsz, std::numeric_limits<double>::infinity());
+    using Node = std::pair<double, vtkIdType>;
+    std::priority_queue<Node, std::vector<Node>, std::greater<Node>> pq;
+    for (vtkIdType s : seeds)
+    {
+        if (s >= 0 && s < n)
+        {
+            dist[static_cast<size_t>(s)] = 0.0;
+            pq.emplace(0.0, s);
+        }
+    }
+
+    while (!pq.empty())
+    {
+        const double d = pq.top().first;
+        const vtkIdType u = pq.top().second;
+        pq.pop();
+        const size_t ui = static_cast<size_t>(u);
+        if (d > dist[ui])
+        {
+            continue;
+        }
+        for (const auto& nb : adj[ui])
+        {
+            const vtkIdType v = nb.first;
+            const double w = nb.second;
+            const double nd = d + w;
+            const size_t vi = static_cast<size_t>(v);
+            if (nd < dist[vi])
+            {
+                dist[vi] = nd;
+                pq.emplace(nd, v);
+            }
+        }
+    }
+
+    for (vtkIdType i = 0; i < n; ++i)
+    {
+        if (affectMask->GetValue(i) == 0)
+        {
+            geo->SetValue(i, 0.0);
+        }
+        else
+        {
+            const double di = dist[static_cast<size_t>(i)];
+            geo->SetValue(i, std::isfinite(di) ? di : kUnreach);
+        }
+    }
+
+    output->GetPointData()->RemoveArray(geoArrayName);
+    output->GetPointData()->AddArray(geo);
+}
 
 void Sub(double a[3], const double b[3], const double c[3])
 {
@@ -60,19 +241,6 @@ double Norm(const double v[3])
 double Dot(const double a[3], const double b[3])
 {
     return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
-}
-
-double SmoothStep01(double t)
-{
-    if (t <= 0.0)
-    {
-        return 0.0;
-    }
-    if (t >= 1.0)
-    {
-        return 1.0;
-    }
-    return t * t * (3.0 - 2.0 * t);
 }
 
 void LinInterp3(double o[3], const double p0[3], const double p1[3], double t)
@@ -496,11 +664,17 @@ vtkSHYXVascularStentPlacement::vtkSHYXVascularStentPlacement()
     this->SetNumberOfOutputPorts(1);
     this->CenterlineRadiusArrayName = nullptr;
     this->SetCenterlineRadiusArrayName("MaximumInscribedSphereRadius");
+    this->AffectMaskArrayName = nullptr;
+    this->SetAffectMaskArrayName("StentPlacementAffectMask");
+    this->GeodesicToZeroRegionArrayName = nullptr;
+    this->SetGeodesicToZeroRegionArrayName("StentGeodesicToZeroRegion");
 }
 
 vtkSHYXVascularStentPlacement::~vtkSHYXVascularStentPlacement()
 {
     this->SetCenterlineRadiusArrayName(nullptr);
+    this->SetAffectMaskArrayName(nullptr);
+    this->SetGeodesicToZeroRegionArrayName(nullptr);
 }
 
 void vtkSHYXVascularStentPlacement::PrintSelf(ostream& os, vtkIndent indent)
@@ -510,7 +684,6 @@ void vtkSHYXVascularStentPlacement::PrintSelf(ostream& os, vtkIndent indent)
     os << indent << "StentLength: " << this->StentLength << "\n";
     os << indent << "StentRadius: " << this->StentRadius << "\n";
     os << indent << "StentAxisSampleSpacing: " << this->StentAxisSampleSpacing << "\n";
-    os << indent << "CapSideSmoothInfluenceRange: " << this->CapSideSmoothInfluenceRange << "\n";
     os << indent << "PreferInputPointNormals: " << (this->PreferInputPointNormals ? "on" : "off") << "\n";
     os << indent << "StentWidgetCenter: (" << this->StentWidgetCenter[0] << ", " << this->StentWidgetCenter[1] << ", "
        << this->StentWidgetCenter[2] << ")\n";
@@ -518,6 +691,9 @@ void vtkSHYXVascularStentPlacement::PrintSelf(ostream& os, vtkIndent indent)
        << this->StentWidgetAxis[2] << ")\n";
     os << indent << "CenterlineRadiusArrayName: "
        << (this->CenterlineRadiusArrayName ? this->CenterlineRadiusArrayName : "") << "\n";
+    os << indent << "AffectMaskArrayName: " << (this->AffectMaskArrayName ? this->AffectMaskArrayName : "") << "\n";
+    os << indent << "GeodesicToZeroRegionArrayName: "
+       << (this->GeodesicToZeroRegionArrayName ? this->GeodesicToZeroRegionArrayName : "") << "\n";
 }
 
 void vtkSHYXVascularStentPlacement::SetCenterlineConnection(vtkAlgorithmOutput* algOutput)
@@ -580,7 +756,21 @@ int vtkSHYXVascularStentPlacement::RequestData(vtkInformation* vtkNotUsed(reques
     if (this->StentLength <= kEps || this->StentRadius <= kEps)
     {
         vtkWarningMacro(<< "StentLength or StentRadius too small; passing geometry through unchanged.");
-        output->ShallowCopy(surface);
+        output->DeepCopy(surface);
+        const vtkIdType nPtsEarly = output->GetNumberOfPoints();
+        const char* affectNameEarly = EffectiveAffectMaskName(this->AffectMaskArrayName);
+        vtkNew<vtkIntArray> affectEarly;
+        affectEarly->SetName(affectNameEarly);
+        affectEarly->SetNumberOfComponents(1);
+        affectEarly->SetNumberOfTuples(nPtsEarly);
+        for (vtkIdType i = 0; i < nPtsEarly; ++i)
+        {
+            affectEarly->SetValue(i, -1);
+        }
+        output->GetPointData()->RemoveArray(affectNameEarly);
+        output->GetPointData()->AddArray(affectEarly);
+        const char* geoEarly = EffectiveGeodesicToZeroName(this->GeodesicToZeroRegionArrayName);
+        ComputeGeodesicDistanceToZeroRegion(output, output->GetPoints(), affectEarly.Get(), geoEarly, output);
         return 1;
     }
 
@@ -719,7 +909,6 @@ int vtkSHYXVascularStentPlacement::RequestData(vtkInformation* vtkNotUsed(reques
     vtkNew<vtkGenericCell> cell;
     const double R = this->StentRadius;
     const double R2 = R * R;
-    const double W = this->CapSideSmoothInfluenceRange;
 
     output->CopyStructure(surface);
     output->GetPointData()->PassData(surface->GetPointData());
@@ -729,6 +918,17 @@ int vtkSHYXVascularStentPlacement::RequestData(vtkInformation* vtkNotUsed(reques
     outPts->DeepCopy(surface->GetPoints());
 
     const vtkIdType nSurfPts = surface->GetNumberOfPoints();
+    const char* affectName = EffectiveAffectMaskName(this->AffectMaskArrayName);
+    vtkNew<vtkIntArray> affectMask;
+    affectMask->SetName(affectName);
+    affectMask->SetNumberOfComponents(1);
+    affectMask->SetNumberOfTuples(nSurfPts);
+    for (vtkIdType i = 0; i < nSurfPts; ++i)
+    {
+        affectMask->SetValue(i, -1);
+    }
+    output->GetPointData()->RemoveArray(affectName);
+    output->GetPointData()->AddArray(affectMask);
     if (pointNormals->GetNumberOfTuples() != nSurfPts)
     {
         vtkErrorMacro(<< "Point normal count does not match surface points.");
@@ -768,11 +968,7 @@ int vtkSHYXVascularStentPlacement::RequestData(vtkInformation* vtkNotUsed(reques
         const double sE = Dot(vL, capTEnd);
 
         const bool inStrict = (dist2 <= R2) && (s0 >= 0.0) && (sE <= 0.0);
-        const bool inStartBand =
-            (dist2 <= R2) && (s0 < 0.0) && (W > kEps) && (s0 > -W) && (sE <= 0.0);
-        const bool inEndBand = (dist2 <= R2) && (sE > 0.0) && (W > kEps) && (sE < W) && (s0 >= 0.0);
-
-        if (!inStrict && !inStartBand && !inEndBand)
+        if (!inStrict)
         {
             continue;
         }
@@ -783,28 +979,13 @@ int vtkSHYXVascularStentPlacement::RequestData(vtkInformation* vtkNotUsed(reques
             FallbackCylinderPoint(axisPd, locator, cell, x, cellId, R, yTarget);
         }
 
-        double alpha = 1.0;
-        if (!inStrict)
-        {
-            alpha = 1.0;
-            if (inStartBand)
-            {
-                alpha *= SmoothStep01((s0 + W) / W);
-            }
-            if (inEndBand)
-            {
-                alpha *= SmoothStep01((W - sE) / W);
-            }
-        }
-
-        double newx[3];
-        newx[0] = x[0] + alpha * (yTarget[0] - x[0]);
-        newx[1] = x[1] + alpha * (yTarget[1] - x[1]);
-        newx[2] = x[2] + alpha * (yTarget[2] - x[2]);
-        outPts->SetPoint(pid, newx);
+        outPts->SetPoint(pid, yTarget);
+        affectMask->SetValue(pid, 0);
     }
 
     output->SetPoints(outPts);
+    const char* geoName = EffectiveGeodesicToZeroName(this->GeodesicToZeroRegionArrayName);
+    ComputeGeodesicDistanceToZeroRegion(output, output->GetPoints(), affectMask.Get(), geoName, output);
     return 1;
 }
 

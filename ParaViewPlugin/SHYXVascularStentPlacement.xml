@@ -4,8 +4,8 @@
                  class="vtkSHYXVascularStentPlacement"
                  label="SHYX Vascular Stent Placement">
       <Documentation
-          long_help="Stent-like deformation along a walked centerline segment. Port 0: vessel vtkPolyData; port 1: centerline polyline. Strict alignment applies only inside the flat-ended cylinder: perpendicular distance ≤ StentRadius to the axis and between the two axial half-spaces through the first/last axis points. There, each vertex is moved along its point normal (vtkPolyDataNormals on the surface) so distance to the axis becomes StentRadius (numerical solve; cylindrical fallback if needed). Outside that slab but still within distance R of the axis (capsule hemispheres), CapSideSmoothInfluenceRange sets an axial band on each end where motion is smoothly blended toward the same target (smoothstep). StentAxisSampleSpacing densifies the internal axis polyline for closest-point queries."
-          short_help="Flat-capped stent alignment (vertex normals) with optional cap-side smoothing."/>
+          long_help="Stent-like deformation along a walked centerline segment. Port 0: vessel vtkPolyData; port 1: centerline polyline. Alignment applies only inside the flat-ended cylinder: perpendicular distance ≤ StentRadius to the axis and between the two axial half-spaces through the first/last axis points. There, each vertex is moved along its point normal (vtkPolyDataNormals on the surface) so distance to the axis becomes StentRadius (numerical solve; cylindrical fallback if needed). Points still within distance R of the axis but outside the flat slab (capsule hemispheres) are left unchanged. StentAxisSampleSpacing densifies the internal axis polyline for closest-point queries. Output point data gets an int array (AffectMaskArrayName, default StentPlacementAffectMask): 0 where the vertex was updated in the strict region, -1 elsewhere (set during deformation, not by comparing to input positions). A double array (GeodesicToZeroRegionArrayName, default StentGeodesicToZeroRegion) gives surface geodesic distance along polygon edges (lengths in the deformed mesh) from each mask≠0 vertex to the nearest mask==0 vertex; mask==0 gets 0; no polygons or unreachable components get -1."
+          short_help="Flat-capped stent alignment (vertex normals), strict slab only."/>
 
       <InputProperty name="Input" command="SetInputConnection">
         <ProxyGroupDomain name="groups">
@@ -77,21 +77,6 @@
         </Documentation>
       </DoubleVectorProperty>
 
-      <DoubleVectorProperty name="CapSideSmoothInfluenceRange"
-                            label="Cap side smooth range"
-                            command="SetCapSideSmoothInfluenceRange"
-                            number_of_elements="1"
-                            default_values="1.0"
-                            animateable="1">
-        <DoubleRangeDomain name="range" min="0.0" max="1e12"/>
-        <Documentation>
-          Axial width (world units) on each flat-cap side over which points still within distance R of the
-          axis but outside the flat slab (hemisphere-side) blend from no motion to full normal-based
-          stent alignment (smoothstep). Zero disables cap-side smoothing (only the strict flat-capped
-          interior is deformed).
-        </Documentation>
-      </DoubleVectorProperty>
-
       <IntVectorProperty name="PreferInputPointNormals"
                          label="Prefer input point normals"
                          command="SetPreferInputPointNormals"
@@ -115,6 +100,32 @@
           Point-data array on port 1 (Centerline). After each interactive snap to a centerline vertex,
           StentRadius is set from this array at that point id (first component). Clear the name to keep
           the radius from the widget only. Typical VMTK output: MaximumInscribedSphereRadius.
+        </Documentation>
+      </StringVectorProperty>
+
+      <StringVectorProperty name="AffectMaskArrayName"
+                            label="Affect mask array name"
+                            command="SetAffectMaskArrayName"
+                            number_of_elements="1"
+                            default_values="StentPlacementAffectMask"
+                            animateable="0">
+        <Documentation>
+          Name of the vtkIntArray written on output point data: 0 for vertices moved in the strict
+          flat-capped region, -1 for all others. Cleared or empty falls back to StentPlacementAffectMask.
+        </Documentation>
+      </StringVectorProperty>
+
+      <StringVectorProperty name="GeodesicToZeroRegionArrayName"
+                            label="Geodesic to zero-region array name"
+                            command="SetGeodesicToZeroRegionArrayName"
+                            number_of_elements="1"
+                            default_values="StentGeodesicToZeroRegion"
+                            animateable="0">
+        <Documentation>
+          Name of the vtkDoubleArray on output: for vertices with affect mask ≠ 0, shortest path distance
+          along mesh edges to the nearest vertex with mask 0 (edge weights use deformed vertex positions);
+          mask 0 vertices store 0. Empty name falls back to StentGeodesicToZeroRegion. -1 if no seed or
+          unreachable (e.g. no vtkPolys).
         </Documentation>
       </StringVectorProperty>
 
