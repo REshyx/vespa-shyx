@@ -153,7 +153,7 @@ protected:
     double MinEdgeLength = 0.0;
     double MaxEdgeLength = 0.0;
     double AdaptiveTolerance = 0.01;
-    double AdaptiveSizingNeighborMaxRatio = 1.6;
+    double AdaptiveSizingNeighborMaxRatio = 1.5;
     bool ScaleToRange = false;
     bool RemeshRecomputeCurvatureEachIteration = true;
     int NumberOfIterations = 3;

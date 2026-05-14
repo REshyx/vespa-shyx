@@ -4,7 +4,8 @@
  *
  * Single input: tubular vessel surface (vtkPolyData). Select cells whose chosen array magnitude
  * falls in [ThresholdMin, ThresholdMax] (same rules as vtkSHYXAdaptiveIsotropicRemesher remesh
- * range). The threshold array is chosen via VTK \c SetInputArrayToProcess (ParaView array picker).
+ * range). Default threshold array is cell-data \c EndpointIndex (e.g. vtkCGALVesselEndClipper);
+ * override via VTK \c SetInputArrayToProcess (ParaView array picker).
  * Each resulting connected component yields one representative surface point (closest mesh
  * vertex to the patch centroid). Each opening’s list entry is keyed by **SeedPoint: &lt;SurfacePointId&gt;**
  * (the representative surface vertex id); duplicate labels get **#2**, **#3** suffixes.

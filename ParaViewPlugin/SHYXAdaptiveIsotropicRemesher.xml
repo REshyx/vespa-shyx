@@ -255,11 +255,11 @@
                             name="AdaptiveSizingNeighborMaxRatio"
                             label="Expansion ratio"
                             number_of_elements="1"
-                            default_values="1.6">
+                            default_values="1.5">
         <DoubleRangeDomain name="range" min="0" max="1e6"/>
         <Documentation>
           **Expansion ratio** R caps spatial jumps of the Vespa ICC sizing maps: **≤ 1** disables (raw per-vertex ICC targets).
-          Default **1.6** relaxes `v:vespa_size_global` and `v:vespa_size_feature` so along any mesh edge the
+          Default **1.5** relaxes `v:vespa_size_global` and `v:vespa_size_feature` so along any mesh edge the
           larger vertex target does not exceed R times the smaller (e.g. 1.3–2 to tame abrupt coarsening
           next to fine regions). Set **0** to disable.
         </Documentation>

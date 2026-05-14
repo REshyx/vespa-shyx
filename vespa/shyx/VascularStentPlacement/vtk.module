@@ -1,0 +1,12 @@
+NAME
+  vtkSHYXVascularStentPlacement
+DESCRIPTION
+  "Radial mesh displacement along a centerline segment for stent placement visualization."
+GROUPS
+  Meshing
+DEPENDS
+  VTK::FiltersCore
+  VTK::CommonDataModel
+  VTK::CommonExecutionModel
+PRIVATE_DEPENDS
+  VTK::CommonCore

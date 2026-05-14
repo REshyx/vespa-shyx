@@ -56,6 +56,16 @@ paraview_plugin_add_property_widget(
   INTERFACES vespa_selection_plane_clipper_interfaces
   SOURCES vespa_selection_plane_clipper_sources)
 
+paraview_plugin_add_property_widget(
+  KIND GROUP_WIDGET
+  TYPE "vespa_shyx_vascular_stent_cylinder"
+  CLASS_NAME pqSHYXVascularStentCylinderWidget
+  INTERFACES vespa_stent_cylinder_interfaces
+  SOURCES vespa_stent_cylinder_sources)
+list(APPEND vespa_stent_cylinder_sources
+  pqSHYXVascularStentCylinderWidget.cxx
+  pqSHYXVascularStentCylinderWidget.h)
+
 set(shyx_openings_table_interfaces)
 set(shyx_openings_table_sources)
 if (VESPA_USE_VMTK)
@@ -136,6 +146,7 @@ paraview_add_plugin(VESPAPlugin
     "SHYXConvexHullFilter.xml"
     "SHYXVortexCriteria.xml"
     "SHYXVortexCoreTest.xml"
+    "SHYXVascularStentPlacement.xml"
     "SHYXVectorFieldTopology.xml"
     "SHYXArrayCurveMapper.xml"
     "SHYXAutorefineSelfIntersectionFilter.xml"
@@ -149,8 +160,8 @@ paraview_add_plugin(VESPAPlugin
      ${MESH_SMOOTHING_SERVER_MANAGER_XML}
      ${ADAPTIVE_REMESHING_SERVER_MANAGER_XML}
      ${VMTK_CENTERLINES_SERVER_MANAGER_XML}
-  UI_INTERFACES ${acm_interfaces} ${vespa_obb_box_interfaces} ${vespa_endclipper_plane_interfaces} ${vespa_selection_plane_clipper_interfaces} ${shyx_openings_table_interfaces} ${vespa_plugin_qt_auto_interfaces}
-  SOURCES ${acm_sources} ${vespa_obb_box_sources} ${vespa_endclipper_plane_sources} ${vespa_selection_plane_clipper_sources} ${shyx_openings_table_sources}
+  UI_INTERFACES ${acm_interfaces} ${vespa_obb_box_interfaces} ${vespa_endclipper_plane_interfaces} ${vespa_selection_plane_clipper_interfaces} ${vespa_stent_cylinder_interfaces} ${shyx_openings_table_interfaces} ${vespa_plugin_qt_auto_interfaces}
+  SOURCES ${acm_sources} ${vespa_obb_box_sources} ${vespa_endclipper_plane_sources} ${vespa_selection_plane_clipper_sources} ${vespa_stent_cylinder_sources} ${shyx_openings_table_sources}
     pqArrayCurveMapperPanel.cxx
     pqArrayCurveMapperPanel.h
     pqVESPAOBBInteractiveBoxWidget.cxx

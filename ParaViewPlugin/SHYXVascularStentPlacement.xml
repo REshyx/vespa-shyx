@@ -1,0 +1,95 @@
+<ServerManagerConfiguration>
+  <ProxyGroup name="filters">
+    <SourceProxy name="SHYXVascularStentPlacement"
+                 class="vtkSHYXVascularStentPlacement"
+                 label="SHYX Vascular Stent Placement">
+      <Documentation
+          long_help="Deforms a vessel surface toward a target radius along a short centerline segment for thrombosis stent placement visualization. Port 0 is the vessel vtkPolyData; port 1 is a centerline vtkPolyData (line/polyline cells). AnchorCenterlinePointId selects the centerline vertex at the stent midpoint. StentLength is the total arc length along the graph walked from that vertex (split across the two incident branches when degree ≥ 2; if the anchor is degree 1, the full length is walked along the single branch). StentRadius is the target perpendicular distance from the local axis: each affected surface point is moved to c + R·r̂, where c is its closest point on the axis segment and r̂ is the component of (x−c) orthogonal to the local tangent. Only points within an internal band (max(5·R, 0.25·L) from the axis) are updated."
+          short_help="Radial expansion along a centerline window (geometry + centerline)."/>
+
+      <InputProperty name="Input" command="SetInputConnection">
+        <ProxyGroupDomain name="groups">
+          <Group name="sources"/>
+          <Group name="filters"/>
+        </ProxyGroupDomain>
+        <DataTypeDomain name="input_type">
+          <DataType value="vtkPolyData"/>
+        </DataTypeDomain>
+        <Documentation>Vessel wall surface (vtkPolyData).</Documentation>
+      </InputProperty>
+
+      <InputProperty name="Centerline" command="SetCenterlineConnection">
+        <ProxyGroupDomain name="groups">
+          <Group name="sources"/>
+          <Group name="filters"/>
+        </ProxyGroupDomain>
+        <DataTypeDomain name="input_type">
+          <DataType value="vtkPolyData"/>
+        </DataTypeDomain>
+        <Documentation>
+          Centerline polyline(s), same style as SHYX Vessel End Clipper port 1 (vtkLine / vtkPolyLine cells).
+        </Documentation>
+      </InputProperty>
+
+      <IntVectorProperty name="AnchorCenterlinePointId"
+                         label="Anchor Centerline Point Id"
+                         command="SetAnchorCenterlinePointId"
+                         number_of_elements="1"
+                         default_values="0"
+                         animateable="0">
+        <IntRangeDomain name="range" min="0" max="2147483647"/>
+        <Documentation>
+          Point id on the centerline mesh whose position is the stent center. Must lie on the line graph.
+        </Documentation>
+      </IntVectorProperty>
+
+      <DoubleVectorProperty name="StentLength"
+                            label="Stent Length"
+                            command="SetStentLength"
+                            number_of_elements="1"
+                            default_values="10.0"
+                            animateable="1">
+        <DoubleRangeDomain name="range" min="0.0" max="1e12"/>
+        <Documentation>Total arc length along the centerline used for the stent segment (world units).</Documentation>
+      </DoubleVectorProperty>
+
+      <DoubleVectorProperty name="StentRadius"
+                            label="Stent Radius"
+                            command="SetStentRadius"
+                            number_of_elements="1"
+                            default_values="1.0"
+                            animateable="1">
+        <DoubleRangeDomain name="range" min="0.0" max="1e12"/>
+        <Documentation>Target perpendicular distance from the local centerline tangent (world units).</Documentation>
+      </DoubleVectorProperty>
+
+      <DoubleVectorProperty name="StentWidgetCenter"
+                            command="SetStentWidgetCenter"
+                            default_values="0 0 0"
+                            number_of_elements="3"
+                            panel_visibility="never">
+        <DoubleRangeDomain name="range" />
+      </DoubleVectorProperty>
+      <DoubleVectorProperty name="StentWidgetAxis"
+                            command="SetStentWidgetAxis"
+                            default_values="0 0 1"
+                            number_of_elements="3"
+                            panel_visibility="never">
+        <DoubleRangeDomain name="range" />
+      </DoubleVectorProperty>
+
+      <PropertyGroup label="Interactive stent cylinder"
+                     panel_widget="vespa_shyx_vascular_stent_cylinder"
+                     panel_visibility="default">
+        <Property function="Center" name="StentWidgetCenter"/>
+        <Property function="Axis" name="StentWidgetAxis"/>
+        <Property function="Radius" name="StentRadius"/>
+        <Property function="Input" name="Input"/>
+      </PropertyGroup>
+
+      <Hints>
+        <ShowInMenu category="SHYX" icon=":/VESPA/SHYX_Vessel_End_Clipper.png"/>
+      </Hints>
+    </SourceProxy>
+  </ProxyGroup>
+</ServerManagerConfiguration>

@@ -133,7 +133,7 @@
                             name="AdaptiveSizingNeighborMaxRatio"
                             label="Expansion ratio"
                             number_of_elements="1"
-                            default_values="1.6">
+                            default_values="1.5">
         <DoubleRangeDomain name="range" min="0" max="1e6"/>
         <Documentation>
           **Expansion ratio** R caps ICC sizing jumps along edges; **≤ 1** disables. Set **0** to disable (same semantics as SHYX Adaptive Isotropic Remesher).

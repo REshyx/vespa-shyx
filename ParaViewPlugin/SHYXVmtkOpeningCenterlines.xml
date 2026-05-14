@@ -49,6 +49,7 @@
                             command="SetInputArrayToProcess"
                             number_of_elements="5"
                             element_types="0 0 0 0 2"
+                            default_values="0 0 0 1 EndpointIndex"
                             animateable="0">
         <ArrayListDomain name="opening_threshold_list"
                          input_domain_name="opening_threshold_arrays">
@@ -58,7 +59,8 @@
         </ArrayListDomain>
         <Documentation>
           Point- or cell-centered array (same name resolution as Remesh range in Adaptive Isotropic Remesher).
-          Uses standard VTK input-array selection (ParaView array picker).
+          Default: cell-data **EndpointIndex** (e.g. vtkCGALVesselEndClipper caps). Uses standard VTK
+          input-array selection (ParaView array picker).
         </Documentation>
         <Hints>
           <ArraySelectionWidget/>

@@ -428,6 +428,8 @@ vtkSHYXVmtkOpeningCenterlines::vtkSHYXVmtkOpeningCenterlines()
 {
   this->SetNumberOfInputPorts(1);
   this->SetNumberOfOutputPorts(2);
+  this->SetInputArrayToProcess(
+    0, 0, 0, vtkDataObject::FIELD_ASSOCIATION_CELLS, "EndpointIndex");
   this->InletSelection = vtkSmartPointer<vtkDataArraySelection>::New();
   this->ExcludedOpeningSelection = vtkSmartPointer<vtkDataArraySelection>::New();
 }
