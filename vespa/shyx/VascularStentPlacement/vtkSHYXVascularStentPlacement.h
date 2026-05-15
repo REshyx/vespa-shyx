@@ -17,14 +17,17 @@
  * vertices updated in the strict region, -1 elsewhere. Values are set when applying each vertex move,
  * not by post-comparing coordinates.
  *
- * A vtkDoubleArray (GeodesicToZeroRegionArrayName, default StentGeodesicToZeroRegion) stores **unweighted**
- * graph distance along mesh edges (each polygon edge counts as 1) from each mask≠0 vertex to the nearest
- * mask==0 vertex; mask==0 vertices get 0; unreachable components get -1.
+ * A vtkDoubleArray (GeodesicToZeroRegionArrayName, default StentGeodesicToZeroRegion) stores **weighted**
+ * graph distance along mesh edges (each edge weight = Euclidean length after the strict placement pass) from
+ * each mask≠0 vertex to the nearest mask==0 vertex; mask==0 vertices get 0; unreachable components get -1.
+ * This distance is computed **between** deformation stages: on the strict-deformed geometry, before the
+ * optional geodesic-band smooth pass.
  *
  * Strict slab classification uses perpendicular distance to the **stent segment axis** (walked window on
  * the centerline), not the full port-1 polyline. Optional geodesic band smoothing
  * (GeodesicSmoothInfluenceRange x, GeodesicSmoothPowerLambda λ in [0.1, 10]) moves mask==-1 vertices with
- * 0 < g < x by p' = p + S * (R - d) * n_dir only when R > d, where g is **unweighted** edge-hop geodesic to mask-0, d is
+ * 0 < g < x by p' = p + S * (R - d) * n_dir only when R > d, where g is **weighted** surface geodesic (same
+ * length units as x) to mask-0 computed on the strict-deformed mesh, d is
  * perpendicular distance to the **entire** centerline (port 1), R is StentRadius, S = (1 - g/x)^λ, and n_dir
  * is the surface normal oriented toward increasing radius from that centerline (same sign convention as the strict normal solve). Strength is
  * written to GeodesicSmoothStrengthArrayName (default StentGeodesicSmoothStrength): 1 on strict mask, S when the band move applies, 0 otherwise.
@@ -75,11 +78,11 @@ public:
     vtkGetStringMacro(AffectMaskArrayName);
     vtkSetStringMacro(AffectMaskArrayName);
 
-    /** vtkDoubleArray on output: geodesic distance to mask==0 region (see class doc). */
+    /** vtkDoubleArray on output: weighted geodesic distance to mask==0 region on strict-deformed mesh (see class doc). */
     vtkGetStringMacro(GeodesicToZeroRegionArrayName);
     vtkSetStringMacro(GeodesicToZeroRegionArrayName);
 
-    /** Band threshold x: mask==-1 with unweighted edge-hop geodesic g in (0, x); 0 disables band smooth. */
+    /** Band threshold x (world length): mask==-1 with weighted geodesic g in (0, x); 0 disables band smooth. */
     vtkGetMacro(GeodesicSmoothInfluenceRange, double);
     vtkSetClampMacro(GeodesicSmoothInfluenceRange, double, 0.0, VTK_DOUBLE_MAX);
 

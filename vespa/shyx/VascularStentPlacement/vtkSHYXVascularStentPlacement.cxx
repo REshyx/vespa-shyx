@@ -46,7 +46,7 @@ const char* EffectiveGeodesicToZeroName(const char* nm)
     return (nm && nm[0]) ? nm : "StentGeodesicToZeroRegion";
 }
 
-/** Builds undirected graph from polygon edges; each edge has unit weight (unweighted / hop-count geodesic). */
+/** Builds undirected graph from polygon edges; edge weight = Euclidean length in \p pts (weighted geodesic). */
 bool BuildSurfaceWeightedAdjacency(vtkPolyData* pd, vtkPoints* pts,
     std::vector<std::vector<std::pair<vtkIdType, double>>>& weightedAdj)
 {
@@ -66,14 +66,20 @@ bool BuildSurfaceWeightedAdjacency(vtkPolyData* pd, vtkPoints* pts,
         return false;
     }
     weightedAdj.assign(static_cast<size_t>(n), {});
-    constexpr double kUnitEdge = 1.0;
     auto addEdge = [&](vtkIdType a, vtkIdType b) {
         if (a == b || a < 0 || b < 0 || a >= n || b >= n)
         {
             return;
         }
-        weightedAdj[static_cast<size_t>(a)].emplace_back(b, kUnitEdge);
-        weightedAdj[static_cast<size_t>(b)].emplace_back(a, kUnitEdge);
+        double pa[3], pb[3];
+        pts->GetPoint(a, pa);
+        pts->GetPoint(b, pb);
+        const double dx = pa[0] - pb[0];
+        const double dy = pa[1] - pb[1];
+        const double dz = pa[2] - pb[2];
+        const double w = std::max(std::sqrt(dx * dx + dy * dy + dz * dz), kTolDist);
+        weightedAdj[static_cast<size_t>(a)].emplace_back(b, w);
+        weightedAdj[static_cast<size_t>(b)].emplace_back(a, w);
     };
     vtkCellArray* polys = pd->GetPolys();
     vtkIdType nptsCell = 0;
@@ -93,7 +99,7 @@ bool BuildSurfaceWeightedAdjacency(vtkPolyData* pd, vtkPoints* pts,
     return true;
 }
 
-/** For mask==0: 0. For mask!=0: unweighted graph distance (sum of unit edge weights) to nearest mask==0 vertex, or -1 if none/unreachable. */
+/** For mask==0: 0. For mask!=0: weighted graph distance (sum of edge Euclidean lengths in \p deformedPts) to nearest mask==0 vertex, or -1 if none/unreachable. */
 void ComputeGeodesicDistanceToZeroRegion(vtkPolyData* topology, vtkPoints* deformedPts,
     vtkIntArray* affectMask, const char* geoArrayName, vtkPolyData* output)
 {
@@ -675,9 +681,9 @@ const char* EffectiveGeodesicSmoothStrengthName(const char* nm)
 }
 
 /**
- * For mask==-1 and unweighted edge-hop geodesic g in (0, xBand): only if perpendicular centerline distance
- * d satisfies R > d, apply p' = p + S * (R - d) * n_dir; else leave p unchanged. n_dir as in
- * SolveAlongNormalForRadius; S = (1 - g/xBand)^lambdaPow (g,x in edge hops).
+ * For mask==-1 and weighted surface geodesic g in (0, xBand) (same length units as mesh edges): only if
+ * perpendicular centerline distance d satisfies R > d, apply p' = p + S * (R - d) * n_dir; else leave p
+ * unchanged. n_dir as in SolveAlongNormalForRadius; S = (1 - g/xBand)^lambdaPow.
  * Strict mask==0 vertices get strength 1 (unchanged position); others get 0 unless moved in band (then S).
  */
 void ApplyGeodesicSmoothBand(vtkPolyData* output, vtkPoints* outPts, vtkIntArray* affectMask,
