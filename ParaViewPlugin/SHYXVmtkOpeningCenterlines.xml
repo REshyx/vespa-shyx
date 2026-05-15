@@ -40,8 +40,8 @@
         <DataTypeDomain name="input_type">
           <DataType value="vtkPolyData"/>
         </DataTypeDomain>
-        <InputArrayDomain name="opening_threshold_arrays" optional="1"/>
-        <Documentation>Vessel lumen surface with point- or cell-centered scalars for thresholding openings.</Documentation>
+        <InputArrayDomain name="opening_threshold_arrays" attribute_type="cell" optional="1"/>
+        <Documentation>Vessel lumen surface with cell-centered scalars for thresholding openings (picker lists cell arrays only so the default EndpointIndex resolves to cell data when a point array of the same name also exists).</Documentation>
       </InputProperty>
 
       <StringVectorProperty name="ThresholdArrayName"
@@ -58,9 +58,10 @@
           </RequiredProperties>
         </ArrayListDomain>
         <Documentation>
-          Point- or cell-centered array (same name resolution as Remesh range in Adaptive Isotropic Remesher).
-          Default: cell-data **EndpointIndex** (e.g. vtkCGALVesselEndClipper caps). Uses standard VTK
-          input-array selection (ParaView array picker).
+          Cell-centered array on the input (same VTK input-array slot as other SHYX filters).
+          Default: **EndpointIndex** on **Cell Data** (e.g. vtkCGALVesselEndClipper caps). The array
+          list is restricted to cell arrays so ParaView does not pick a same-named point array by
+          default when both exist.
         </Documentation>
         <Hints>
           <ArraySelectionWidget/>
