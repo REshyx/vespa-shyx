@@ -2,14 +2,11 @@
 
 #include "pqActiveObjects.h"
 #include "pqInteractivePropertyWidgetAbstract.h"
-#include "pqRenderView.h"
 
 #include <QtCore/QCoreApplication>
 #include "ui_pqCylinderPropertyWidget.h"
 
 #include "vtkAlgorithm.h"
-#include "vtkBoundingBox.h"
-#include "vtkCamera.h"
 #include "vtkCellArray.h"
 #include "vtkDataArray.h"
 #include "vtkImplicitCylinderRepresentation.h"
@@ -24,12 +21,9 @@
 #include "vtkSMPropertyHelper.h"
 #include "vtkSMUncheckedPropertyHelper.h"
 #include "vtkSMProxy.h"
-#include "vtkSMRenderViewProxy.h"
 #include "vtkSMSourceProxy.h"
 
 #include "vtkSHYXImplicitCylinderRepresentation.h"
-
-#include <cassert>
 
 #include "vtkCallbackCommand.h"
 #include "vtkCommand.h"
@@ -191,22 +185,6 @@ void BuildAdjacency(vtkPolyData* cl, std::unordered_map<vtkIdType, std::vector<v
     }
 }
 
-void pqAdjustBounds(vtkBoundingBox& bbox, double scaleFactor)
-{
-    double min_point[3], max_point[3];
-    bbox.GetMinPoint(min_point[0], min_point[1], min_point[2]);
-    bbox.GetMaxPoint(max_point[0], max_point[1], max_point[2]);
-
-    for (int i = 0; i < 3; ++i)
-    {
-        const double mid = (min_point[i] + max_point[i]) / 2.0;
-        min_point[i] = mid + scaleFactor * (min_point[i] - mid);
-        max_point[i] = mid + scaleFactor * (max_point[i] - mid);
-    }
-    bbox.SetMinPoint(min_point);
-    bbox.SetMaxPoint(max_point);
-}
-
 } // namespace
 
 //-----------------------------------------------------------------------------
@@ -265,24 +243,7 @@ pqSHYXVascularStentCylinderWidget::pqSHYXVascularStentCylinderWidget(
         qCritical("Missing required property for function 'Radius'.");
     }
 
-    if (smgroup->GetProperty("Input"))
-    {
-        this->connect(ui.resetBounds, SIGNAL(clicked()), SLOT(resetBounds()));
-    }
-    else
-    {
-        ui.resetBounds->hide();
-    }
-
-    this->connect(ui.useXAxis, SIGNAL(clicked()), SLOT(useXAxis()));
-    this->connect(ui.useYAxis, SIGNAL(clicked()), SLOT(useYAxis()));
-    this->connect(ui.useZAxis, SIGNAL(clicked()), SLOT(useZAxis()));
-    this->connect(ui.useCameraAxis, SIGNAL(clicked()), SLOT(useCameraAxis()));
-    this->connect(ui.resetCameraToAxis, SIGNAL(clicked()), SLOT(resetCameraToAxis()));
-
     vtkSMProxy* wdgProxy = this->widgetProxy();
-    this->WidgetLinks.addPropertyLink(
-        ui.scaling, "checked", SIGNAL(toggled(bool)), wdgProxy, wdgProxy->GetProperty("ScaleEnabled"));
     this->WidgetLinks.addPropertyLink(ui.outlineTranslation, "checked", SIGNAL(toggled(bool)), wdgProxy,
         wdgProxy->GetProperty("OutlineTranslation"));
     this->connect(&this->WidgetLinks, SIGNAL(qtWidgetChanged()), SLOT(render()));
@@ -291,8 +252,8 @@ pqSHYXVascularStentCylinderWidget::pqSHYXVascularStentCylinderWidget(
     ui.show3DWidget->connect(this, SIGNAL(widgetVisibilityToggled(bool)), SLOT(setChecked(bool)));
     this->setWidgetVisible(ui.show3DWidget->isChecked());
 
-    this->AdvancedPropertyWidgets[0] = ui.scaling;
-    this->AdvancedPropertyWidgets[1] = ui.outlineTranslation;
+    this->AdvancedPropertyWidgets[0] = ui.outlineTranslation;
+    this->AdvancedPropertyWidgets[1] = nullptr;
 
     QObject::disconnect(&pqActiveObjects::instance(), &pqActiveObjects::dataUpdated, this, nullptr);
     QObject::connect(&pqActiveObjects::instance(), &pqActiveObjects::dataUpdated, this,
@@ -764,80 +725,6 @@ void pqSHYXVascularStentCylinderWidget::syncFiniteLengthHintFromFilter()
         return;
     }
     shyx->SetFiniteStentLengthHint(SHYXGetStentLengthFromFilter(filter));
-}
-
-//-----------------------------------------------------------------------------
-void pqSHYXVascularStentCylinderWidget::resetBounds()
-{
-    vtkSMNewWidgetRepresentationProxy* wdgProxy = this->widgetProxy();
-    assert(wdgProxy);
-
-    vtkBoundingBox bbox = this->dataBounds();
-    if (!bbox.IsValid())
-    {
-        return;
-    }
-
-    const double scaleFactor = vtkSMPropertyHelper(wdgProxy, "PlaceFactor").GetAsDouble();
-    pqAdjustBounds(bbox, scaleFactor);
-
-    double center[3];
-    bbox.GetCenter(center);
-    double bnds[6];
-    bbox.GetBounds(bnds);
-
-    vtkSMPropertyHelper(wdgProxy, "Center").Set(center, 3);
-    vtkSMPropertyHelper(wdgProxy, "WidgetBounds").Set(bnds, 6);
-    wdgProxy->UpdateProperty("WidgetBounds", true);
-
-    Q_EMIT this->changeAvailable();
-    this->render();
-}
-
-//-----------------------------------------------------------------------------
-void pqSHYXVascularStentCylinderWidget::resetCameraToAxis()
-{
-    if (pqRenderView* renView = qobject_cast<pqRenderView*>(this->view()))
-    {
-        vtkCamera* camera = renView->getRenderViewProxy()->GetActiveCamera();
-        vtkSMProxy* wdgProxy = this->widgetProxy();
-        double up[3], forward[3];
-        camera->GetViewUp(up);
-        vtkSMPropertyHelper(wdgProxy, "Axis").Get(forward, 3);
-        vtkMath::Cross(up, forward, up);
-        vtkMath::Cross(forward, up, up);
-        renView->resetViewDirection(forward[0], forward[1], forward[2], up[0], up[1], up[2]);
-        renView->render();
-    }
-}
-
-//-----------------------------------------------------------------------------
-void pqSHYXVascularStentCylinderWidget::useCameraAxis()
-{
-    vtkSMRenderViewProxy* viewProxy =
-        this->view() ? vtkSMRenderViewProxy::SafeDownCast(this->view()->getProxy()) : nullptr;
-    if (viewProxy)
-    {
-        vtkCamera* camera = viewProxy->GetActiveCamera();
-
-        double camera_normal[3];
-        camera->GetViewPlaneNormal(camera_normal);
-        camera_normal[0] = -camera_normal[0];
-        camera_normal[1] = -camera_normal[1];
-        camera_normal[2] = -camera_normal[2];
-        this->setAxis(camera_normal[0], camera_normal[1], camera_normal[2]);
-    }
-}
-
-//-----------------------------------------------------------------------------
-void pqSHYXVascularStentCylinderWidget::setAxis(double wx, double wy, double wz)
-{
-    vtkSMProxy* wdgProxy = this->widgetProxy();
-    double axis[3] = { wx, wy, wz };
-    vtkSMPropertyHelper(wdgProxy, "Axis").Set(axis, 3);
-    wdgProxy->UpdateVTKObjects();
-    Q_EMIT this->changeAvailable();
-    this->render();
 }
 
 //-----------------------------------------------------------------------------

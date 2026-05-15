@@ -17,9 +17,17 @@
  * vertices updated in the strict region, -1 elsewhere. Values are set when applying each vertex move,
  * not by post-comparing coordinates.
  *
- * A vtkDoubleArray (GeodesicToZeroRegionArrayName, default StentGeodesicToZeroRegion) stores surface
- * geodesic distance along mesh edges (edge length in deformed geometry) from each mask≠0 vertex to the
- * nearest mask==0 vertex; mask==0 vertices get 0; unreachable components get -1.
+ * A vtkDoubleArray (GeodesicToZeroRegionArrayName, default StentGeodesicToZeroRegion) stores **unweighted**
+ * graph distance along mesh edges (each polygon edge counts as 1) from each mask≠0 vertex to the nearest
+ * mask==0 vertex; mask==0 vertices get 0; unreachable components get -1.
+ *
+ * Strict slab classification uses perpendicular distance to the **stent segment axis** (walked window on
+ * the centerline), not the full port-1 polyline. Optional geodesic band smoothing
+ * (GeodesicSmoothInfluenceRange x, GeodesicSmoothPowerLambda λ in [0.1, 10]) moves mask==-1 vertices with
+ * 0 < g < x by p' = p + S * (R - d) * n_dir only when R > d, where g is **unweighted** edge-hop geodesic to mask-0, d is
+ * perpendicular distance to the **entire** centerline (port 1), R is StentRadius, S = (1 - g/x)^λ, and n_dir
+ * is the surface normal oriented toward increasing radius from that centerline (same sign convention as the strict normal solve). Strength is
+ * written to GeodesicSmoothStrengthArrayName (default StentGeodesicSmoothStrength): 1 on strict mask, S when the band move applies, 0 otherwise.
  */
 
 #ifndef vtkSHYXVascularStentPlacement_h
@@ -71,6 +79,18 @@ public:
     vtkGetStringMacro(GeodesicToZeroRegionArrayName);
     vtkSetStringMacro(GeodesicToZeroRegionArrayName);
 
+    /** Band threshold x: mask==-1 with unweighted edge-hop geodesic g in (0, x); 0 disables band smooth. */
+    vtkGetMacro(GeodesicSmoothInfluenceRange, double);
+    vtkSetClampMacro(GeodesicSmoothInfluenceRange, double, 0.0, VTK_DOUBLE_MAX);
+
+    /** Exponent λ in (1 - g/x)^λ for band strength; clamped to [0.1, 10]. */
+    vtkGetMacro(GeodesicSmoothPowerLambda, double);
+    vtkSetClampMacro(GeodesicSmoothPowerLambda, double, 0.1, 10.0);
+
+    /** vtkDoubleArray: 1 on strict mask; S in band only when vertex moves (R > d); else 0. */
+    vtkGetStringMacro(GeodesicSmoothStrengthArrayName);
+    vtkSetStringMacro(GeodesicSmoothStrengthArrayName);
+
     /** Linked to the ImplicitCylinder 3D widget center (ParaView UI). */
     vtkGetVector3Macro(StentWidgetCenter, double);
     vtkSetVector3Macro(StentWidgetCenter, double);
@@ -96,6 +116,9 @@ protected:
     char* CenterlineRadiusArrayName = nullptr;
     char* AffectMaskArrayName = nullptr;
     char* GeodesicToZeroRegionArrayName = nullptr;
+    double GeodesicSmoothInfluenceRange = 5.0;
+    double GeodesicSmoothPowerLambda = 1.0;
+    char* GeodesicSmoothStrengthArrayName = nullptr;
 
 private:
     vtkSHYXVascularStentPlacement(const vtkSHYXVascularStentPlacement&) = delete;

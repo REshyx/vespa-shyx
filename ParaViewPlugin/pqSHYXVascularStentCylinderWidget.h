@@ -41,17 +41,11 @@ public:
     void select() override;
 
 public Q_SLOTS:
-    void useXAxis() { this->setAxis(1, 0, 0); }
-    void useYAxis() { this->setAxis(0, 1, 0); }
-    void useZAxis() { this->setAxis(0, 0, 1); }
-    void resetCameraToAxis();
-    void useCameraAxis();
     /** Invoked (queued) when filter StentLength SM property changes from the main Properties panel. */
     void onStentLengthPropertyModified();
 
 protected Q_SLOTS:
     void placeWidget() override;
-    void resetBounds();
 
 private Q_SLOTS:
     void onCylinderEndInteraction();
@@ -66,7 +60,6 @@ private:
     static void finiteCylinderWorldAABB(
         const double center[3], const double axis[3], double radius, double length, double bds[6]);
     static vtkIdType nearestPointId(vtkPoints* pts, const double p[3]);
-    void setAxis(double x, double y, double z);
     void syncFiniteLengthHintFromFilter();
 
     pqPropertyLinks WidgetLinks;

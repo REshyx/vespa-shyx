@@ -4,8 +4,8 @@
                  class="vtkSHYXVascularStentPlacement"
                  label="SHYX Vascular Stent Placement">
       <Documentation
-          long_help="Stent-like deformation along a walked centerline segment. Port 0: vessel vtkPolyData; port 1: centerline polyline. Alignment applies only inside the flat-ended cylinder: perpendicular distance ≤ StentRadius to the axis and between the two axial half-spaces through the first/last axis points. There, each vertex is moved along its point normal (vtkPolyDataNormals on the surface) so distance to the axis becomes StentRadius (numerical solve; cylindrical fallback if needed). Points still within distance R of the axis but outside the flat slab (capsule hemispheres) are left unchanged. StentAxisSampleSpacing densifies the internal axis polyline for closest-point queries. Output point data gets an int array (AffectMaskArrayName, default StentPlacementAffectMask): 0 where the vertex was updated in the strict region, -1 elsewhere (set during deformation, not by comparing to input positions). A double array (GeodesicToZeroRegionArrayName, default StentGeodesicToZeroRegion) gives surface geodesic distance along polygon edges (lengths in the deformed mesh) from each mask≠0 vertex to the nearest mask==0 vertex; mask==0 gets 0; no polygons or unreachable components get -1."
-          short_help="Flat-capped stent alignment (vertex normals), strict slab only."/>
+          long_help="Stent-like deformation along a walked centerline segment. Port 0: vessel vtkPolyData; port 1: centerline polyline. Strict alignment uses perpendicular distance to the **stent segment axis** (walked window), not the full centerline graph. Inside the flat-ended cylinder slab, vertices move along point normals so distance to that segment axis becomes StentRadius. Points still within R of the segment but outside the flat slab are unchanged by the strict pass. StentAxisSampleSpacing densifies the internal stent axis polyline. Output: int AffectMaskArrayName (default StentPlacementAffectMask) 0 strict / -1 else; double GeodesicToZeroRegionArrayName (default StentGeodesicToZeroRegion) **unweighted** mesh edge-hop distance to mask-0 on the surface graph. Optional GeodesicSmoothInfluenceRange x and GeodesicSmoothPowerLambda lambda: for mask -1 with 0 &lt; geodesic &lt; x (hop count), add S*(R-d)*n to the vertex only when StentRadius R is greater than perp distance d to the **full** port-1 centerline (d = that distance, n = surface normal toward increasing radius, S = (1 - g/x)^lambda); double GeodesicSmoothStrengthArrayName (default StentGeodesicSmoothStrength) stores S when moved in band, else 0 (1 on strict vertices)."
+          short_help="Strict stent slab + optional geodesic band smooth to full centerline R."/>
 
       <InputProperty name="Input" command="SetInputConnection">
         <ProxyGroupDomain name="groups">
@@ -26,6 +26,7 @@
         <DataTypeDomain name="input_type">
           <DataType value="vtkPolyData"/>
         </DataTypeDomain>
+        <InputArrayDomain name="centerline_point_arrays" attribute_type="point" optional="1"/>
         <Documentation>
           Centerline polyline(s), same style as SHYX Vessel End Clipper port 1 (vtkLine / vtkPolyLine cells).
         </Documentation>
@@ -96,11 +97,22 @@
                             number_of_elements="1"
                             default_values="MaximumInscribedSphereRadius"
                             animateable="0">
+        <ArrayListDomain name="centerline_radius_array_list"
+                         attribute_type="Scalars"
+                         none_string="(None)"
+                         input_domain_name="centerline_point_arrays">
+          <RequiredProperties>
+            <Property name="Centerline" function="Input"/>
+          </RequiredProperties>
+        </ArrayListDomain>
         <Documentation>
-          Point-data array on port 1 (Centerline). After each interactive snap to a centerline vertex,
-          StentRadius is set from this array at that point id (first component). Clear the name to keep
+          Point-data scalar array on port 1 (Centerline). After each interactive snap to a centerline vertex,
+          StentRadius is set from this array at that point id (first component). Choose (None) to keep
           the radius from the widget only. Typical VMTK output: MaximumInscribedSphereRadius.
         </Documentation>
+        <Hints>
+          <ArraySelectionWidget icon_type="point"/>
+        </Hints>
       </StringVectorProperty>
 
       <StringVectorProperty name="AffectMaskArrayName"
@@ -108,7 +120,8 @@
                             command="SetAffectMaskArrayName"
                             number_of_elements="1"
                             default_values="StentPlacementAffectMask"
-                            animateable="0">
+                            animateable="0"
+                            panel_visibility="never">
         <Documentation>
           Name of the vtkIntArray written on output point data: 0 for vertices moved in the strict
           flat-capped region, -1 for all others. Cleared or empty falls back to StentPlacementAffectMask.
@@ -120,12 +133,53 @@
                             command="SetGeodesicToZeroRegionArrayName"
                             number_of_elements="1"
                             default_values="StentGeodesicToZeroRegion"
-                            animateable="0">
+                            animateable="0"
+                            panel_visibility="never">
         <Documentation>
-          Name of the vtkDoubleArray on output: for vertices with affect mask ≠ 0, shortest path distance
-          along mesh edges to the nearest vertex with mask 0 (edge weights use deformed vertex positions);
-          mask 0 vertices store 0. Empty name falls back to StentGeodesicToZeroRegion. -1 if no seed or
-          unreachable (e.g. no vtkPolys).
+          Name of the vtkDoubleArray on output: for vertices with affect mask ≠ 0, shortest path in **edge
+          hops** (each mesh polygon edge weight = 1) to the nearest vertex with mask 0; mask 0 stores 0.
+          Empty name falls back to StentGeodesicToZeroRegion. -1 if no seed or unreachable (e.g. no vtkPolys).
+        </Documentation>
+      </StringVectorProperty>
+
+      <DoubleVectorProperty name="GeodesicSmoothInfluenceRange"
+                            label="Geodesic smooth influence range (edge hops)"
+                            command="SetGeodesicSmoothInfluenceRange"
+                            number_of_elements="1"
+                            default_values="5.0"
+                            animateable="1">
+        <DoubleRangeDomain name="range" min="0.0" max="1e12"/>
+        <Documentation>
+          Threshold x in **mesh edge hops** (unweighted graph distance to strict mask-0): mask -1 vertices
+          with geodesic g in (0, x) and **R &gt; d** (StentRadius vs perp distance d to full centerline) are
+          displaced by S*(R-d)*n. Default 5 edge hops; zero disables this band pass.
+        </Documentation>
+      </DoubleVectorProperty>
+
+      <DoubleVectorProperty name="GeodesicSmoothPowerLambda"
+                            label="Geodesic smooth power lambda"
+                            command="SetGeodesicSmoothPowerLambda"
+                            number_of_elements="1"
+                            default_values="1.0"
+                            animateable="1">
+        <DoubleRangeDomain name="range" min="0.1" max="10.0"/>
+        <Documentation>
+          Exponent λ in blend strength S = (1 - g/x)^λ with g/x in (0, 1), clamped to [0.1, 10]. λ &gt; 1
+          makes the falloff more convex (steeper near the outer edge g→x); λ &lt; 1 more concave (gentler).
+        </Documentation>
+      </DoubleVectorProperty>
+
+      <StringVectorProperty name="GeodesicSmoothStrengthArrayName"
+                            label="Geodesic smooth strength array name"
+                            command="SetGeodesicSmoothStrengthArrayName"
+                            number_of_elements="1"
+                            default_values="StentGeodesicSmoothStrength"
+                            animateable="0"
+                            panel_visibility="never">
+        <Documentation>
+          vtkDoubleArray on output when Geodesic smooth influence range &gt; 0: 1 on strict (mask 0)
+          vertices; in the geodesic band, S = (1 - g/x)^λ only if the vertex is actually displaced (R &gt; d);
+          otherwise 0. Empty name falls back to StentGeodesicSmoothStrength.
         </Documentation>
       </StringVectorProperty>
 
