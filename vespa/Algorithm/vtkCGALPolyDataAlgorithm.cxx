@@ -139,14 +139,27 @@ bool vtkCGALPolyDataAlgorithm::interpolateAttributes(vtkPolyData* input, vtkPoly
 {
   if (this->UpdateAttributes)
   {
-    vtkNew<vtkProbeFilter> probe;
-    probe->SetInputData(vtkMesh);
-    probe->SetSourceData(input);
-    probe->SpatialMatchOn();
-    probe->PassCellArraysOff();
-    probe->Update();
+    // vtkProbeFilter copies source CellData onto output PointData when the same name is absent
+    // there (VTK InitializeForProbing). We only want **point** fields probed onto vertices; cell
+    // fields are mapped separately onto output **cells** via centroid + nearest input cell below.
+    // With no point arrays there is nothing to probe — skip vtkProbeFilter (no vtkValidPointMask).
+    vtkPointData* const inPD = input->GetPointData();
+    if (inPD && inPD->GetNumberOfArrays() > 0)
+    {
+      vtkNew<vtkPolyData> probeSource;
+      probeSource->CopyStructure(input);
+      probeSource->GetPointData()->ShallowCopy(inPD);
+      probeSource->GetCellData()->Initialize();
 
-    vtkMesh->ShallowCopy(probe->GetOutput());
+      vtkNew<vtkProbeFilter> probe;
+      probe->SetInputData(vtkMesh);
+      probe->SetSourceData(probeSource);
+      probe->SpatialMatchOn();
+      probe->PassCellArraysOff();
+      probe->Update();
+
+      vtkMesh->ShallowCopy(probe->GetOutput());
+    }
 
     vtkCellData* inCD  = input->GetCellData();
     vtkCellData* outCD = vtkMesh->GetCellData();

@@ -3,6 +3,7 @@
 
 #include "pqPropertyGroupWidget.h"
 
+#include "vtkAlgorithm.h"
 #include "vtkPolyData.h"
 #include "vtkSmartPointer.h"
 
@@ -18,8 +19,9 @@ class pqView;
 class vtkSMNewWidgetRepresentationProxy;
 
 /**
- * Single implicit-plane widget for vtkSHYXSelectionPlaneClipper. Plane hint is read from port 0
- * field data array SHYX_SelectionPlaneClipper_PlanePacked (six components per tuple).
+ * Single implicit-plane widget for vtkSHYXSelectionPlaneClipper. Plane state comes from the
+ * InteractiveCutPacked proxy property when set; otherwise from vtkSHYXSelectionPlaneClipper::ClipPlaneHintPackedString
+ * after a successful clip (six doubles: origin + direction handle).
  */
 class pqVESPASelectionPlaneClipperWidget : public pqPropertyGroupWidget
 {
@@ -53,8 +55,7 @@ private:
   void placePlaneBounds(vtkSMNewWidgetRepresentationProxy* wdg, const double bounds[6]);
   void syncWidgetsFromFilterState();
   void pushPackedFromWidgetsToFilter();
-  int  planeHintCountFromOutput(vtkPolyData* out) const;
-  bool readPlaneHandlesFromOutput(vtkPolyData* out, double origin[3], double dirHandle[3]) const;
+  int  planeHintCountFromOutput(vtkAlgorithm* alg, vtkPolyData* out) const;
   void stylePlaneWidget(vtkSMNewWidgetRepresentationProxy* wdg) const;
   void disconnectViewVisibilityLinks();
   bool isOutputPort0VisibleInView(pqView* view) const;

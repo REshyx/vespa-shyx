@@ -7,8 +7,9 @@
  *
  * Port 1 accepts vtkSelection (ParaView Selection port with SelectionInput); vtkExtractSelection is run
  * internally. Alternatively set SelectionCellArrayName on port 0 when no selection is connected.
- * The computed clip plane hint (origin + direction handle) is stored on port 0 field data array
- * SHYX_SelectionPlaneClipper_PlanePacked for the interactive plane widget.
+ * After a successful clip, ClipPlaneHintPackedString holds the same six doubles as the interactive
+ * packed convention (origin + direction handle) for the client-side plane widget; it is not written
+ * to the output vtkPolyData.
  */
 
 #ifndef vtkSHYXSelectionPlaneClipper_h
@@ -63,6 +64,12 @@ public:
 
   vtkGetStringMacro(InteractiveCutPackedString);
   vtkSetStringMacro(InteractiveCutPackedString);
+  /**
+   * Internal: six space-separated doubles (plane origin, then direction handle point), updated when
+   * RequestData produces a clipped mesh. Not a Server Manager property; not attached to output geometry.
+   */
+  vtkGetStringMacro(ClipPlaneHintPackedString);
+  vtkSetStringMacro(ClipPlaneHintPackedString);
   /** ParaView UI: show the implicit-plane widget; does not disable use of InteractiveCutPackedString. */
   vtkGetMacro(UseInteractiveCutPlanes, int);
   vtkSetMacro(UseInteractiveCutPlanes, int);
@@ -112,6 +119,7 @@ protected:
   int RemovePositiveHalfSpace = 1;
 
   char* InteractiveCutPackedString = nullptr;
+  char* ClipPlaneHintPackedString = nullptr;
   int UseInteractiveCutPlanes = 0;
 
   int FillHoles = 1;

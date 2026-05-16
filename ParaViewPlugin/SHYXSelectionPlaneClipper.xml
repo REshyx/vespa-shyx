@@ -16,8 +16,6 @@
         Array Name (default EndpointIndex). By default the marker is max(existing values)+1; enable
         Use Custom Marker Value to supply an explicit number instead.
         Other cell arrays copy tuple from cell 0.
-        Field data array SHYX_SelectionPlaneClipper_PlanePacked (six values: plane origin and direction handle)
-        is attached to port 0 for the interactive plane widget and for scripting.
       </Documentation>
 
       <OutputPort name="Clipped Mesh" index="0" id="port0" />
@@ -175,8 +173,8 @@
         <Documentation>
           When ON, the yellow plane widget is shown so you can edit the cut plane in the view.
           Turning it OFF only hides the widget; clipping still uses the last plane from the widget
-          (InteractiveCutPacked) when present. Apply once so port 0 is generated (including the plane
-          hint in field data), then drag the plane and Apply again to clip.
+          (InteractiveCutPacked) when present. Apply once so port 0 is generated, then drag the plane
+          and Apply again to clip.
         </Documentation>
       </IntVectorProperty>
 

@@ -42,21 +42,12 @@ vtkStandardNewMacro(vtkSHYXSelectionPlaneClipper);
 
 namespace
 {
-constexpr char kPlanePackedFieldName[] = "SHYX_SelectionPlaneClipper_PlanePacked";
 constexpr char kDefaultFillHoleStampArrayName[] = "EndpointIndex";
 
-void RemovePlanePackedField(vtkPolyData* pd)
+void SetClipPlaneHintPacked(vtkSHYXSelectionPlaneClipper* self, const double meshBounds[6],
+  const double origin[3], const double planeNormal[3])
 {
-  if (pd && pd->GetFieldData())
-  {
-    pd->GetFieldData()->RemoveArray(kPlanePackedFieldName);
-  }
-}
-
-void AttachPlanePackedField(vtkPolyData* output, const double meshBounds[6], const double origin[3],
-  const double planeNormal[3])
-{
-  if (!output)
+  if (!self)
   {
     return;
   }
@@ -68,14 +59,10 @@ void AttachPlanePackedField(vtkPolyData* output, const double meshBounds[6], con
   const double dh[3] = { origin[0] + arrowLen * planeNormal[0], origin[1] + arrowLen * planeNormal[1],
     origin[2] + arrowLen * planeNormal[2] };
 
-  vtkNew<vtkDoubleArray> arr;
-  arr->SetName(kPlanePackedFieldName);
-  arr->SetNumberOfComponents(6);
-  arr->SetNumberOfTuples(1);
-  const double tuple[6] = { origin[0], origin[1], origin[2], dh[0], dh[1], dh[2] };
-  arr->SetTuple(0, tuple);
-  output->GetFieldData()->RemoveArray(kPlanePackedFieldName);
-  output->GetFieldData()->AddArray(arr);
+  std::ostringstream oss;
+  oss << origin[0] << ' ' << origin[1] << ' ' << origin[2] << ' ' << dh[0] << ' ' << dh[1] << ' ' << dh[2];
+  const std::string packed = oss.str();
+  self->SetClipPlaneHintPackedString(packed.c_str());
 }
 
 void CollectCellsFromExtracted(vtkPolyData* mesh, vtkDataSet* extracted, std::set<vtkIdType>& selected)
@@ -563,6 +550,7 @@ vtkSHYXSelectionPlaneClipper::vtkSHYXSelectionPlaneClipper()
 vtkSHYXSelectionPlaneClipper::~vtkSHYXSelectionPlaneClipper()
 {
   this->SetInteractiveCutPackedString(nullptr);
+  this->SetClipPlaneHintPackedString(nullptr);
   this->SetSelectionCellArrayName(nullptr);
   this->SetFillHoleStampCellArrayName(nullptr);
 }
@@ -588,6 +576,8 @@ void vtkSHYXSelectionPlaneClipper::PrintSelf(ostream& os, vtkIndent indent)
      << (this->FillHoleStampCellArrayName ? this->FillHoleStampCellArrayName : "(null)") << "\n";
   os << indent << "InteractiveCutPackedString: "
      << (this->InteractiveCutPackedString ? this->InteractiveCutPackedString : "") << "\n";
+  os << indent << "ClipPlaneHintPackedString: "
+     << (this->ClipPlaneHintPackedString ? this->ClipPlaneHintPackedString : "") << "\n";
   os << indent << "SelectionCellArrayName: "
      << (this->SelectionCellArrayName ? this->SelectionCellArrayName : "(null)") << "\n";
 }
@@ -628,6 +618,7 @@ int vtkSHYXSelectionPlaneClipper::RequestData(
   {
     return 0;
   }
+  this->SetClipPlaneHintPackedString(nullptr);
 
   if (!mesh->GetNumberOfCells())
   {
@@ -700,7 +691,6 @@ int vtkSHYXSelectionPlaneClipper::RequestData(
     vtkWarningMacro("No selected triangles (use Copy Active Selection on the Selection port, "
                     "or set Selection Cell Array Name). Pass-through input mesh.");
     output->ShallowCopy(mesh);
-    RemovePlanePackedField(output);
     return 1;
   }
 
@@ -710,7 +700,6 @@ int vtkSHYXSelectionPlaneClipper::RequestData(
   {
     vtkWarningMacro("Could not compute centroid/normal from selection patch.");
     output->ShallowCopy(mesh);
-    RemovePlanePackedField(output);
     return 1;
   }
 
@@ -767,7 +756,6 @@ int vtkSHYXSelectionPlaneClipper::RequestData(
     {
       vtkWarningMacro("Clip produced empty geometry; pass-through.");
       output->ShallowCopy(mesh);
-      RemovePlanePackedField(output);
       return 1;
     }
 
@@ -837,7 +825,6 @@ int vtkSHYXSelectionPlaneClipper::RequestData(
   {
     vtkWarningMacro("Clip result empty; pass-through input.");
     output->ShallowCopy(mesh);
-    RemovePlanePackedField(output);
     return 1;
   }
 
@@ -874,7 +861,7 @@ int vtkSHYXSelectionPlaneClipper::RequestData(
   {
     output->ShallowCopy(cleaned);
   }
-  AttachPlanePackedField(output, meshBounds, origin, planeNormal);
+  SetClipPlaneHintPacked(this, meshBounds, origin, planeNormal);
   return 1;
 }
 

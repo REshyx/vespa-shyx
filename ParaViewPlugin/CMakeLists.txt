@@ -198,6 +198,7 @@ if (PARAVIEW_USE_QT)
       ParaView::RemotingViews
       ParaView::pqApplicationComponents
       VTK::InteractionWidgets
+      vtkSHYXSelectionPlaneClipper
       vtkSHYXVascularStentPlacement)
 endif ()
 

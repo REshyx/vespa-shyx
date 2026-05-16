@@ -14,8 +14,6 @@
 #include "vtkAlgorithm.h"
 #include "vtkBoundingBox.h"
 #include "vtkCommand.h"
-#include "vtkDoubleArray.h"
-#include "vtkFieldData.h"
 #include "vtkMath.h"
 #include "vtkNew.h"
 #include "vtkPVDataInformation.h"
@@ -26,6 +24,9 @@
 #include "vtkSMSessionProxyManager.h"
 #include "vtkSMSourceProxy.h"
 #include "vtkSMNewWidgetRepresentationProxy.h"
+#include "vtkSMProperty.h"
+
+#include "vtkSHYXSelectionPlaneClipper.h"
 
 #include <QCheckBox>
 #include <QLabel>
@@ -35,10 +36,10 @@
 #include <cmath>
 #include <sstream>
 #include <string>
+#include <vector>
 
 namespace
 {
-constexpr char kPlanePackedFieldName[] = "SHYX_SelectionPlaneClipper_PlanePacked";
 
 void AdjustBounds(vtkBoundingBox& bbox, double scaleFactor)
 {
@@ -366,42 +367,38 @@ void pqVESPASelectionPlaneClipperWidget::stylePlaneWidget(vtkSMNewWidgetRepresen
 }
 
 //-----------------------------------------------------------------------------
-int pqVESPASelectionPlaneClipperWidget::planeHintCountFromOutput(vtkPolyData* out) const
+int pqVESPASelectionPlaneClipperWidget::planeHintCountFromOutput(vtkAlgorithm* alg, vtkPolyData* out) const
 {
-  if (!out)
+  if (!out || out->GetNumberOfPoints() <= 0)
   {
     return 0;
   }
-  auto* da = vtkDoubleArray::SafeDownCast(out->GetFieldData()->GetAbstractArray(kPlanePackedFieldName));
-  if (!da || da->GetNumberOfComponents() != 6 || da->GetNumberOfTuples() < 1)
+  auto* src = vtkSMSourceProxy::SafeDownCast(this->proxy());
+  QString packedStr;
+  if (src)
   {
-    return 0;
+    vtkSMProperty* prop = src->GetProperty("InteractiveCutPacked");
+    if (prop)
+    {
+      vtkSMPropertyHelper hp(prop);
+      const char* cs = hp.GetAsString(0);
+      packedStr = cs ? QString::fromUtf8(cs) : QString();
+    }
   }
-  return 1;
-}
-
-//-----------------------------------------------------------------------------
-bool pqVESPASelectionPlaneClipperWidget::readPlaneHandlesFromOutput(
-  vtkPolyData* out, double origin[3], double dirHandle[3]) const
-{
-  if (!out)
+  std::vector<double> parsed;
+  if (ParsePackedDoubles(packedStr, parsed))
   {
-    return false;
+    return 1;
   }
-  auto* da = vtkDoubleArray::SafeDownCast(out->GetFieldData()->GetAbstractArray(kPlanePackedFieldName));
-  if (!da || da->GetNumberOfComponents() != 6 || da->GetNumberOfTuples() < 1)
+  auto* clip = vtkSHYXSelectionPlaneClipper::SafeDownCast(alg);
+  if (clip && clip->GetClipPlaneHintPackedString())
   {
-    return false;
+    if (ParsePackedDoubles(QString::fromUtf8(clip->GetClipPlaneHintPackedString()), parsed))
+    {
+      return 1;
+    }
   }
-  double buf[6];
-  da->GetTuple(0, buf);
-  origin[0]   = buf[0];
-  origin[1]   = buf[1];
-  origin[2]   = buf[2];
-  dirHandle[0] = buf[3];
-  dirHandle[1] = buf[4];
-  dirHandle[2] = buf[5];
-  return true;
+  return 0;
 }
 
 //-----------------------------------------------------------------------------
@@ -421,26 +418,24 @@ void pqVESPASelectionPlaneClipperWidget::syncWidgetsFromFilterState()
     packedStr      = cs ? QString::fromUtf8(cs) : QString();
   }
   std::vector<double> parsed;
-  const bool havePacked = ParsePackedDoubles(packedStr, parsed);
-
-  vtkAlgorithm* alg = vtkAlgorithm::SafeDownCast(src->GetClientSideObject());
-  vtkPolyData*  outPd = alg ? vtkPolyData::SafeDownCast(alg->GetOutputDataObject(0)) : nullptr;
-
-  double o[3] = { 0, 0, 0 };
-  double d[3] = { 0, 0, 0 };
-  if (havePacked)
+  bool haveSix = ParsePackedDoubles(packedStr, parsed);
+  if (!haveSix)
   {
-    o[0] = parsed[0];
-    o[1] = parsed[1];
-    o[2] = parsed[2];
-    d[0] = parsed[3];
-    d[1] = parsed[4];
-    d[2] = parsed[5];
+    vtkAlgorithm* alg = vtkAlgorithm::SafeDownCast(src->GetClientSideObject());
+    auto* clip = vtkSHYXSelectionPlaneClipper::SafeDownCast(alg);
+    const char* hint = clip ? clip->GetClipPlaneHintPackedString() : nullptr;
+    if (hint)
+    {
+      haveSix = ParsePackedDoubles(QString::fromUtf8(hint), parsed);
+    }
   }
-  else if (!this->readPlaneHandlesFromOutput(outPd, o, d))
+  if (!haveSix || parsed.size() != 6u)
   {
     return;
   }
+
+  const double o[3] = { parsed[0], parsed[1], parsed[2] };
+  const double d[3] = { parsed[3], parsed[4], parsed[5] };
   double nrm[3] = { d[0] - o[0], d[1] - o[1], d[2] - o[2] };
   if (vtkMath::Normalize(nrm) < 1e-15)
   {
@@ -543,7 +538,7 @@ void pqVESPASelectionPlaneClipperWidget::rebuildPlaneWidgetsIfNeeded()
 
   vtkAlgorithm* alg = vtkAlgorithm::SafeDownCast(src->GetClientSideObject());
   vtkPolyData*  outPd = alg ? vtkPolyData::SafeDownCast(alg->GetOutputDataObject(0)) : nullptr;
-  const int n       = this->planeHintCountFromOutput(outPd);
+  const int n       = this->planeHintCountFromOutput(alg, outPd);
 
   if (n <= 0)
   {
