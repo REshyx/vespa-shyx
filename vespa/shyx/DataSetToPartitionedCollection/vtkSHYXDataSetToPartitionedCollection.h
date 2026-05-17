@@ -6,19 +6,25 @@
  * point/cell GlobalIds (1..N) for vtkIOSSWriter; (2) vtkDataSetSurfaceFilter on
  * the tet-only mesh with PassThroughCellIds/PointIds; (3) boundary cell data element_side (volume
  * global cell id, Exodus tet face 1..4); (4) split the boundary surface into side-set patches
- * using a cell-data partition scalar (default \c EndpointIndex, same cell array as
- * vtkCGALVesselEndClipper: 1-based endpoint id per triangle, -1 for unassigned); each distinct
- * scalar (first component, rounded to integer) is one patch, ordered by ascending key. If that
- * array is missing or the wrong length, falls back to vtkPolyDataNormals feature-angle splitting
- * plus vtkPolyDataConnectivityFilter. If PartitionCellArrayName is empty, always use the feature
- * angle path. Unreferenced points are stripped per region so side{i} / node{i} only contain
+ * using vtkPointData on the extracted surface: \c vtkThreshold keeps cells whose first component
+ * lies in (-\infty, 0] (inclusive of 0) with All Scalars off (any corner suffices); vtkAppendPolyData merges
+ * all connected parts into one patch. Then cells in [1, +\infty) (inclusive of 1) on the first component,
+ * also any corner; \c vtkPolyDataConnectivityFilter splits that sub-mesh into \e n connected regions.
+ * A cell whose corners all lie strictly in (0, 1) may belong to neither pass.
+ * Side / node sets follow in order: one block for the merged non-positive region (if non-empty), then \e n blocks for
+ * the sub-regions at or above 1 (up to \e n+1 pairs total). If the array is missing or the wrong length, or the name is empty, falls
+ * back to vtkPolyDataNormals feature-angle splitting plus vtkPolyDataConnectivityFilter on the full
+ * surface. Unreferenced points are stripped per region so side{i} / node{i} only contain
  * points used by that patch. node{i} matches side{i} (1:1 by point id) with one vtkVertex per
  * point. Surface point GlobalIds duplicate the volume mesh node ids so vtkIOSSWriter NodeSet ids
  * resolve to correct coordinates in the merged Exodus node block.
  * vtkDataAssembly IOSS / element_blocks, node_sets (all node{i}), then side_sets (all side{i}).
  *
+ * Output port 1 is a single vtkPolyData: the full boundary surface before patch splitting (same
+ * mesh and cell arrays used to build node/side sets), for downstream node/face partitioning.
+ *
  * @sa
- * vtkDataSetSurfaceFilter, vtkCGALVesselEndClipper, vtkPolyDataNormals, vtkPolyDataConnectivityFilter
+ * vtkDataSetSurfaceFilter, vtkThreshold, vtkGeometryFilter, vtkAppendPolyData, vtkPolyDataNormals, vtkPolyDataConnectivityFilter
  */
 
 #ifndef vtkSHYXDataSetToPartitionedCollection_h
@@ -40,13 +46,15 @@ public:
   vtkGetMacro(FeatureAngle, double);
 
   /**
-   * Cell-data array used to group surface triangles into side sets (first tuple component; values
-   * are rounded to the nearest integer for bucketing). Default \c EndpointIndex (see
-   * vtkCGALVesselEndClipper). Empty string disables this path and uses FeatureAngle /
-   * vtkPolyDataConnectivityFilter only.
+   * Point-data array on the boundary surface: vtkThreshold first component in (-\infty, 0] (any
+   * corner; vtkThreshold THRESHOLD_BETWEEN with inclusive endpoints) merged to one patch; then
+   * [1, +\infty) (any corner) split by vtkPolyDataConnectivityFilter into multiple patches. Values
+   * strictly in (0, 1) at all corners of a cell keep that cell out of both passes. Default \c
+   * EndpointIndex. Empty string uses FeatureAngle / vtkPolyDataConnectivityFilter on the full
+   * surface only.
    */
-  vtkSetStringMacro(PartitionCellArrayName);
-  vtkGetStringMacro(PartitionCellArrayName);
+  vtkSetStringMacro(PartitionPointArrayName);
+  vtkGetStringMacro(PartitionPointArrayName);
 
   vtkSetMacro(SortByArea, int);
   vtkGetMacro(SortByArea, int);
@@ -65,7 +73,7 @@ protected:
   int RequestData(vtkInformation*, vtkInformationVector**, vtkInformationVector*) override;
 
   double FeatureAngle = 70.0;
-  char* PartitionCellArrayName = nullptr;
+  char* PartitionPointArrayName = nullptr;
   /** When non-zero (default), order side / node set patches by total surface area, largest first. */
   int SortByArea = 1;
   /**

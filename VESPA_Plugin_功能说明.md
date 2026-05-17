@@ -556,21 +556,22 @@
 
 ### 30. SHYX DataSet To Partitioned Collection（`vtkSHYXDataSetToPartitionedCollection`）
 
-**功能**：将 **`vtkDataSet`** 转为 **`vtkPartitionedDataSetCollection`**，便于配合 **vtkIOSSWriter** 等写出带 **IOSS 装配（assembly）** 的 Exodus/IOSS 结构：四面体体网格块、按特征角与连通性划分的表面片，以及对应的 side / node 集合元数据。
+**功能**：将 **`vtkDataSet`** 转为 **`vtkPartitionedDataSetCollection`**，便于配合 **vtkIOSSWriter** 等写出带 **IOSS 装配（assembly）** 的 Exodus/IOSS 结构：四面体体网格块、按**表面点标量符号分区**（或回退：特征角 + 连通域）得到的 **side / node** 集合元数据。
 
 **管线概要**：
 
 1. 若输入为 **`vtkUnstructuredGrid` 且含 `VTK_TETRA`**：抽出全部四面体为**单一**体分区，并为其点、单元写入**连续**的 **GlobalIds**（1…N），便于 IOSS 的 `element_blocks` / `tetrahedra`（`object_id = 1` 等约定以插件实现为准）。
 2. 仅对该四面体子网格做 **`vtkDataSetSurfaceFilter`**（而非对整个混合网格），得到边界表面；可传递单元/点 ID，并在边界单元数据上写入 **`element_side`**（体网格全局单元 ID + Exodus 四面体面序号 1…4），供 **side sets** 使用。
-3. 对表面用 **`vtkPolyDataNormals`** 按 **Feature angle** 分裂，再用 **`vtkPolyDataConnectivityFilter`** 分成多个连通区域；每个区域 **i** 对应 **`side{i}`** 与 **`node{i}`**（节点集与侧面点一致，表面点 **GlobalIds** 与体网格节点 ID 对齐，便于合并后的 Exodus 节点块解析）。
+3. 在边界 **`vtkPolyData`** 的 **`vtkPointData`** 上（**Partition Point Array Name**，默认 `EndpointIndex`）：**`vtkThreshold`**（**`THRESHOLD_BETWEEN`**，端点**包含**；**`SetAllScalars(0)`**，即**任意角点**满足区间即可）取首分量 **(-∞, 0]**，**`vtkGeometryFilter` + 连通域 + `vtkAppendPolyData`** 合并为 **1 片**（若有单元）；再 **`vtkThreshold`** 取首分量 **[1, +∞)**（同样任意角点），在该子网格上 **`vtkPolyDataConnectivityFilter`** 拆成 **n 片**；若单元**各角点**均严格在 **(0, 1)** 内则可能**两侧都不进**。输出顺序：**≤0 的合并片**（若有）在前，其后为 **n 个 ≥1 的连通片**，共 **至多 n+1 对** **`node{i}` / `side{i}`**；再经 **Sort By Area** / **Custom Post Reorder**（若开启）作用于**整张列表**。若点数组无效或两步阈后皆空，则回退为整张表面 **`vtkPolyDataNormals`（Feature angle）+ `vtkPolyDataConnectivityFilter`**。表面点 **GlobalIds** 与体网格节点 ID 对齐（有体四面体块时）。
 
-**非体网格或非四面体输入**：若为 **`vtkPolyData`** 则原样放入集合；否则对整体数据集取表面后再参与上述分裂（与 XML 长说明一致）。
+**非体网格或非四面体输入**：若为 **`vtkPolyData`** 则原样放入集合；否则对整体数据集取表面后再参与上述流程（与 XML 长说明一致）。
 
 | 参数 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
-| **Feature angle (deg)** | double | 70.0 | 表面分裂用的二面角阈值（`vtkPolyDataNormals`）。**较大**时更多光滑邻域被合并；**较小**时在尖棱/折边处切分更细。 |
+| **Partition Point Array Name** | string | EndpointIndex | 点标量名：驱动「首分量 ≤0 合并 + ≥1 连通拆分」；清空则始终走特征角路径。 |
+| **Feature angle (deg)** | double | 70.0 | 回退路径：`vtkPolyDataNormals` 二面角阈值。**较大**时更多光滑邻域被合并；**较小**时在尖棱/折边处切分更细。 |
 
-**输出**：`vtkPartitionedDataSetCollection`；块元数据会设置 **NAME** 及与 **vtkIOSSReader** 的 **ENTITY_ID** 等兼容字段（以当前实现为准）。
+**输出**：端口 0 为 **`vtkPartitionedDataSetCollection`**；端口 1 为分 patch 前的整块边界 **`vtkPolyData`**。块元数据会设置 **NAME** 及与 **vtkIOSSReader** 的 **ENTITY_ID** 等兼容字段（以当前实现为准）。
 
 ---
 

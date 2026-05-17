@@ -7,7 +7,7 @@
 ## 1. 目的与功能算法详细解释
 
 ### 🎯 核心目的
-`vtkSHYXDataSetToPartitionedCollection` 模块的主要任务是将 `vtkDataSet`（通常为包含四面体单元的非结构化网格）转换并重组为兼容 `vtkIOSSWriter` (Exodus 格式) 要求的 `vtkPartitionedDataSetCollection` 数据结构。该模块负责处理体网格、提取表面、按**单元数据分区标量**（默认 `EndpointIndex`，与 `vtkCGALVesselEndClipper` 输出的 cap 标记一致）将边界曲面分组为若干 patch，并构建 IOSS 格式所需的**单元块 (Element Blocks)**、**侧面集 (Side Sets)** 及 **节点集 (Node Sets)**。若该数组不存在或长度不匹配，则回退为特征角 + 连通域拆分。
+`vtkSHYXDataSetToPartitionedCollection` 模块的主要任务是将 `vtkDataSet`（通常为包含四面体单元的非结构化网格）转换并重组为兼容 `vtkIOSSWriter` (Exodus 格式) 要求的 `vtkPartitionedDataSetCollection` 数据结构。对提取出的边界 **`vtkPointData`** 标量（`PartitionPointArrayName`，默认 `EndpointIndex`）：**先**用 **`vtkThreshold`**（**`THRESHOLD_BETWEEN`**，区间端点**包含**；首分量落在 **(-∞, 0]**）配合 **All Scalars 关闭**（**任意角点**满足区间即可保留该单元），连通域结果 **`vtkAppendPolyData` 合并为 1 片**；**再**用 **`vtkThreshold`** 取首分量 **[1, +∞)**（同样任意角点），在该子网格上用 **`vtkPolyDataConnectivityFilter` 按连通性拆成 n 片**。若某单元**所有角点**的首分量都严格落在 **(0, 1)** 内，则**可能**不属于任一侧。最终得到 **至多 n+1 个** face 区域，依次生成 **`node{i}` / `side{i}`**（若「≤0」合并区域为空则为 n 对）。分界常量见源码 **`kPartitionLeZeroInclusive`** / **`kPartitionGeOneInclusive`**（0 与 1）。若点数组缺失或与点数不一致、或两步阈后均无单元，则回退为整张表面的 **特征角 + 连通域**；分区数组名为空时始终走特征角路径。若标量只在单元上，需先用 **Cell Data To Point Data** 等转到点。
 
 ### 🧠 算法流水线 (The Pipeline)
 该转换过程分为以下具体步骤：
@@ -15,18 +15,16 @@
 1. **提取四面体 (Tet Volume Extraction)**：从输入数据集中提取所有四面体 (`VTK_TETRA`) 单元，生成独立的 `vtkUnstructuredGrid` 对象，并为其分配连续的全局点 ID 和单元 ID（1至N），以符合 Exodus 格式对 ID 连续性的要求。
 2. **表面剥离 (Surface Extraction)**：通过 `vtkDataSetSurfaceFilter` 提取四面体网格的外部边界曲面，并保留其在体网格中的 Cell IDs 与 Point IDs 映射。
 3. **归属映射 (Element Side Mapping)**：识别表面每个三角形单元所属的内部四面体及其对应的面索引（Exodus 格式面编号为 1至4），并将此映射关系存储至单元数据 `element_side`，用于定义后续的侧面集 (Side Set)。
-4. **单元标量分区 (Cell-array partitioning)**：读取表面单元数据中的分区数组（属性 `PartitionCellArrayName`，默认 `EndpointIndex`）。对每个单元取标量第一个分量并**四舍五入为整数**，相同整数值的单元归入同一 patch；patch 顺序为标量键升序（例如 …, -1, 1, 2, …）。若数组缺失、非数值类型或 tuple 数与单元数不一致，则退回到 **特征角分裂与连通域提取**：`vtkPolyDataNormals` + `vtkPolyDataConnectivityFilter`。若将分区数组名置为空字符串，则始终走特征角路径。
-5. **点集清洗 (Stripping Unreferenced Points)**：对提取出的各个表面区域进行校验，移除区域内未引用的孤立点，确保构建出的 `side{i}` 和 `node{i}` 块中仅包含有效的顶点。
-6. **节点与侧面生成 (Node & Side Sets Generation)**：将处理完毕的曲面保存为 `side{i}` 块，并在曲面上生成等效的顶点拓扑数据 (`vtkVertex`) 以形成 `node{i}` 块。在此过程中恢复所有点的原始全局 ID 映射，保证坐标的准确性。
-7. **数据装配 (Assembly Building)**：最终生成一个 `vtkDataAssembly` 层级树结构，将转换后的块级数据规范地映射至 `element_blocks`、`node_sets` 及 `side_sets` 分支，完成格式转换。
+4. **符号分区 (Sign split)**：在表面点标量上执行两步 **`vtkThreshold`**（**`THRESHOLD_BETWEEN`**，端点包含；均为 **`SetAllScalars(0)`**，即任意角点满足区间即可）+ **`vtkGeometryFilter`**：**(a)** 首分量 **≤0**（实现为到 0 的闭区间阈）→ 连通域后 **`vtkAppendPolyData` 合并为 1 个 patch（若有单元）；**(b)** 首分量 **≥1**（实现为从 1 起的闭区间阈）→ **`vtkPolyDataConnectivityFilter`** 拆成 **n** 个 patch。将 (a)（若存在）置于列表首位，再依次追加 (b) 的 n 个 patch，得到 **至多 n+1** 个区域后，再经 **Sort By Area** / **Custom Post Reorder**（若开启）重排整块列表。若数组无效或阈后为空则退化为 **`vtkPolyDataNormals` + `vtkPolyDataConnectivityFilter`** 对整张表面拆分。
+5. **点集清洗 (Stripping Unreferenced Points)**：对各 patch 去除未引用点。
+6. **节点与侧面生成 (Node & Side Sets Generation)**：每个 patch 生成 `side{i}` 与对应 `node{i}`（`vtkVertex`），并恢复/写入 **GlobalIds** 等。
+7. **数据装配 (Assembly Building)**：生成 `vtkDataAssembly`（`element_blocks` / `node_sets` / `side_sets`）。
 
 ## 2. 参数列表及其效果和含义
 
-以下为该模块可供调整的配置参数：
-
 | 参数名称 | 类型 | 默认值 | 效果和含义 |
 | :--- | :---: | :---: | :--- |
-| **PartitionCellArrayName** | `char*` | `EndpointIndex` | **分区单元数组名**。表面 `vtkCellData` 中用于分组的标量数组；与 `vtkCGALVesselEndClipper` 写入的 `EndpointIndex`（端点 1-based 编号，未标记为 -1）一致。置为空字符串则仅使用下面的特征角路径。 |
-| **FeatureAngle** | `double` | `70.0` | **特征角阈值**（回退路径）。当分区数组不可用或拆不出 patch 时，用法线夹角判断拆分；或当数组名为空时单独使用。 |
-| **SortByArea** | `int` (布尔) | `1` (True) | **按面积排序**。若启用，按各 patch 总表面积从大到小重排 `side{i}` / `node{i}`；关闭时保持分区标量升序（或连通域索引顺序）。 |
-| **CustomPostReorder** | `int` (布尔) | `1` (True) | **自定义重排**：在面积排序（若启用）之后，将第 3 个 patch 移到最前、第 1 个移到最后（与原先逻辑相同）。少于 3 个 patch 时无效果。 |
+| **PartitionPointArrayName** | `char*` | `EndpointIndex` | **分区点数组名**。表面 `vtkPointData` 上用于「首分量 ≤0 合并 + ≥1 连通拆分」的首分量标量；需在点上。 |
+| **FeatureAngle** | `double` | `70.0` | **特征角阈值**（回退路径）。 |
+| **SortByArea** | `int` (布尔) | `1` (True) | **按面积排序**（对当前 **全部** patch 列表：≤0 的合并片 + ≥1 的各连通片）。 |
+| **CustomPostReorder** | `int` (布尔) | `1` (True) | **自定义重排**（在面积排序之后，对当前 patch 列表生效）。 |

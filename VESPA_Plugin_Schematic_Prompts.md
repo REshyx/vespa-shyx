@@ -75,7 +75,7 @@ Panel 1: Overview of the goal: bringing static fluid streamlines to life using G
 
 ### 10. DataSetToPartitionedCollection (数据分区集合转换)
 ```text
-Panel 1: Overview of the goal: organizing an unstructured mesh into IOSS/Exodus compatible blocks, side sets, and node sets. Panel 2: Extracting outer boundary surface triangles from the solid tetrahedral volume block. Panel 3: Splitting the boundary surface into distinct patches based on sharp feature angles. Panel 4: Final assembly tree output showing properly partitioned tet blocks and separated boundary side sets.
+Panel 1: Overview of the goal: organizing an unstructured mesh into IOSS/Exodus compatible blocks, side sets, and node sets. Panel 2: Extracting outer boundary surface triangles from the solid tetrahedral volume block. Panel 3: Splitting the boundary into patches by point scalar (first component <=0 merged, >=1 per connected region) or sharp feature angles when unset. Panel 4: Final assembly tree output showing properly partitioned tet blocks and separated boundary side sets.
 ```
 
 ### 11. VortexCriteria (涡流识别判据)

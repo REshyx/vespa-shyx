@@ -1,6 +1,7 @@
 #include "vtkSHYXDataSetToPartitionedCollection.h"
 
 #include <vtkAbstractArray.h>
+#include <vtkAppendPolyData.h>
 #include <vtkCellArray.h>
 #include <vtkCellType.h>
 #include <vtkCellData.h>
@@ -11,6 +12,7 @@
 #include <vtkDataSet.h>
 #include <vtkDataSetSurfaceFilter.h>
 #include <vtkExtractCells.h>
+#include <vtkGeometryFilter.h>
 #include <vtkIdList.h>
 #include <vtkIdTypeArray.h>
 #include <vtkInformation.h>
@@ -30,13 +32,13 @@
 #include <vtkPolygon.h>
 #include <vtkSmartPointer.h>
 #include <vtkTetra.h>
+#include <vtkThreshold.h>
 #include <vtkUnstructuredGrid.h>
 
 #include <algorithm>
 #include <array>
 #include <cmath>
 #include <limits>
-#include <map>
 #include <numeric>
 #include <set>
 #include <string>
@@ -48,6 +50,11 @@ vtkStandardNewMacro(vtkSHYXDataSetToPartitionedCollection);
 
 namespace
 {
+/** vtkThreshold BETWEEN upper bound for merged non-positive patch (values <= this, inclusive). */
+constexpr double kPartitionLeZeroInclusive = 0.0;
+/** vtkThreshold BETWEEN lower bound for high-side patches split by connectivity (values >= this, inclusive). */
+constexpr double kPartitionGeOneInclusive = 1.0;
+
 /** vtkIOSSWriter expects contiguous global ids (1..N) per volume block. */
 void SetContiguousGlobalIds(vtkUnstructuredGrid* ug)
 {
@@ -631,10 +638,14 @@ void BuildPolyDataWithCellIds(vtkPolyData* inMesh, const std::vector<vtkIdType>&
 }
 
 /**
- * One surface patch per distinct partition id (first array component, rounded to long long).
- * Patch order follows ascending key (std::map), e.g. EndpointIndex -1, 1, 2, …
+ * vtkThreshold on point \p arrayName first component in [\p lowerThr, \p upperThr] (vtkThreshold
+ * THRESHOLD_BETWEEN; interval endpoints are inclusive in VTK), then vtkGeometryFilter +
+ * vtkPolyDataConnectivityFilter. All Scalars is always off (any corner may qualify a cell). When
+ * \p mergeAllRegions is false, each connected region is its own piece. When true, all regions are
+ * vtkAppendPolyData-merged into one surface.
  */
-void CollectSurfacePiecesByCellArray(vtkPolyData* surface, const char* arrayName,
+void CollectSurfacePiecesByThresholdRangeConnectivity(vtkPolyData* surface, const char* arrayName,
+  double lowerThr, double upperThr, bool mergeAllRegions,
   std::vector<vtkSmartPointer<vtkPolyData>>* outPieces)
 {
   outPieces->clear();
@@ -643,39 +654,132 @@ void CollectSurfacePiecesByCellArray(vtkPolyData* surface, const char* arrayName
     return;
   }
 
-  vtkDataArray* arr = vtkDataArray::SafeDownCast(surface->GetCellData()->GetAbstractArray(arrayName));
-  if (!arr || arr->GetNumberOfTuples() != surface->GetNumberOfCells() || arr->GetNumberOfComponents() < 1)
+  vtkDataArray* arr = vtkDataArray::SafeDownCast(surface->GetPointData()->GetAbstractArray(arrayName));
+  if (!arr || arr->GetNumberOfTuples() != surface->GetNumberOfPoints() || arr->GetNumberOfComponents() < 1)
   {
     return;
   }
 
-  const vtkIdType nc = surface->GetNumberOfCells();
-  std::map<long long, std::vector<vtkIdType>> buckets;
-  constexpr long long kNonFiniteKey = std::numeric_limits<long long>::min();
-  for (vtkIdType cid = 0; cid < nc; ++cid)
+  vtkNew<vtkThreshold> th;
+  th->SetInputData(surface);
+  th->SetInputArrayToProcess(0, 0, 0, vtkDataObject::FIELD_ASSOCIATION_POINTS, arrayName);
+  th->SetThresholdFunction(vtkThreshold::THRESHOLD_BETWEEN);
+  th->SetLowerThreshold(lowerThr);
+  th->SetUpperThreshold(upperThr);
+  th->SetSelectedComponent(0);
+  th->SetComponentModeToUseSelected();
+  th->SetAllScalars(0);
+  th->Update();
+
+  vtkDataSet* thOut = vtkDataSet::SafeDownCast(th->GetOutputDataObject(0));
+  if (!thOut || thOut->GetNumberOfCells() == 0)
   {
-    const double comp = arr->GetComponent(cid, 0);
-    const long long key =
-      std::isfinite(comp) ? static_cast<long long>(std::llround(comp)) : kNonFiniteKey;
-    buckets[key].push_back(cid);
+    return;
   }
 
-  for (const auto& kv : buckets)
+  vtkNew<vtkGeometryFilter> geom;
+  geom->SetInputData(thOut);
+  geom->Update();
+  vtkPolyData* poly = vtkPolyData::SafeDownCast(geom->GetOutput());
+  if (!poly || poly->GetNumberOfCells() == 0)
   {
-    if (kv.second.empty())
+    return;
+  }
+
+  vtkNew<vtkPolyDataConnectivityFilter> probe;
+  probe->SetInputData(poly);
+  probe->SetExtractionModeToAllRegions();
+  probe->ColorRegionsOn();
+  probe->Update();
+
+  const int nRegions = static_cast<int>(probe->GetNumberOfExtractedRegions());
+  if (nRegions <= 0)
+  {
+    return;
+  }
+
+  vtkNew<vtkPolyDataConnectivityFilter> conn;
+  conn->SetInputData(poly);
+  conn->SetExtractionModeToSpecifiedRegions();
+  conn->ColorRegionsOff();
+
+  if (!mergeAllRegions)
+  {
+    for (int r = 0; r < nRegions; ++r)
     {
-      continue;
+      conn->InitializeSpecifiedRegionList();
+      conn->AddSpecifiedRegion(r);
+      conn->Update();
+      vtkPolyData* out = conn->GetOutput();
+      if (!out || out->GetNumberOfCells() == 0)
+      {
+        continue;
+      }
+      vtkSmartPointer<vtkPolyData> copy = vtkSmartPointer<vtkPolyData>::New();
+      copy->DeepCopy(out);
+      StripUnreferencedPoints(copy);
+      outPieces->push_back(copy);
     }
-    vtkNew<vtkPolyData> piece;
-    BuildPolyDataWithCellIds(surface, kv.second, piece.GetPointer());
-    if (piece->GetNumberOfCells() == 0)
+  }
+  else
+  {
+    vtkNew<vtkAppendPolyData> append;
+    int nAppended = 0;
+    for (int r = 0; r < nRegions; ++r)
     {
-      continue;
+      conn->InitializeSpecifiedRegionList();
+      conn->AddSpecifiedRegion(r);
+      conn->Update();
+      vtkPolyData* out = conn->GetOutput();
+      if (!out || out->GetNumberOfCells() == 0)
+      {
+        continue;
+      }
+      append->AddInputData(out);
+      ++nAppended;
     }
-    vtkSmartPointer<vtkPolyData> copy = vtkSmartPointer<vtkPolyData>::New();
-    copy->DeepCopy(piece);
-    StripUnreferencedPoints(copy);
-    outPieces->push_back(copy);
+    if (nAppended == 0)
+    {
+      return;
+    }
+    append->Update();
+    vtkPolyData* mergedOut = append->GetOutput();
+    if (!mergedOut || mergedOut->GetNumberOfCells() == 0)
+    {
+      return;
+    }
+    vtkSmartPointer<vtkPolyData> merged = vtkSmartPointer<vtkPolyData>::New();
+    merged->DeepCopy(mergedOut);
+    StripUnreferencedPoints(merged);
+    outPieces->push_back(merged);
+  }
+}
+
+/** Build side patches: one merged region for first component <= 0 (any corner; vtkThreshold BETWEEN),
+ * then one patch per connected region where the first component >= 1 (any corner). */
+void BuildSidePiecesSignThreshold(vtkPolyData* surface, const char* arrayName,
+  std::vector<vtkSmartPointer<vtkPolyData>>* sidePieces)
+{
+  sidePieces->clear();
+
+  std::vector<vtkSmartPointer<vtkPolyData>> leZero;
+  CollectSurfacePiecesByThresholdRangeConnectivity(surface, arrayName,
+    std::numeric_limits<double>::lowest(), kPartitionLeZeroInclusive, true, &leZero);
+
+  std::vector<vtkSmartPointer<vtkPolyData>> geOne;
+  CollectSurfacePiecesByThresholdRangeConnectivity(surface, arrayName, kPartitionGeOneInclusive,
+    std::numeric_limits<double>::max(), false, &geOne);
+
+  if (!leZero.empty() && leZero[0] && leZero[0]->GetNumberOfCells() > 0)
+  {
+    sidePieces->push_back(leZero[0]);
+  }
+  for (auto& p : geOne)
+  {
+    if (p && p->GetNumberOfCells() > 0)
+    {
+      sidePieces->push_back(p);
+    }
   }
 }
 
@@ -802,14 +906,14 @@ void BuildIossAssembly(vtkPartitionedDataSetCollection* coll, bool hasTet,
 vtkSHYXDataSetToPartitionedCollection::vtkSHYXDataSetToPartitionedCollection()
 {
   this->SetNumberOfInputPorts(1);
-  this->SetNumberOfOutputPorts(1);
-  this->SetPartitionCellArrayName("EndpointIndex");
+  this->SetNumberOfOutputPorts(2);
+  this->SetPartitionPointArrayName("EndpointIndex");
 }
 
 //------------------------------------------------------------------------------
 vtkSHYXDataSetToPartitionedCollection::~vtkSHYXDataSetToPartitionedCollection()
 {
-  this->SetPartitionCellArrayName(nullptr);
+  this->SetPartitionPointArrayName(nullptr);
 }
 
 //------------------------------------------------------------------------------
@@ -817,8 +921,8 @@ void vtkSHYXDataSetToPartitionedCollection::PrintSelf(ostream& os, vtkIndent ind
 {
   this->Superclass::PrintSelf(os, indent);
   os << indent << "FeatureAngle: " << this->FeatureAngle << "\n";
-  os << indent << "PartitionCellArrayName: "
-     << (this->PartitionCellArrayName ? this->PartitionCellArrayName : "(null)") << "\n";
+  os << indent << "PartitionPointArrayName: "
+     << (this->PartitionPointArrayName ? this->PartitionPointArrayName : "(null)") << "\n";
   os << indent << "SortByArea: " << this->SortByArea << "\n";
   os << indent << "CustomPostReorder: " << this->CustomPostReorder << "\n";
 }
@@ -844,6 +948,11 @@ int vtkSHYXDataSetToPartitionedCollection::FillOutputPortInformation(
     info->Set(vtkDataObject::DATA_TYPE_NAME(), "vtkPartitionedDataSetCollection");
     return 1;
   }
+  if (port == 1)
+  {
+    info->Set(vtkDataObject::DATA_TYPE_NAME(), "vtkPolyData");
+    return 1;
+  }
   return 0;
 }
 
@@ -854,6 +963,7 @@ int vtkSHYXDataSetToPartitionedCollection::RequestData(vtkInformation* vtkNotUse
   vtkDataSet* input = vtkDataSet::GetData(inputVector[0], 0);
   vtkPartitionedDataSetCollection* output =
     vtkPartitionedDataSetCollection::GetData(outputVector, 0);
+  vtkPolyData* surfaceOutput = vtkPolyData::GetData(outputVector, 1);
 
   if (!input)
   {
@@ -863,6 +973,11 @@ int vtkSHYXDataSetToPartitionedCollection::RequestData(vtkInformation* vtkNotUse
   if (!output)
   {
     vtkErrorMacro(<< "Output PartitionedDataSetCollection is null.");
+    return 0;
+  }
+  if (!surfaceOutput)
+  {
+    vtkErrorMacro(<< "Output boundary surface (port 1) is null.");
     return 0;
   }
 
@@ -926,26 +1041,30 @@ int vtkSHYXDataSetToPartitionedCollection::RequestData(vtkInformation* vtkNotUse
   }
 
   std::vector<vtkSmartPointer<vtkPolyData>> sidePieces;
-  const char* partName = this->PartitionCellArrayName;
+  const char* partName = this->PartitionPointArrayName;
   vtkDataArray* partArr = nullptr;
   if (partName && partName[0] != '\0')
   {
-    partArr = vtkDataArray::SafeDownCast(surfaceWork->GetCellData()->GetAbstractArray(partName));
-    if (!partArr || partArr->GetNumberOfTuples() != surfaceWork->GetNumberOfCells())
+    partArr = vtkDataArray::SafeDownCast(surfaceWork->GetPointData()->GetAbstractArray(partName));
+    if (!partArr || partArr->GetNumberOfTuples() != surfaceWork->GetNumberOfPoints() ||
+      partArr->GetNumberOfComponents() < 1)
     {
-      vtkWarningMacro(<< "Cell data array \"" << partName << "\" is missing, not numeric, or has length "
+      vtkWarningMacro(<< "Point data array \"" << partName << "\" is missing, not numeric, or has length "
                       << (partArr ? partArr->GetNumberOfTuples() : static_cast<vtkIdType>(-1))
-                      << " != number of cells " << surfaceWork->GetNumberOfCells()
+                      << " != number of points " << surfaceWork->GetNumberOfPoints()
                       << ". Using feature-angle / connectivity split instead.");
       partArr = nullptr;
     }
   }
   if (partArr)
   {
-    CollectSurfacePiecesByCellArray(surfaceWork.GetPointer(), partName, &sidePieces);
+    BuildSidePiecesSignThreshold(surfaceWork.GetPointer(), partName, &sidePieces);
     if (sidePieces.empty())
     {
-      vtkWarningMacro(<< "Cell-array split produced no patches; using feature-angle / connectivity split instead.");
+      vtkWarningMacro(<< "Split threshold (<=" << kPartitionLeZeroInclusive << " merged, >="
+                      << kPartitionGeOneInclusive
+                      << " connectivity) produced no patches; using "
+                         "feature-angle / connectivity split instead.");
       CollectCuspConnectedSurfacePieces(surfaceWork.GetPointer(), this->FeatureAngle, &sidePieces);
     }
   }
@@ -961,6 +1080,9 @@ int vtkSHYXDataSetToPartitionedCollection::RequestData(vtkInformation* vtkNotUse
   {
     ApplyCustomPostReorder(&sidePieces);
   }
+
+  // Full boundary surface before per-patch GlobalIds / stripping; same topology & arrays as split input.
+  surfaceOutput->DeepCopy(surfaceWork);
 
   const unsigned int nPairs = static_cast<unsigned int>(sidePieces.size());
   vtkIdType nextStandaloneSurfacePointGid = 1;

@@ -1,7 +1,7 @@
 NAME
   vtkSHYXDataSetToPartitionedCollection
-DESCRIPTION
-  "Split vtkDataSet into a vtkPartitionedDataSetCollection: tetrahedra, then node_sets and side_sets from feature-angle splitting and connectivity partitions."
+  DESCRIPTION
+  "Split vtkDataSet into vtkPartitionedDataSetCollection: tetrahedra, then node_sets/side_sets from first-component <=0 merged + >=1 connectivity split (vtkThreshold BETWEEN) or feature-angle connectivity."
 GROUPS
   Meshing
 DEPENDS

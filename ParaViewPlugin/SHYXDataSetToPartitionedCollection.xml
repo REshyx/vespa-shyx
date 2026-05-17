@@ -4,8 +4,11 @@
                  class="vtkSHYXDataSetToPartitionedCollection"
                  label="SHYX DataSet To Partitioned Collection">
       <Documentation
-          short_help="Split dataset into tet volume, then node sets, then side sets."
-          long_help="Tetrahedra (if any) are extracted first under vtkDataAssembly IOSS/element_blocks/tetrahedra with contiguous GlobalIds (1..N) for IOSS writers. PartitionedDataSetCollection block order is then all node{i} blocks (node_sets), then all side{i} blocks (side_sets). Surface for sets comes from vtkDataSetSurfaceFilter on the tet-only submesh when tets exist (with element_side for Exodus side sets), else polydata or full-dataset surface. Side patches are grouped by a cell-data partition array (Partition Cell Array Name, default EndpointIndex from vtkCGALVesselEndClipper: one scalar per cell, first component rounded to an integer bucket; ascending key order). If that array is missing or the wrong length, or the name is cleared, the surface is split with vtkPolyDataNormals (Feature Angle) and vtkPolyDataConnectivityFilter instead. By default Sort By Area reorders those patches so matching node{i}/side{i} pairs follow descending total patch area; turn it off to keep ascending partition-id order from the cell array, or VTK region order from connectivity. Block metadata sets NAME and vtkIOSSReader ENTITY_ID: one ascending id per block in output order (tet block if present, then each node set, then each side set), so ids do not repeat across those groups."/>
+          short_help="Split dataset into tet volume, then node sets, then side sets; optional full boundary surface output."
+          long_help="Tetrahedra (if any) are extracted first under vtkDataAssembly IOSS/element_blocks/tetrahedra with contiguous GlobalIds (1..N) for IOSS writers. PartitionedDataSetCollection block order is then all node{i} blocks (node_sets), then all side{i} blocks (side_sets). When Partition Point Array Name is set on the extracted boundary vtkPolyData, vtkThreshold with THRESHOLD_BETWEEN (endpoints inclusive in VTK; All Scalars off: any corner qualifies) keeps cells whose first component lies in (-inf, 0]; vtkGeometryFilter and vtkPolyDataConnectivityFilter plus vtkAppendPolyData merge all such connected components into one side/node pair if non-empty. A second vtkThreshold pass (also any corner, BETWEEN) keeps first component in [1, +inf); vtkPolyDataConnectivityFilter splits that sub-mesh into n connected regions, each its own side/node pair. A cell whose corners all lie strictly in (0, 1) may belong to neither pass. Patch order is the merged non-positive patch first (if present), then the n patches at or above 1 (up to n+1 pairs). If the array is missing or the wrong length, or the name is cleared, or both passes yield no cells, the full surface is split with vtkPolyDataNormals (Feature Angle) and vtkPolyDataConnectivityFilter instead. Sort By Area and Custom Post Reorder apply to the full list of patches. Block metadata sets NAME and vtkIOSSReader ENTITY_ID. Output port 1 is the full boundary vtkPolyData before sign-splitting."/>
+
+      <OutputPort name="Partitioned collection" index="0" id="port0"/>
+      <OutputPort name="Boundary surface (pre-split)" index="1" id="port1"/>
 
       <InputProperty name="Input" command="SetInputConnection">
         <ProxyGroupDomain name="groups">
@@ -17,13 +20,13 @@
         </DataTypeDomain>
       </InputProperty>
 
-      <StringVectorProperty name="PartitionCellArrayName" label="Partition Cell Array Name"
-          command="SetPartitionCellArrayName" number_of_elements="1" default_values="EndpointIndex">
+      <StringVectorProperty name="PartitionPointArrayName" label="Partition Point Array Name"
+          command="SetPartitionPointArrayName" number_of_elements="1" default_values="EndpointIndex">
         <Documentation>
-          Cell-data array used to group boundary surface cells into side sets (first tuple component;
-          values are rounded to the nearest integer). Default EndpointIndex matches vtkCGALVesselEndClipper
-          output (1-based endpoint id per cap triangle, -1 elsewhere). Clear this string to use only
-          Feature angle / vtkPolyDataConnectivityFilter splitting.
+          Point-data array on the boundary: first vtkThreshold first component in (-inf, 0] with THRESHOLD_BETWEEN (inclusive endpoints; any corner),
+          merged to one patch; then [1, +inf) (any corner), split by vtkPolyDataConnectivityFilter
+          into n patches (up to n+1 side/node pairs). Default EndpointIndex. Clear to use Feature angle /
+          vtkPolyDataConnectivityFilter on the full surface only.
         </Documentation>
       </StringVectorProperty>
 
@@ -31,8 +34,8 @@
           number_of_elements="1" default_values="70.0" animateable="0">
         <DoubleRangeDomain name="range" min="0.0" max="180.0"/>
         <Documentation>
-          Used when Partition Cell Array Name is empty, or the named array is missing / wrong length, or
-          cell-array splitting yields no patches: vtkPolyDataNormals dihedral threshold for cusp / sharp
+          Used when Partition Point Array Name is empty, or the named array is missing / wrong length, or
+          sign-split threshold yields no patches: vtkPolyDataNormals dihedral threshold for cusp / sharp
           edge split, then vtkPolyDataConnectivityFilter regions. Larger values merge more smooth neighborhoods.
         </Documentation>
       </DoubleVectorProperty>
@@ -41,7 +44,7 @@
           number_of_elements="1" default_values="1" animateable="0">
         <BooleanDomain name="bool"/>
         <Documentation>
-          When enabled (default), reorder node{i} and side{i} patches by total surface area of each side patch, largest first. When disabled, patch order follows ascending partition id from the cell array, or vtkPolyDataConnectivityFilter region indices when the feature-angle path is used.
+          When enabled (default), reorder all node{i} and side{i} patches by total surface area of each side patch, largest first. When disabled, patch order follows the sign-split construction order (merged &lt;=0 region first, then &gt;=1 connectivity regions), or vtkPolyDataConnectivityFilter region indices on the feature-angle fallback path.
         </Documentation>
       </IntVectorProperty>
 
@@ -55,6 +58,7 @@
 
       <Hints>
         <ShowInMenu category="SHYX" icon=":/VESPA/SHYX_DataSet_To_Partitioned_Collection.png"/>
+        <RepresentationType view="RenderView" type="Surface" port="1"/>
       </Hints>
     </SourceProxy>
   </ProxyGroup>
