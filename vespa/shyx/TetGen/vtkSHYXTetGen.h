@@ -100,6 +100,17 @@ public:
     vtkSetMacro(Epsilon, double);
     ///@}
 
+    ///@{
+    /**
+     * When ON and the input has point data arrays, run vtkProbeFilter after meshing:
+     * volume mesh points sample the input surface (point data only; input cell data is not used).
+     * No new cell data is produced. Default OFF.
+     */
+    vtkGetMacro(ProbeInputPointData, bool);
+    vtkSetMacro(ProbeInputPointData, bool);
+    vtkBooleanMacro(ProbeInputPointData, bool);
+    ///@}
+
 protected:
     vtkSHYXTetGen();
     ~vtkSHYXTetGen() override = default;
@@ -117,6 +128,7 @@ protected:
     bool UseCDT = false;
     int CDTRefine = 7;
     double Epsilon = 1e-8;
+    bool ProbeInputPointData = false;
 
 private:
     vtkSHYXTetGen(const vtkSHYXTetGen&) = delete;

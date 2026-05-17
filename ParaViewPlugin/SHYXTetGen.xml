@@ -135,6 +135,20 @@
         </Documentation>
       </DoubleVectorProperty>
 
+      <IntVectorProperty command="SetProbeInputPointData"
+                         name="ProbeInputPointData"
+                         label="Probe input point data"
+                         number_of_elements="1"
+                         default_values="0">
+        <BooleanDomain name="bool"/>
+        <Documentation>
+          When ON, after TetGen, vtkProbeFilter samples the input surface point arrays onto
+          the volume mesh vertices (point data only; input cell data is not used and no
+          cell data is created). Interior points sample the surface mesh; boundary points
+          align with the input when the surface is preserved.
+        </Documentation>
+      </IntVectorProperty>
+
       <PropertyGroup label="TetGen volume limit (-a)">
         <Property name="LimitMaxVolume"/>
         <Property name="MaxVolume"/>

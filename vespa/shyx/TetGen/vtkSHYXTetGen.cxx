@@ -1,12 +1,15 @@
 #include "vtkSHYXTetGen.h"
 
 #include <vtkCell.h>
+#include <vtkCellData.h>
 #include <vtkDataObject.h>
 #include <vtkInformation.h>
 #include <vtkInformationVector.h>
 #include <vtkObjectFactory.h>
+#include <vtkPointData.h>
 #include <vtkPoints.h>
 #include <vtkPolyData.h>
+#include <vtkProbeFilter.h>
 #include <vtkUnstructuredGrid.h>
 
 #define TETLIBRARY
@@ -60,6 +63,7 @@ void vtkSHYXTetGen::PrintSelf(ostream& os, vtkIndent indent)
     os << indent << "UseCDT: " << (this->UseCDT ? "ON" : "OFF") << std::endl;
     os << indent << "CDTRefine: " << this->CDTRefine << std::endl;
     os << indent << "Epsilon: " << this->Epsilon << std::endl;
+    os << indent << "ProbeInputPointData: " << (this->ProbeInputPointData ? "ON" : "OFF") << std::endl;
     this->Superclass::PrintSelf(os, indent);
 }
 
@@ -295,6 +299,27 @@ int vtkSHYXTetGen::RequestData(
     {
         vtkErrorMacro("Failed to convert TetGen output to VTK.");
         return 0;
+    }
+
+    // Point-data only: same idea as vtkCGALPolyDataAlgorithm (vtkProbeFilter + stripped cell data).
+    // Do not use SpatialMatchOn: volume vertices are not in 1:1 correspondence with surface points.
+    if (this->ProbeInputPointData)
+    {
+        vtkPointData* const inPD = input->GetPointData();
+        if (inPD && inPD->GetNumberOfArrays() > 0)
+        {
+            vtkNew<vtkPolyData> probeSource;
+            probeSource->CopyStructure(input);
+            probeSource->GetPointData()->ShallowCopy(inPD);
+            probeSource->GetCellData()->Initialize();
+
+            vtkNew<vtkProbeFilter> probe;
+            probe->SetInputData(output);
+            probe->SetSourceData(probeSource);
+            probe->PassCellArraysOff();
+            probe->Update();
+            output->ShallowCopy(probe->GetOutput());
+        }
     }
 
     return 1;
