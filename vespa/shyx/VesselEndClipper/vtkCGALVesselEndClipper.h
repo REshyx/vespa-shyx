@@ -11,6 +11,8 @@
  *
  * Each discovered endpoint appears as a checkable item in the Properties
  * panel (via vtkDataArraySelection). Only checked endpoints are clipped.
+ * MinBranchLength can leave short centerline branches (leaf to nearest junction)
+ * unchecked by default when endpoints are first discovered.
  *
  * Output polydata (port 0) carries cell-data array \c EndpointIndex when
  * CapEndpoints is on: each triangle introduced by CGAL hole filling at
@@ -53,6 +55,19 @@ public:
      */
     vtkGetMacro(ClipOffset, double);
     vtkSetMacro(ClipOffset, double);
+    ///@}
+
+    ///@{
+    /**
+     * Minimum length of the centerline branch attached to a leaf endpoint
+     * (from the leaf to the nearest junction with degree != 2, measured along
+     * the skeleton). When greater than zero, newly discovered endpoints on
+     * branches shorter than this value are unchecked by default in
+     * EndpointSelection; longer branches remain checked. Set to 0 to disable
+     * auto-filtering (all endpoints checked). Default is 0.
+     */
+    vtkGetMacro(MinBranchLength, double);
+    vtkSetMacro(MinBranchLength, double);
     ///@}
 
     ///@{
@@ -127,7 +142,8 @@ protected:
     int FillOutputPortInformation(int port, vtkInformation* info) override;
     int RequestData(vtkInformation*, vtkInformationVector**, vtkInformationVector*) override;
 
-    double ClipOffset   = 0.0;
+    double ClipOffset       = 0.0;
+    double MinBranchLength  = 0.0;
     int    TangentDepth = 1;
     bool   CapEndpoints = true;
     int    FairingContinuity = 0;

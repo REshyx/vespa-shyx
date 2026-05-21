@@ -69,6 +69,7 @@ int vtkCGALVesselEndClipper::FillOutputPortInformation(int port, vtkInformation*
 void vtkCGALVesselEndClipper::PrintSelf(ostream& os, vtkIndent indent)
 {
     os << indent << "ClipOffset: " << this->ClipOffset << std::endl;
+    os << indent << "MinBranchLength: " << this->MinBranchLength << std::endl;
     os << indent << "TangentDepth: " << this->TangentDepth << std::endl;
     os << indent << "CapEndpoints: " << this->CapEndpoints << std::endl;
     os << indent << "FairingContinuity: " << this->FairingContinuity << std::endl;
@@ -100,6 +101,66 @@ vtkMTimeType vtkCGALVesselEndClipper::GetMTime()
         mTime = std::max(mTime, selTime);
     }
     return mTime;
+}
+
+//------------------------------------------------------------------------------
+// Arc length along the skeleton from |leafId| to the nearest node with degree != 2
+// (bifurcation or opposite leaf on a branch without junctions).
+static double ComputeBranchLengthFromLeaf(
+    vtkIdType leafId, vtkPolyData* centerline, const std::vector<std::vector<vtkIdType>>& adjacency)
+{
+    if (!centerline || leafId < 0 || static_cast<size_t>(leafId) >= adjacency.size())
+    {
+        return 0.0;
+    }
+    if (adjacency[leafId].size() != 1)
+    {
+        return 0.0;
+    }
+
+    double      length  = 0.0;
+    vtkIdType   current = leafId;
+    vtkIdType   prev    = -1;
+    double      pCurrent[3];
+    centerline->GetPoint(current, pCurrent);
+
+    while (true)
+    {
+        vtkIdType next = -1;
+        for (vtkIdType neighbor : adjacency[current])
+        {
+            if (neighbor != prev)
+            {
+                next = neighbor;
+                break;
+            }
+        }
+        if (next < 0)
+        {
+            break;
+        }
+
+        double pNext[3];
+        centerline->GetPoint(next, pNext);
+        const double dx = pNext[0] - pCurrent[0];
+        const double dy = pNext[1] - pCurrent[1];
+        const double dz = pNext[2] - pCurrent[2];
+        length += std::sqrt(dx * dx + dy * dy + dz * dz);
+
+        const size_t degNext = adjacency[next].size();
+        if (degNext != 2)
+        {
+            break;
+        }
+
+        prev    = current;
+        current = next;
+        pCurrent[0] = pNext[0];
+        pCurrent[1] = pNext[1];
+        pCurrent[2] = pNext[2];
+    }
+
+    return length;
 }
 
 //------------------------------------------------------------------------------
@@ -326,6 +387,7 @@ int vtkCGALVesselEndClipper::RequestData(
         double      origin[3];
         double      normal[3];
         double      endPt[3];
+        double      branchLength = 0.0;
         std::string name;
     };
     std::vector<ClipInfo> clips;
@@ -384,6 +446,7 @@ int vtkCGALVesselEndClipper::RequestData(
         ci.endPt[0]  = leafPt[0];
         ci.endPt[1]  = leafPt[1];
         ci.endPt[2]  = leafPt[2];
+        ci.branchLength = ComputeBranchLengthFromLeaf(i, centerline, adjacency);
 
         clips.push_back(ci);
     }
@@ -444,10 +507,23 @@ int vtkCGALVesselEndClipper::RequestData(
             this->EndpointSelection->RemoveArrayByName(existing);
     }
 
+    const double minBranchLen = this->MinBranchLength;
     for (const auto& ci : clips)
     {
-        if (!this->EndpointSelection->ArrayExists(ci.name.c_str()))
+        if (this->EndpointSelection->ArrayExists(ci.name.c_str()))
+        {
+            continue;
+        }
+        const bool autoSelect =
+            (minBranchLen <= 0.0) || (ci.branchLength >= minBranchLen);
+        if (autoSelect)
+        {
             this->EndpointSelection->EnableArray(ci.name.c_str());
+        }
+        else
+        {
+            this->EndpointSelection->DisableArray(ci.name.c_str());
+        }
     }
 
     // ---------------------------------------------------------------

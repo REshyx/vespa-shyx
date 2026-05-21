@@ -1396,6 +1396,26 @@
         </Documentation>
       </IntVectorProperty>
 
+      <DoubleVectorProperty command="SetMinBranchLength"
+                            name="MinBranchLength"
+                            label="Min Branch Length"
+                            number_of_elements="1"
+                            default_values="0.0">
+        <BoundsDomain mode="scaled_extent" name="bounds" scale_factor="0.01">
+          <RequiredProperties>
+            <Property function="Input" name="Input"/>
+          </RequiredProperties>
+        </BoundsDomain>
+        <Documentation>
+          Minimum centerline branch length (arc length from each leaf endpoint to
+          the nearest bifurcation, or to the opposite leaf when there is no junction)
+          for that endpoint to be checked by default in **Endpoints to Clip**.
+          Shorter branches are left unchecked (typical short side branches or stubs).
+          Set to **0** to disable auto-filtering and check all endpoints. Apply once
+          after changing centerline input so endpoints are discovered.
+        </Documentation>
+      </DoubleVectorProperty>
+
       <IntVectorProperty command="SetCapEndpoints"
                          name="CapEndpoints"
                          label="Cap Endpoints"
@@ -1446,7 +1466,8 @@
           Select which endpoints to clip. Each entry corresponds to a
           degree-1 leaf vertex of the input centerline. Only checked
           endpoints will be clipped. Apply once first to discover
-          the endpoints from the centerline input.
+          the endpoints from the centerline input. **Min Branch Length**
+          controls which endpoints are checked by default (short branches unchecked).
         </Documentation>
       </StringVectorProperty>
 
