@@ -4,11 +4,10 @@
                  class="vtkSHYXDataSetToPartitionedCollection"
                  label="SHYX DataSet To Partitioned Collection">
       <Documentation
-          short_help="Split dataset into tet volume, then node sets, then side sets; optional full boundary surface output."
-          long_help="Tetrahedra (if any) are extracted first under vtkDataAssembly IOSS/element_blocks/tetrahedra with contiguous GlobalIds (1..N) for IOSS writers. PartitionedDataSetCollection block order is then all node{i} blocks (node_sets), then all side{i} blocks (side_sets). When Partition Point Array Name is set on the extracted boundary vtkPolyData, vtkThreshold with THRESHOLD_BETWEEN (endpoints inclusive in VTK; All Scalars off: any corner qualifies) keeps cells whose first component lies in (-inf, 0]; vtkGeometryFilter and vtkPolyDataConnectivityFilter plus vtkAppendPolyData merge all such connected components into one side/node pair if non-empty. A second vtkThreshold pass (also any corner, BETWEEN) keeps first component in [1, +inf); vtkPolyDataConnectivityFilter splits that sub-mesh into n connected regions, each its own side/node pair. A cell whose corners all lie strictly in (0, 1) may belong to neither pass. Patch order is the merged non-positive patch first (if present), then the n patches at or above 1 (up to n+1 pairs). If the array is missing or the wrong length, or the name is cleared, or both passes yield no cells, the full surface is split with vtkPolyDataNormals (Feature Angle) and vtkPolyDataConnectivityFilter instead. Sort By Area and Custom Post Reorder apply to the full list of patches. Block metadata sets NAME and vtkIOSSReader ENTITY_ID. Output port 1 is the full boundary vtkPolyData before sign-splitting."/>
+          short_help="Split dataset into tet volume, then node sets, then side sets as a PartitionedDataSetCollection."
+          long_help="Tetrahedra (if any) are extracted first under vtkDataAssembly IOSS/element_blocks/tetrahedra with contiguous GlobalIds (1..N) for IOSS writers. PartitionedDataSetCollection block order is then all node{i} blocks (node_sets), then all side{i} blocks (side_sets). When Partition Point Array Name is set on the extracted boundary vtkPolyData, vtkThreshold with THRESHOLD_BETWEEN (endpoints inclusive in VTK; All Scalars off: any corner qualifies) keeps cells whose first component lies in (-inf, 0]; vtkGeometryFilter and vtkPolyDataConnectivityFilter plus vtkAppendPolyData merge all such connected components into one side/node pair if non-empty. A second vtkThreshold pass (also any corner, BETWEEN) keeps first component in [1, +inf); vtkPolyDataConnectivityFilter splits that sub-mesh into n connected regions, each its own side/node pair. A cell whose corners all lie strictly in (0, 1) may belong to neither pass. Patch order is the merged non-positive patch first (if present), then the n patches at or above 1 (up to n+1 pairs). If the array is missing or the wrong length, or the name is cleared, or both passes yield no cells, the full surface is split with vtkPolyDataNormals (Feature Angle) and vtkPolyDataConnectivityFilter instead. Sort By Area and Custom Post Reorder apply to the full list of patches. Block metadata sets NAME and vtkIOSSReader ENTITY_ID."/>
 
       <OutputPort name="Partitioned collection" index="0" id="port0"/>
-      <OutputPort name="Boundary surface (pre-split)" index="1" id="port1"/>
 
       <InputProperty name="Input" command="SetInputConnection">
         <ProxyGroupDomain name="groups">
@@ -58,7 +57,6 @@
 
       <Hints>
         <ShowInMenu category="SHYX" icon=":/VESPA/SHYX_DataSet_To_Partitioned_Collection.png"/>
-        <RepresentationType view="RenderView" type="Surface" port="1"/>
       </Hints>
     </SourceProxy>
   </ProxyGroup>

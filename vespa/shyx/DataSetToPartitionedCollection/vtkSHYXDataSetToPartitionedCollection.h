@@ -20,9 +20,6 @@
  * resolve to correct coordinates in the merged Exodus node block.
  * vtkDataAssembly IOSS / element_blocks, node_sets (all node{i}), then side_sets (all side{i}).
  *
- * Output port 1 is a single vtkPolyData: the full boundary surface before patch splitting (same
- * mesh and cell arrays used to build node/side sets), for downstream node/face partitioning.
- *
  * @sa
  * vtkDataSetSurfaceFilter, vtkThreshold, vtkGeometryFilter, vtkAppendPolyData, vtkPolyDataNormals, vtkPolyDataConnectivityFilter
  */

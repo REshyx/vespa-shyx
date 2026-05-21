@@ -18,19 +18,22 @@
  * not by post-comparing coordinates.
  *
  * A vtkDoubleArray (GeodesicToZeroRegionArrayName, default StentGeodesicToZeroRegion) stores **weighted**
- * graph distance along mesh edges (each edge weight = Euclidean length after the strict placement pass) from
- * each mask≠0 vertex to the nearest mask==0 vertex; mask==0 vertices get 0; unreachable components get -1.
- * This distance is computed **between** deformation stages: on the strict-deformed geometry, before the
- * optional geodesic-band smooth pass.
+ * graph distance along mesh edges (each edge weight = Euclidean length on the **input** surface coordinates)
+ * from each mask≠0 vertex to the nearest mask==0 vertex; mask==0 vertices get 0; unreachable components get -1.
+ * Computed after strict-region classification on the undeformed mesh and **before** any vertex displacement.
  *
  * Strict slab classification uses perpendicular distance to the **stent segment axis** (walked window on
  * the centerline), not the full port-1 polyline. Optional geodesic band smoothing
  * (GeodesicSmoothInfluenceRange x, GeodesicSmoothPowerLambda λ in [0.1, 10]) moves mask==-1 vertices with
- * 0 < g < x by p' = p + S * (R - d) * n_dir only when R > d, where g is **weighted** surface geodesic (same
- * length units as x) to mask-0 computed on the strict-deformed mesh, d is
- * perpendicular distance to the **entire** centerline (port 1), R is StentRadius, S = (1 - g/x)^λ, and n_dir
- * is the surface normal oriented toward increasing radius from that centerline (same sign convention as the strict normal solve). Strength is
+ * 0 < g < x by p' = p + S * (R - d) * n only when R > d, where g is **weighted** surface geodesic (same
+ * length units as x) to mask-0 on the input mesh topology, d is
+ * perpendicular distance to the **entire** centerline (port 1), R is StentRadius, S = (1 - g/x)^λ, and n is
+ * the outward-oriented surface point normal (input Normals or vtkPolyDataNormals). Strength is
  * written to GeodesicSmoothStrengthArrayName (default StentGeodesicSmoothStrength): 1 on strict mask, S when the band move applies, 0 otherwise.
+ *
+ * A vtkDoubleArray (DisplacementArrayName, default StentPlacementDisplacement) with 3 components stores the
+ * total displacement vector per vertex: final position minus input surface position (dx, dy, dz). Magnitude
+ * is the Euclidean norm; direction is displacement / magnitude when magnitude &gt; 0.
  */
 
 #ifndef vtkSHYXVascularStentPlacement_h
@@ -78,7 +81,7 @@ public:
     vtkGetStringMacro(AffectMaskArrayName);
     vtkSetStringMacro(AffectMaskArrayName);
 
-    /** vtkDoubleArray on output: weighted geodesic distance to mask==0 region on strict-deformed mesh (see class doc). */
+    /** vtkDoubleArray on output: weighted geodesic distance to mask==0 on input mesh coords (see class doc). */
     vtkGetStringMacro(GeodesicToZeroRegionArrayName);
     vtkSetStringMacro(GeodesicToZeroRegionArrayName);
 
@@ -93,6 +96,10 @@ public:
     /** vtkDoubleArray: 1 on strict mask; S in band only when vertex moves (R > d); else 0. */
     vtkGetStringMacro(GeodesicSmoothStrengthArrayName);
     vtkSetStringMacro(GeodesicSmoothStrengthArrayName);
+
+    /** vtkDoubleArray (3 components): total displacement final - input surface position. */
+    vtkGetStringMacro(DisplacementArrayName);
+    vtkSetStringMacro(DisplacementArrayName);
 
     /** Linked to the ImplicitCylinder 3D widget center (ParaView UI). */
     vtkGetVector3Macro(StentWidgetCenter, double);
@@ -122,6 +129,7 @@ protected:
     double GeodesicSmoothInfluenceRange = 5.0;
     double GeodesicSmoothPowerLambda = 1.0;
     char* GeodesicSmoothStrengthArrayName = nullptr;
+    char* DisplacementArrayName = nullptr;
 
 private:
     vtkSHYXVascularStentPlacement(const vtkSHYXVascularStentPlacement&) = delete;

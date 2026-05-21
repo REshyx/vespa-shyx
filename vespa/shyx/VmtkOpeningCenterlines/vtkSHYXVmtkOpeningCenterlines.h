@@ -16,10 +16,10 @@
  * RequestData.
  *
  * Outputs:
- * - Port 0: one vertex per non-excluded opening with PointData OpeningArrayValue (mean magnitude),
- *   OpeningIndex (processing order among emitted openings), SurfacePointId, IsInlet.
- * - Port 1: vtkvmtkPolyDataCenterlines result when CalculateCenterline is on and seeds valid;
+ * - Port 0: vtkvmtkPolyDataCenterlines result when CalculateCenterline is on and seeds valid;
  *   otherwise empty polydata. (Input surface is shallow-copied internally for VMTK with point GlobalIds.)
+ * - Port 1: one vertex per non-excluded opening with PointData OpeningArrayValue (mean magnitude),
+ *   OpeningIndex (processing order among emitted openings), SurfacePointId, IsInlet.
  */
 
 #ifndef vtkSHYXVmtkOpeningCenterlines_h

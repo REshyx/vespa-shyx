@@ -46,6 +46,39 @@ const char* EffectiveGeodesicToZeroName(const char* nm)
     return (nm && nm[0]) ? nm : "StentGeodesicToZeroRegion";
 }
 
+const char* EffectiveDisplacementName(const char* nm)
+{
+    return (nm && nm[0]) ? nm : "StentPlacementDisplacement";
+}
+
+/** 3-component displacement: current position minus \p origPts (direction × magnitude in one vector). */
+void WritePlacementDisplacement(vtkPoints* origPts, vtkPoints* curPts, const char* arrayName, vtkPolyData* output)
+{
+    if (!origPts || !curPts || !output)
+    {
+        return;
+    }
+    const vtkIdType n = curPts->GetNumberOfPoints();
+    if (n <= 0 || origPts->GetNumberOfPoints() != n)
+    {
+        return;
+    }
+
+    vtkNew<vtkDoubleArray> disp;
+    disp->SetName(arrayName);
+    disp->SetNumberOfComponents(3);
+    disp->SetNumberOfTuples(n);
+    for (vtkIdType i = 0; i < n; ++i)
+    {
+        double p0[3], p1[3];
+        origPts->GetPoint(i, p0);
+        curPts->GetPoint(i, p1);
+        disp->SetTuple3(i, p1[0] - p0[0], p1[1] - p0[1], p1[2] - p0[2]);
+    }
+    output->GetPointData()->RemoveArray(arrayName);
+    output->GetPointData()->AddArray(disp);
+}
+
 /** Builds undirected graph from polygon edges; edge weight = Euclidean length in \p pts (weighted geodesic). */
 bool BuildSurfaceWeightedAdjacency(vtkPolyData* pd, vtkPoints* pts,
     std::vector<std::vector<std::pair<vtkIdType, double>>>& weightedAdj)
@@ -99,8 +132,8 @@ bool BuildSurfaceWeightedAdjacency(vtkPolyData* pd, vtkPoints* pts,
     return true;
 }
 
-/** For mask==0: 0. For mask!=0: weighted graph distance (sum of edge Euclidean lengths in \p deformedPts) to nearest mask==0 vertex, or -1 if none/unreachable. */
-void ComputeGeodesicDistanceToZeroRegion(vtkPolyData* topology, vtkPoints* deformedPts,
+/** For mask==0: 0. For mask!=0: weighted graph distance (sum of edge Euclidean lengths in \p edgeWeightPts) to nearest mask==0 vertex, or -1 if none/unreachable. */
+void ComputeGeodesicDistanceToZeroRegion(vtkPolyData* topology, vtkPoints* edgeWeightPts,
     vtkIntArray* affectMask, const char* geoArrayName, vtkPolyData* output)
 {
     const vtkIdType n = topology->GetNumberOfPoints();
@@ -122,7 +155,7 @@ void ComputeGeodesicDistanceToZeroRegion(vtkPolyData* topology, vtkPoints* defor
     }
 
     std::vector<std::vector<std::pair<vtkIdType, double>>> adj;
-    if (!BuildSurfaceWeightedAdjacency(topology, deformedPts, adj))
+    if (!BuildSurfaceWeightedAdjacency(topology, edgeWeightPts, adj))
     {
         for (vtkIdType i = 0; i < n; ++i)
         {
@@ -527,7 +560,7 @@ void RadialPerpendicular(const double x[3], const double closest[3], const doubl
     rlenOut = Norm(radial);
 }
 
-/** Move along ±n until distance to axis is R (bisection). n must be unit. */
+/** Move along outward surface normal n until distance to axis is R (bisection). n must be unit. */
 bool SolveAlongNormalForRadius(vtkCellLocator* locator, vtkGenericCell* cell, vtkPolyData* axisPd,
     const double x[3], const double n[3], double R, const double closest0[3], vtkIdType cellId0, double yOut[3])
 {
@@ -540,18 +573,10 @@ bool SolveAlongNormalForRadius(vtkCellLocator* locator, vtkGenericCell* cell, vt
     {
         return false;
     }
-    double ndir[3];
-    Copy3(ndir, n);
-    if (Dot(ndir, rh) < 0.0)
-    {
-        ndir[0] = -n[0];
-        ndir[1] = -n[1];
-        ndir[2] = -n[2];
-    }
 
     auto distMinusR = [&](double t) -> double {
         double p[3];
-        ScaleAdd(p, x, t, ndir);
+        ScaleAdd(p, x, t, n);
         double ctmp[3];
         vtkIdType cid = -1;
         return DistanceToAxis(locator, cell, p, ctmp, cid) - R;
@@ -588,7 +613,7 @@ bool SolveAlongNormalForRadius(vtkCellLocator* locator, vtkGenericCell* cell, vt
         const double fm = distMinusR(mid);
         if (std::fabs(fm) < kTolDist * std::max(1.0, R))
         {
-            ScaleAdd(yOut, x, mid, ndir);
+            ScaleAdd(yOut, x, mid, n);
             return true;
         }
         if (flo * fm <= 0.0)
@@ -603,7 +628,7 @@ bool SolveAlongNormalForRadius(vtkCellLocator* locator, vtkGenericCell* cell, vt
         }
     }
     const double tSol = 0.5 * (lo + hi);
-    ScaleAdd(yOut, x, tSol, ndir);
+    ScaleAdd(yOut, x, tSol, n);
     return true;
 }
 
@@ -652,29 +677,6 @@ void FallbackCylinderPoint(vtkPolyData* axisPd, vtkCellLocator* locator, vtkGene
     yOut[2] = closest[2] + R * radial[2];
 }
 
-/** Unit vector along surface normal n (must be unit), oriented toward increasing perpendicular distance to axis. */
-bool NormalDirTowardRadiusIncrease(vtkPolyData* axisPd, const double p[3], const double n[3],
-    const double closest[3], vtkIdType cellId, double ndirOut[3])
-{
-    double tdir[3];
-    SegmentTangentFromCell(axisPd, cellId, tdir);
-    double rh[3];
-    double rlen = 0.0;
-    RadialPerpendicular(p, closest, tdir, rh, rlen);
-    if (rlen < kEps)
-    {
-        return false;
-    }
-    Copy3(ndirOut, n);
-    if (Dot(ndirOut, rh) < 0.0)
-    {
-        ndirOut[0] = -n[0];
-        ndirOut[1] = -n[1];
-        ndirOut[2] = -n[2];
-    }
-    return true;
-}
-
 const char* EffectiveGeodesicSmoothStrengthName(const char* nm)
 {
     return (nm && nm[0]) ? nm : "StentGeodesicSmoothStrength";
@@ -682,8 +684,8 @@ const char* EffectiveGeodesicSmoothStrengthName(const char* nm)
 
 /**
  * For mask==-1 and weighted surface geodesic g in (0, xBand) (same length units as mesh edges): only if
- * perpendicular centerline distance d satisfies R > d, apply p' = p + S * (R - d) * n_dir; else leave p
- * unchanged. n_dir as in SolveAlongNormalForRadius; S = (1 - g/xBand)^lambdaPow.
+ * perpendicular centerline distance d satisfies R > d, apply p' = p + S * (R - d) * n (outward unit surface
+ * normal); else leave p unchanged. S = (1 - g/xBand)^lambdaPow.
  * Strict mask==0 vertices get strength 1 (unchanged position); others get 0 unless moved in band (then S).
  */
 void ApplyGeodesicSmoothBand(vtkPolyData* output, vtkPoints* outPts, vtkIntArray* affectMask,
@@ -760,11 +762,6 @@ void ApplyGeodesicSmoothBand(vtkPolyData* output, vtkPoints* outPts, vtkIntArray
             continue;
         }
 
-        double ndir[3];
-        if (!NormalDirTowardRadiusIncrease(globalCenterline, p, nunit, closestF, cidF, ndir))
-        {
-            continue;
-        }
         const double d = std::sqrt(d2f);
         if (!(R > d + kEps))
         {
@@ -772,9 +769,9 @@ void ApplyGeodesicSmoothBand(vtkPolyData* output, vtkPoints* outPts, vtkIntArray
         }
         const double deltaLen = R - d;
 
-        const double q0 = p[0] + S * deltaLen * ndir[0];
-        const double q1 = p[1] + S * deltaLen * ndir[1];
-        const double q2 = p[2] + S * deltaLen * ndir[2];
+        const double q0 = p[0] + S * deltaLen * nunit[0];
+        const double q1 = p[1] + S * deltaLen * nunit[1];
+        const double q2 = p[2] + S * deltaLen * nunit[2];
         outPts->SetPoint(pid, q0, q1, q2);
         strength->SetValue(pid, S);
     }
@@ -797,6 +794,8 @@ vtkSHYXVascularStentPlacement::vtkSHYXVascularStentPlacement()
     this->SetGeodesicToZeroRegionArrayName("StentGeodesicToZeroRegion");
     this->GeodesicSmoothStrengthArrayName = nullptr;
     this->SetGeodesicSmoothStrengthArrayName("StentGeodesicSmoothStrength");
+    this->DisplacementArrayName = nullptr;
+    this->SetDisplacementArrayName("StentPlacementDisplacement");
 }
 
 vtkSHYXVascularStentPlacement::~vtkSHYXVascularStentPlacement()
@@ -805,6 +804,7 @@ vtkSHYXVascularStentPlacement::~vtkSHYXVascularStentPlacement()
     this->SetAffectMaskArrayName(nullptr);
     this->SetGeodesicToZeroRegionArrayName(nullptr);
     this->SetGeodesicSmoothStrengthArrayName(nullptr);
+    this->SetDisplacementArrayName(nullptr);
 }
 
 void vtkSHYXVascularStentPlacement::PrintSelf(ostream& os, vtkIndent indent)
@@ -828,6 +828,8 @@ void vtkSHYXVascularStentPlacement::PrintSelf(ostream& os, vtkIndent indent)
     os << indent << "GeodesicSmoothPowerLambda: " << this->GeodesicSmoothPowerLambda << "\n";
     os << indent << "GeodesicSmoothStrengthArrayName: "
        << (this->GeodesicSmoothStrengthArrayName ? this->GeodesicSmoothStrengthArrayName : "") << "\n";
+    os << indent << "DisplacementArrayName: "
+       << (this->DisplacementArrayName ? this->DisplacementArrayName : "") << "\n";
 }
 
 void vtkSHYXVascularStentPlacement::SetCenterlineConnection(vtkAlgorithmOutput* algOutput)
@@ -905,6 +907,8 @@ int vtkSHYXVascularStentPlacement::RequestData(vtkInformation* vtkNotUsed(reques
         output->GetPointData()->AddArray(affectEarly);
         const char* geoEarly = EffectiveGeodesicToZeroName(this->GeodesicToZeroRegionArrayName);
         ComputeGeodesicDistanceToZeroRegion(output, output->GetPoints(), affectEarly.Get(), geoEarly, output);
+        WritePlacementDisplacement(output->GetPoints(), output->GetPoints(),
+            EffectiveDisplacementName(this->DisplacementArrayName), output);
         return 1;
     }
 
@@ -1048,8 +1052,11 @@ int vtkSHYXVascularStentPlacement::RequestData(vtkInformation* vtkNotUsed(reques
     output->GetPointData()->PassData(surface->GetPointData());
     output->GetCellData()->PassData(surface->GetCellData());
 
+    vtkNew<vtkPoints> origPts;
+    origPts->DeepCopy(surface->GetPoints());
+
     vtkNew<vtkPoints> outPts;
-    outPts->DeepCopy(surface->GetPoints());
+    outPts->DeepCopy(origPts);
 
     const vtkIdType nSurfPts = surface->GetNumberOfPoints();
     const char* affectName = EffectiveAffectMaskName(this->AffectMaskArrayName);
@@ -1073,16 +1080,6 @@ int vtkSHYXVascularStentPlacement::RequestData(vtkInformation* vtkNotUsed(reques
     {
         double x[3];
         surface->GetPoint(pid, x);
-        double n[3];
-        pointNormals->GetTuple(pid, n);
-        const double nlen = Norm(n);
-        if (nlen < kEps)
-        {
-            continue;
-        }
-        n[0] /= nlen;
-        n[1] /= nlen;
-        n[2] /= nlen;
 
         double closest[3];
         double dist2 = 0.0;
@@ -1107,6 +1104,38 @@ int vtkSHYXVascularStentPlacement::RequestData(vtkInformation* vtkNotUsed(reques
             continue;
         }
 
+        affectMask->SetValue(pid, 0);
+    }
+
+    const char* geoName = EffectiveGeodesicToZeroName(this->GeodesicToZeroRegionArrayName);
+    ComputeGeodesicDistanceToZeroRegion(output, origPts.Get(), affectMask.Get(), geoName, output);
+
+    for (vtkIdType pid = 0; pid < nSurfPts; ++pid)
+    {
+        if (affectMask->GetValue(pid) != 0)
+        {
+            continue;
+        }
+
+        double x[3];
+        surface->GetPoint(pid, x);
+        double n[3];
+        pointNormals->GetTuple(pid, n);
+        const double nlen = Norm(n);
+        if (nlen < kEps)
+        {
+            continue;
+        }
+        n[0] /= nlen;
+        n[1] /= nlen;
+        n[2] /= nlen;
+
+        double closest[3];
+        double dist2 = 0.0;
+        vtkIdType cellId = -1;
+        int subId = -1;
+        locator->FindClosestPoint(x, closest, cell, cellId, subId, dist2);
+
         double yTarget[3];
         if (!SolveAlongNormalForRadius(locator, cell, axisPd, x, n, R, closest, cellId, yTarget))
         {
@@ -1114,12 +1143,9 @@ int vtkSHYXVascularStentPlacement::RequestData(vtkInformation* vtkNotUsed(reques
         }
 
         outPts->SetPoint(pid, yTarget);
-        affectMask->SetValue(pid, 0);
     }
 
     output->SetPoints(outPts);
-    const char* geoName = EffectiveGeodesicToZeroName(this->GeodesicToZeroRegionArrayName);
-    ComputeGeodesicDistanceToZeroRegion(output, output->GetPoints(), affectMask.Get(), geoName, output);
 
     const double xSmooth = this->GeodesicSmoothInfluenceRange;
     if (xSmooth > kEps)
@@ -1143,6 +1169,9 @@ int vtkSHYXVascularStentPlacement::RequestData(vtkInformation* vtkNotUsed(reques
                              << "skipping geodesic band smooth.");
         }
     }
+
+    WritePlacementDisplacement(origPts.Get(), output->GetPoints(),
+        EffectiveDisplacementName(this->DisplacementArrayName), output);
     return 1;
 }
 

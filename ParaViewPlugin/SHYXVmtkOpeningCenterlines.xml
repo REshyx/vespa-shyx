@@ -16,21 +16,24 @@
         centerlines are not computed during exploration.
 
         The **Remove openings** list mirrors each discovery row; checked openings are skipped on output
-        port 0 (seed points) and excluded from centerline seeds (treated as deleted). Assign **Inlets** only among
+        port 1 (seed points) and excluded from centerline seeds (treated as deleted). Assign **Inlets** only among
         openings that remain unchecked here.
 
         Changing **Threshold array**, **min/max**, or **all corners** clears prior inlet/outlet and
         remove checks and rebuilds the opening list on the next Apply/update.
 
-        Output 0 is one vertex per **non-removed** opening with arrays OpeningArrayValue,
+        Output 0 is VMTK centerline polydata when **Calculate centerline** is on and at least one
+        checked inlet and one unchecked outlet exist among non-removed openings; otherwise empty
+        (the filter shallow-copies the input internally for VMTK with point GlobalIds).
+
+        Output 1 is one vertex per **non-removed** opening with arrays OpeningArrayValue,
         OpeningIndex, SurfacePointId, IsInlet; **SurfacePointId** is the active scalars array for display.
-        and at least one inlet and one outlet exist; otherwise it is empty (the filter shallow-copies the input internally for VMTK with point GlobalIds when centerlines are computed).
 
         Requires VMTK compatible with this ParaView VTK (same as SHYX VMTK Centerlines).
       </Documentation>
 
-      <OutputPort name="Opening seed points" index="0" id="port0"/>
-      <OutputPort name="Centerlines (optional)" index="1" id="port1"/>
+      <OutputPort name="Centerlines (optional)" index="0" id="port0"/>
+      <OutputPort name="Opening seed points" index="1" id="port1"/>
 
       <InputProperty name="Input" command="SetInputConnection">
         <ProxyGroupDomain name="groups">
@@ -188,7 +191,7 @@
                          default_values="0">
         <BooleanDomain name="bool"/>
         <Documentation>
-          When off (default), only seed glyphs (port 0) and the opening lists are produced.
+          When off (default), only seed glyphs (port 1) and the opening lists are produced.
           When on, runs vtkvmtkPolyDataCenterlines using non-removed checked openings as sources and non-removed unchecked as targets.
         </Documentation>
       </IntVectorProperty>
@@ -234,8 +237,8 @@
       <Hints>
         <!-- replace_input: 0 = Apply 后不隐藏上游输入（默认无此 Hint 时为 1 会隐藏） -->
         <Visibility replace_input="0"/>
-        <!-- 端口 0（Opening seed points）首次显示时默认用 Point Label；端口 1 不受影响 -->
-        <RepresentationType view="RenderView" type="Point Label" port="0"/>
+        <!-- 端口 1（Opening seed points）首次显示时默认用 Point Label；端口 0 不受影响 -->
+        <RepresentationType view="RenderView" type="Point Label" port="1"/>
         <ShowInMenu category="SHYX" icon=":/VESPA/SHYX_Radius_Neighbor_Count.png"/>
       </Hints>
     </SourceProxy>

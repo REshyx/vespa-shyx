@@ -496,8 +496,8 @@ int vtkSHYXVmtkOpeningCenterlines::RequestData(vtkInformation* vtkNotUsed(reques
   vtkInformationVector** inputVector, vtkInformationVector* outputVector)
 {
   vtkPolyData* input = vtkPolyData::GetData(inputVector[0], 0);
-  vtkPolyData* outSeeds = vtkPolyData::GetData(outputVector, 0);
-  vtkPolyData* outCenterlines = vtkPolyData::GetData(outputVector, 1);
+  vtkPolyData* outCenterlines = vtkPolyData::GetData(outputVector, 0);
+  vtkPolyData* outSeeds = vtkPolyData::GetData(outputVector, 1);
 
   if (!input || !outSeeds || !outCenterlines)
   {
@@ -654,7 +654,7 @@ int vtkSHYXVmtkOpeningCenterlines::RequestData(vtkInformation* vtkNotUsed(reques
     activeScalars.push_back(openingScalars[i]);
   }
 
-  // Port 0: seed vertices (non-excluded openings only)
+  // Port 1: seed vertices (non-excluded openings only)
   if (!activeNames.empty())
   {
     vtkNew<vtkPoints> spts;

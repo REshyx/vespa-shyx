@@ -906,7 +906,7 @@ void BuildIossAssembly(vtkPartitionedDataSetCollection* coll, bool hasTet,
 vtkSHYXDataSetToPartitionedCollection::vtkSHYXDataSetToPartitionedCollection()
 {
   this->SetNumberOfInputPorts(1);
-  this->SetNumberOfOutputPorts(2);
+  this->SetNumberOfOutputPorts(1);
   this->SetPartitionPointArrayName("EndpointIndex");
 }
 
@@ -948,11 +948,6 @@ int vtkSHYXDataSetToPartitionedCollection::FillOutputPortInformation(
     info->Set(vtkDataObject::DATA_TYPE_NAME(), "vtkPartitionedDataSetCollection");
     return 1;
   }
-  if (port == 1)
-  {
-    info->Set(vtkDataObject::DATA_TYPE_NAME(), "vtkPolyData");
-    return 1;
-  }
   return 0;
 }
 
@@ -963,7 +958,6 @@ int vtkSHYXDataSetToPartitionedCollection::RequestData(vtkInformation* vtkNotUse
   vtkDataSet* input = vtkDataSet::GetData(inputVector[0], 0);
   vtkPartitionedDataSetCollection* output =
     vtkPartitionedDataSetCollection::GetData(outputVector, 0);
-  vtkPolyData* surfaceOutput = vtkPolyData::GetData(outputVector, 1);
 
   if (!input)
   {
@@ -973,11 +967,6 @@ int vtkSHYXDataSetToPartitionedCollection::RequestData(vtkInformation* vtkNotUse
   if (!output)
   {
     vtkErrorMacro(<< "Output PartitionedDataSetCollection is null.");
-    return 0;
-  }
-  if (!surfaceOutput)
-  {
-    vtkErrorMacro(<< "Output boundary surface (port 1) is null.");
     return 0;
   }
 
@@ -1080,9 +1069,6 @@ int vtkSHYXDataSetToPartitionedCollection::RequestData(vtkInformation* vtkNotUse
   {
     ApplyCustomPostReorder(&sidePieces);
   }
-
-  // Full boundary surface before per-patch GlobalIds / stripping; same topology & arrays as split input.
-  surfaceOutput->DeepCopy(surfaceWork);
 
   const unsigned int nPairs = static_cast<unsigned int>(sidePieces.size());
   vtkIdType nextStandaloneSurfacePointGid = 1;
