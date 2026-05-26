@@ -2,6 +2,8 @@
 
 #include <vtkCell.h>
 #include <vtkCellData.h>
+#include <vtkCellDataToPointData.h>
+#include <vtkDataArray.h>
 #include <vtkDataObject.h>
 #include <vtkInformation.h>
 #include <vtkInformationVector.h>
@@ -27,6 +29,22 @@ vtkSHYXTetGen::vtkSHYXTetGen()
 {
     this->SetNumberOfInputPorts(1);
     this->SetNumberOfOutputPorts(1);
+    this->SetInputArrayToProcess(0, 0, 0, vtkDataObject::FIELD_ASSOCIATION_NONE, nullptr);
+}
+
+//------------------------------------------------------------------------------
+const char* vtkSHYXTetGen::GetMaskArrayName()
+{
+    vtkInformation* const ai = this->GetInputArrayInformation(0);
+    if (ai && ai->Has(vtkDataObject::FIELD_NAME()))
+    {
+        const char* const n = ai->Get(vtkDataObject::FIELD_NAME());
+        if (n && n[0] != '\0')
+        {
+            return n;
+        }
+    }
+    return nullptr;
 }
 
 //------------------------------------------------------------------------------
@@ -64,8 +82,95 @@ void vtkSHYXTetGen::PrintSelf(ostream& os, vtkIndent indent)
     os << indent << "CDTRefine: " << this->CDTRefine << std::endl;
     os << indent << "Epsilon: " << this->Epsilon << std::endl;
     os << indent << "ProbeInputPointData: " << (this->ProbeInputPointData ? "ON" : "OFF") << std::endl;
+    os << indent << "MaskArrayEnabled: " << (this->MaskArrayEnabled ? "ON" : "OFF") << std::endl;
+    if (const char* const maskName = this->GetMaskArrayName())
+    {
+        os << indent << "MaskArrayName: " << maskName << std::endl;
+    }
+    else
+    {
+        os << indent << "MaskArrayName: (null)" << std::endl;
+    }
     this->Superclass::PrintSelf(os, indent);
 }
+
+//------------------------------------------------------------------------------
+namespace
+{
+void ApplyBinaryMaskInPlace(vtkDataArray* arr)
+{
+    if (!arr)
+    {
+        return;
+    }
+
+    const int numComp = arr->GetNumberOfComponents();
+    const vtkIdType numTuples = arr->GetNumberOfTuples();
+    for (vtkIdType i = 0; i < numTuples; ++i)
+    {
+        const double v = arr->GetComponent(i, 0);
+        const double masked = (v > 0.0) ? 1.0 : 0.0;
+        for (int c = 0; c < numComp; ++c)
+        {
+            arr->SetComponent(i, c, masked);
+        }
+    }
+    arr->Modified();
+}
+
+bool ApplyMaskArrayToSurface(vtkPolyData* surface, const char* arrayName)
+{
+    if (!surface || !arrayName || arrayName[0] == '\0')
+    {
+        return false;
+    }
+
+    vtkDataArray* const cellArr = surface->GetCellData()->GetArray(arrayName);
+    vtkDataArray* const ptArr = surface->GetPointData()->GetArray(arrayName);
+    const vtkIdType nCells = surface->GetNumberOfCells();
+    const vtkIdType nPts = surface->GetNumberOfPoints();
+
+    const bool cellOk = (cellArr != nullptr && cellArr->GetNumberOfTuples() == nCells);
+    const bool ptOk = (ptArr != nullptr && ptArr->GetNumberOfTuples() == nPts);
+
+    vtkDataArray* maskArray = nullptr;
+    bool isCellData = false;
+    if (cellOk && ptOk)
+    {
+        maskArray = cellArr;
+        isCellData = true;
+    }
+    else if (cellOk)
+    {
+        maskArray = cellArr;
+        isCellData = true;
+    }
+    else if (ptOk)
+    {
+        maskArray = ptArr;
+        isCellData = false;
+    }
+    else
+    {
+        return false;
+    }
+
+    ApplyBinaryMaskInPlace(maskArray);
+
+    if (!isCellData)
+    {
+        return true;
+    }
+
+    vtkNew<vtkCellDataToPointData> cellToPoint;
+    cellToPoint->SetInputData(surface);
+    cellToPoint->PassCellDataOff();
+    cellToPoint->Update();
+
+    surface->ShallowCopy(cellToPoint->GetOutput());
+    return true;
+}
+} // namespace
 
 //------------------------------------------------------------------------------
 static bool vtkToTetgenio(vtkPolyData* input, tetgenio& in)
@@ -301,16 +406,38 @@ int vtkSHYXTetGen::RequestData(
         return 0;
     }
 
-    // Point-data only: same idea as vtkCGALPolyDataAlgorithm (vtkProbeFilter + stripped cell data).
-    // Do not use SpatialMatchOn: volume vertices are not in 1:1 correspondence with surface points.
+    // Point-data probe (optional mask binarization) after volume meshing.
     if (this->ProbeInputPointData)
     {
         vtkPointData* const inPD = input->GetPointData();
-        if (inPD && inPD->GetNumberOfArrays() > 0)
+        const bool hasPointArrays = inPD && inPD->GetNumberOfArrays() > 0;
+        const bool applyMask = this->MaskArrayEnabled;
+        if (hasPointArrays || applyMask)
         {
             vtkNew<vtkPolyData> probeSource;
-            probeSource->CopyStructure(input);
-            probeSource->GetPointData()->ShallowCopy(inPD);
+            if (applyMask)
+            {
+                probeSource->DeepCopy(input);
+
+                vtkDataArray* const picked = this->GetInputArrayToProcess(0, inputVector);
+                const char* arrayName = picked ? picked->GetName() : this->GetMaskArrayName();
+                if (!arrayName || arrayName[0] == '\0')
+                {
+                    vtkErrorMacro("Mask array enabled but no array selected on input.");
+                    return 0;
+                }
+                if (!ApplyMaskArrayToSurface(probeSource, arrayName))
+                {
+                    vtkErrorMacro("Failed to apply mask array \"" << arrayName << "\".");
+                    return 0;
+                }
+            }
+            else
+            {
+                probeSource->CopyStructure(input);
+                probeSource->GetPointData()->ShallowCopy(inPD);
+            }
+
             probeSource->GetCellData()->Initialize();
 
             vtkNew<vtkProbeFilter> probe;

@@ -111,6 +111,20 @@ public:
     vtkBooleanMacro(ProbeInputPointData, bool);
     ///@}
 
+    ///@{
+    /**
+     * When ON (and Probe input point data is ON), binarize the chosen input array in place
+     * (values <= 0 -> 0, > 0 -> 1). Cell-centered arrays are converted to point data via
+     * vtkCellDataToPointData before probing. Array slot 0 (ParaView picker).
+     */
+    vtkGetMacro(MaskArrayEnabled, bool);
+    vtkSetMacro(MaskArrayEnabled, bool);
+    vtkBooleanMacro(MaskArrayEnabled, bool);
+    ///@}
+
+    /** Mask array name (input-array slot 0). Empty when unset. */
+    const char* GetMaskArrayName();
+
 protected:
     vtkSHYXTetGen();
     ~vtkSHYXTetGen() override = default;
@@ -129,6 +143,7 @@ protected:
     int CDTRefine = 7;
     double Epsilon = 1e-8;
     bool ProbeInputPointData = false;
+    bool MaskArrayEnabled = false;
 
 private:
     vtkSHYXTetGen(const vtkSHYXTetGen&) = delete;

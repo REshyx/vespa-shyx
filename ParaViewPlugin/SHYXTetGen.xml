@@ -16,6 +16,7 @@
         <DataTypeDomain name="input_type">
           <DataType value="vtkPolyData"/>
         </DataTypeDomain>
+        <InputArrayDomain name="mask_arrays" optional="1"/>
       </InputProperty>
 
       <IntVectorProperty command="SetLimitMaxVolume"
@@ -148,6 +149,65 @@
           align with the input when the surface is preserved.
         </Documentation>
       </IntVectorProperty>
+
+      <IntVectorProperty command="SetMaskArrayEnabled"
+                         name="MaskArrayEnabled"
+                         label="Mask array"
+                         number_of_elements="1"
+                         default_values="0">
+        <BooleanDomain name="bool"/>
+        <Documentation>
+          Requires Probe input point data. When both are ON, binarize the selected array in place
+          (values &lt;= 0 become 0, values &gt; 0 become 1). Cell-centered arrays are converted
+          to point data via vtkCellDataToPointData before probing onto the volume mesh.
+        </Documentation>
+        <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="enabled_state"
+                                   property="ProbeInputPointData"
+                                   value="1"/>
+        </Hints>
+      </IntVectorProperty>
+
+      <StringVectorProperty name="MaskArrayName"
+                            label="Array"
+                            command="SetInputArrayToProcess"
+                            number_of_elements="5"
+                            element_types="0 0 0 0 2"
+                            default_values="0 0 0 0 "
+                            animateable="0">
+        <ArrayListDomain name="mask_array_list"
+                         input_domain_name="mask_arrays">
+          <RequiredProperties>
+            <Property name="Input" function="Input"/>
+          </RequiredProperties>
+        </ArrayListDomain>
+        <Documentation>
+          Point- or cell-centered array to binarize before probing. If both exist with the same
+          name, cell data is used. Only effective when Probe input point data is also ON.
+        </Documentation>
+        <Hints>
+          <PropertyWidgetDecorator type="CompositeDecorator">
+            <Expression type="and">
+              <PropertyWidgetDecorator type="GenericDecorator"
+                                       mode="visibility"
+                                       property="ProbeInputPointData"
+                                       value="1"/>
+              <PropertyWidgetDecorator type="GenericDecorator"
+                                       mode="visibility"
+                                       property="MaskArrayEnabled"
+                                       value="1"/>
+            </Expression>
+          </PropertyWidgetDecorator>
+          <ArraySelectionWidget/>
+        </Hints>
+      </StringVectorProperty>
+
+      <PropertyGroup label="Point data probing">
+        <Property name="ProbeInputPointData"/>
+        <Property name="MaskArrayEnabled"/>
+        <Property name="MaskArrayName"/>
+      </PropertyGroup>
 
       <PropertyGroup label="TetGen volume limit (-a)">
         <Property name="LimitMaxVolume"/>
