@@ -119,28 +119,48 @@ public:
 
     ///@{
     /**
-     * When UseInteractiveCutPlanes is true and InteractiveCutPackedString parses
-     * to exactly 6 * N doubles (N = number of discovered leaf endpoints), each
-     * endpoint i uses:
+     * Interactive plane state from the ParaView widget (whitespace-separated ASCII).
+     * When InteractiveCutPackedString parses to exactly 6 * N doubles (N = number of
+     * discovered leaf endpoints), each endpoint i uses:
      *   - origin = packed[6*i .. 6*i+2]
      *   - direction handle = packed[6*i+3 .. 6*i+5]
      *   - plane normal = normalize(direction_handle - origin)
      * Otherwise the plane is computed from the centerline as usual.
-     * The string is whitespace-separated ASCII numbers (ParaView custom widget).
      */
     vtkGetStringMacro(InteractiveCutPackedString);
     vtkSetStringMacro(InteractiveCutPackedString);
+    ///@}
+
+    ///@{
+    /**
+     * ParaView UI only: show per-endpoint implicit-plane widgets in the render view.
+     * Does not disable use of InteractiveCutPackedString after Apply (same as
+     * vtkSHYXSelectionPlaneClipper::UseInteractiveCutPlanes).
+     */
     vtkGetMacro(UseInteractiveCutPlanes, bool);
-    vtkSetMacro(UseInteractiveCutPlanes, bool);
+    void SetUseInteractiveCutPlanes(bool flag);
     vtkBooleanMacro(UseInteractiveCutPlanes, bool);
     ///@}
+
+    /**
+     * Read-only diagnostic text from the last pipeline update (RequestData).
+     * Also printed to the ParaView Output Messages window via vtkWarningMacro.
+     */
+    vtkGetStringMacro(OutputMessage);
 
 protected:
     vtkCGALVesselEndClipper();
     ~vtkCGALVesselEndClipper() override;
 
     int FillOutputPortInformation(int port, vtkInformation* info) override;
+    int ProcessRequest(vtkInformation*, vtkInformationVector**, vtkInformationVector*) override;
     int RequestData(vtkInformation*, vtkInformationVector**, vtkInformationVector*) override;
+
+    /** Updates OutputMessage without calling Modified() (avoids update loops). */
+    void SetOutputMessageNoModified(const char* msg);
+
+    void LogUpdateReasonAtRequestData(
+        vtkPolyData* vesselMesh, vtkPolyData* centerline, vtkPolyData* existingOutput);
 
     double ClipOffset       = 0.0;
     double MinBranchLength  = 0.0;
@@ -152,6 +172,16 @@ protected:
     bool  UseInteractiveCutPlanes     = false;
 
     vtkSmartPointer<vtkDataArraySelection> EndpointSelection;
+
+    char* OutputMessage = nullptr;
+
+    vtkIdType UpdateCount = 0;
+    vtkMTimeType LastLoggedInput0MTime = 0;
+    vtkMTimeType LastLoggedInput1MTime = 0;
+    vtkMTimeType LastLoggedFilterParamsMTime = 0;
+    vtkMTimeType LastLoggedFilterFullMTime = 0;
+    vtkMTimeType LastLoggedEndpointSelectionMTime = 0;
+    vtkMTimeType LastLoggedOutputMTime = 0;
 
 private:
     vtkCGALVesselEndClipper(const vtkCGALVesselEndClipper&) = delete;

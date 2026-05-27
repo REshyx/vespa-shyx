@@ -1487,14 +1487,16 @@
 
       <IntVectorProperty command="SetUseInteractiveCutPlanes"
                          name="UseInteractiveCutPlanes"
-                         label="Use Interactive Cut Planes"
+                         label="Show Interactive Cut Planes"
                          number_of_elements="1"
                          default_values="0">
         <BooleanDomain name="bool"/>
         <Documentation>
-          When enabled, per-endpoint 3D plane widgets (yellow translucent plane)
-          override automatic centerline-based clip planes. Apply once so endpoints
-          are discovered, then adjust planes and Apply again to clip.
+          When ON, yellow per-endpoint plane widgets are shown in the view so you can
+          edit cut planes. Turning it OFF only hides the widgets; clipping still uses
+          the last plane state from InteractiveCutPacked when present. Apply once so
+          endpoints are discovered, select a row under Endpoints to Clip, adjust the
+          plane, then Apply again to clip.
         </Documentation>
       </IntVectorProperty>
 
@@ -1514,6 +1516,18 @@
         <Property name="UseInteractiveCutPlanes" />
         <Property name="InteractiveCutPacked" />
       </PropertyGroup>
+
+      <StringVectorProperty name="OutputMessage"
+                            command="GetOutputMessage"
+                            label="Last update reason"
+                            number_of_elements="1"
+                            information_only="1"
+                            panel_visibility="advanced">
+        <Documentation>
+          Read-only text from the last pipeline update: why RequestData ran and relevant
+          MTime values. The same line is printed to View → Output Messages (vtkWarningMacro).
+        </Documentation>
+      </StringVectorProperty>
 
       <Hints>
         <!-- 端口 1（Clip Planes）首次显示时默认 Point Label（与 PointLabelRepresentation.xml 中 text 一致） -->

@@ -13,6 +13,7 @@
 #include <vtkCellData.h>
 #include <vtkCleanPolyData.h>
 #include <vtkClipPolyData.h>
+#include <vtkDemandDrivenPipeline.h>
 #include <vtkDoubleArray.h>
 #include <vtkInformation.h>
 #include <vtkInformationVector.h>
@@ -30,6 +31,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <cstring>
 #include <exception>
 #include <iterator>
 #include <memory>
@@ -52,6 +54,7 @@ vtkCGALVesselEndClipper::vtkCGALVesselEndClipper()
 vtkCGALVesselEndClipper::~vtkCGALVesselEndClipper()
 {
     this->SetInteractiveCutPackedString(nullptr);
+    this->SetOutputMessageNoModified(nullptr);
 }
 
 //------------------------------------------------------------------------------
@@ -76,7 +79,145 @@ void vtkCGALVesselEndClipper::PrintSelf(ostream& os, vtkIndent indent)
     os << indent << "UseInteractiveCutPlanes: " << (this->UseInteractiveCutPlanes ? 1 : 0) << std::endl;
     os << indent << "InteractiveCutPackedString: "
        << (this->InteractiveCutPackedString ? this->InteractiveCutPackedString : "") << std::endl;
+    os << indent << "OutputMessage: "
+       << (this->OutputMessage ? this->OutputMessage : "") << std::endl;
+    os << indent << "UpdateCount: " << this->UpdateCount << std::endl;
     this->Superclass::PrintSelf(os, indent);
+}
+
+//------------------------------------------------------------------------------
+void vtkCGALVesselEndClipper::SetOutputMessageNoModified(const char* msg)
+{
+    if ((this->OutputMessage == nullptr && (msg == nullptr || msg[0] == '\0')) ||
+        (this->OutputMessage && msg && std::strcmp(this->OutputMessage, msg) == 0))
+    {
+        return;
+    }
+    delete[] this->OutputMessage;
+    this->OutputMessage = nullptr;
+    if (msg && msg[0] != '\0')
+    {
+        const size_t n = std::strlen(msg) + 1;
+        this->OutputMessage = new char[n];
+        std::memcpy(this->OutputMessage, msg, n);
+    }
+}
+
+//------------------------------------------------------------------------------
+void vtkCGALVesselEndClipper::LogUpdateReasonAtRequestData(
+    vtkPolyData* vesselMesh, vtkPolyData* centerline, vtkPolyData* existingOutput)
+{
+    ++this->UpdateCount;
+
+    const vtkMTimeType filterMTime = this->Superclass::GetMTime();
+    const vtkMTimeType filterMTimeWithSelection = this->GetMTime();
+    const vtkMTimeType epSelMTime =
+        this->EndpointSelection ? this->EndpointSelection->GetMTime() : 0;
+    const vtkMTimeType in0MTime = vesselMesh ? vesselMesh->GetMTime() : 0;
+    const vtkMTimeType in1MTime = centerline ? centerline->GetMTime() : 0;
+    const vtkMTimeType outMTime = existingOutput ? existingOutput->GetMTime() : 0;
+
+    std::ostringstream oss;
+    oss << "[SHYXVesselEndClipper] RequestData #" << this->UpdateCount << " | ";
+
+    bool anyReason = false;
+    auto appendReason = [&](const char* text) {
+        if (anyReason)
+        {
+            oss << "; ";
+        }
+        oss << text;
+        anyReason = true;
+    };
+
+    if (this->UpdateCount == 1)
+    {
+        appendReason("first execution");
+    }
+
+    if (this->UpdateCount > 1)
+    {
+        if (in0MTime > this->LastLoggedInput0MTime)
+        {
+            appendReason("input port 0 (vessel mesh) MTime increased");
+        }
+        if (in1MTime > this->LastLoggedInput1MTime)
+        {
+            appendReason("input port 1 (centerline) MTime increased");
+        }
+        if (filterMTime > this->LastLoggedFilterParamsMTime)
+        {
+            appendReason("filter parameter MTime increased (ClipOffset/MinBranchLength/TangentDepth/"
+                        "CapEndpoints/FairingContinuity/InteractiveCut/UpdateAttributes)");
+        }
+        if (epSelMTime > this->LastLoggedEndpointSelectionMTime)
+        {
+            appendReason("EndpointSelection MTime increased (endpoint checkboxes changed or prior sync)");
+        }
+        if (in0MTime == this->LastLoggedInput0MTime && in1MTime == this->LastLoggedInput1MTime &&
+            filterMTimeWithSelection == this->LastLoggedFilterFullMTime &&
+            epSelMTime == this->LastLoggedEndpointSelectionMTime)
+        {
+            appendReason(
+                "downstream pipeline refresh / forced REQUEST_DATA (inputs & filter unchanged "
+                "since last RequestData)");
+        }
+    }
+
+    if (!existingOutput || existingOutput->GetNumberOfPoints() == 0)
+    {
+        appendReason("output port 0 empty or missing (initial or invalidated)");
+    }
+
+    if (!anyReason)
+    {
+        oss << "unknown trigger (compare MTimes below)";
+    }
+
+    oss << " | MTime filter=" << filterMTime << " filter+selection=" << filterMTimeWithSelection
+        << " EndpointSelection=" << epSelMTime << " in0=" << in0MTime << " in1=" << in1MTime
+        << " out0=" << outMTime << " | prev in0=" << this->LastLoggedInput0MTime
+        << " prev in1=" << this->LastLoggedInput1MTime
+        << " prev filterParams=" << this->LastLoggedFilterParamsMTime
+        << " prev filterFull=" << this->LastLoggedFilterFullMTime
+        << " prev EndpointSelection=" << this->LastLoggedEndpointSelectionMTime
+        << " prev out0=" << this->LastLoggedOutputMTime;
+
+    this->SetOutputMessageNoModified(oss.str().c_str());
+    vtkWarningMacro(<< this->OutputMessage);
+
+    this->LastLoggedInput0MTime = in0MTime;
+    this->LastLoggedInput1MTime = in1MTime;
+    this->LastLoggedFilterParamsMTime = filterMTime;
+    this->LastLoggedFilterFullMTime = filterMTimeWithSelection;
+    this->LastLoggedEndpointSelectionMTime = epSelMTime;
+    this->LastLoggedOutputMTime = outMTime;
+}
+
+//------------------------------------------------------------------------------
+int vtkCGALVesselEndClipper::ProcessRequest(
+    vtkInformation* request, vtkInformationVector** inputVector, vtkInformationVector* outputVector)
+{
+    if (request->Has(vtkDemandDrivenPipeline::REQUEST_DATA()))
+    {
+        vtkPolyData* vesselMesh = vtkPolyData::GetData(inputVector[0], 0);
+        vtkPolyData* centerline = vtkPolyData::GetData(inputVector[1], 0);
+        vtkPolyData* existingOutput = vtkPolyData::GetData(outputVector, 0);
+        this->LogUpdateReasonAtRequestData(vesselMesh, centerline, existingOutput);
+    }
+    return this->Superclass::ProcessRequest(request, inputVector, outputVector);
+}
+
+//------------------------------------------------------------------------------
+void vtkCGALVesselEndClipper::SetUseInteractiveCutPlanes(bool flag)
+{
+    if (this->UseInteractiveCutPlanes == flag)
+    {
+        return;
+    }
+    this->UseInteractiveCutPlanes = flag;
+    // Intentionally no Modified(): ParaView UI visibility only; must not invalidate the
+    // pipeline or re-run clipping when toggling Show interactive cut planes + Apply.
 }
 
 //------------------------------------------------------------------------------
@@ -464,9 +605,10 @@ int vtkCGALVesselEndClipper::RequestData(
     }
 
     // ---------------------------------------------------------------
-    // 2a. Optional interactive plane overrides (ParaView custom widget).
+    // 2a. Interactive plane overrides (ParaView custom widget). When packed
+    // state parses, it always drives clip planes; UseInteractiveCutPlanes only
+    // controls 3D widget visibility on the client (see vtkSHYXSelectionPlaneClipper).
     // ---------------------------------------------------------------
-    if (this->UseInteractiveCutPlanes)
     {
         std::vector<double> packed;
         if (ParseInteractivePacked(this->InteractiveCutPackedString, packed) &&
@@ -496,6 +638,9 @@ int vtkCGALVesselEndClipper::RequestData(
     // ---------------------------------------------------------------
     // 2b. Sync the vtkDataArraySelection with the discovered endpoints.
     // ---------------------------------------------------------------
+    const vtkMTimeType epSelMTimeBeforeSync =
+        this->EndpointSelection ? this->EndpointSelection->GetMTime() : 0;
+
     std::set<std::string> currentNames;
     for (const auto& ci : clips)
         currentNames.insert(ci.name);
@@ -523,6 +668,18 @@ int vtkCGALVesselEndClipper::RequestData(
         else
         {
             this->EndpointSelection->DisableArray(ci.name.c_str());
+        }
+    }
+
+    if (this->EndpointSelection)
+    {
+        const vtkMTimeType epSelMTimeAfterSync = this->EndpointSelection->GetMTime();
+        if (epSelMTimeAfterSync > epSelMTimeBeforeSync)
+        {
+            vtkWarningMacro(<< "[SHYXVesselEndClipper] EndpointSelection Modified during RequestData "
+                            << "(endpoint sync: add/remove/enable/disable). MTime "
+                            << epSelMTimeBeforeSync << " -> " << epSelMTimeAfterSync
+                            << " — this can cause an extra pipeline pass on the next update.");
         }
     }
 

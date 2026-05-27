@@ -555,6 +555,16 @@ vtkSHYXSelectionPlaneClipper::~vtkSHYXSelectionPlaneClipper()
   this->SetFillHoleStampCellArrayName(nullptr);
 }
 
+void vtkSHYXSelectionPlaneClipper::SetUseInteractiveCutPlanes(int flag)
+{
+  if (this->UseInteractiveCutPlanes == flag)
+  {
+    return;
+  }
+  this->UseInteractiveCutPlanes = flag;
+  // Intentionally no Modified(): show/hide widget only (see class doc).
+}
+
 void vtkSHYXSelectionPlaneClipper::SetSourceConnection(vtkAlgorithmOutput* algOutput)
 {
   this->SetInputConnection(1, algOutput);

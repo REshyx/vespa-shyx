@@ -72,7 +72,7 @@ public:
   vtkSetStringMacro(ClipPlaneHintPackedString);
   /** ParaView UI: show the implicit-plane widget; does not disable use of InteractiveCutPackedString. */
   vtkGetMacro(UseInteractiveCutPlanes, int);
-  vtkSetMacro(UseInteractiveCutPlanes, int);
+  void SetUseInteractiveCutPlanes(int flag);
   vtkBooleanMacro(UseInteractiveCutPlanes, int);
 
   /**

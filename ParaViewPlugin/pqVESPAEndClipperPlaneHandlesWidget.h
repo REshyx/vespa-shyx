@@ -23,8 +23,8 @@ class vtkSMNewWidgetRepresentationProxy;
 
 /**
  * One DisplaySized implicit-plane widget per vessel endpoint (port 1 preview).
- * Origin = cut position; normal follows the implicit-plane handles (direction
- * is encoded as origin + arm * normal when pushing packed state to the filter).
+ * UseInteractiveCutPlanes is a show/hide toggle only (see vtkSHYXSelectionPlaneClipper);
+ * InteractiveCutPacked always drives clipping on the server when it parses.
  *
  * Visibility matches the port-1 representation eye icon in the active view (same idea as
  * pqVESPAOBBInteractiveBoxWidget and the boolean subtract preview).

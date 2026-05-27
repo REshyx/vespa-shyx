@@ -93,15 +93,16 @@ pqVESPAEndClipperPlaneHandlesWidget::pqVESPAEndClipperPlaneHandlesWidget(
 
     auto* vbox = new QVBoxLayout(this);
     this->InfoLabel = new QLabel(
-        tr("Enable interactive planes, then click a single row under \"Endpoints to Clip\" "
-           "(blue selection, not the clip checkbox) to show the yellow plane for that endpoint. "
-           "Dragging updates origin and normal in the panel only — use Apply (or turn on auto-apply) "
-           "to run clipping with the edited planes."),
+        tr("Show interactive planes, then click a single row under \"Endpoints to Clip\" "
+           "(blue selection, not the clip checkbox) to display the yellow plane for that endpoint. "
+           "Dragging updates origin and normal in the panel only — use Apply (or auto-apply) to "
+           "clip. Hiding the planes only removes the widgets; clipping still uses the last adjusted "
+           "planes when their state is present."),
         this);
     this->InfoLabel->setWordWrap(true);
     vbox->addWidget(this->InfoLabel);
 
-    this->UseInteractiveCheckbox = new QCheckBox(tr("Use interactive cut planes"), this);
+    this->UseInteractiveCheckbox = new QCheckBox(tr("Show interactive cut planes"), this);
     vbox->addWidget(this->UseInteractiveCheckbox);
 
     this->addPropertyLink(this->UseInteractiveCheckbox, "UseInteractiveCutPlanes");
@@ -659,7 +660,16 @@ void pqVESPAEndClipperPlaneHandlesWidget::pushPackedFromWidgetsToFilter()
     if (vtkSMProperty* p = src->GetProperty("InteractiveCutPacked"))
     {
         vtkSMPropertyHelper hp(p);
-        const QByteArray   utf = packed.toUtf8();
+        const QByteArray    utf = packed.toUtf8();
+        const char*         current = hp.GetAsString(0);
+        if (current && utf == current)
+        {
+            return;
+        }
+        if ((!current || current[0] == '\0') && utf.isEmpty())
+        {
+            return;
+        }
         hp.Set(0, utf.constData());
     }
 }
@@ -669,17 +679,21 @@ void pqVESPAEndClipperPlaneHandlesWidget::rebuildPlaneWidgetsIfNeeded()
 {
     if (!this->UseInteractiveCheckbox || !this->UseInteractiveCheckbox->isChecked())
     {
+        // Hide widgets only; keep proxies and InteractiveCutPacked so Apply still clips with the
+        // last edited planes (server no longer gates on UseInteractiveCutPlanes).
         this->ActiveRowEndpointIndex = -1;
         this->disconnectEndpointListSelection();
-        const QPointer<pqRenderView> hostSnap = this->LastPlaneHostRenderView;
-        this->tearDownPlaneWidgets();
+        if (!this->PlaneWidgets.empty())
+        {
+            this->detachPlaneWidgetsFromView();
+        }
         if (pqView* v = this->view())
         {
             v->render();
         }
-        if (hostSnap)
+        if (this->LastPlaneHostRenderView)
         {
-            hostSnap->render();
+            this->LastPlaneHostRenderView->render();
         }
         return;
     }
@@ -689,12 +703,18 @@ void pqVESPAEndClipperPlaneHandlesWidget::rebuildPlaneWidgetsIfNeeded()
     {
         return;
     }
-    src->UpdatePipeline();
-    src->UpdatePipelineInformation();
 
     vtkAlgorithm* alg = vtkAlgorithm::SafeDownCast(src->GetClientSideObject());
     vtkPolyData*  viz = alg ? vtkPolyData::SafeDownCast(alg->GetOutputDataObject(1)) : nullptr;
     int           n   = this->endpointCountFromClipViz(viz);
+    if (n <= 0)
+    {
+        src->UpdatePipeline();
+        src->UpdatePipelineInformation();
+        alg = vtkAlgorithm::SafeDownCast(src->GetClientSideObject());
+        viz = alg ? vtkPolyData::SafeDownCast(alg->GetOutputDataObject(1)) : nullptr;
+        n   = this->endpointCountFromClipViz(viz);
+    }
     if (n > kMaxEndpoints)
     {
         if (this->InfoLabel)
@@ -708,7 +728,7 @@ void pqVESPAEndClipperPlaneHandlesWidget::rebuildPlaneWidgetsIfNeeded()
     else if (this->InfoLabel)
     {
         this->InfoLabel->setText(
-            tr("Enable interactive planes, then click a row under \"Endpoints to Clip\" "
+            tr("Show interactive planes, then click a row under \"Endpoints to Clip\" "
                "(blue selection, not the checkbox) to edit that endpoint's yellow plane. "
                "Apply (or auto-apply) runs clipping; dragging alone does not."));
     }
@@ -722,7 +742,6 @@ void pqVESPAEndClipperPlaneHandlesWidget::rebuildPlaneWidgetsIfNeeded()
     if (n > 0 && static_cast<int>(this->PlaneWidgets.size()) == n && this->PlaneWidgets[0])
     {
         this->syncWidgetsFromFilterState();
-        this->pushPackedFromWidgetsToFilter();
         this->attachPlaneWidgetsToView();
         this->updatePlaneWidgetsVisibility();
         this->tryConnectEndpointListSelection();
@@ -780,7 +799,6 @@ void pqVESPAEndClipperPlaneHandlesWidget::rebuildPlaneWidgetsIfNeeded()
 
     this->attachPlaneWidgetsToView();
     this->syncWidgetsFromFilterState();
-    this->pushPackedFromWidgetsToFilter();
     this->updatePlaneWidgetsVisibility();
     this->tryConnectEndpointListSelection();
 }
