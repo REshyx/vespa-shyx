@@ -40,6 +40,8 @@
 namespace
 {
 constexpr double kEps = 1e-12;
+/** Inflate finite-cylinder widget bounds by 10% beyond analytic geometry + pad. */
+constexpr double kWidgetBoundsScale = 1.1;
 
 void SHYXOnStentLengthPropertyEvent(vtkObject*, unsigned long, void* clientData, void*)
 {
@@ -482,8 +484,8 @@ void pqSHYXVascularStentCylinderWidget::finiteCylinderWorldAABB(
     vtkMath::Cross(a, u, v);
     vtkMath::Normalize(v);
 
-    const double halfL = 0.5 * std::max(length, 0.0);
-    const double R = std::max(radius, 0.0);
+    const double halfL = 0.5 * std::max(length, 0.0) * kWidgetBoundsScale;
+    const double R = std::max(radius, 0.0) * kWidgetBoundsScale;
     double minC[3] = { VTK_DOUBLE_MAX, VTK_DOUBLE_MAX, VTK_DOUBLE_MAX };
     double maxC[3] = { -VTK_DOUBLE_MAX, -VTK_DOUBLE_MAX, -VTK_DOUBLE_MAX };
     for (int sA = -1; sA <= 1; sA += 2)

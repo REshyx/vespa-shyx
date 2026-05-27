@@ -2,6 +2,8 @@
 
 #include "vtkAbstractPicker.h"
 #include "vtkActor.h"
+#include "vtkAssemblyPath.h"
+#include "vtkProp.h"
 #include "vtkCellArray.h"
 #include "vtkCellPicker.h"
 #include "vtkConeSource.h"
@@ -31,10 +33,56 @@ vtkStandardNewMacro(vtkSHYXImplicitCylinderRepresentation);
 namespace
 {
 constexpr double kEps = 1e-12;
+/** Inflate finite-cylinder widget bounds by 10% beyond analytic geometry + pad. */
+constexpr double kWidgetBoundsScale = 1.1;
+/** vtkCellPicker tolerance for the stent cylinder shell (fraction of window diagonal). */
+constexpr double kCylinderPickTolerance = 0.001;
+/** End-cap cone picker tolerance (fraction of window diagonal; same units as CylPicker). */
+constexpr double kConeCapPickTolerance = 0.001;
 }
 
 //----------------------------------------------------------------------------
-vtkSHYXImplicitCylinderRepresentation::vtkSHYXImplicitCylinderRepresentation() = default;
+vtkSHYXImplicitCylinderRepresentation::vtkSHYXImplicitCylinderRepresentation()
+{
+    this->ConfigureStentPickers();
+}
+
+//----------------------------------------------------------------------------
+vtkSHYXImplicitCylinderRepresentation::~vtkSHYXImplicitCylinderRepresentation()
+{
+    if (this->ConeCapPicker)
+    {
+        this->ConeCapPicker->Delete();
+        this->ConeCapPicker = nullptr;
+    }
+}
+
+//----------------------------------------------------------------------------
+void vtkSHYXImplicitCylinderRepresentation::ConfigureStentPickers()
+{
+    // Axis lines run through the cylinder center; with vtkCellPicker tolerance they steal
+    // hits from a thin shell. End cones use ConeCapPicker; the shell adjusts radius.
+    if (this->Picker)
+    {
+        this->Picker->DeletePickList(this->LineActor);
+        this->Picker->DeletePickList(this->LineActor2);
+        this->Picker->DeletePickList(this->ConeActor);
+        this->Picker->DeletePickList(this->ConeActor2);
+    }
+    if (this->CylPicker)
+    {
+        this->CylPicker->SetTolerance(kCylinderPickTolerance);
+    }
+    if (!this->ConeCapPicker)
+    {
+        this->ConeCapPicker = vtkCellPicker::New();
+        this->ConeCapPicker->PickFromListOn();
+    }
+    this->ConeCapPicker->InitializePickList();
+    this->ConeCapPicker->AddPickList(this->ConeActor);
+    this->ConeCapPicker->AddPickList(this->ConeActor2);
+    this->ConeCapPicker->SetTolerance(kConeCapPickTolerance);
+}
 
 //----------------------------------------------------------------------------
 void vtkSHYXImplicitCylinderRepresentation::CreateDefaultProperties()
@@ -91,8 +139,8 @@ void vtkSHYXImplicitCylinderRepresentation::FiniteCylinderWorldAABB(
     vtkMath::Cross(a, u, v);
     vtkMath::Normalize(v);
 
-    const double halfL = 0.5 * std::max(length, 0.0);
-    const double R = std::max(radius, 0.0);
+    const double halfL = 0.5 * std::max(length, 0.0) * kWidgetBoundsScale;
+    const double R = std::max(radius, 0.0) * kWidgetBoundsScale;
     double minC[3] = { VTK_DOUBLE_MAX, VTK_DOUBLE_MAX, VTK_DOUBLE_MAX };
     double maxC[3] = { -VTK_DOUBLE_MAX, -VTK_DOUBLE_MAX, -VTK_DOUBLE_MAX };
     for (int sA = -1; sA <= 1; sA += 2)
@@ -146,13 +194,147 @@ void vtkSHYXImplicitCylinderRepresentation::ApplyFiniteLengthToWidgetBounds()
 }
 
 //----------------------------------------------------------------------------
+int vtkSHYXImplicitCylinderRepresentation::ComputeInteractionState(int X, int Y, int vtkNotUsed(modify))
+{
+    vtkProp* coneProp = nullptr;
+    if (this->Renderer && this->ConeCapPicker && this->ConeCapPicker->Pick(X, Y, 0., this->Renderer))
+    {
+        if (vtkAssemblyPath* conePath = this->ConeCapPicker->GetPath())
+        {
+            coneProp = conePath->GetFirstNode()->GetViewProp();
+        }
+    }
+
+    vtkAssemblyPath* handlePath = this->GetAssemblyPath(X, Y, 0., this->Picker);
+
+    vtkAssemblyPath* cylPath = nullptr;
+    if (this->Renderer && this->CylPicker->Pick(X, Y, 0., this->Renderer))
+    {
+        cylPath = this->CylPicker->GetPath();
+    }
+
+    if (!coneProp && !handlePath && !cylPath)
+    {
+        this->SetRepresentationState(vtkImplicitCylinderRepresentation::Outside);
+        this->InteractionState = vtkImplicitCylinderRepresentation::Outside;
+        return this->InteractionState;
+    }
+
+    this->ValidPick = 1;
+
+    if (this->InteractionState == vtkImplicitCylinderRepresentation::Moving)
+    {
+        vtkProp* handleProp = handlePath ? handlePath->GetFirstNode()->GetViewProp() : nullptr;
+        vtkProp* cylProp = cylPath ? cylPath->GetFirstNode()->GetViewProp() : nullptr;
+
+        const bool cylHit = cylProp == this->CylActor || cylProp == this->EdgesActor;
+        const bool coneHit = coneProp == this->ConeActor || coneProp == this->ConeActor2;
+        const bool sphereHit = handleProp == this->SphereActor;
+        const bool outlineHit = handleProp == this->GetOutlineActor();
+
+        if (coneHit)
+        {
+            // ConeActor is on +axis from center; ConeActor2 on -axis. Length delta uses outward cap motion.
+            this->FiniteStentLengthDragSign = (coneProp == this->ConeActor2) ? -1 : 1;
+            this->InteractionState = vtkImplicitCylinderRepresentation::RotatingAxis;
+            this->SetRepresentationState(vtkImplicitCylinderRepresentation::RotatingAxis);
+        }
+        else if (sphereHit)
+        {
+            this->InteractionState = vtkImplicitCylinderRepresentation::MovingCenter;
+            this->SetRepresentationState(vtkImplicitCylinderRepresentation::MovingCenter);
+        }
+        else if (cylHit)
+        {
+            this->InteractionState = vtkImplicitCylinderRepresentation::AdjustingRadius;
+            this->SetRepresentationState(vtkImplicitCylinderRepresentation::AdjustingRadius);
+        }
+        else if (outlineHit && this->GetOutlineTranslation())
+        {
+            this->InteractionState = vtkImplicitCylinderRepresentation::MovingOutline;
+            this->SetRepresentationState(vtkImplicitCylinderRepresentation::MovingOutline);
+        }
+        else if (handlePath)
+        {
+            if (this->GetOutlineTranslation())
+            {
+                this->InteractionState = vtkImplicitCylinderRepresentation::MovingOutline;
+                this->SetRepresentationState(vtkImplicitCylinderRepresentation::MovingOutline);
+            }
+            else
+            {
+                this->InteractionState = vtkImplicitCylinderRepresentation::Outside;
+                this->SetRepresentationState(vtkImplicitCylinderRepresentation::Outside);
+            }
+        }
+        else
+        {
+            this->InteractionState = vtkImplicitCylinderRepresentation::Outside;
+            this->SetRepresentationState(vtkImplicitCylinderRepresentation::Outside);
+        }
+    }
+    else if (this->InteractionState != vtkImplicitCylinderRepresentation::Scaling)
+    {
+        this->InteractionState = vtkImplicitCylinderRepresentation::Outside;
+    }
+
+    return this->InteractionState;
+}
+
+//----------------------------------------------------------------------------
+void vtkSHYXImplicitCylinderRepresentation::SetRepresentationState(int state)
+{
+    state = std::min(std::max(state, static_cast<int>(vtkImplicitCylinderRepresentation::Outside)),
+        static_cast<int>(vtkImplicitCylinderRepresentation::Scaling));
+
+    if (this->RepresentationState == state)
+    {
+        return;
+    }
+
+    this->RepresentationState = state;
+    this->Modified();
+
+    this->HighlightNormal(0);
+    this->HighlightCylinder(0);
+    this->HighlightOutline(0);
+    if (state == vtkImplicitCylinderRepresentation::RotatingAxis)
+    {
+        // Length handles at end cones only; do not green-highlight the cylinder shell.
+        this->HighlightNormal(1);
+    }
+    else if (state == vtkImplicitCylinderRepresentation::AdjustingRadius)
+    {
+        this->HighlightCylinder(1);
+    }
+    else if (state == vtkImplicitCylinderRepresentation::MovingCenter)
+    {
+        this->HighlightNormal(1);
+    }
+    else if (state == vtkImplicitCylinderRepresentation::MovingOutline)
+    {
+        this->HighlightOutline(1);
+    }
+    else if (state == vtkImplicitCylinderRepresentation::Scaling && this->ScaleEnabled)
+    {
+        this->HighlightNormal(1);
+        this->HighlightCylinder(1);
+        this->HighlightOutline(1);
+    }
+    else if (state == vtkImplicitCylinderRepresentation::TranslatingCenter)
+    {
+        this->HighlightNormal(1);
+    }
+}
+
+//----------------------------------------------------------------------------
 void vtkSHYXImplicitCylinderRepresentation::WidgetInteraction(double e[2])
 {
     if (this->InteractionState == vtkImplicitCylinderRepresentation::RotatingAxis)
     {
-        vtkVector3d prevPickPoint =
-            this->GetWorldPoint(static_cast<vtkAbstractPicker*>(this->Picker), this->LastEventPosition);
-        vtkVector3d pickPoint = this->GetWorldPoint(static_cast<vtkAbstractPicker*>(this->Picker), e);
+        vtkAbstractPicker* capPicker = static_cast<vtkAbstractPicker*>(this->ConeCapPicker);
+        vtkVector3d prevPickPoint = this->GetWorldPoint(capPicker, this->LastEventPosition);
+        vtkVector3d pickPoint = this->GetWorldPoint(capPicker, e);
 
         double a[3];
         this->GetAxis(a);
@@ -165,7 +347,7 @@ void vtkSHYXImplicitCylinderRepresentation::WidgetInteraction(double e[2])
 
         const double dp[3] = { pickPoint[0] - prevPickPoint[0], pickPoint[1] - prevPickPoint[1],
             pickPoint[2] - prevPickPoint[2] };
-        const double deltaL = 2.0 * vtkMath::Dot(dp, a);
+        const double deltaL = 2.0 * this->FiniteStentLengthDragSign * vtkMath::Dot(dp, a);
         this->FiniteStentLength = std::max(1e-9, this->FiniteStentLength + deltaL);
         this->Modified();
 

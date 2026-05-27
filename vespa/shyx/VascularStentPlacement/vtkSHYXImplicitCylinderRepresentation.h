@@ -11,6 +11,8 @@
 #include "vtkImplicitCylinderRepresentation.h"
 #include "vtkSHYXVascularStentPlacementModule.h"
 
+class vtkCellPicker;
+
 class VTKSHYXVASCULARSTENTPLACEMENT_EXPORT vtkSHYXImplicitCylinderRepresentation
   : public vtkImplicitCylinderRepresentation
 {
@@ -27,11 +29,13 @@ public:
     void SetFiniteStentLengthHint(double L);
 
     void WidgetInteraction(double newEventPos[2]) override;
+    int ComputeInteractionState(int X, int Y, int modify = 0) override;
+    void SetRepresentationState(int state) override;
     void BuildRepresentation() override;
 
 protected:
     vtkSHYXImplicitCylinderRepresentation();
-    ~vtkSHYXImplicitCylinderRepresentation() override = default;
+    ~vtkSHYXImplicitCylinderRepresentation() override;
 
     /** Forward to vtkImplicitCylinderRepresentation so material defaults stay VTK-identical. */
     void CreateDefaultProperties() override;
@@ -41,6 +45,9 @@ protected:
 
     void ApplyFiniteLengthToWidgetBounds();
 
+    /** Drop axis lines from the handle picker; length uses end cones only. */
+    void ConfigureStentPickers();
+
 private:
     vtkSHYXImplicitCylinderRepresentation(const vtkSHYXImplicitCylinderRepresentation&) = delete;
     void operator=(const vtkSHYXImplicitCylinderRepresentation&) = delete;
@@ -49,6 +56,12 @@ private:
     void BuildFiniteStentCylinder();
 
     double FiniteStentLength = 10.0;
+
+    /** +1 when dragging ConeActor (+axis cap), -1 for ConeActor2 (-axis cap). */
+    int FiniteStentLengthDragSign = 1;
+
+    /** End-cap cones only; picked before the cylinder shell (pixel-sized handles). */
+    vtkCellPicker* ConeCapPicker = nullptr;
 };
 
 #endif
