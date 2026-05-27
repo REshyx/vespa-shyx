@@ -460,6 +460,7 @@
 
       <Hints>
         <ShowInMenu category="SHYX" icon=":/VESPA/SHYX_Adaptive_Isotropic_Remesher.png"/>
+        <ShowInMenu category="Vascular" icon=":/VESPA/SHYX_Adaptive_Isotropic_Remesher.png"/>
         <RepresentationType view="RenderView" type="Surface With Edges" port="0"/>
       </Hints>
     </SourceProxy>

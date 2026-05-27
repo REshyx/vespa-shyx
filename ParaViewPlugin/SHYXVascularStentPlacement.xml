@@ -227,6 +227,7 @@
 
       <Hints>
         <ShowInMenu category="SHYX" icon=":/VESPA/SHYX_Vessel_End_Clipper.png"/>
+        <ShowInMenu category="Vascular" icon=":/VESPA/SHYX_Vessel_End_Clipper.png"/>
       </Hints>
     </SourceProxy>
   </ProxyGroup>

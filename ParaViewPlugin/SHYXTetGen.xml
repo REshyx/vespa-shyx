@@ -216,6 +216,7 @@
 
       <Hints>
         <ShowInMenu category="SHYX" icon=":/VESPA/SHYX_TetGen.png"/>
+        <ShowInMenu category="Vascular" icon=":/VESPA/SHYX_TetGen.png"/>
       </Hints>
     </SourceProxy>
   </ProxyGroup>

@@ -240,6 +240,7 @@
         <!-- 端口 1（Opening seed points）首次显示时默认用 Point Label；端口 0 不受影响 -->
         <RepresentationType view="RenderView" type="Point Label" port="1"/>
         <ShowInMenu category="SHYX" icon=":/VESPA/SHYX_Radius_Neighbor_Count.png"/>
+        <ShowInMenu category="Vascular" icon=":/VESPA/SHYX_Radius_Neighbor_Count.png"/>
       </Hints>
     </SourceProxy>
   </ProxyGroup>

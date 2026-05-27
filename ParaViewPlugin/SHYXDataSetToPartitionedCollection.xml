@@ -57,6 +57,7 @@
 
       <Hints>
         <ShowInMenu category="SHYX" icon=":/VESPA/SHYX_DataSet_To_Partitioned_Collection.png"/>
+        <ShowInMenu category="Vascular" icon=":/VESPA/SHYX_DataSet_To_Partitioned_Collection.png"/>
       </Hints>
     </SourceProxy>
   </ProxyGroup>
