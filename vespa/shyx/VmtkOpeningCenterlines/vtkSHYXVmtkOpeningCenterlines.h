@@ -3,17 +3,16 @@
  * @brief   Scalar-range patches → connected openings → seed points; optional VMTK centerlines.
  *
  * Single input: tubular vessel surface (vtkPolyData). Select cells whose chosen array magnitude
- * falls in [ThresholdMin, ThresholdMax] (same rules as vtkSHYXAdaptiveIsotropicRemesher remesh
- * range). Default threshold array is cell-data \c EndpointIndex (e.g. vtkCGALVesselEndClipper);
- * override via VTK \c SetInputArrayToProcess (ParaView array picker).
+ * is greater than zero (fixed rule; only the array is user-selectable). Default threshold array is
+ * cell-data \c EndpointIndex (e.g. vtkCGALVesselEndClipper); override via VTK
+ * \c SetInputArrayToProcess (ParaView array picker).
  * Each resulting connected component yields one representative surface point (closest mesh
  * vertex to the patch centroid). Each opening’s list entry is keyed by **SeedPoint: &lt;SurfacePointId&gt;**
  * (the representative surface vertex id); duplicate labels get **#2**, **#3** suffixes.
  * vtkDataArraySelection \c InletSelection — checked entries are VMTK source seeds (inlets);
  * unchecked entries are targets (outlets). \c ExcludedOpeningSelection — checked entries are omitted
- * from seed output and from centerline seeds (deleted openings). Changing the opening threshold
- * (array name, min/max, or all-corners option) clears prior checks and rebuilds the lists on the next
- * RequestData.
+ * from seed output and from centerline seeds (deleted openings). Changing the threshold array
+ * clears prior checks and rebuilds the lists on the next RequestData.
  *
  * Outputs:
  * - Port 0: vtkvmtkPolyDataCenterlines result when CalculateCenterline is on and seeds valid;
@@ -42,16 +41,6 @@ public:
   static vtkSHYXVmtkOpeningCenterlines* New();
   vtkTypeMacro(vtkSHYXVmtkOpeningCenterlines, vtkPolyDataAlgorithm);
   void PrintSelf(ostream& os, vtkIndent indent) override;
-
-  vtkSetMacro(ThresholdMin, double);
-  vtkGetMacro(ThresholdMin, double);
-
-  vtkSetMacro(ThresholdMax, double);
-  vtkGetMacro(ThresholdMax, double);
-
-  vtkGetMacro(ThresholdAllScalars, bool);
-  vtkSetMacro(ThresholdAllScalars, bool);
-  vtkBooleanMacro(ThresholdAllScalars, bool);
 
   vtkSetMacro(CalculateCenterline, int);
   vtkGetMacro(CalculateCenterline, int);
@@ -88,10 +77,6 @@ private:
   static void ClearAllArrays(vtkDataArraySelection* sel);
   void InvalidateInletSelectionIfOpeningThresholdChanged();
 
-  double ThresholdMin = 0.0;
-  double ThresholdMax = 1.0;
-  bool ThresholdAllScalars = false;
-
   int CalculateCenterline = 0;
 
   int FlipNormals = 0;
@@ -100,7 +85,7 @@ private:
   vtkSmartPointer<vtkDataArraySelection> InletSelection;
   vtkSmartPointer<vtkDataArraySelection> ExcludedOpeningSelection;
 
-  /** Last Opening threshold fingerprint (array + min/max + all corners); used to reset the inlet list. */
+  /** Last threshold-array fingerprint; used to reset the inlet list when the array changes. */
   std::string CachedOpeningThresholdFingerprint;
 
   int OpeningListRevision = 0;

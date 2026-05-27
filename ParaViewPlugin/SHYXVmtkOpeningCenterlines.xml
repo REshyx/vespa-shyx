@@ -5,10 +5,9 @@
                  class="vtkSHYXVmtkOpeningCenterlines"
                  label="SHYX VMTK Opening Centerlines">
       <Documentation short_help="Threshold openings, pick inlets/outlets, optional VMTK centerlines.">
-        Single surface input. Cells whose chosen scalar magnitude lies in [Threshold min, Threshold max]
-        (same point/cell resolution rules as SHYX Adaptive Isotropic Remesher remesh range) are
-        extracted; each connected component defines one opening. The representative point is the mesh
-        vertex closest to that patch centroid (for disk-like inlets/outlets).
+        Single surface input. Cells whose chosen scalar magnitude is **greater than 0** are extracted
+        (fixed threshold rule; only the array may be chosen). Each connected component defines one opening.
+        The representative point is the mesh vertex closest to that patch centroid (for disk-like inlets/outlets).
 
         The **Inlets (openings)** list is filled after Apply. Each row is keyed as **SeedPoint: &lt;SurfacePointId&gt;**
         (representative surface vertex id); identical ids get **#2**, **#3** suffixes. Check entries that are **inlets** (VMTK source seeds); unchecked openings are
@@ -19,8 +18,8 @@
         port 1 (seed points) and excluded from centerline seeds (treated as deleted). Assign **Inlets** only among
         openings that remain unchecked here.
 
-        Changing **Threshold array**, **min/max**, or **all corners** clears prior inlet/outlet and
-        remove checks and rebuilds the opening list on the next Apply/update.
+        Changing **Threshold array** clears prior inlet/outlet and remove checks and rebuilds the opening
+        list on the next Apply/update.
 
         Output 0 is VMTK centerline polydata when **Calculate centerline** is on and at least one
         checked inlet and one unchecked outlet exist among non-removed openings; otherwise empty
@@ -64,61 +63,15 @@
           Cell-centered array on the input (same VTK input-array slot as other SHYX filters).
           Default: **EndpointIndex** on **Cell Data** (e.g. vtkCGALVesselEndClipper caps). The array
           list is restricted to cell arrays so ParaView does not pick a same-named point array by
-          default when both exist.
+          default when both exist. Threshold rule is fixed: tuple magnitude **&gt; 0** (not adjustable).
         </Documentation>
         <Hints>
           <ArraySelectionWidget/>
         </Hints>
       </StringVectorProperty>
 
-      <DoubleVectorProperty command="SetThresholdMin"
-                            name="ThresholdMin"
-                            label="Threshold min"
-                            number_of_elements="1"
-                            default_values="0"
-                            animateable="1">
-        <ArrayRangeDomain name="range" default_mode="min">
-          <RequiredProperties>
-            <Property name="Input" function="Input"/>
-            <Property name="ThresholdArrayName" function="ArraySelection"/>
-          </RequiredProperties>
-        </ArrayRangeDomain>
-        <Documentation>Inclusive lower bound on tuple magnitude for thresholded cells. Slider range follows the selected array’s actual min/max (information pipeline).</Documentation>
-      </DoubleVectorProperty>
-
-      <DoubleVectorProperty command="SetThresholdMax"
-                            name="ThresholdMax"
-                            label="Threshold max"
-                            number_of_elements="1"
-                            default_values="1"
-                            animateable="1">
-        <ArrayRangeDomain name="range" default_mode="max">
-          <RequiredProperties>
-            <Property name="Input" function="Input"/>
-            <Property name="ThresholdArrayName" function="ArraySelection"/>
-          </RequiredProperties>
-        </ArrayRangeDomain>
-        <Documentation>Inclusive upper bound; must be &gt;= Threshold min. Slider range follows the selected array’s actual min/max (information pipeline).</Documentation>
-      </DoubleVectorProperty>
-
-      <IntVectorProperty command="SetThresholdAllScalars"
-                         name="ThresholdAllScalars"
-                         label="Threshold: all corners (points)"
-                         number_of_elements="1"
-                         default_values="0"
-                         animateable="0">
-        <BooleanDomain name="bool"/>
-        <Documentation>
-          When the threshold array is point-centered: if ON, every corner of a cell must fall inside
-          the range; if OFF, one in-range corner is enough. Ignored for cell-centered arrays.
-        </Documentation>
-      </IntVectorProperty>
-
       <PropertyGroup label="Opening threshold">
         <Property name="ThresholdArrayName"/>
-        <Property name="ThresholdMin"/>
-        <Property name="ThresholdMax"/>
-        <Property name="ThresholdAllScalars"/>
       </PropertyGroup>
 
       <StringVectorProperty name="InletInfo"

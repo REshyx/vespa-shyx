@@ -60,10 +60,7 @@ void vtkSHYXVmtkOpeningCenterlines::InvalidateInletSelectionIfOpeningThresholdCh
   {
     arrayTag += std::to_string(ai->Get(vtkDataObject::FIELD_ASSOCIATION()));
   }
-  char buf[2048];
-  std::snprintf(buf, sizeof(buf), "%s|%.17g|%.17g|%d", arrayTag.c_str(), this->ThresholdMin,
-    this->ThresholdMax, this->ThresholdAllScalars ? 1 : 0);
-  const std::string fp(buf);
+  const std::string fp = arrayTag;
   if (fp != this->CachedOpeningThresholdFingerprint)
   {
     ClearAllArrays(this->InletSelection);
@@ -141,11 +138,11 @@ vtkDataArray* GetOriginalCellIds(vtkPolyData* pd)
   return nullptr;
 }
 
-bool CollectCellsByScalarValueRange(vtkPolyData* pd, vtkDataArray* arrOnField, bool fieldIsPoints,
-  double rangeMin, double rangeMax, bool allScalars, std::set<vtkIdType>& selected)
+bool CollectCellsByScalarGreaterThan(vtkPolyData* pd, vtkDataArray* arrOnField, bool fieldIsPoints,
+  double lowerExclusive, std::set<vtkIdType>& selected)
 {
   selected.clear();
-  if (!pd || !arrOnField || rangeMin > rangeMax)
+  if (!pd || !arrOnField)
   {
     return false;
   }
@@ -164,16 +161,16 @@ bool CollectCellsByScalarValueRange(vtkPolyData* pd, vtkDataArray* arrOnField, b
     return false;
   }
 
-  auto inRange = [&](vtkIdType tupleIdx) -> bool {
+  auto passesThreshold = [&](vtkIdType tupleIdx) -> bool {
     const double m = TupleMagnitude(arrOnField, tupleIdx);
-    return (m >= rangeMin && m <= rangeMax);
+    return m > lowerExclusive;
   };
 
   if (!fieldIsPoints)
   {
     for (vtkIdType cid = 0; cid < nCells; ++cid)
     {
-      if (inRange(cid))
+      if (passesThreshold(cid))
       {
         selected.insert(cid);
       }
@@ -187,15 +184,11 @@ bool CollectCellsByScalarValueRange(vtkPolyData* pd, vtkDataArray* arrOnField, b
   {
     pd->GetCellPoints(cid, nptsCorner, pids);
     bool anyPass = false;
-    bool allPass = (nptsCorner > 0);
     for (vtkIdType k = 0; k < nptsCorner; ++k)
     {
-      const bool pass = inRange(pids[k]);
-      anyPass = anyPass || pass;
-      allPass = allPass && pass;
+      anyPass = anyPass || passesThreshold(pids[k]);
     }
-    const bool cellPass = allScalars ? allPass : anyPass;
-    if (cellPass)
+    if (anyPass)
     {
       selected.insert(cid);
     }
@@ -463,9 +456,7 @@ vtkMTimeType vtkSHYXVmtkOpeningCenterlines::GetMTime()
 void vtkSHYXVmtkOpeningCenterlines::PrintSelf(ostream& os, vtkIndent indent)
 {
   this->Superclass::PrintSelf(os, indent);
-  os << indent << "ThresholdMin: " << this->ThresholdMin << "\n";
-  os << indent << "ThresholdMax: " << this->ThresholdMax << "\n";
-  os << indent << "ThresholdAllScalars: " << (this->ThresholdAllScalars ? "on" : "off") << "\n";
+  os << indent << "Threshold rule: magnitude > 0 (fixed)\n";
   os << indent << "CalculateCenterline: " << this->CalculateCenterline << "\n";
   os << indent << "FlipNormals: " << this->FlipNormals << "\n";
   os << indent << "StopFastMarchingOnReachingTarget: " << this->StopFastMarchingOnReachingTarget
@@ -527,12 +518,11 @@ int vtkSHYXVmtkOpeningCenterlines::RequestData(vtkInformation* vtkNotUsed(reques
   const bool fieldIsPoints = (assoc == vtkDataObject::FIELD_ASSOCIATION_POINTS);
 
   std::set<vtkIdType> selectedCells;
-  if (!CollectCellsByScalarValueRange(input, thrArr, fieldIsPoints, this->ThresholdMin,
-        this->ThresholdMax, this->ThresholdAllScalars, selectedCells) ||
+  if (!CollectCellsByScalarGreaterThan(input, thrArr, fieldIsPoints, 0.0, selectedCells) ||
     selectedCells.empty())
   {
     vtkWarningMacro(
-      << "No cells passed the scalar threshold (check array name and [ThresholdMin, ThresholdMax]).");
+      << "No cells passed the scalar threshold (check Threshold array; rule is magnitude > 0).");
     ClearAllArrays(this->InletSelection);
     ClearAllArrays(this->ExcludedOpeningSelection);
     this->InletSelection->Modified();
