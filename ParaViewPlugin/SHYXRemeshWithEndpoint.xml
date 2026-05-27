@@ -26,7 +26,8 @@
         <DataTypeDomain name="input_type">
           <DataType value="vtkPolyData"/>
         </DataTypeDomain>
-        <InputArrayDomain name="endpoint_arrays" optional="1"/>
+        <InputArrayDomain name="endpoint_arrays" attribute_type="cell" optional="1"/>
+        <Documentation>Vessel lumen surface with cell-centered scalars for endpoint tagging (picker lists cell arrays only so the default EndpointIndex resolves to cell data when a point array of the same name also exists).</Documentation>
       </InputProperty>
 
       <StringVectorProperty name="EndpointIndexArrayName"
@@ -34,7 +35,7 @@
                             command="SetInputArrayToProcess"
                             number_of_elements="5"
                             element_types="0 0 0 0 2"
-                            default_values="0 0 0 0 EndpointIndex"
+                            default_values="0 0 0 1 EndpointIndex"
                             animateable="0">
         <ArrayListDomain name="endpoint_array_list"
                          input_domain_name="endpoint_arrays">
@@ -43,9 +44,11 @@
           </RequiredProperties>
         </ArrayListDomain>
         <Documentation>
-          Point- or cell-centered array. If both exist with the same name, cell data is used.
-          **vtkThreshold** keeps cells whose **first component** lies in (-1e200, -1e-9), i.e. strictly
-          negative for typical integer tags (e.g. **-1** from vtkCGALVesselEndClipper).
+          Cell-centered array on the input (same VTK input-array slot as other SHYX filters).
+          Default: **EndpointIndex** on **Cell Data** (e.g. vtkCGALVesselEndClipper caps). The array
+          list is restricted to cell arrays so ParaView does not pick a same-named point array by
+          default when both exist. **vtkThreshold** keeps cells whose **first component** lies in
+          (-1e200, -1e-9), i.e. strictly negative for typical integer tags (e.g. bulk **-1**).
         </Documentation>
         <Hints>
           <ArraySelectionWidget/>

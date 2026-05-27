@@ -357,7 +357,7 @@ vtkSHYXRemeshWithEndpoint::vtkSHYXRemeshWithEndpoint()
     this->SetNumberOfInputPorts(1);
     this->SetNumberOfOutputPorts(1);
     this->SetInputArrayToProcess(
-        0, 0, 0, vtkDataObject::FIELD_ASSOCIATION_POINTS, "EndpointIndex");
+        0, 0, 0, vtkDataObject::FIELD_ASSOCIATION_CELLS, "EndpointIndex");
 }
 
 //------------------------------------------------------------------------------
@@ -365,7 +365,7 @@ void vtkSHYXRemeshWithEndpoint::SetEndpointIndexArrayName(const char* name)
 {
     const bool hasName = (name != nullptr && name[0] != '\0');
     this->SetInputArrayToProcess(0, 0, 0,
-        hasName ? vtkDataObject::FIELD_ASSOCIATION_POINTS : vtkDataObject::FIELD_ASSOCIATION_NONE,
+        hasName ? vtkDataObject::FIELD_ASSOCIATION_CELLS : vtkDataObject::FIELD_ASSOCIATION_NONE,
         hasName ? name : nullptr);
 }
 
