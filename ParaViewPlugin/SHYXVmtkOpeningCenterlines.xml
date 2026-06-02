@@ -149,6 +149,25 @@
         </Documentation>
       </IntVectorProperty>
 
+      <IntVectorProperty name="AppendEndPointsToCenterlines"
+                         label="Append End Points"
+                         command="SetAppendEndPointsToCenterlines"
+                         number_of_elements="1"
+                         default_values="1">
+        <BooleanDomain name="bool"/>
+        <Documentation>
+          When on (default), VMTK appends line segments from each inlet/outlet seed on the surface to the
+          corresponding centerline endpoint (Voronoi pole). When off, centerlines stop at poles only.
+        </Documentation>
+        <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="enabled_state"
+                                   property="CalculateCenterline"
+                                   value="0"
+                                   inverse="1"/>
+        </Hints>
+      </IntVectorProperty>
+
       <IntVectorProperty name="FlipNormals"
                          label="Flip Normals"
                          command="SetFlipNormals"
@@ -183,6 +202,7 @@
 
       <PropertyGroup label="VMTK centerline (optional)">
         <Property name="CalculateCenterline"/>
+        <Property name="AppendEndPointsToCenterlines"/>
         <Property name="FlipNormals"/>
         <Property name="StopFastMarchingOnReachingTarget"/>
       </PropertyGroup>

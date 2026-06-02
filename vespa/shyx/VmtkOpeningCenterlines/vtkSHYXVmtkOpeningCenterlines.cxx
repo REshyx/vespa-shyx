@@ -461,6 +461,7 @@ void vtkSHYXVmtkOpeningCenterlines::PrintSelf(ostream& os, vtkIndent indent)
   os << indent << "FlipNormals: " << this->FlipNormals << "\n";
   os << indent << "StopFastMarchingOnReachingTarget: " << this->StopFastMarchingOnReachingTarget
      << "\n";
+  os << indent << "AppendEndPointsToCenterlines: " << this->AppendEndPointsToCenterlines << "\n";
 }
 
 int vtkSHYXVmtkOpeningCenterlines::FillInputPortInformation(int port, vtkInformation* info)
@@ -744,7 +745,7 @@ int vtkSHYXVmtkOpeningCenterlines::RequestData(vtkInformation* vtkNotUsed(reques
   centerlines->SetDelaunayTolerance(1e-3);
   centerlines->SetCenterlineResampling(0);
   centerlines->SetResamplingStepLength(1.0);
-  centerlines->SetAppendEndPointsToCenterlines(0);
+  centerlines->SetAppendEndPointsToCenterlines(this->AppendEndPointsToCenterlines);
   centerlines->SetSimplifyVoronoi(0);
   centerlines->SetStopFastMarchingOnReachingTarget(this->StopFastMarchingOnReachingTarget);
   centerlines->Update();

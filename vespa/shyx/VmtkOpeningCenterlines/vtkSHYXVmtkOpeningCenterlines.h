@@ -54,6 +54,10 @@ public:
   vtkGetMacro(StopFastMarchingOnReachingTarget, int);
   vtkBooleanMacro(StopFastMarchingOnReachingTarget, int);
 
+  vtkSetMacro(AppendEndPointsToCenterlines, int);
+  vtkGetMacro(AppendEndPointsToCenterlines, int);
+  vtkBooleanMacro(AppendEndPointsToCenterlines, int);
+
   vtkDataArraySelection* GetInletSelection();
   vtkDataArraySelection* GetExcludedOpeningSelection();
 
@@ -81,6 +85,7 @@ private:
 
   int FlipNormals = 0;
   int StopFastMarchingOnReachingTarget = 0;
+  int AppendEndPointsToCenterlines = 1;
 
   vtkSmartPointer<vtkDataArraySelection> InletSelection;
   vtkSmartPointer<vtkDataArraySelection> ExcludedOpeningSelection;
