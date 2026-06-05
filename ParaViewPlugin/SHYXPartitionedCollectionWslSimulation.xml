@@ -1,0 +1,83 @@
+<ServerManagerConfiguration>
+  <ProxyGroup name="filters">
+    <SourceProxy name="SHYXPartitionedCollectionWslSimulation"
+                 class="vtkSHYXPartitionedCollectionWslSimulation"
+                 label="SHYX Partitioned Collection WSL Simulation">
+      <Documentation
+          short_help="Export partitioned collection to WSL Exodus, run run.sh, load result.exo."
+          long_help="Accepts vtkPartitionedDataSetCollection (e.g. from SHYX DataSet To Partitioned Collection). Writes Input Exodus File Name under Work Directory (default UNC \\\\wsl.localhost\\Ubuntu-24.04\\home\\shyx\\Test), optionally runs Run Script Wsl Path via WSL (default /home/shyx/Test/run.sh in the same directory), then reads Result Exodus File Name (default result.exo) from the work directory into the output."/>
+
+      <OutputPort name="Simulation result" index="0" id="port0"/>
+
+      <InputProperty name="Input" command="SetInputConnection">
+        <ProxyGroupDomain name="groups">
+          <Group name="sources"/>
+          <Group name="filters"/>
+        </ProxyGroupDomain>
+        <DataTypeDomain name="input_type">
+          <DataType value="vtkPartitionedDataSetCollection"/>
+        </DataTypeDomain>
+      </InputProperty>
+
+      <StringVectorProperty name="WorkDirectory" label="Work Directory"
+          command="SetWorkDirectory" number_of_elements="1"
+          default_values="\\\\wsl.localhost\\Ubuntu-24.04\\home\\shyx\\Test">
+        <Documentation>
+          Directory for input.exo and result.exo. On Windows use the WSL UNC path
+          (e.g. \\wsl.localhost\Ubuntu-24.04\home\shyx\Test).
+        </Documentation>
+      </StringVectorProperty>
+
+      <StringVectorProperty name="WslDistribution" label="WSL Distribution"
+          command="SetWslDistribution" number_of_elements="1" default_values="Ubuntu-24.04">
+        <Documentation>WSL distribution name for `wsl -d` when Run Script is enabled.</Documentation>
+      </StringVectorProperty>
+
+      <StringVectorProperty name="RunScriptWslPath" label="Run Script (WSL path)"
+          command="SetRunScriptWslPath" number_of_elements="1" default_values="/home/shyx/Test/run.sh">
+        <Documentation>
+          Absolute path to run.sh inside WSL (default /home/shyx/Test/run.sh, same folder as input/result Exodus).
+        </Documentation>
+      </StringVectorProperty>
+
+      <StringVectorProperty name="InputExoFileName" label="Input Exodus File Name"
+          command="SetInputExoFileName" number_of_elements="1" default_values="input.exo">
+        <Documentation>Exodus file name written under Work Directory before simulation.</Documentation>
+      </StringVectorProperty>
+
+      <StringVectorProperty name="ResultExoFileName" label="Result Exodus File Name"
+          command="SetResultExoFileName" number_of_elements="1" default_values="result.exo">
+        <Documentation>Exodus file name read from Work Directory after simulation.</Documentation>
+      </StringVectorProperty>
+
+      <StringVectorProperty name="OptionFilePath" label="Option File"
+          command="SetOptionFilePath" number_of_elements="1" default_values="">
+        <FileListDomain name="files"/>
+        <Documentation>
+          Option file on Windows (use the file picker). On Apply it is copied with overwrite into
+          the WSL work directory before run.sh. Leave empty to skip.
+        </Documentation>
+      </StringVectorProperty>
+
+      <StringVectorProperty name="OptionFileWslName" label="Option File Name (WSL)"
+          command="SetOptionFileWslName" number_of_elements="1" default_values="opt">
+        <Documentation>
+          Target file name under the WSL work directory (same folder as run.sh). Default opt.
+        </Documentation>
+      </StringVectorProperty>
+
+      <IntVectorProperty name="RunScript" label="Run Script" command="SetRunScript"
+          number_of_elements="1" default_values="1" animateable="0">
+        <BooleanDomain name="bool"/>
+        <Documentation>
+          When enabled, invoke Run Script (WSL path) via WSL after writing the input Exodus file.
+        </Documentation>
+      </IntVectorProperty>
+
+      <Hints>
+        <ShowInMenu category="SHYX"/>
+        <ShowInMenu category="Vascular"/>
+      </Hints>
+    </SourceProxy>
+  </ProxyGroup>
+</ServerManagerConfiguration>

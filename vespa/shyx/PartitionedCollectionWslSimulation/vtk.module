@@ -1,0 +1,11 @@
+NAME
+  vtkSHYXPartitionedCollectionWslSimulation
+DESCRIPTION
+  "Write vtkPartitionedDataSetCollection to Exodus on WSL, run external script, read result.exo."
+GROUPS
+  Meshing
+DEPENDS
+  VTK::CommonCore
+  VTK::CommonDataModel
+  VTK::CommonExecutionModel
+  VTK::IOIOSS

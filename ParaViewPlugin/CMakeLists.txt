@@ -141,6 +141,7 @@ paraview_add_plugin(VESPAPlugin
     "SHYXDisconnectedRegionFuse.xml"
     "SHYXEdgeCollapse.xml"
     "SHYXDataSetToPartitionedCollection.xml"
+    "SHYXPartitionedCollectionWslSimulation.xml"
     "SHYXDeleteSelectedCells.xml"
     "SHYXClebschMapFilter.xml"
     "SHYXConvexHullFilter.xml"
