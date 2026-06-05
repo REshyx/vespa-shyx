@@ -1,0 +1,109 @@
+<ServerManagerConfiguration>
+  <ProxyGroup name="filters">
+    <SourceProxy name="SHYXEnhancedRuler"
+                 class="vtkSHYXEnhancedRuler"
+                 label="SHYX Enhanced Ruler">
+      <Documentation
+          long_help="Interactive 3D ruler on a vtkDataSet surface. Drag the two endpoint handles; on release each endpoint is snapped with a screen-ray pick to the nearest visible mesh point (ParaView Select Points / ConvertDisplayToPointOnSurface). Computes the shortest surface path distance (Dijkstra on triangle mesh edges) and outputs the geodesic path polyline."
+          short_help="Surface ruler with screen-ray vertex snap and geodesic path distance."/>
+
+      <InputProperty name="Input" command="SetInputConnection">
+        <ProxyGroupDomain name="groups">
+          <Group name="sources"/>
+          <Group name="filters"/>
+        </ProxyGroupDomain>
+        <DataTypeDomain name="input_type">
+          <DataType value="vtkDataSet"/>
+        </DataTypeDomain>
+        <Documentation>
+          Surface or point-set vtkDataSet. Geodesic path requires polygonal cells (triangulated surface).
+        </Documentation>
+      </InputProperty>
+
+      <DoubleVectorProperty name="Point1"
+                            label="Point 1"
+                            command="SetPoint1"
+                            number_of_elements="3"
+                            default_values="0 0 0"
+                            animateable="1">
+        <DoubleRangeDomain name="range"/>
+        <Documentation>World position of endpoint 1 (snapped to nearest input vertex when enabled).</Documentation>
+      </DoubleVectorProperty>
+
+      <DoubleVectorProperty name="Point2"
+                            label="Point 2"
+                            command="SetPoint2"
+                            number_of_elements="3"
+                            default_values="1 0 0"
+                            animateable="1">
+        <DoubleRangeDomain name="range"/>
+        <Documentation>World position of endpoint 2 (snapped to nearest input vertex when enabled).</Documentation>
+      </DoubleVectorProperty>
+
+      <IntVectorProperty name="Point1VertexId"
+                         label="Point 1 vertex id"
+                         command="SetPoint1VertexId"
+                         number_of_elements="1"
+                         default_values="0"
+                         animateable="0">
+        <IntRangeDomain name="range" min="-1" max="2147483647"/>
+        <Documentation>Input point id for endpoint 1 (default 0 = minimum id).</Documentation>
+      </IntVectorProperty>
+
+      <IntVectorProperty name="Point2VertexId"
+                         label="Point 2 vertex id"
+                         command="SetPoint2VertexId"
+                         number_of_elements="1"
+                         default_values="-1"
+                         animateable="0">
+        <IntRangeDomain name="range" min="-1" max="2147483647"/>
+        <Documentation>
+          Input point id for endpoint 2. Default -1 auto-initializes to the maximum id (last point)
+          on the first update after Input is connected.
+        </Documentation>
+      </IntVectorProperty>
+
+      <IntVectorProperty name="SnapToInputVertices"
+                         label="Snap to input vertices"
+                         command="SetSnapToInputVertices"
+                         number_of_elements="1"
+                         default_values="1"
+                         animateable="0">
+        <BooleanDomain name="bool"/>
+        <Documentation>
+          When on (default) and vertex ids are out of range, endpoints are re-snapped from world
+          positions. When Point1VertexId / Point2VertexId are valid (typical after interactive pick
+          and Apply), those ids are used directly for the geodesic output.
+        </Documentation>
+      </IntVectorProperty>
+
+      <DoubleVectorProperty name="GeodesicDistance"
+                            label="Geodesic distance"
+                            command="GetGeodesicDistance"
+                            number_of_elements="1"
+                            default_values="-1"
+                            animateable="0"
+                            information_only="1"
+                            panel_visibility="default">
+        <Documentation>
+          Shortest path distance along the input surface triangle mesh (-1 if unreachable).
+        </Documentation>
+      </DoubleVectorProperty>
+
+      <OutputPort index="0" name="Geodesic Path"/>
+
+      <PropertyGroup label="Interactive ruler"
+                     panel_widget="vespa_shyx_enhanced_ruler"
+                     panel_visibility="default">
+        <Property function="Point1WorldPosition" name="Point1"/>
+        <Property function="Point2WorldPosition" name="Point2"/>
+        <Property function="Input" name="Input"/>
+      </PropertyGroup>
+
+      <Hints>
+        <ShowInMenu category="SHYX" icon=":/VESPA/SHYX_Geodesic_Distance.png"/>
+        <RepresentationType view="RenderView" type="Wireframe" port="0"/>
+      </Hints>
+    </SourceProxy>
+  </ProxyGroup>
+</ServerManagerConfiguration>
