@@ -4,8 +4,8 @@
                  class="vtkSHYXEnhancedRuler"
                  label="SHYX Enhanced Ruler">
       <Documentation
-          long_help="Interactive 3D ruler on a vtkDataSet surface. Drag the two endpoint handles; on release each endpoint is snapped with a screen-ray pick to the nearest visible mesh point (ParaView Select Points / ConvertDisplayToPointOnSurface). Computes the shortest surface path distance (Dijkstra on triangle mesh edges) and outputs the geodesic path polyline."
-          short_help="Surface ruler with screen-ray vertex snap and geodesic path distance."/>
+          long_help="Interactive 3D ruler on a vtkDataSet. Drag the two endpoint handles; on release each endpoint is snapped with a screen-ray pick to the nearest visible mesh point (ParaView Select Points / ConvertDisplayToPointOnSurface). Computes the shortest path along triangle mesh edges or, for line-only inputs, along VTK_LINE / VTK_POLY_LINE segments (Dijkstra), and outputs the path polyline."
+          short_help="Ruler with screen-ray vertex snap and surface or polyline path distance."/>
 
       <InputProperty name="Input" command="SetInputConnection">
         <ProxyGroupDomain name="groups">
@@ -16,7 +16,8 @@
           <DataType value="vtkDataSet"/>
         </DataTypeDomain>
         <Documentation>
-          Surface or point-set vtkDataSet. Geodesic path requires polygonal cells (triangulated surface).
+          Surface or polyline vtkDataSet. Path uses triangle mesh edges when polygons are present;
+          otherwise walks line / poly-line segments between input points.
         </Documentation>
       </InputProperty>
 
@@ -86,7 +87,7 @@
                             information_only="1"
                             panel_visibility="default">
         <Documentation>
-          Shortest path distance along the input surface triangle mesh (-1 if unreachable).
+          Shortest path distance along the surface mesh or polyline graph (-1 if unreachable).
         </Documentation>
       </DoubleVectorProperty>
 

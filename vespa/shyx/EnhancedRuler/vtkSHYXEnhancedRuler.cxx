@@ -1,6 +1,7 @@
 #include "vtkSHYXEnhancedRuler.h"
 
 #include "vtkCellArray.h"
+#include "vtkCellType.h"
 #include "vtkDataObject.h"
 #include "vtkDataSet.h"
 #include "vtkDijkstraGraphGeodesicPath.h"
@@ -91,12 +92,141 @@ void WriteGeodesicFieldData(vtkDataObject* obj, double geodesic)
     fd->AddArray(geoArr);
 }
 
+double PathLength(vtkPolyData* path)
+{
+    if (!path || path->GetNumberOfPoints() < 2)
+    {
+        return -1.0;
+    }
+    double len = 0.0;
+    vtkPoints* pts = path->GetPoints();
+    for (vtkIdType i = 1; i < path->GetNumberOfPoints(); ++i)
+    {
+        double a[3], b[3];
+        pts->GetPoint(i - 1, a);
+        pts->GetPoint(i, b);
+        len += std::sqrt(vtkMath::Distance2BetweenPoints(a, b));
+    }
+    return len;
+}
+
+double DijkstraDistance(vtkPolyData* graph, vtkIdType startId, vtkIdType endId, vtkPolyData* pathOut)
+{
+    if (!graph || startId < 0 || endId < 0 || startId == endId)
+    {
+        return -1.0;
+    }
+    const vtkIdType nPts = graph->GetNumberOfPoints();
+    if (startId >= nPts || endId >= nPts)
+    {
+        return -1.0;
+    }
+
+    vtkNew<vtkDijkstraGraphGeodesicPath> dijkstra;
+    dijkstra->SetInputData(graph);
+    dijkstra->SetStartVertex(startId);
+    dijkstra->SetEndVertex(endId);
+    dijkstra->StopWhenEndReachedOn();
+    dijkstra->Update();
+
+    vtkPolyData* path = dijkstra->GetOutput();
+    if (pathOut)
+    {
+        pathOut->ShallowCopy(path);
+    }
+
+    vtkNew<vtkDoubleArray> weights;
+    dijkstra->GetCumulativeWeights(weights);
+    if (endId < weights->GetNumberOfTuples())
+    {
+        const double w = weights->GetValue(endId);
+        if (w < std::numeric_limits<double>::max() * 0.5)
+        {
+            return w;
+        }
+    }
+    return PathLength(path);
+}
+
+/** vtkDijkstraGraphGeodesicPath only handles VTK_LINE, not VTK_POLY_LINE — expand poly-lines. */
+void BuildLineGraphPolyData(vtkPolyData* input, vtkPolyData* output)
+{
+    output->Initialize();
+    if (!input || !input->GetPoints())
+    {
+        return;
+    }
+    output->SetPoints(input->GetPoints());
+
+    vtkNew<vtkCellArray> lines;
+    const vtkIdType ncells = input->GetNumberOfCells();
+    for (vtkIdType i = 0; i < ncells; ++i)
+    {
+        const int ctype = input->GetCellType(i);
+        const vtkIdType* pts = nullptr;
+        vtkIdType npts = 0;
+        input->GetCellPoints(i, npts, pts);
+        if (!pts || npts < 2)
+        {
+            continue;
+        }
+        if (ctype == VTK_LINE)
+        {
+            lines->InsertNextCell(2, pts);
+        }
+        else if (ctype == VTK_POLY_LINE)
+        {
+            for (vtkIdType j = 0; j < npts - 1; ++j)
+            {
+                vtkIdType edge[2] = { pts[j], pts[j + 1] };
+                lines->InsertNextCell(2, edge);
+            }
+        }
+    }
+    output->SetLines(lines);
+}
+
+bool HasPathTopology(vtkPolyData* pd)
+{
+    return pd && (pd->GetNumberOfPolys() > 0 || pd->GetNumberOfLines() > 0);
+}
+
 } // namespace
 
 vtkSHYXEnhancedRuler::vtkSHYXEnhancedRuler()
 {
     this->SetNumberOfInputPorts(1);
     this->SetNumberOfOutputPorts(1);
+}
+
+double vtkSHYXEnhancedRuler::ComputePathDistance(
+    vtkPolyData* topology, vtkIdType startId, vtkIdType endId, vtkPolyData* pathOut)
+{
+    if (!topology || startId < 0 || endId < 0 || startId == endId)
+    {
+        return -1.0;
+    }
+
+    if (topology->GetNumberOfPolys() > 0)
+    {
+        vtkNew<vtkTriangleFilter> triangles;
+        triangles->SetInputData(topology);
+        triangles->Update();
+        return DijkstraDistance(triangles->GetOutput(), startId, endId, pathOut);
+    }
+
+    if (topology->GetNumberOfLines() > 0)
+    {
+        vtkNew<vtkPolyData> lineGraph;
+        BuildLineGraphPolyData(topology, lineGraph);
+        if (lineGraph->GetNumberOfCells() == 0)
+        {
+            return -1.0;
+        }
+        return DijkstraDistance(lineGraph, startId, endId, pathOut);
+    }
+
+    return -1.0;
 }
 
 void vtkSHYXEnhancedRuler::PrintSelf(ostream& os, vtkIndent indent)
@@ -215,48 +345,10 @@ int vtkSHYXEnhancedRuler::RequestData(
 
     vtkNew<vtkPolyData> surfaceCache;
     vtkPolyData* surface = ExtractSurfacePolyData(input, surfaceCache);
-    if (surface && surface->GetNumberOfPolys() > 0 && id1 != id2)
+    if (surface && HasPathTopology(surface) && id1 != id2)
     {
-        vtkNew<vtkTriangleFilter> triangles;
-        triangles->SetInputData(surface);
-        triangles->Update();
-        vtkPolyData* triMesh = triangles->GetOutput();
-        const vtkIdType nTriPts = triMesh->GetNumberOfPoints();
-        if (id1 >= 0 && id1 < nTriPts && id2 >= 0 && id2 < nTriPts)
-        {
-            vtkNew<vtkDijkstraGraphGeodesicPath> dijkstra;
-            dijkstra->SetInputData(triMesh);
-            dijkstra->SetStartVertex(id1);
-            dijkstra->SetEndVertex(id2);
-            dijkstra->StopWhenEndReachedOn();
-            dijkstra->Update();
-
-            pathOut->ShallowCopy(dijkstra->GetOutput());
-
-            vtkNew<vtkDoubleArray> weights;
-            dijkstra->GetCumulativeWeights(weights);
-            if (id2 < weights->GetNumberOfTuples())
-            {
-                const double w = weights->GetValue(id2);
-                if (w < std::numeric_limits<double>::max() * 0.5)
-                {
-                    this->GeodesicDistance = w;
-                }
-            }
-            if (this->GeodesicDistance < 0.0 && pathOut->GetNumberOfPoints() >= 2)
-            {
-                double pathLen = 0.0;
-                vtkPoints* pathPts = pathOut->GetPoints();
-                for (vtkIdType i = 1; i < pathOut->GetNumberOfPoints(); ++i)
-                {
-                    double a[3], b[3];
-                    pathPts->GetPoint(i - 1, a);
-                    pathPts->GetPoint(i, b);
-                    pathLen += std::sqrt(vtkMath::Distance2BetweenPoints(a, b));
-                }
-                this->GeodesicDistance = pathLen;
-            }
-        }
+        this->GeodesicDistance =
+            vtkSHYXEnhancedRuler::ComputePathDistance(surface, id1, id2, pathOut);
     }
 
     WriteGeodesicFieldData(pathOut, this->GeodesicDistance);

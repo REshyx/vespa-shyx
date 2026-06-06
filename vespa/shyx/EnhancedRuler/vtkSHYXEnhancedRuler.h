@@ -3,9 +3,9 @@
  * @brief   Surface ruler with vertex snapping and geodesic path distance.
  *
  * Port 0 input is a vtkDataSet (typically a surface vtkPolyData). Endpoints snap to the nearest
- * input point id when SnapToInputVertices is on. Output port 0 is the shortest surface path
- * polyline (Dijkstra on triangle mesh edges). GeodesicDistance is updated on each execution (-1
- * when unreachable).
+ * input point id when SnapToInputVertices is on. Output port 0 is the shortest path polyline:
+ * Dijkstra on triangle mesh edges when polygons are present, otherwise along VTK_LINE /
+ * VTK_POLY_LINE segments. GeodesicDistance is updated on each execution (-1 when unreachable).
  */
 
 #ifndef vtkSHYXEnhancedRuler_h
@@ -15,6 +15,8 @@
 #include "vtkSHYXEnhancedRulerModule.h"
 
 VTK_ABI_NAMESPACE_BEGIN
+
+class vtkPolyData;
 
 class VTKSHYXENHANCEDRULER_EXPORT vtkSHYXEnhancedRuler : public vtkDataObjectAlgorithm
 {
@@ -38,6 +40,14 @@ public:
     vtkBooleanMacro(SnapToInputVertices, bool);
 
     vtkGetMacro(GeodesicDistance, double);
+
+    /**
+     * Shortest path distance between two input point ids. Uses triangle-surface Dijkstra when
+     * polygons are present; otherwise walks VTK_LINE / VTK_POLY_LINE connectivity. Optionally
+     * fills \p pathOut with the path polyline. Returns -1 when unreachable.
+     */
+    static double ComputePathDistance(
+        vtkPolyData* topology, vtkIdType startId, vtkIdType endId, vtkPolyData* pathOut = nullptr);
 
 protected:
     vtkSHYXEnhancedRuler();

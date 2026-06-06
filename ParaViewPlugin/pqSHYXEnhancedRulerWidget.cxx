@@ -1,5 +1,7 @@
 #include "pqSHYXEnhancedRulerWidget.h"
 
+#include "vtkSHYXEnhancedRuler.h"
+
 #include "pqActiveObjects.h"
 #include "pqApplicationCore.h"
 #include "pqInteractivePropertyWidgetAbstract.h"
@@ -12,10 +14,8 @@
 #include "vtkAxisActor2D.h"
 #include "vtkDataObject.h"
 #include "vtkDataSet.h"
-#include "vtkDijkstraGraphGeodesicPath.h"
 #include "vtkDistanceRepresentation2D.h"
 #include "vtkDistanceWidget.h"
-#include "vtkDoubleArray.h"
 #include "vtkGeometryFilter.h"
 #include "vtkMath.h"
 #include "vtkNew.h"
@@ -32,8 +32,6 @@
 #include "vtkSMProperty.h"
 
 #include "vtkTextProperty.h"
-#include "vtkTriangleFilter.h"
-
 #include "vtkSmartPointer.h"
 
 #include <QCheckBox>
@@ -264,7 +262,7 @@ vtkPolyData* pqSHYXEnhancedRulerWidget::inputSurfacePoly() const
     vtkDataObject* data = alg->GetOutputDataObject(0);
     if (auto* pd = vtkPolyData::SafeDownCast(data))
     {
-        if (pd->GetNumberOfPolys() > 0)
+        if (pd->GetNumberOfPolys() > 0 || pd->GetNumberOfLines() > 0)
         {
             return pd;
         }
@@ -279,7 +277,8 @@ vtkPolyData* pqSHYXEnhancedRulerWidget::inputSurfacePoly() const
         geometry->SetInputData(ds);
         geometry->Update();
         gEnhancedRulerSurfaceCache->ShallowCopy(geometry->GetOutput());
-        if (gEnhancedRulerSurfaceCache->GetNumberOfPolys() > 0)
+        if (gEnhancedRulerSurfaceCache->GetNumberOfPolys() > 0 ||
+            gEnhancedRulerSurfaceCache->GetNumberOfLines() > 0)
         {
             return gEnhancedRulerSurfaceCache;
         }
@@ -420,38 +419,7 @@ vtkIdType pqSHYXEnhancedRulerWidget::nearestPointId(vtkPoints* pts, const double
 double pqSHYXEnhancedRulerWidget::computeGeodesicDistance(
     vtkPolyData* surface, vtkIdType startId, vtkIdType endId)
 {
-    if (!surface || startId < 0 || endId < 0 || startId == endId)
-    {
-        return -1.0;
-    }
-    vtkNew<vtkTriangleFilter> triangles;
-    triangles->SetInputData(surface);
-    triangles->Update();
-    vtkPolyData* triMesh = triangles->GetOutput();
-    if (startId >= triMesh->GetNumberOfPoints() || endId >= triMesh->GetNumberOfPoints())
-    {
-        return -1.0;
-    }
-
-    vtkNew<vtkDijkstraGraphGeodesicPath> dijkstra;
-    dijkstra->SetInputData(triMesh);
-    dijkstra->SetStartVertex(startId);
-    dijkstra->SetEndVertex(endId);
-    dijkstra->StopWhenEndReachedOn();
-    dijkstra->Update();
-
-    vtkNew<vtkDoubleArray> weights;
-    dijkstra->GetCumulativeWeights(weights);
-    if (endId >= weights->GetNumberOfTuples())
-    {
-        return -1.0;
-    }
-    const double w = weights->GetValue(endId);
-    if (w >= std::numeric_limits<double>::max() * 0.5)
-    {
-        return -1.0;
-    }
-    return w;
+    return vtkSHYXEnhancedRuler::ComputePathDistance(surface, startId, endId, nullptr);
 }
 
 //-----------------------------------------------------------------------------
