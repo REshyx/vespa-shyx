@@ -69,12 +69,21 @@ paraview_plugin_add_property_widget(
   CLASS_NAME pqSHYXEnhancedRulerWidget
   INTERFACES vespa_enhanced_ruler_interfaces
   SOURCES vespa_enhanced_ruler_sources)
+paraview_plugin_add_property_widget(
+  KIND GROUP_WIDGET
+  TYPE "vespa_shyx_endpoint_stent"
+  CLASS_NAME pqSHYXEndpointStentWidget
+  INTERFACES vespa_endpoint_stent_interfaces
+  SOURCES vespa_endpoint_stent_sources)
 list(APPEND vespa_stent_cylinder_sources
   pqSHYXVascularStentCylinderWidget.cxx
   pqSHYXVascularStentCylinderWidget.h)
 list(APPEND vespa_enhanced_ruler_sources
   pqSHYXEnhancedRulerWidget.cxx
   pqSHYXEnhancedRulerWidget.h)
+list(APPEND vespa_endpoint_stent_sources
+  pqSHYXEndpointStentWidget.cxx
+  pqSHYXEndpointStentWidget.h)
 
 set(shyx_openings_table_interfaces)
 set(shyx_openings_table_sources)
@@ -159,6 +168,7 @@ paraview_add_plugin(VESPAPlugin
     "SHYXVortexCriteria.xml"
     "SHYXVortexCoreTest.xml"
     "SHYXVascularStentPlacement.xml"
+    "SHYXEndpointStentPlacement.xml"
     "SHYXImplicitCylinderWidgetRepresentation.xml"
     "SHYXVectorFieldTopology.xml"
     "SHYXArrayCurveMapper.xml"
@@ -173,8 +183,8 @@ paraview_add_plugin(VESPAPlugin
      ${MESH_SMOOTHING_SERVER_MANAGER_XML}
      ${ADAPTIVE_REMESHING_SERVER_MANAGER_XML}
      ${VMTK_CENTERLINES_SERVER_MANAGER_XML}
-  UI_INTERFACES ${acm_interfaces} ${vespa_obb_box_interfaces} ${vespa_endclipper_plane_interfaces} ${vespa_selection_plane_clipper_interfaces} ${vespa_stent_cylinder_interfaces} ${vespa_enhanced_ruler_interfaces} ${shyx_openings_table_interfaces} ${vespa_plugin_qt_auto_interfaces}
-  SOURCES ${acm_sources} ${vespa_obb_box_sources} ${vespa_endclipper_plane_sources} ${vespa_selection_plane_clipper_sources} ${vespa_stent_cylinder_sources} ${vespa_enhanced_ruler_sources} ${shyx_openings_table_sources}
+  UI_INTERFACES ${acm_interfaces} ${vespa_obb_box_interfaces} ${vespa_endclipper_plane_interfaces} ${vespa_selection_plane_clipper_interfaces} ${vespa_stent_cylinder_interfaces} ${vespa_enhanced_ruler_interfaces} ${vespa_endpoint_stent_interfaces} ${shyx_openings_table_interfaces} ${vespa_plugin_qt_auto_interfaces}
+  SOURCES ${acm_sources} ${vespa_obb_box_sources} ${vespa_endclipper_plane_sources} ${vespa_selection_plane_clipper_sources} ${vespa_stent_cylinder_sources} ${vespa_enhanced_ruler_sources} ${vespa_endpoint_stent_sources} ${shyx_openings_table_sources}
     pqArrayCurveMapperPanel.cxx
     pqArrayCurveMapperPanel.h
     pqVESPAOBBInteractiveBoxWidget.cxx
@@ -212,6 +222,7 @@ if (PARAVIEW_USE_QT)
       VTK::InteractionWidgets
       vtkSHYXSelectionPlaneClipper
       vtkSHYXVascularStentPlacement
+      vtkSHYXEndpointStentPlacement
       vtkSHYXEnhancedRuler)
 endif ()
 

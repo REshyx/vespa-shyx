@@ -1,0 +1,282 @@
+<ServerManagerConfiguration>
+  <ProxyGroup name="filters">
+    <SourceProxy name="SHYXEndpointStentPlacement"
+                 class="vtkSHYXEndpointStentPlacement"
+                 label="SHYX Endpoint Stent Placement">
+      <Documentation
+          long_help="Stent-like deformation along a centerline segment between two interactive endpoints. Port 0: vessel vtkPolyData; port 1: centerline polyline. Drag the two handles to snap endpoints on the centerline; StentLength is the shortest path distance along the centerline graph; StentRadius may be taken from CenterlineRadiusArrayName at the path midpoint. Deformation matches SHYX Vascular Stent Placement (strict flat-capped slab, optional geodesic band smooth, same output arrays)."
+          short_help="Stent placement with two centerline-snapped endpoints."/>
+
+      <InputProperty name="Input" command="SetInputConnection">
+        <ProxyGroupDomain name="groups">
+          <Group name="sources"/>
+          <Group name="filters"/>
+        </ProxyGroupDomain>
+        <DataTypeDomain name="input_type">
+          <DataType value="vtkPolyData"/>
+        </DataTypeDomain>
+        <Documentation>Vessel wall surface (vtkPolyData).</Documentation>
+      </InputProperty>
+
+      <InputProperty name="Centerline" command="SetCenterlineConnection">
+        <ProxyGroupDomain name="groups">
+          <Group name="sources"/>
+          <Group name="filters"/>
+        </ProxyGroupDomain>
+        <DataTypeDomain name="input_type">
+          <DataType value="vtkPolyData"/>
+        </DataTypeDomain>
+        <InputArrayDomain name="centerline_point_arrays" attribute_type="point" optional="1"/>
+        <Documentation>
+          Centerline polyline(s) used for endpoint snapping and stent axis path (vtkLine / vtkPolyLine).
+        </Documentation>
+      </InputProperty>
+
+      <DoubleVectorProperty name="Point1"
+                            label="Endpoint 1"
+                            command="SetPoint1"
+                            number_of_elements="3"
+                            default_values="0 0 0"
+                            animateable="1">
+        <DoubleRangeDomain name="range"/>
+        <Documentation>World position of stent endpoint 1 on the centerline.</Documentation>
+      </DoubleVectorProperty>
+
+      <DoubleVectorProperty name="Point2"
+                            label="Endpoint 2"
+                            command="SetPoint2"
+                            number_of_elements="3"
+                            default_values="1 0 0"
+                            animateable="1">
+        <DoubleRangeDomain name="range"/>
+        <Documentation>World position of stent endpoint 2 on the centerline.</Documentation>
+      </DoubleVectorProperty>
+
+      <IntVectorProperty name="Point1VertexId"
+                         label="Endpoint 1 vertex id"
+                         command="SetPoint1VertexId"
+                         number_of_elements="1"
+                         default_values="0"
+                         animateable="0">
+        <IntRangeDomain name="range" min="-1" max="2147483647"/>
+        <Documentation>Centerline point id for endpoint 1.</Documentation>
+      </IntVectorProperty>
+
+      <IntVectorProperty name="Point2VertexId"
+                         label="Endpoint 2 vertex id"
+                         command="SetPoint2VertexId"
+                         number_of_elements="1"
+                         default_values="-1"
+                         animateable="0">
+        <IntRangeDomain name="range" min="-1" max="2147483647"/>
+        <Documentation>
+          Centerline point id for endpoint 2. Default -1 auto-initializes to the last centerline point
+          on the first update after Centerline is connected.
+        </Documentation>
+      </IntVectorProperty>
+
+      <DoubleVectorProperty name="StentLength"
+                            label="Stent Length"
+                            command="SetStentLength"
+                            number_of_elements="1"
+                            default_values="10.0"
+                            animateable="1">
+        <DoubleRangeDomain name="range" min="0.0" max="1e12"/>
+        <Documentation>
+          Measured arc length along the centerline between endpoints. Updated by 3D drag; overridden when
+          a catalog length is selected.
+        </Documentation>
+      </DoubleVectorProperty>
+
+      <DoubleVectorProperty name="StentRadius"
+                            label="Stent Radius"
+                            command="SetStentRadius"
+                            number_of_elements="1"
+                            default_values="1.0"
+                            animateable="1">
+        <DoubleRangeDomain name="range" min="0.0" max="1e12"/>
+        <Documentation>
+          Measured vessel radius at the path midpoint. Updated by 3D drag / CenterlineRadiusArrayName;
+          overridden when a catalog diameter is selected (radius = diameter / 2).
+        </Documentation>
+      </DoubleVectorProperty>
+
+      <IntVectorProperty name="StentCatalogDiameterIndex"
+                         label="Catalog diameter"
+                         command="SetStentCatalogDiameterIndex"
+                         number_of_elements="1"
+                         default_values="0"
+                         animateable="0">
+        <EnumerationDomain name="enum">
+          <Entry text="Custom (measured)" value="0"/>
+          <Entry text="2.25" value="1"/>
+          <Entry text="2.5" value="2"/>
+          <Entry text="2.75" value="3"/>
+          <Entry text="3.0" value="4"/>
+          <Entry text="3.5" value="5"/>
+          <Entry text="4.0" value="6"/>
+        </EnumerationDomain>
+        <Documentation>
+          Coronary stent nominal diameter. Custom keeps the measured radius from interaction; a catalog entry
+          sets StentRadius to half the listed diameter.
+        </Documentation>
+      </IntVectorProperty>
+
+      <IntVectorProperty name="StentCatalogLengthIndex"
+                         label="Catalog length"
+                         command="SetStentCatalogLengthIndex"
+                         number_of_elements="1"
+                         default_values="0"
+                         animateable="0">
+        <EnumerationDomain name="enum">
+          <Entry text="Custom (measured)" value="0"/>
+          <Entry text="13" value="1"/>
+          <Entry text="16" value="2"/>
+          <Entry text="18" value="3"/>
+          <Entry text="21" value="4"/>
+          <Entry text="23" value="5"/>
+          <Entry text="26" value="6"/>
+          <Entry text="29" value="7"/>
+          <Entry text="31" value="8"/>
+          <Entry text="33" value="9"/>
+          <Entry text="35" value="10"/>
+          <Entry text="38" value="11"/>
+        </EnumerationDomain>
+        <Documentation>
+          Coronary stent nominal length. Custom keeps both endpoints from 3D interaction; a catalog entry
+          expands or contracts both endpoints symmetrically about the current segment midpoint until the
+          centerline path length matches the listed value.
+        </Documentation>
+      </IntVectorProperty>
+
+      <DoubleVectorProperty name="StentAxisSampleSpacing"
+                            label="Stent Axis Sample Spacing"
+                            command="SetStentAxisSampleSpacing"
+                            number_of_elements="1"
+                            default_values="0.0"
+                            animateable="1">
+        <DoubleRangeDomain name="range" min="0.0" max="1e12"/>
+        <Documentation>
+          Maximum arc length between consecutive samples on the internal stent axis polyline. Zero keeps
+          only path vertices; a positive value subdivides each axis segment.
+        </Documentation>
+      </DoubleVectorProperty>
+
+      <IntVectorProperty name="PreferInputPointNormals"
+                         label="Prefer input point normals"
+                         command="SetPreferInputPointNormals"
+                         number_of_elements="1"
+                         default_values="0"
+                         animateable="0">
+        <BooleanDomain name="bool"/>
+        <Documentation>
+          When on, use the input surface point-data Normals array if present; otherwise vtkPolyDataNormals
+          is run on the surface.
+        </Documentation>
+      </IntVectorProperty>
+
+      <StringVectorProperty name="CenterlineRadiusArrayName"
+                            label="Centerline radius array"
+                            command="SetCenterlineRadiusArrayName"
+                            number_of_elements="1"
+                            default_values="MaximumInscribedSphereRadius"
+                            animateable="0">
+        <ArrayListDomain name="centerline_radius_array_list"
+                         attribute_type="Scalars"
+                         none_string="(None)"
+                         input_domain_name="centerline_point_arrays">
+          <RequiredProperties>
+            <Property name="Centerline" function="Input"/>
+          </RequiredProperties>
+        </ArrayListDomain>
+        <Documentation>
+          Point-data scalar on Centerline. After each interactive snap, StentRadius is set from this array
+          at the path midpoint vertex. Choose (None) to keep the current radius.
+        </Documentation>
+        <Hints>
+          <ArraySelectionWidget icon_type="point"/>
+        </Hints>
+      </StringVectorProperty>
+
+      <StringVectorProperty name="AffectMaskArrayName"
+                            label="Affect mask array name"
+                            command="SetAffectMaskArrayName"
+                            number_of_elements="1"
+                            default_values="StentPlacementAffectMask"
+                            animateable="0"
+                            panel_visibility="never">
+        <Documentation>Output int array: 0 strict region, -1 elsewhere.</Documentation>
+      </StringVectorProperty>
+
+      <StringVectorProperty name="GeodesicToZeroRegionArrayName"
+                            label="Geodesic to zero-region array name"
+                            command="SetGeodesicToZeroRegionArrayName"
+                            number_of_elements="1"
+                            default_values="StentGeodesicToZeroRegion"
+                            animateable="0"
+                            panel_visibility="never">
+        <Documentation>Weighted surface geodesic distance to mask-0 vertices.</Documentation>
+      </StringVectorProperty>
+
+      <DoubleVectorProperty name="GeodesicSmoothInfluenceRange"
+                            label="Geodesic smooth influence range"
+                            command="SetGeodesicSmoothInfluenceRange"
+                            number_of_elements="1"
+                            default_values="5.0"
+                            animateable="1">
+        <DoubleRangeDomain name="range" min="0.0" max="1e12"/>
+        <Documentation>Band threshold for optional geodesic smooth (0 disables).</Documentation>
+      </DoubleVectorProperty>
+
+      <DoubleVectorProperty name="GeodesicSmoothPowerLambda"
+                            label="Geodesic smooth power lambda"
+                            command="SetGeodesicSmoothPowerLambda"
+                            number_of_elements="1"
+                            default_values="1.0"
+                            animateable="1">
+        <DoubleRangeDomain name="range" min="0.1" max="10.0"/>
+        <Documentation>Exponent in (1 - g/x)^λ for band strength.</Documentation>
+      </DoubleVectorProperty>
+
+      <StringVectorProperty name="GeodesicSmoothStrengthArrayName"
+                            label="Geodesic smooth strength array name"
+                            command="SetGeodesicSmoothStrengthArrayName"
+                            number_of_elements="1"
+                            default_values="StentGeodesicSmoothStrength"
+                            animateable="0"
+                            panel_visibility="never">
+        <Documentation>Band smooth strength array on output.</Documentation>
+      </StringVectorProperty>
+
+      <StringVectorProperty name="DisplacementArrayName"
+                            label="Displacement array name"
+                            command="SetDisplacementArrayName"
+                            number_of_elements="1"
+                            default_values="StentPlacementDisplacement"
+                            animateable="0"
+                            panel_visibility="never">
+        <Documentation>3-component displacement array on output.</Documentation>
+      </StringVectorProperty>
+
+      <PropertyGroup label="Coronary stent catalog">
+        <Property name="StentCatalogDiameterIndex"/>
+        <Property name="StentCatalogLengthIndex"/>
+      </PropertyGroup>
+
+      <PropertyGroup label="Interactive stent endpoints"
+                     panel_widget="vespa_shyx_endpoint_stent"
+                     panel_visibility="default">
+        <Property function="Point1WorldPosition" name="Point1"/>
+        <Property function="Point2WorldPosition" name="Point2"/>
+        <Property function="Centerline" name="Centerline"/>
+        <Property function="CatalogDiameter" name="StentCatalogDiameterIndex"/>
+        <Property function="CatalogLength" name="StentCatalogLengthIndex"/>
+      </PropertyGroup>
+
+      <Hints>
+        <ShowInMenu category="SHYX" icon=":/VESPA/SHYX_Vessel_End_Clipper.png"/>
+        <ShowInMenu category="Vascular" icon=":/VESPA/SHYX_Vessel_End_Clipper.png"/>
+      </Hints>
+    </SourceProxy>
+  </ProxyGroup>
+</ServerManagerConfiguration>

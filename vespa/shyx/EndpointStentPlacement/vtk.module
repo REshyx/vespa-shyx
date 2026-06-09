@@ -1,0 +1,13 @@
+NAME
+  vtkSHYXEndpointStentPlacement
+DESCRIPTION
+  "Radial mesh displacement along a centerline segment defined by two snapped endpoints."
+GROUPS
+  Meshing
+DEPENDS
+  VTK::FiltersCore
+  VTK::CommonDataModel
+  VTK::CommonExecutionModel
+  vtkSHYXEnhancedRuler
+PRIVATE_DEPENDS
+  VTK::CommonCore
