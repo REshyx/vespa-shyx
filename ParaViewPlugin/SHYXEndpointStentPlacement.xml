@@ -144,8 +144,9 @@
         </EnumerationDomain>
         <Documentation>
           Coronary stent nominal length. Custom keeps both endpoints from 3D interaction; a catalog entry
-          expands or contracts both endpoints symmetrically about the current segment midpoint until the
-          centerline path length matches the listed value.
+          moves both endpoints outward (if too short) or inward (if too long) one centerline vertex at a
+          time until path length first exceeds or falls below the listed value. StentLength stores the
+          achieved path length, which may differ slightly from the catalog nominal.
         </Documentation>
       </IntVectorProperty>
 

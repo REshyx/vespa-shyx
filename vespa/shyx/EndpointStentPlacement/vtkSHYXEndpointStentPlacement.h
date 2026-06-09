@@ -87,12 +87,13 @@ public:
     vtkSetClampMacro(StentCatalogLengthIndex, int, 0, 11);
 
     /**
-     * From the centerline path between \p id1 and \p id2, expand or contract both ends symmetrically
-     * about the path midpoint until the total arc length is \p targetLength. Fills both endpoint
-     * positions and nearest centerline vertex ids.
+     * Iteratively move both endpoints along the centerline graph: expand in steps until path length
+     * first exceeds \p targetLength, or contract in steps until it first falls below. Vertex ids and
+     * positions are returned; optional \p achievedLengthOut is the resulting path length.
      */
     static bool ComputeSymmetricEndpointsForLength(vtkPolyData* centerline, vtkIdType id1, vtkIdType id2,
-        double targetLength, vtkIdType& outId1, double outPos1[3], vtkIdType& outId2, double outPos2[3]);
+        double targetLength, vtkIdType& outId1, double outPos1[3], vtkIdType& outId2, double outPos2[3],
+        double* achievedLengthOut = nullptr);
 
 protected:
     vtkSHYXEndpointStentPlacement();

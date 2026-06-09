@@ -86,8 +86,8 @@ pqSHYXEndpointStentWidget::pqSHYXEndpointStentWidget(
     auto* info = new QLabel(
         tr("Drag the two handles along the centerline to measure length and radius, then pick a "
            "nominal coronary stent size from the catalog dropdowns (or use Custom to keep measured "
-           "values). Catalog length expands or contracts both endpoints symmetrically about the "
-           "segment midpoint."),
+           "values). Catalog length expands or contracts both endpoints stepwise along the "
+           "centerline until path length first crosses the catalog value."),
         this);
     info->setWordWrap(true);
     vbox->addWidget(info);
@@ -535,13 +535,18 @@ void pqSHYXEndpointStentWidget::markCatalogPropertiesModified()
         return;
     }
     for (const char* propName :
-        { "StentCatalogDiameterIndex", "StentCatalogLengthIndex", "StentLength", "StentRadius" })
+        { "StentCatalogDiameterIndex", "StentCatalogLengthIndex", "StentLength", "StentRadius",
+            "Point1", "Point2", "Point1VertexId", "Point2VertexId" })
     {
         if (vtkSMProperty* prop = filter->GetProperty(propName))
         {
             prop->Modified();
         }
     }
+    // Catalog combos are Qt controls, not VTK interaction events — notify the properties panel
+    // so Apply becomes enabled (same as EndInteractionEvent on the distance widget).
+    Q_EMIT this->changeAvailable();
+    Q_EMIT this->changeFinished();
 }
 
 //-----------------------------------------------------------------------------
@@ -613,14 +618,15 @@ void pqSHYXEndpointStentWidget::applyCatalogLength(int catalogIndex)
     vtkIdType newId2 = hintId2;
     double newPos1[3] = { 0.0, 0.0, 0.0 };
     double newPos2[3] = { 0.0, 0.0, 0.0 };
-    if (!vtkSHYXEndpointStentPlacement::ComputeSymmetricEndpointsForLength(
-            cl, id1, hintId2, targetLen, newId1, newPos1, newId2, newPos2))
+    double achievedLen = 0.0;
+    if (!vtkSHYXEndpointStentPlacement::ComputeSymmetricEndpointsForLength(cl, id1, hintId2, targetLen,
+            newId1, newPos1, newId2, newPos2, &achievedLen))
     {
         return;
     }
 
     vtkSMUncheckedPropertyHelper(filter, "StentCatalogLengthIndex").Set(catalogIndex);
-    vtkSMUncheckedPropertyHelper(filter, "StentLength").Set(targetLen);
+    vtkSMUncheckedPropertyHelper(filter, "StentLength").Set(achievedLen);
     this->pushEndpointsToFilter(newId1, newPos1, newId2, newPos2);
     this->markCatalogPropertiesModified();
 }
@@ -628,7 +634,7 @@ void pqSHYXEndpointStentWidget::applyCatalogLength(int catalogIndex)
 //-----------------------------------------------------------------------------
 void pqSHYXEndpointStentWidget::onCatalogDiameterChanged(int comboIndex)
 {
-    if (this->UpdatingCatalogCombos || comboIndex < 0)
+    if (this->UpdatingCatalogCombos || this->ApplyingCatalogChange || comboIndex < 0)
     {
         return;
     }
@@ -643,15 +649,17 @@ void pqSHYXEndpointStentWidget::onCatalogDiameterChanged(int comboIndex)
         this->markCatalogPropertiesModified();
         return;
     }
+    this->ApplyingCatalogChange = true;
     this->applyCatalogDiameter(comboIndex);
     this->refreshRulerLabel(true);
     this->render();
+    this->ApplyingCatalogChange = false;
 }
 
 //-----------------------------------------------------------------------------
 void pqSHYXEndpointStentWidget::onCatalogLengthChanged(int comboIndex)
 {
-    if (this->UpdatingCatalogCombos || comboIndex < 0)
+    if (this->UpdatingCatalogCombos || this->ApplyingCatalogChange || comboIndex < 0)
     {
         return;
     }
@@ -666,10 +674,12 @@ void pqSHYXEndpointStentWidget::onCatalogLengthChanged(int comboIndex)
         this->markCatalogPropertiesModified();
         return;
     }
+    this->ApplyingCatalogChange = true;
     this->applyCatalogLength(comboIndex);
     this->refreshRulerLabel(true);
     this->placeWidget();
     this->render();
+    this->ApplyingCatalogChange = false;
 }
 
 //-----------------------------------------------------------------------------

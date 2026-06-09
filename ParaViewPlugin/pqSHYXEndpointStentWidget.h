@@ -67,6 +67,7 @@ private:
     QComboBox* DiameterCatalogCombo = nullptr;
     QComboBox* LengthCatalogCombo = nullptr;
     bool UpdatingCatalogCombos = false;
+    bool ApplyingCatalogChange = false;
 };
 
 #endif

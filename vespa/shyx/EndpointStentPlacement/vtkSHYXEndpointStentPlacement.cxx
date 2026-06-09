@@ -544,386 +544,185 @@ void PathPolylineToPoints(vtkPolyData* pathPoly, std::vector<std::array<double, 
     }
 }
 
-double PolylinePathLength(vtkPolyData* path)
+vtkIdType PickOtherNeighbor(const AdjMap& adj, vtkIdType cur, vtkIdType exclude)
 {
-    vtkPoints* pts = path ? path->GetPoints() : nullptr;
-    if (!pts || pts->GetNumberOfPoints() < 2)
+    auto it = adj.find(cur);
+    if (it == adj.end())
+    {
+        return cur;
+    }
+    vtkIdType best = cur;
+    for (vtkIdType nx : it->second)
+    {
+        if (nx != exclude && (best == cur || nx < best))
+        {
+            best = nx;
+        }
+    }
+    return best;
+}
+
+bool BuildSpineFromPath(
+    vtkPolyData* centerline, vtkPolyData* path, std::vector<vtkIdType>& spine)
+{
+    spine.clear();
+    vtkPoints* cpts = centerline ? centerline->GetPoints() : nullptr;
+    vtkPoints* ppts = path ? path->GetPoints() : nullptr;
+    if (!cpts || !ppts)
+    {
+        return false;
+    }
+    const vtkIdType n = ppts->GetNumberOfPoints();
+    if (n < 2)
+    {
+        return false;
+    }
+    spine.reserve(static_cast<size_t>(n));
+    for (vtkIdType i = 0; i < n; ++i)
+    {
+        double p[3];
+        ppts->GetPoint(i, p);
+        const vtkIdType vid = NearestCenterlinePointId(cpts, p);
+        if (spine.empty() || spine.back() != vid)
+        {
+            spine.push_back(vid);
+        }
+    }
+    return spine.size() >= 2;
+}
+
+double SpineArcLength(vtkPoints* cpts, const std::vector<vtkIdType>& spine)
+{
+    if (!cpts || spine.size() < 2)
     {
         return 0.0;
     }
-    double total = 0.0;
-    for (vtkIdType i = 1; i < pts->GetNumberOfPoints(); ++i)
+    double sum = 0.0;
+    for (size_t i = 1; i < spine.size(); ++i)
     {
         double a[3], b[3];
-        pts->GetPoint(i - 1, a);
-        pts->GetPoint(i, b);
+        cpts->GetPoint(spine[i - 1], a);
+        cpts->GetPoint(spine[i], b);
         double e[3];
         Sub(e, b, a);
-        total += Norm(e);
+        sum += Norm(e);
     }
-    return total;
+    return sum;
 }
 
-/** Append points along \p path from arc length \p s0 to \p s1 (inclusive ends, \p s0 &lt;= \p s1). */
-bool ExtractPathArcLength(
-    vtkPolyData* path, double s0, double s1, std::vector<std::array<double, 3>>& outPts)
+bool SpineExpandOneStep(const AdjMap& adj, std::vector<vtkIdType>& spine)
 {
-    outPts.clear();
-    if (!path)
+    if (spine.size() < 2)
     {
         return false;
     }
-    const double total = PolylinePathLength(path);
-    if (total <= kEps)
+    const vtkIdType id1 = spine.front();
+    const vtkIdType id2 = spine.back();
+    const vtkIdType toward1 = spine[1];
+    const vtkIdType toward2 = spine[spine.size() - 2];
+    const vtkIdType newId1 = PickOtherNeighbor(adj, id1, toward1);
+    const vtkIdType newId2 = PickOtherNeighbor(adj, id2, toward2);
+    bool changed = false;
+    if (newId1 != id1)
+    {
+        spine.insert(spine.begin(), newId1);
+        changed = true;
+    }
+    if (newId2 != id2)
+    {
+        spine.push_back(newId2);
+        changed = true;
+    }
+    return changed;
+}
+
+bool SpineContractOneStep(std::vector<vtkIdType>& spine)
+{
+    if (spine.size() < 3)
     {
         return false;
     }
-    s0 = std::clamp(s0, 0.0, total);
-    s1 = std::clamp(s1, 0.0, total);
-    if (s1 + kEps < s0)
-    {
-        std::swap(s0, s1);
-    }
-
-    vtkPoints* pts = path->GetPoints();
-    if (!pts || pts->GetNumberOfPoints() < 1)
-    {
-        return false;
-    }
-
-    auto appendDistinct = [&outPts](const double p[3]) {
-        if (outPts.empty())
-        {
-            outPts.push_back({ p[0], p[1], p[2] });
-            return;
-        }
-        double d[3];
-        Sub(d, p, outPts.back().data());
-        if (Norm(d) > kEps)
-        {
-            outPts.push_back({ p[0], p[1], p[2] });
-        }
-    };
-
-    auto pointAtS = [&](double s, double pOut[3]) -> bool {
-        if (s <= kEps)
-        {
-            pts->GetPoint(0, pOut);
-            return true;
-        }
-        if (s >= total - kEps)
-        {
-            pts->GetPoint(pts->GetNumberOfPoints() - 1, pOut);
-            return true;
-        }
-        double acc = 0.0;
-        for (vtkIdType i = 1; i < pts->GetNumberOfPoints(); ++i)
-        {
-            double pa[3], pb[3];
-            pts->GetPoint(i - 1, pa);
-            pts->GetPoint(i, pb);
-            double e[3];
-            Sub(e, pb, pa);
-            const double seg = Norm(e);
-            if (seg < kEps)
-            {
-                continue;
-            }
-            if (acc + seg >= s - kEps)
-            {
-                const double t = (s - acc) / seg;
-                LinInterp3(pOut, pa, pb, t);
-                return true;
-            }
-            acc += seg;
-        }
-        pts->GetPoint(pts->GetNumberOfPoints() - 1, pOut);
-        return true;
-    };
-
-    double p0[3], p1[3];
-    if (!pointAtS(s0, p0) || !pointAtS(s1, p1))
-    {
-        return false;
-    }
-    appendDistinct(p0);
-
-    double acc = 0.0;
-    for (vtkIdType i = 1; i < pts->GetNumberOfPoints(); ++i)
-    {
-        double pa[3], pb[3];
-        pts->GetPoint(i - 1, pa);
-        pts->GetPoint(i, pb);
-        double e[3];
-        Sub(e, pb, pa);
-        const double seg = Norm(e);
-        if (seg < kEps)
-        {
-            continue;
-        }
-        const double segEnd = acc + seg;
-        if (segEnd > s0 + kEps && segEnd <= s1 + kEps)
-        {
-            appendDistinct(pb);
-        }
-        acc = segEnd;
-    }
-    appendDistinct(p1);
-    return outPts.size() >= 1;
+    spine.erase(spine.begin());
+    spine.pop_back();
+    return spine.size() >= 2;
 }
 
-void PrependCenterlineExtension(vtkPolyData* centerline, vtkPolyData* path, double extendLen,
-    std::vector<std::array<double, 3>>& seg)
+bool ComputeSymmetricEndpointsIterative(vtkPolyData* centerline, vtkIdType id1, vtkIdType id2,
+    double targetLength, vtkIdType& outId1, double outPos1[3], vtkIdType& outId2, double outPos2[3],
+    double& achievedLength)
 {
-    if (extendLen <= kEps || !centerline || !path)
-    {
-        return;
-    }
-    vtkPoints* cpts = centerline->GetPoints();
-    vtkPoints* ppts = path->GetPoints();
-    if (!cpts || !ppts || ppts->GetNumberOfPoints() < 2 || seg.empty())
-    {
-        return;
-    }
-    double p0[3], p1[3];
-    ppts->GetPoint(0, p0);
-    ppts->GetPoint(1, p1);
-    const vtkIdType id0 = NearestCenterlinePointId(cpts, p0);
-    const vtkIdType id1 = NearestCenterlinePointId(cpts, p1);
-
-    AdjMap adj;
-    BuildAdjacency(centerline, adj);
-    DedupeNeighbors(adj);
-
-    std::vector<std::array<double, 3>> ext;
-    WalkGeodesic(cpts, adj, id1, id0, extendLen, ext);
-
-    std::vector<std::array<double, 3>> merged;
-    merged.reserve(ext.size() + seg.size());
-    for (const auto& pt : ext)
-    {
-        merged.push_back(pt);
-    }
-    for (const auto& pt : seg)
-    {
-        if (merged.empty())
-        {
-            merged.push_back(pt);
-            continue;
-        }
-        double d[3];
-        Sub(d, pt.data(), merged.back().data());
-        if (Norm(d) > kEps)
-        {
-            merged.push_back(pt);
-        }
-    }
-    seg.swap(merged);
-}
-
-void AppendCenterlineExtension(vtkPolyData* centerline, vtkPolyData* path, double extendLen,
-    std::vector<std::array<double, 3>>& seg)
-{
-    if (extendLen <= kEps || !centerline || !path || seg.empty())
-    {
-        return;
-    }
-    vtkPoints* cpts = centerline->GetPoints();
-    vtkPoints* ppts = path->GetPoints();
-    const vtkIdType n = ppts ? ppts->GetNumberOfPoints() : 0;
-    if (!cpts || n < 2)
-    {
-        return;
-    }
-    double pPrev[3], pLast[3];
-    ppts->GetPoint(n - 2, pPrev);
-    ppts->GetPoint(n - 1, pLast);
-    const vtkIdType idPrev = NearestCenterlinePointId(cpts, pPrev);
-    const vtkIdType idLast = NearestCenterlinePointId(cpts, pLast);
-
-    AdjMap adj;
-    BuildAdjacency(centerline, adj);
-    DedupeNeighbors(adj);
-
-    std::vector<std::array<double, 3>> ext;
-    WalkGeodesic(cpts, adj, idPrev, idLast, extendLen, ext);
-    for (const auto& pt : ext)
-    {
-        if (seg.empty())
-        {
-            seg.push_back(pt);
-            continue;
-        }
-        double d[3];
-        Sub(d, pt.data(), seg.back().data());
-        if (Norm(d) > kEps)
-        {
-            seg.push_back(pt);
-        }
-    }
-}
-
-/** Symmetric expand/contract about the path midpoint between \p id1 and \p id2. */
-bool BuildSymmetricAxisPolyline(vtkPolyData* centerline, vtkIdType id1, vtkIdType id2, double targetLength,
-    std::vector<std::array<double, 3>>& poly)
-{
-    poly.clear();
-    if (!centerline || targetLength <= kEps)
+    vtkPoints* cpts = centerline ? centerline->GetPoints() : nullptr;
+    if (!cpts || id1 < 0 || id2 < 0 || id1 == id2 || targetLength <= kEps)
     {
         return false;
     }
 
     vtkNew<vtkPolyData> path;
-    const double pathLen = vtkSHYXEnhancedRuler::ComputePathDistance(centerline, id1, id2, path);
-    if (pathLen <= kEps)
+    if (vtkSHYXEnhancedRuler::ComputePathDistance(centerline, id1, id2, path) <= kEps)
     {
         return false;
     }
 
-    const double half = 0.5 * targetLength;
-    const double midS = 0.5 * pathLen;
-
-    std::vector<std::array<double, 3>> backSeg;
-    const double backS0 = midS - half;
-    if (backS0 >= 0.0)
+    std::vector<vtkIdType> spine;
+    if (!BuildSpineFromPath(centerline, path, spine))
     {
-        ExtractPathArcLength(path, backS0, midS, backSeg);
-    }
-    else
-    {
-        ExtractPathArcLength(path, 0.0, midS, backSeg);
-        PrependCenterlineExtension(centerline, path, -backS0, backSeg);
+        return false;
     }
 
-    std::vector<std::array<double, 3>> fwdSeg;
-    const double fwdS1 = midS + half;
-    if (fwdS1 <= pathLen)
+    AdjMap adj;
+    BuildAdjacency(centerline, adj);
+    DedupeNeighbors(adj);
+
+    achievedLength = SpineArcLength(cpts, spine);
+    if (achievedLength <= kEps)
     {
-        ExtractPathArcLength(path, midS, fwdS1, fwdSeg);
-    }
-    else
-    {
-        ExtractPathArcLength(path, midS, pathLen, fwdSeg);
-        AppendCenterlineExtension(centerline, path, fwdS1 - pathLen, fwdSeg);
+        return false;
     }
 
-    poly = backSeg;
-    if (!fwdSeg.empty())
+    const vtkIdType maxSteps = centerline->GetNumberOfPoints();
+    if (achievedLength < targetLength - kEps)
     {
-        size_t start = 0;
-        if (!poly.empty())
+        for (vtkIdType step = 0; step < maxSteps && achievedLength <= targetLength + kEps; ++step)
         {
-            double d[3];
-            Sub(d, fwdSeg[0].data(), poly.back().data());
-            if (Norm(d) <= kEps)
+            const double prevLen = achievedLength;
+            if (!SpineExpandOneStep(adj, spine))
             {
-                start = 1;
-            }
-        }
-        for (size_t i = start; i < fwdSeg.size(); ++i)
-        {
-            poly.push_back(fwdSeg[i]);
-        }
-    }
-    return poly.size() >= 2;
-}
-
-/** Axis polyline from \p startId toward \p hintEndId with total arc length \p targetLength. */
-bool BuildCenterlineAxisPolyline(vtkPolyData* centerline, vtkIdType startId, vtkIdType hintEndId,
-    double targetLength, std::vector<std::array<double, 3>>& poly)
-{
-    poly.clear();
-    if (!centerline || targetLength <= kEps)
-    {
-        return false;
-    }
-
-    vtkNew<vtkPolyData> path;
-    const double pathLen = vtkSHYXEnhancedRuler::ComputePathDistance(centerline, startId, hintEndId, path);
-    if (pathLen <= kEps)
-    {
-        return false;
-    }
-
-    vtkPoints* pathPts = path->GetPoints();
-    if (!pathPts || pathPts->GetNumberOfPoints() < 1)
-    {
-        return false;
-    }
-
-    auto pushDistinct = [&poly](const double p[3]) {
-        if (poly.empty())
-        {
-            poly.push_back({ p[0], p[1], p[2] });
-            return;
-        }
-        double d[3];
-        Sub(d, p, poly.back().data());
-        if (Norm(d) > kEps)
-        {
-            poly.push_back({ p[0], p[1], p[2] });
-        }
-    };
-
-    if (targetLength <= pathLen + kEps)
-    {
-        double p0[3];
-        pathPts->GetPoint(0, p0);
-        pushDistinct(p0);
-        double acc = 0.0;
-        const vtkIdType nPath = pathPts->GetNumberOfPoints();
-        for (vtkIdType i = 1; i < nPath; ++i)
-        {
-            double pi[3];
-            pathPts->GetPoint(i, pi);
-            double e[3];
-            Sub(e, pi, poly.back().data());
-            const double seg = Norm(e);
-            if (seg < kEps)
-            {
-                continue;
-            }
-            if (acc + seg >= targetLength - kEps)
-            {
-                const double t = (targetLength - acc) / seg;
-                double q[3];
-                LinInterp3(q, poly.back().data(), pi, t);
-                pushDistinct(q);
                 break;
             }
-            acc += seg;
-            pushDistinct(pi);
+            achievedLength = SpineArcLength(cpts, spine);
+            if (achievedLength <= kEps || achievedLength <= prevLen + kEps)
+            {
+                break;
+            }
         }
-        return poly.size() >= 2;
     }
-
-    PathPolylineToPoints(path, poly);
-    const double remaining = targetLength - pathLen;
-    if (remaining <= kEps)
+    else if (achievedLength > targetLength + kEps)
     {
-        return poly.size() >= 2;
+        for (vtkIdType step = 0; step < maxSteps && achievedLength >= targetLength - kEps; ++step)
+        {
+            const double prevLen = achievedLength;
+            if (!SpineContractOneStep(spine))
+            {
+                break;
+            }
+            achievedLength = SpineArcLength(cpts, spine);
+            if (achievedLength <= kEps || achievedLength >= prevLen - kEps)
+            {
+                break;
+            }
+        }
     }
 
-    vtkPoints* cpts = centerline->GetPoints();
-    if (!cpts || poly.size() < 2)
+    if (spine.size() < 2)
     {
-        return poly.size() >= 2;
+        return false;
     }
 
-    const vtkIdType endId = NearestCenterlinePointId(cpts, poly.back().data());
-    const vtkIdType prevId = NearestCenterlinePointId(cpts, poly[poly.size() - 2].data());
-
-    AdjMap adj;
-    BuildAdjacency(centerline, adj);
-    DedupeNeighbors(adj);
-
-    std::vector<std::array<double, 3>> ext;
-    WalkGeodesic(cpts, adj, prevId, endId, remaining, ext);
-    for (const auto& pt : ext)
-    {
-        pushDistinct(pt.data());
-    }
-    return poly.size() >= 2;
+    outId1 = spine.front();
+    outId2 = spine.back();
+    cpts->GetPoint(outId1, outPos1);
+    cpts->GetPoint(outId2, outPos2);
+    return true;
 }
 
 void PickTwoSideNeighbors(vtkIdType anchor, const AdjMap& adj, vtkIdType& nA, vtkIdType& nB)
@@ -1309,28 +1108,18 @@ void ApplyGeodesicSmoothBand(vtkPolyData* output, vtkPoints* outPts, vtkIntArray
 //-----------------------------------------------------------------------------
 bool vtkSHYXEndpointStentPlacement::ComputeSymmetricEndpointsForLength(vtkPolyData* centerline, vtkIdType id1,
     vtkIdType id2, double targetLength, vtkIdType& outId1, double outPos1[3], vtkIdType& outId2,
-    double outPos2[3])
+    double outPos2[3], double* achievedLengthOut)
 {
-    std::vector<std::array<double, 3>> poly;
-    if (!BuildSymmetricAxisPolyline(centerline, id1, id2, targetLength, poly) || poly.size() < 2)
+    double achievedLength = 0.0;
+    if (!ComputeSymmetricEndpointsIterative(
+            centerline, id1, id2, targetLength, outId1, outPos1, outId2, outPos2, achievedLength))
     {
         return false;
     }
-    vtkPoints* cpts = centerline->GetPoints();
-    if (!cpts)
+    if (achievedLengthOut)
     {
-        return false;
+        *achievedLengthOut = achievedLength;
     }
-    const double* first = poly.front().data();
-    const double* last = poly.back().data();
-    outPos1[0] = first[0];
-    outPos1[1] = first[1];
-    outPos1[2] = first[2];
-    outPos2[0] = last[0];
-    outPos2[1] = last[1];
-    outPos2[2] = last[2];
-    outId1 = NearestCenterlinePointId(cpts, first);
-    outId2 = NearestCenterlinePointId(cpts, last);
     return true;
 }
 
@@ -1510,18 +1299,20 @@ int vtkSHYXEndpointStentPlacement::RequestData(vtkInformation* vtkNotUsed(reques
 
     const vtkIdType refId1 = id1;
     const vtkIdType refId2 = id2;
+    double achievedCatalogLength = measuredPathLen;
     if (this->StentCatalogLengthIndex > vtkSHYXCoronaryStentCatalog::kCustomIndex)
     {
-        this->StentLength = effectiveLength;
         vtkIdType symId1 = id1;
         vtkIdType symId2 = id2;
         double symP1[3];
         double symP2[3];
-        if (ComputeSymmetricEndpointsForLength(
-                centerline, refId1, refId2, effectiveLength, symId1, symP1, symId2, symP2))
+        if (ComputeSymmetricEndpointsForLength(centerline, refId1, refId2, effectiveLength, symId1, symP1,
+                symId2, symP2, &achievedCatalogLength))
         {
             id1 = symId1;
             id2 = symId2;
+            effectiveLength = achievedCatalogLength;
+            this->StentLength = achievedCatalogLength;
             this->Point1VertexId = id1;
             this->Point2VertexId = id2;
             this->Point1[0] = symP1[0];
@@ -1556,24 +1347,26 @@ int vtkSHYXEndpointStentPlacement::RequestData(vtkInformation* vtkNotUsed(reques
         return 1;
     }
 
-    std::vector<std::array<double, 3>> poly;
-    const bool useCatalogLength = this->StentCatalogLengthIndex > vtkSHYXCoronaryStentCatalog::kCustomIndex;
-    if (useCatalogLength)
+    vtkNew<vtkPolyData> axisPathPoly;
+    if (this->StentCatalogLengthIndex > vtkSHYXCoronaryStentCatalog::kCustomIndex)
     {
-        if (!BuildSymmetricAxisPolyline(centerline, refId1, refId2, effectiveLength, poly))
+        if (vtkSHYXEnhancedRuler::ComputePathDistance(centerline, id1, id2, axisPathPoly) <= kEps)
         {
-            vtkErrorMacro(<< "Failed to build symmetric stent axis polyline along centerline.");
+            vtkErrorMacro(<< "Failed to build stent axis path after catalog length adjustment.");
             return 0;
         }
     }
     else
     {
-        PathPolylineToPoints(pathPoly, poly);
-        if (poly.size() < 2)
-        {
-            vtkErrorMacro(<< "Failed to build stent axis polyline along centerline.");
-            return 0;
-        }
+        axisPathPoly->ShallowCopy(pathPoly);
+    }
+
+    std::vector<std::array<double, 3>> poly;
+    PathPolylineToPoints(axisPathPoly, poly);
+    if (poly.size() < 2)
+    {
+        vtkErrorMacro(<< "Failed to build stent axis polyline along centerline.");
+        return 0;
     }
 
     if (this->StentAxisSampleSpacing > kEps)
