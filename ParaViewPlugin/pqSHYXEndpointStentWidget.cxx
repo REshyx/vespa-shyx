@@ -2,12 +2,15 @@
 
 #include "vtkSHYXCoronaryStentCatalog.h"
 #include "vtkSHYXEndpointStentPlacement.h"
+#include "vtkSHYXEndpointStentRepresentation.h"
 #include "vtkSHYXEnhancedRuler.h"
 
 #include "pqActiveObjects.h"
 #include "pqApplicationCore.h"
 #include "pqInteractivePropertyWidgetAbstract.h"
+#include "pqPipelineSource.h"
 #include "pqRenderView.h"
+#include "pqServerManagerModel.h"
 
 #include "vtkAlgorithm.h"
 #include "vtkAxisActor2D.h"
@@ -80,7 +83,7 @@ std::string TrimAscii(std::string s)
 pqSHYXEndpointStentWidget::pqSHYXEndpointStentWidget(
     vtkSMProxy* smproxy, vtkSMPropertyGroup* smgroup, QWidget* parent)
     : pqInteractivePropertyWidget(
-          "representations", "DistanceWidgetRepresentation", smproxy, smgroup, parent)
+          "representations", "SHYXEndpointStentWidgetRepresentation", smproxy, smgroup, parent)
 {
     auto* vbox = new QVBoxLayout(this);
     auto* info = new QLabel(
@@ -110,15 +113,42 @@ pqSHYXEndpointStentWidget::pqSHYXEndpointStentWidget(
     QObject::connect(this->LengthCatalogCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this,
         &pqSHYXEndpointStentWidget::onCatalogLengthChanged);
 
+    this->ShowStentPreviewCheck = new QCheckBox(tr("Show stent mesh preview"), this);
+    this->ShowStentPreviewCheck->setChecked(true);
+    vbox->addWidget(this->ShowStentPreviewCheck);
+    QObject::connect(this->ShowStentPreviewCheck, &QCheckBox::toggled, this,
+        [this](bool checked) {
+            if (vtkSMNewWidgetRepresentationProxy* wdg = this->widgetProxy())
+            {
+                vtkSMPropertyHelper(wdg, "ShowStentPreview").Set(checked ? 1 : 0);
+                wdg->UpdateVTKObjects();
+            }
+            this->syncStentPreview();
+            this->render();
+        });
+
     auto* showWidget = new QCheckBox(tr("Show interactive endpoints"), this);
     showWidget->setChecked(false);
     vbox->addWidget(showWidget);
-    this->connect(showWidget, SIGNAL(toggled(bool)), SLOT(setWidgetVisible(bool)));
+    QObject::connect(showWidget, &QCheckBox::toggled, this,
+        &pqSHYXEndpointStentWidget::onShowInteractiveEndpointsToggled);
     showWidget->connect(this, SIGNAL(widgetVisibilityToggled(bool)), SLOT(setChecked(bool)));
 
     QObject::disconnect(&pqActiveObjects::instance(), &pqActiveObjects::dataUpdated, this, nullptr);
     QObject::connect(&pqActiveObjects::instance(), &pqActiveObjects::dataUpdated, this,
         &pqSHYXEndpointStentWidget::onCenterlineDataUpdated);
+
+    if (auto* smm = pqApplicationCore::instance()->getServerManagerModel())
+    {
+        this->PipelineSource = smm->findItem<pqPipelineSource*>(smproxy);
+        if (this->PipelineSource)
+        {
+            QObject::connect(this->PipelineSource.data(),
+                static_cast<void (pqPipelineSource::*)(pqPipelineSource*)>(
+                    &pqPipelineSource::dataUpdated),
+                this, &pqSHYXEndpointStentWidget::onPipelineSourceUpdated);
+        }
+    }
 
     QObject::connect(static_cast<pqInteractivePropertyWidgetAbstract*>(this),
         &pqInteractivePropertyWidgetAbstract::endInteraction, this,
@@ -133,25 +163,175 @@ pqSHYXEndpointStentWidget::~pqSHYXEndpointStentWidget() = default;
 //-----------------------------------------------------------------------------
 void pqSHYXEndpointStentWidget::select()
 {
-    this->initializeEndpointsIfNeeded();
+    this->refreshCenterlineClientData();
+    this->promoteCheckedEndpointsToUncheckedIfNeeded();
+    this->ensureEndpointsSyncedFromCenterline();
     this->syncWidgetFromFilterOnSelect();
-    this->syncCatalogCombosFromFilter();
     this->Superclass::select();
+    this->refreshCenterlineClientData();
+    this->promoteCheckedEndpointsToUncheckedIfNeeded();
+    this->ensureEndpointsSyncedFromCenterline();
+    this->syncWidgetFromFilterOnSelect();
+    this->refreshRulerLabel(true);
+    this->syncCatalogCombosFromFilter();
+    if (vtkSMNewWidgetRepresentationProxy* wdg = this->widgetProxy())
+    {
+        vtkSMPropertyHelper(wdg, "ShowStentPreview").Set(this->ShowStentPreviewCheck && this->ShowStentPreviewCheck->isChecked() ? 1 : 0);
+        wdg->UpdateVTKObjects();
+    }
+    this->syncStentPreview();
 }
 
 //-----------------------------------------------------------------------------
 void pqSHYXEndpointStentWidget::onCenterlineDataUpdated()
 {
-    if (this->initializeEndpointsIfNeeded())
-    {
-        this->syncWidgetFromFilterOnSelect();
-    }
+    this->refreshCenterlineClientData();
+    this->promoteCheckedEndpointsToUncheckedIfNeeded();
+    this->ensureEndpointsSyncedFromCenterline();
+    this->syncWidgetFromFilterOnSelect();
     this->placeWidget();
+    this->syncStentPreview();
 }
 
 //-----------------------------------------------------------------------------
-bool pqSHYXEndpointStentWidget::initializeEndpointsIfNeeded()
+void pqSHYXEndpointStentWidget::onPipelineSourceUpdated()
 {
+    this->refreshCenterlineClientData();
+    this->promoteCheckedEndpointsToUncheckedIfNeeded();
+    this->ensureEndpointsSyncedFromCenterline();
+    this->syncWidgetFromFilterOnSelect();
+    if (this->isWidgetVisible())
+    {
+        this->placeWidget();
+        this->refreshRulerLabel(true);
+        this->syncStentPreview();
+        this->render();
+    }
+}
+
+//-----------------------------------------------------------------------------
+void pqSHYXEndpointStentWidget::onShowInteractiveEndpointsToggled(bool visible)
+{
+    this->setWidgetVisible(visible);
+    if (!visible)
+    {
+        return;
+    }
+    this->refreshCenterlineClientData();
+    this->promoteCheckedEndpointsToUncheckedIfNeeded();
+    this->ensureEndpointsSyncedFromCenterline();
+    this->syncWidgetFromFilterOnSelect();
+    this->placeWidget();
+    this->refreshRulerLabel(true);
+    this->syncStentPreview();
+    this->render();
+}
+
+//-----------------------------------------------------------------------------
+bool pqSHYXEndpointStentWidget::refreshCenterlineClientData()
+{
+    vtkSMProxy* filter = this->proxy();
+    if (!filter)
+    {
+        return false;
+    }
+    if (vtkSMSourceProxy* filterSrc = vtkSMSourceProxy::SafeDownCast(filter))
+    {
+        filterSrc->UpdatePipeline();
+        filterSrc->UpdatePipelineInformation();
+    }
+    if (vtkSMProperty* clProp = filter->GetProperty("Centerline"))
+    {
+        if (auto* clSrc = vtkSMSourceProxy::SafeDownCast(vtkSMPropertyHelper(clProp).GetAsProxy()))
+        {
+            clSrc->UpdatePipeline();
+        }
+    }
+    vtkPoints* pts = this->centerlinePoints();
+    return pts && pts->GetNumberOfPoints() > 0;
+}
+
+//-----------------------------------------------------------------------------
+bool pqSHYXEndpointStentWidget::promoteCheckedEndpointsToUncheckedIfNeeded()
+{
+    vtkSMProxy* filter = this->proxy();
+    if (!filter)
+    {
+        return false;
+    }
+
+    auto readVec3 = [&](const char* name, bool unchecked, double out[3]) {
+        vtkSMPropertyHelper h(filter, name);
+        h.SetUseUnchecked(unchecked);
+        h.Get(out, 3);
+    };
+    auto readInt = [&](const char* name, bool unchecked) {
+        vtkSMPropertyHelper h(filter, name);
+        h.SetUseUnchecked(unchecked);
+        return h.GetAsInt();
+    };
+
+    double uncheckedP1[3], uncheckedP2[3];
+    readVec3("Point1", true, uncheckedP1);
+    readVec3("Point2", true, uncheckedP2);
+    const int uncheckedId2 = readInt("Point2VertexId", true);
+    const double zero[3] = { 0.0, 0.0, 0.0 };
+    const double defaultP2[3] = { 1.0, 0.0, 0.0 };
+    const bool uncheckedLooksDefault = uncheckedId2 < 0 ||
+        (vtkMath::Distance2BetweenPoints(uncheckedP1, zero) <= kVertexMatchTol2 &&
+            (vtkMath::Distance2BetweenPoints(uncheckedP2, defaultP2) <= kVertexMatchTol2 ||
+                vtkMath::Distance2BetweenPoints(uncheckedP2, zero) <= kVertexMatchTol2));
+    if (!uncheckedLooksDefault)
+    {
+        return false;
+    }
+
+    bool changed = false;
+    auto promoteVec3 = [&](const char* name) {
+        double c[3], u[3];
+        readVec3(name, false, c);
+        readVec3(name, true, u);
+        if (vtkMath::Distance2BetweenPoints(c, u) > kVertexMatchTol2)
+        {
+            vtkSMUncheckedPropertyHelper(filter, name).Set(c, 3);
+            changed = true;
+        }
+    };
+    auto promoteInt = [&](const char* name) {
+        const int c = readInt(name, false);
+        const int u = readInt(name, true);
+        if (c != u)
+        {
+            vtkSMUncheckedPropertyHelper(filter, name).Set(c);
+            changed = true;
+        }
+    };
+    auto promoteDouble = [&](const char* name) {
+        vtkSMPropertyHelper checked(filter, name);
+        vtkSMPropertyHelper unchecked(filter, name);
+        unchecked.SetUseUnchecked(true);
+        if (std::abs(checked.GetAsDouble() - unchecked.GetAsDouble()) > kVertexMatchTol2)
+        {
+            vtkSMUncheckedPropertyHelper(filter, name).Set(checked.GetAsDouble());
+            changed = true;
+        }
+    };
+
+    // Pipeline execution updates checked properties; the 3D widget links read unchecked.
+    promoteVec3("Point1");
+    promoteVec3("Point2");
+    promoteInt("Point1VertexId");
+    promoteInt("Point2VertexId");
+    promoteDouble("StentLength");
+    promoteDouble("StentRadius");
+
+    return changed;
+}
+
+//-----------------------------------------------------------------------------
+bool pqSHYXEndpointStentWidget::ensureEndpointsSyncedFromCenterline()
+{
+    this->refreshCenterlineClientData();
     vtkSMProxy* filter = this->proxy();
     vtkPoints* pts = this->centerlinePoints();
     if (!filter || !pts)
@@ -165,23 +345,60 @@ bool pqSHYXEndpointStentWidget::initializeEndpointsIfNeeded()
         return false;
     }
 
+    vtkSMPropertyHelper id1Helper(filter, "Point1VertexId");
     vtkSMPropertyHelper id2Helper(filter, "Point2VertexId");
+    vtkSMPropertyHelper p1Helper(filter, "Point1");
+    vtkSMPropertyHelper p2Helper(filter, "Point2");
+    id1Helper.SetUseUnchecked(true);
     id2Helper.SetUseUnchecked(true);
-    if (id2Helper.GetAsInt() != kUninitializedVertexId)
+    p1Helper.SetUseUnchecked(true);
+    p2Helper.SetUseUnchecked(true);
+
+    vtkIdType id1 = static_cast<vtkIdType>(id1Helper.GetAsInt());
+    vtkIdType id2 = static_cast<vtkIdType>(id2Helper.GetAsInt());
+    if (id1 < 0 || id2 < 0)
+    {
+        id1 = 0;
+        id2 = std::max<vtkIdType>(0, n - 1);
+    }
+    if (id1 >= n)
+    {
+        id1 = std::max<vtkIdType>(0, n - 1);
+    }
+    if (id2 >= n)
+    {
+        id2 = std::max<vtkIdType>(0, n - 1);
+    }
+    if (id1 == id2 && n > 1)
+    {
+        id2 = (id1 == 0) ? n - 1 : 0;
+    }
+
+    double cur1[3], cur2[3];
+    p1Helper.Get(cur1, 3);
+    p2Helper.Get(cur2, 3);
+
+    double expected1[3], expected2[3];
+    pts->GetPoint(id1, expected1);
+    pts->GetPoint(id2, expected2);
+
+    const bool positionsStale = vtkMath::Distance2BetweenPoints(cur1, expected1) > kVertexMatchTol2 ||
+        vtkMath::Distance2BetweenPoints(cur2, expected2) > kVertexMatchTol2;
+    const bool idsMismatch =
+        pqSHYXEndpointStentWidget::vertexIdFromPosition(pts, cur1) != id1 ||
+        pqSHYXEndpointStentWidget::vertexIdFromPosition(pts, cur2) != id2;
+    const bool needsInit = id2Helper.GetAsInt() == kUninitializedVertexId || id1Helper.GetAsInt() < 0 ||
+        positionsStale || idsMismatch;
+
+    if (!needsInit)
     {
         return false;
     }
 
-    const vtkIdType id1 = 0;
-    const vtkIdType id2 = std::max<vtkIdType>(0, n - 1);
-    double p1[3], p2[3];
-    pts->GetPoint(id1, p1);
-    pts->GetPoint(id2, p2);
-
     vtkSMUncheckedPropertyHelper(filter, "Point1VertexId").Set(static_cast<int>(id1));
     vtkSMUncheckedPropertyHelper(filter, "Point2VertexId").Set(static_cast<int>(id2));
-    vtkSMUncheckedPropertyHelper(filter, "Point1").Set(p1, 3);
-    vtkSMUncheckedPropertyHelper(filter, "Point2").Set(p2, 3);
+    vtkSMUncheckedPropertyHelper(filter, "Point1").Set(expected1, 3);
+    vtkSMUncheckedPropertyHelper(filter, "Point2").Set(expected2, 3);
 
     this->updateStentLengthAndRadius(id1, id2);
 
@@ -194,21 +411,40 @@ bool pqSHYXEndpointStentWidget::initializeEndpointsIfNeeded()
         }
     }
 
-    if (vtkSMNewWidgetRepresentationProxy* wdg = this->widgetProxy())
+    this->pushEndpointPositionsToWidget(expected1, expected2);
+    return true;
+}
+
+//-----------------------------------------------------------------------------
+void pqSHYXEndpointStentWidget::pushEndpointPositionsToWidget(const double pos1[3], const double pos2[3])
+{
+    vtkSMNewWidgetRepresentationProxy* wdg = this->widgetProxy();
+    if (!wdg)
     {
-        vtkSMPropertyHelper(wdg, "Point1WorldPosition").Set(p1, 3);
-        vtkSMPropertyHelper(wdg, "Point2WorldPosition").Set(p2, 3);
-        wdg->UpdateVTKObjects();
+        return;
     }
 
-    this->refreshRulerLabel(true);
-    return true;
+    double p1[3] = { pos1[0], pos1[1], pos1[2] };
+    double p2[3] = { pos2[0], pos2[1], pos2[2] };
+    vtkSMPropertyHelper(wdg, "Point1WorldPosition").Set(p1, 3);
+    vtkSMPropertyHelper(wdg, "Point2WorldPosition").Set(p2, 3);
+    wdg->UpdateVTKObjects();
+
+    if (vtkDistanceWidget* distW = vtkDistanceWidget::SafeDownCast(wdg->GetWidget()))
+    {
+        if (auto* rep = vtkDistanceRepresentation2D::SafeDownCast(distW->GetRepresentation()))
+        {
+            rep->SetPoint1WorldPosition(p1);
+            rep->SetPoint2WorldPosition(p2);
+            rep->BuildRepresentation();
+        }
+    }
 }
 
 //-----------------------------------------------------------------------------
 void pqSHYXEndpointStentWidget::placeWidget()
 {
-    this->initializeEndpointsIfNeeded();
+    this->ensureEndpointsSyncedFromCenterline();
     vtkSMNewWidgetRepresentationProxy* w = this->widgetProxy();
     if (!w)
     {
@@ -233,6 +469,84 @@ void pqSHYXEndpointStentWidget::placeWidget()
     }
     vtkSMPropertyHelper(w, "PlaceWidget").Set(bds, 6);
     w->UpdateVTKObjects();
+    this->syncWidgetFromFilterOnSelect();
+    this->syncStentPreview();
+}
+
+//-----------------------------------------------------------------------------
+vtkSHYXEndpointStentRepresentation* pqSHYXEndpointStentWidget::stentRepresentation() const
+{
+    vtkSMNewWidgetRepresentationProxy* wdg = this->widgetProxy();
+    if (!wdg)
+    {
+        return nullptr;
+    }
+    vtkDistanceWidget* distW = vtkDistanceWidget::SafeDownCast(wdg->GetWidget());
+    if (!distW)
+    {
+        return nullptr;
+    }
+    return vtkSHYXEndpointStentRepresentation::SafeDownCast(distW->GetRepresentation());
+}
+
+//-----------------------------------------------------------------------------
+void pqSHYXEndpointStentWidget::syncStentPreview()
+{
+    auto* rep = this->stentRepresentation();
+    vtkSMProxy* filter = this->proxy();
+    vtkPolyData* cl = this->centerlineClientPoly();
+    if (!rep || !filter || !cl)
+    {
+        return;
+    }
+
+    const bool showPreview = !this->ShowStentPreviewCheck || this->ShowStentPreviewCheck->isChecked();
+    rep->SetShowStentPreview(showPreview ? 1 : 0);
+
+    vtkSMPropertyHelper radiusHelper(filter, "StentRadius");
+    radiusHelper.SetUseUnchecked(true);
+    const double radius = radiusHelper.GetAsDouble();
+    if (vtkSMNewWidgetRepresentationProxy* wdg = this->widgetProxy())
+    {
+        vtkSMPropertyHelper(wdg, "StentRadius").Set(radius);
+        wdg->UpdateVTKObjects();
+    }
+
+    vtkSMPropertyHelper id1Helper(filter, "Point1VertexId");
+    vtkSMPropertyHelper id2Helper(filter, "Point2VertexId");
+    id1Helper.SetUseUnchecked(true);
+    id2Helper.SetUseUnchecked(true);
+    vtkIdType id1 = static_cast<vtkIdType>(id1Helper.GetAsInt());
+    vtkIdType id2 = static_cast<vtkIdType>(id2Helper.GetAsInt());
+
+    if (id1 < 0 || id2 < 0 || id1 == id2)
+    {
+        if (vtkPoints* pts = this->centerlinePoints())
+        {
+            double p1[3], p2[3];
+            if (vtkSMNewWidgetRepresentationProxy* wdg = this->widgetProxy())
+            {
+                vtkSMPropertyHelper(wdg, "Point1WorldPosition").Get(p1, 3);
+                vtkSMPropertyHelper(wdg, "Point2WorldPosition").Get(p2, 3);
+                id1 = pqSHYXEndpointStentWidget::vertexIdFromPosition(pts, p1);
+                id2 = pqSHYXEndpointStentWidget::vertexIdFromPosition(pts, p2);
+            }
+        }
+    }
+
+    vtkNew<vtkPolyData> path;
+    if (id1 < 0 || id2 < 0 || id1 == id2 ||
+        vtkSHYXEnhancedRuler::ComputePathDistance(cl, id1, id2, path) <= 0.0 || radius <= 0.0)
+    {
+        rep->SetStentPathPolyData(nullptr);
+        rep->SetStentRadius(0.0);
+        rep->BuildRepresentation();
+        return;
+    }
+
+    rep->SetStentPathPolyData(path);
+    rep->SetStentRadius(radius);
+    rep->BuildRepresentation();
 }
 
 //-----------------------------------------------------------------------------
@@ -652,6 +966,7 @@ void pqSHYXEndpointStentWidget::onCatalogDiameterChanged(int comboIndex)
     this->ApplyingCatalogChange = true;
     this->applyCatalogDiameter(comboIndex);
     this->refreshRulerLabel(true);
+    this->syncStentPreview();
     this->render();
     this->ApplyingCatalogChange = false;
 }
@@ -678,6 +993,7 @@ void pqSHYXEndpointStentWidget::onCatalogLengthChanged(int comboIndex)
     this->applyCatalogLength(comboIndex);
     this->refreshRulerLabel(true);
     this->placeWidget();
+    this->syncStentPreview();
     this->render();
     this->ApplyingCatalogChange = false;
 }
@@ -816,17 +1132,18 @@ void pqSHYXEndpointStentWidget::refreshRulerLabel(bool includePathLength)
     rep->SetLabelFormat(label);
     rep->BuildRepresentation();
     applyRulerAxisTitleStyle(rep->GetAxis());
+    this->syncStentPreview();
 }
 
 //-----------------------------------------------------------------------------
 void pqSHYXEndpointStentWidget::syncWidgetFromFilterOnSelect()
 {
     vtkSMProxy* filter = this->proxy();
-    vtkSMNewWidgetRepresentationProxy* wdg = this->widgetProxy();
-    if (!filter || !wdg)
+    if (!filter)
     {
         return;
     }
+    this->ensureEndpointsSyncedFromCenterline();
     double p1[3], p2[3];
     vtkSMPropertyHelper p1h(filter, "Point1");
     vtkSMPropertyHelper p2h(filter, "Point2");
@@ -834,9 +1151,7 @@ void pqSHYXEndpointStentWidget::syncWidgetFromFilterOnSelect()
     p2h.SetUseUnchecked(true);
     p1h.Get(p1, 3);
     p2h.Get(p2, 3);
-    vtkSMPropertyHelper(wdg, "Point1WorldPosition").Set(p1, 3);
-    vtkSMPropertyHelper(wdg, "Point2WorldPosition").Set(p2, 3);
-    wdg->UpdateVTKObjects();
+    this->pushEndpointPositionsToWidget(p1, p2);
 }
 
 //-----------------------------------------------------------------------------
@@ -889,6 +1204,7 @@ void pqSHYXEndpointStentWidget::snapEndpointsAndUpdateStentParams()
 
     wdg->UpdateVTKObjects();
     this->placeWidget();
+    this->syncStentPreview();
     this->render();
 }
 
@@ -896,6 +1212,7 @@ void pqSHYXEndpointStentWidget::snapEndpointsAndUpdateStentParams()
 void pqSHYXEndpointStentWidget::onRulerInteraction()
 {
     this->refreshRulerLabel(false);
+    this->syncStentPreview();
     this->render();
 }
 

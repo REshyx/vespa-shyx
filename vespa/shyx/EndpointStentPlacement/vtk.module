@@ -8,6 +8,7 @@ DEPENDS
   VTK::FiltersCore
   VTK::CommonDataModel
   VTK::CommonExecutionModel
+  VTK::InteractionWidgets
   vtkSHYXEnhancedRuler
 PRIVATE_DEPENDS
   VTK::CommonCore

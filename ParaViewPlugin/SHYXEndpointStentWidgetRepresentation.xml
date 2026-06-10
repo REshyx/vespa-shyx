@@ -1,0 +1,69 @@
+<?xml version="1.0" ?>
+<ServerManagerConfiguration>
+  <ProxyGroup name="3d_widget_representations">
+    <Proxy name="SHYXEndpointStentRepresentation"
+           class="vtkSHYXEndpointStentRepresentation"
+           base_proxygroup="3d_widget_representations"
+           base_proxyname="DistanceRepresentation2D">
+      <DoubleVectorProperty name="StentRadius"
+                            label="Stent preview radius"
+                            command="SetStentRadius"
+                            number_of_elements="1"
+                            default_values="1.0"
+                            animateable="0">
+        <DoubleRangeDomain name="range" min="0.0" max="1e12"/>
+      </DoubleVectorProperty>
+      <IntVectorProperty name="ShowStentPreview"
+                         label="Show stent preview"
+                         command="SetShowStentPreview"
+                         number_of_elements="1"
+                         default_values="1"
+                         animateable="0">
+        <BooleanDomain name="bool"/>
+      </IntVectorProperty>
+    </Proxy>
+  </ProxyGroup>
+  <ProxyGroup name="representations">
+    <NewWidgetRepresentationProxy class="vtk3DWidgetRepresentation"
+                                  name="SHYXEndpointStentWidgetRepresentation">
+      <Documentation>
+        Distance widget for endpoint stent placement with a 3D wireframe stent preview along the
+        centerline path between the two handles.
+      </Documentation>
+      <IntVectorProperty command="SetEnabled"
+                         default_values="0"
+                         name="Enabled"
+                         number_of_elements="1">
+        <BooleanDomain name="bool" />
+        <Documentation>Enable/Disable widget interaction.</Documentation>
+      </IntVectorProperty>
+      <IntVectorProperty command="SetUseNonCompositedRenderer"
+                         default_values="1"
+                         name="UseNonCompositedRenderer"
+                         number_of_elements="1"></IntVectorProperty>
+      <SubProxy>
+        <Proxy name="Prop2D"
+               proxygroup="3d_widget_representations"
+               proxyname="SHYXEndpointStentRepresentation"></Proxy>
+        <ExposedProperties>
+          <Property name="Visibility" />
+          <Property name="Point1WorldPositionInfo" />
+          <Property name="Point1WorldPosition" />
+          <Property name="Point2WorldPositionInfo" />
+          <Property name="Point2WorldPosition" />
+          <Property name="PlaceWidget" />
+          <Property name="StentRadius" />
+          <Property name="ShowStentPreview" />
+        </ExposedProperties>
+      </SubProxy>
+      <SubProxy>
+        <Proxy name="Widget"
+               proxygroup="3d_widgets"
+               proxyname="DistanceWidget"></Proxy>
+        <ExposedProperties>
+          <Property name="ProcessEvents" />
+        </ExposedProperties>
+      </SubProxy>
+    </NewWidgetRepresentationProxy>
+  </ProxyGroup>
+</ServerManagerConfiguration>

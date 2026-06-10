@@ -6,8 +6,10 @@
 #include <QPointer>
 
 class pqPipelineSource;
+class QCheckBox;
 class QComboBox;
 class vtkDistanceRepresentation2D;
+class vtkSHYXEndpointStentRepresentation;
 class vtkPolyData;
 class vtkPoints;
 
@@ -36,11 +38,16 @@ private Q_SLOTS:
     void onRulerInteraction();
     void onRulerEndInteraction();
     void onCenterlineDataUpdated();
+    void onPipelineSourceUpdated();
+    void onShowInteractiveEndpointsToggled(bool visible);
     void onCatalogDiameterChanged(int comboIndex);
     void onCatalogLengthChanged(int comboIndex);
 
 private:
-    bool initializeEndpointsIfNeeded();
+    bool refreshCenterlineClientData();
+    bool promoteCheckedEndpointsToUncheckedIfNeeded();
+    bool ensureEndpointsSyncedFromCenterline();
+    void pushEndpointPositionsToWidget(const double pos1[3], const double pos2[3]);
     vtkPolyData* centerlineClientPoly() const;
     vtkPoints* centerlinePoints() const;
     bool pickCenterlineVertexAtDisplay(
@@ -62,10 +69,13 @@ private:
     void applyCatalogLength(int catalogIndex);
     void markCatalogPropertiesModified();
     void pushEndpointsToFilter(vtkIdType id1, const double pos1[3], vtkIdType id2, const double pos2[3]);
+    vtkSHYXEndpointStentRepresentation* stentRepresentation() const;
+    void syncStentPreview();
 
     QPointer<pqPipelineSource> PipelineSource;
     QComboBox* DiameterCatalogCombo = nullptr;
     QComboBox* LengthCatalogCombo = nullptr;
+    QCheckBox* ShowStentPreviewCheck = nullptr;
     bool UpdatingCatalogCombos = false;
     bool ApplyingCatalogChange = false;
 };

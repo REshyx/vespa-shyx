@@ -170,6 +170,7 @@ paraview_add_plugin(VESPAPlugin
     "SHYXVascularStentPlacement.xml"
     "SHYXEndpointStentPlacement.xml"
     "SHYXImplicitCylinderWidgetRepresentation.xml"
+    "SHYXEndpointStentWidgetRepresentation.xml"
     "SHYXVectorFieldTopology.xml"
     "SHYXArrayCurveMapper.xml"
     "SHYXAutorefineSelfIntersectionFilter.xml"
