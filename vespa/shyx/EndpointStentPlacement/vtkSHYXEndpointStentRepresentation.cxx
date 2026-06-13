@@ -185,13 +185,10 @@ bool BuildStentRings(vtkPoints* pathPts, double radius, int circRes, int numRing
             prevN1[i] = n1[i];
         }
 
-        // Odd rings are rotated by half a circumferential cell so longitudinal links form diamonds.
-        const double phase = (ring % 2 == 1) ? vtkMath::Pi() / static_cast<double>(circRes) : 0.0;
         rings[static_cast<size_t>(ring)].resize(static_cast<size_t>(circRes));
         for (int j = 0; j < circRes; ++j)
         {
-            const double theta =
-                phase + (static_cast<double>(j) / static_cast<double>(circRes)) * 2.0 * vtkMath::Pi();
+            const double theta = (static_cast<double>(j) / static_cast<double>(circRes)) * 2.0 * vtkMath::Pi();
             const double c = std::cos(theta);
             const double sn = std::sin(theta);
             rings[static_cast<size_t>(ring)][static_cast<size_t>(j)] = {
@@ -335,6 +332,7 @@ void vtkSHYXEndpointStentRepresentation::BuildStentPreviewMesh()
         }
     }
 
+    // Neighbor-index cross: ring k[j]↔k+1[j+1] and k[j+1]↔k+1[j] (diamond/X per cell, not half-turn funnel).
     for (int ring = 0; ring < numRings - 1; ++ring)
     {
         const vtkIdType base0 = static_cast<vtkIdType>(ring) * ringStride;
@@ -342,7 +340,8 @@ void vtkSHYXEndpointStentRepresentation::BuildStentPreviewMesh()
         for (int j = 0; j < circRes; ++j)
         {
             const int jn = (j + 1) % circRes;
-            InsertLine(wireLines, base0 + j, base1 + j);
+            InsertLine(wireLines, base0 + j, base1 + jn);
+            InsertLine(wireLines, base0 + jn, base1 + j);
             InsertQuad(shellPolys, base0 + j, base0 + jn, base1 + jn, base1 + j);
         }
     }
