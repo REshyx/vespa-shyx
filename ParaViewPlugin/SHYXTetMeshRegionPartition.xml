@@ -79,7 +79,7 @@
                          name="UseFaceAreaWeights"
                          label="Use Face Area Weights"
                          number_of_elements="1"
-                         default_values="1"
+                         default_values="0"
                          panel_visibility="advanced">
         <BooleanDomain name="bool"/>
         <Documentation>
@@ -93,6 +93,18 @@
                                    value="1"/>
         </Hints>
       </IntVectorProperty>
+
+      <StringVectorProperty name="OutputMessage"
+                            command="GetOutputMessage"
+                            label="Timing Report"
+                            number_of_elements="1"
+                            information_only="1"
+                            panel_visibility="advanced">
+        <Documentation>
+          Read-only timing breakdown from the last pipeline update. The same text is printed to
+          View → Output Messages (vtkWarningMacro).
+        </Documentation>
+      </StringVectorProperty>
 
       <Hints>
         <ShowInMenu category="SHYX"/>

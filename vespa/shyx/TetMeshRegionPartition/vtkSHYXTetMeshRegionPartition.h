@@ -87,17 +87,22 @@ public:
 
     ///@{
     /**
-     * When ON (default) min-cut edge capacities are the shared-face areas, so bisections minimize
-     * interface area. When OFF, every shared face has unit capacity (minimize cut face count).
+     * When ON, min-cut edge capacities are the shared-face areas, so bisections minimize
+     * interface area. When OFF (default), every shared face has unit capacity (minimize cut face count).
      */
     vtkSetMacro(UseFaceAreaWeights, bool);
     vtkGetMacro(UseFaceAreaWeights, bool);
     vtkBooleanMacro(UseFaceAreaWeights, bool);
     ///@}
 
+    ///@{
+    /** Read-only summary from the last pipeline update (also printed to Output Messages). */
+    vtkGetStringMacro(OutputMessage);
+    ///@}
+
 protected:
     vtkSHYXTetMeshRegionPartition();
-    ~vtkSHYXTetMeshRegionPartition() override = default;
+    ~vtkSHYXTetMeshRegionPartition() override;
 
     int FillInputPortInformation(int port, vtkInformation* info) override;
     int RequestData(vtkInformation*, vtkInformationVector**, vtkInformationVector*) override;
@@ -105,9 +110,14 @@ protected:
     int PartitionMethod = BALANCED_MIN_CUT;
     int NumberOfRegions = 4;
     double BalanceBand = 0.3;
-    bool UseFaceAreaWeights = true;
+    bool UseFaceAreaWeights = false;
 
 private:
+    /** Updates OutputMessage without calling Modified() (avoids update loops). */
+    void SetOutputMessageNoModified(const char* msg);
+
+    char* OutputMessage = nullptr;
+
     vtkSHYXTetMeshRegionPartition(const vtkSHYXTetMeshRegionPartition&) = delete;
     void operator=(const vtkSHYXTetMeshRegionPartition&) = delete;
 };

@@ -12,15 +12,25 @@
 #include <vtkObjectFactory.h>
 #include <vtkPointData.h>
 #include <vtkPoints.h>
+#include <vtkTimerLog.h>
 #include <vtkUnstructuredGrid.h>
+
+#ifdef VESPA_USE_SMP
+#include <vtkSMPThreadLocalObject.h>
+#include <vtkSMPTools.h>
+#endif
 
 #include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstdint>
+#include <cstring>
+#include <iomanip>
 #include <limits>
 #include <numeric>
 #include <queue>
+#include <sstream>
+#include <string>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -37,6 +47,75 @@ constexpr double kEps = 1e-12;
 // Dual-graph adjacency: node -> list of (neighbor node, shared-face capacity).
 using DualAdjacency = std::vector<std::vector<std::pair<int, double>>>;
 
+struct PartitionProfile
+{
+    double collectTetsMs = 0.0;
+    double faceEmitMs = 0.0;
+    double faceSortMs = 0.0;
+    double adjScanMs = 0.0;
+    double topComponentsMs = 0.0;
+    double labelRegionsMs = 0.0;
+    double writeOutputMs = 0.0;
+    double totalMs = 0.0;
+
+    int bisectCalls = 0;
+    double bisectTotalMs = 0.0;
+    double bisectBuildLocalMs = 0.0;
+    double bisectBfsMs = 0.0;
+    double bisectAnchorSortMs = 0.0;
+    double bisectDinicMs = 0.0;
+    double bisectOtherMs = 0.0;
+
+    int inducedCcCalls = 0;
+    double inducedCcMs = 0.0;
+};
+
+double elapsedMs(double t0)
+{
+    return (vtkTimerLog::GetUniversalTime() - t0) * 1000.0;
+}
+
+std::string formatPartitionProfile(const PartitionProfile& profile, int numNodes, vtkIdType numCells,
+    std::size_t numDualEdges, int numComps, int producedRegions, int partitionMethod,
+    int numberOfRegions, bool useFaceAreaWeights, double balanceBand)
+{
+    std::ostringstream oss;
+    oss << std::fixed << std::setprecision(2);
+    const char* methodName =
+        (partitionMethod == 0) ? "ConnectedComponents" : "BalancedMinCut";
+    const double accounted = profile.collectTetsMs + profile.faceEmitMs + profile.faceSortMs +
+        profile.adjScanMs + profile.topComponentsMs + profile.labelRegionsMs + profile.writeOutputMs;
+
+    oss << "TetMeshRegionPartition timing (total " << profile.totalMs << " ms, accounted "
+        << accounted << " ms)\n";
+    oss << "  mesh: " << numNodes << " tets / " << numCells << " cells, " << numDualEdges
+        << " dual edges, " << numComps << " connected component(s)\n";
+    oss << "  settings: method=" << methodName << ", regions_requested=" << numberOfRegions
+        << ", regions_produced=" << producedRegions << ", balance_band=" << balanceBand
+        << ", face_area_weights=" << (useFaceAreaWeights ? "ON" : "OFF") << "\n";
+    oss << "  [1] collect tetrahedra: " << profile.collectTetsMs << " ms\n";
+    oss << "  [2] dual graph face emit: " << profile.faceEmitMs << " ms (" << (numNodes * 4)
+        << " face records)\n";
+    oss << "  [3] dual graph sort: " << profile.faceSortMs << " ms\n";
+    oss << "  [4] dual graph adjacency scan: " << profile.adjScanMs << " ms\n";
+    oss << "  [5] top connected components (BFS): " << profile.topComponentsMs << " ms\n";
+    oss << "  [6] region labeling: " << profile.labelRegionsMs << " ms\n";
+    if (partitionMethod != 0)
+    {
+        oss << "      induced-component checks: " << profile.inducedCcMs << " ms ("
+            << profile.inducedCcCalls << " call(s))\n";
+        oss << "      min-cut bisection total: " << profile.bisectTotalMs << " ms ("
+            << profile.bisectCalls << " call(s))\n";
+        oss << "        build local subgraph: " << profile.bisectBuildLocalMs << " ms\n";
+        oss << "        BFS diameter / distances: " << profile.bisectBfsMs << " ms\n";
+        oss << "        anchor ordering sort: " << profile.bisectAnchorSortMs << " ms\n";
+        oss << "        Dinic max-flow: " << profile.bisectDinicMs << " ms\n";
+        oss << "        bisect other (fallback/assign): " << profile.bisectOtherMs << " ms\n";
+    }
+    oss << "  [7] write output RegionId arrays: " << profile.writeOutputMs << " ms";
+    return oss.str();
+}
+
 // ---------------------------------------------------------------------------
 // Hash for an unordered triangle face key (3 sorted point ids).
 struct FaceKey
@@ -45,27 +124,34 @@ struct FaceKey
     bool operator==(const FaceKey& o) const { return a == o.a && b == o.b && c == o.c; }
 };
 
-struct FaceKeyHash
-{
-    std::size_t operator()(const FaceKey& k) const
-    {
-        std::uint64_t h = 1469598103934665603ull;
-        auto mix = [&h](std::uint64_t v) {
-            h ^= v;
-            h *= 1099511628211ull;
-        };
-        mix(static_cast<std::uint64_t>(k.a));
-        mix(static_cast<std::uint64_t>(k.b));
-        mix(static_cast<std::uint64_t>(k.c));
-        return static_cast<std::size_t>(h);
-    }
-};
-
 FaceKey makeFaceKey(vtkIdType p0, vtkIdType p1, vtkIdType p2)
 {
     vtkIdType v[3] = { p0, p1, p2 };
     std::sort(v, v + 3);
     return FaceKey{ v[0], v[1], v[2] };
+}
+
+// One triangular face of one tetrahedron, used to match shared faces by sorting.
+struct FaceRecord
+{
+    vtkIdType a, b, c; // sorted vertex ids
+    int owner;         // dual-graph node (tet) this face belongs to
+    double cap;        // face area (or 1) used as min-cut capacity
+
+    bool sameFaceAs(const FaceRecord& o) const { return a == o.a && b == o.b && c == o.c; }
+};
+
+bool faceRecordLess(const FaceRecord& x, const FaceRecord& y)
+{
+    if (x.a != y.a)
+    {
+        return x.a < y.a;
+    }
+    if (x.b != y.b)
+    {
+        return x.b < y.b;
+    }
+    return x.c < y.c;
 }
 
 double triangleArea(double* p0, double* p1, double* p2)
@@ -236,14 +322,16 @@ int farthestNode(int seed, const std::vector<std::vector<int>>& localAdj)
 // 'side' is filled (length = global node count) with 0/1 for the nodes in sub.
 // Returns false if the set cannot be split (fewer than 2 nodes).
 bool bisect(const std::vector<int>& sub, const DualAdjacency& adj, double band,
-    std::vector<char>& side)
+    std::vector<char>& side, PartitionProfile* profile)
 {
+    const double tBisect = vtkTimerLog::GetUniversalTime();
     const int n = static_cast<int>(sub.size());
     if (n < 2)
     {
         return false;
     }
 
+    double tPhase = vtkTimerLog::GetUniversalTime();
     std::unordered_map<int, int> g2l;
     g2l.reserve(n * 2);
     for (int i = 0; i < n; ++i)
@@ -272,6 +360,12 @@ bool bisect(const std::vector<int>& sub, const DualAdjacency& adj, double band,
         }
     }
 
+    if (profile)
+    {
+        profile->bisectBuildLocalMs += elapsedMs(tPhase);
+    }
+
+    tPhase = vtkTimerLog::GetUniversalTime();
     // Graph-diameter endpoints via double BFS sweep.
     int a = farthestNode(0, localAdj);
     int b = farthestNode(a, localAdj);
@@ -284,6 +378,12 @@ bool bisect(const std::vector<int>& sub, const DualAdjacency& adj, double band,
     bfsDistances(a, localAdj, distA);
     bfsDistances(b, localAdj, distB);
 
+    if (profile)
+    {
+        profile->bisectBfsMs += elapsedMs(tPhase);
+    }
+
+    tPhase = vtkTimerLog::GetUniversalTime();
     // Order nodes by (distA - distB): negative => closer to a, positive => closer to b.
     // Disconnected nodes (dist < 0) are pushed toward the nearer-by-construction terminal.
     std::vector<std::pair<double, int>> order(n);
@@ -305,6 +405,12 @@ bool bisect(const std::vector<int>& sub, const DualAdjacency& adj, double band,
         anchor[order[n - 1 - i].second] = 2;
     }
 
+    if (profile)
+    {
+        profile->bisectAnchorSortMs += elapsedMs(tPhase);
+    }
+
+    tPhase = vtkTimerLog::GetUniversalTime();
     // Build flow network: locals 0..n-1, source = n, sink = n+1.
     double totalCap = 0.0;
     for (const auto& e : edges)
@@ -337,6 +443,12 @@ bool bisect(const std::vector<int>& sub, const DualAdjacency& adj, double band,
     dinic.MaxFlow(src, snk);
     std::vector<char> srcSide = dinic.SourceSide(src);
 
+    if (profile)
+    {
+        profile->bisectDinicMs += elapsedMs(tPhase);
+    }
+
+    tPhase = vtkTimerLog::GetUniversalTime();
     int cntA = 0;
     int cntB = 0;
     for (int i = 0; i < n; ++i)
@@ -360,12 +472,24 @@ bool bisect(const std::vector<int>& sub, const DualAdjacency& adj, double band,
             int localNode = order[i].second;
             side[sub[localNode]] = (i < n / 2) ? 0 : 1;
         }
+        if (profile)
+        {
+            profile->bisectOtherMs += elapsedMs(tPhase);
+            profile->bisectCalls++;
+            profile->bisectTotalMs += elapsedMs(tBisect);
+        }
         return true;
     }
 
     for (int i = 0; i < n; ++i)
     {
         side[sub[i]] = srcSide[i] ? 0 : 1;
+    }
+    if (profile)
+    {
+        profile->bisectOtherMs += elapsedMs(tPhase);
+        profile->bisectCalls++;
+        profile->bisectTotalMs += elapsedMs(tBisect);
     }
     return true;
 }
@@ -447,14 +571,20 @@ std::vector<int> distributeBudget(const std::vector<std::size_t>& sizes, int k)
 // emitted region is connected (a min cut only guarantees its source side is
 // connected; the complement may be several islands).
 void partitionRecursive(const std::vector<int>& sub, int k, const DualAdjacency& adj, double band,
-    std::vector<int>& regionOf, int& nextLabel)
+    std::vector<int>& regionOf, int& nextLabel, PartitionProfile* profile)
 {
     if (sub.empty())
     {
         return;
     }
 
+    const double tInduced = vtkTimerLog::GetUniversalTime();
     std::vector<std::vector<int>> comps = inducedComponents(sub, adj);
+    if (profile)
+    {
+        profile->inducedCcCalls++;
+        profile->inducedCcMs += elapsedMs(tInduced);
+    }
     if (comps.size() > 1)
     {
         // Disconnected: each component is its own region (or more). Regions can
@@ -468,7 +598,7 @@ void partitionRecursive(const std::vector<int>& sub, int k, const DualAdjacency&
         std::vector<int> kPer = distributeBudget(sizes, k);
         for (std::size_t c = 0; c < comps.size(); ++c)
         {
-            partitionRecursive(comps[c], kPer[c], adj, band, regionOf, nextLabel);
+            partitionRecursive(comps[c], kPer[c], adj, band, regionOf, nextLabel, profile);
         }
         return;
     }
@@ -486,7 +616,7 @@ void partitionRecursive(const std::vector<int>& sub, int k, const DualAdjacency&
     std::vector<char> side(regionOf.size(), 0);
     std::vector<int> partA;
     std::vector<int> partB;
-    if (bisect(sub, adj, band, side))
+    if (bisect(sub, adj, band, side, profile))
     {
         partA.reserve(sub.size());
         partB.reserve(sub.size());
@@ -512,8 +642,8 @@ void partitionRecursive(const std::vector<int>& sub, int k, const DualAdjacency&
     kA = std::max(1, std::min(kA, k - 1));
     int kB = k - kA;
 
-    partitionRecursive(partA, kA, adj, band, regionOf, nextLabel);
-    partitionRecursive(partB, kB, adj, band, regionOf, nextLabel);
+    partitionRecursive(partA, kA, adj, band, regionOf, nextLabel, profile);
+    partitionRecursive(partB, kB, adj, band, regionOf, nextLabel, profile);
 }
 
 // ---------------------------------------------------------------------------
@@ -562,6 +692,30 @@ vtkSHYXTetMeshRegionPartition::vtkSHYXTetMeshRegionPartition()
 }
 
 //------------------------------------------------------------------------------
+vtkSHYXTetMeshRegionPartition::~vtkSHYXTetMeshRegionPartition()
+{
+    this->SetOutputMessageNoModified(nullptr);
+}
+
+//------------------------------------------------------------------------------
+void vtkSHYXTetMeshRegionPartition::SetOutputMessageNoModified(const char* msg)
+{
+    if ((this->OutputMessage == nullptr && (msg == nullptr || msg[0] == '\0')) ||
+        (this->OutputMessage && msg && std::strcmp(this->OutputMessage, msg) == 0))
+    {
+        return;
+    }
+    delete[] this->OutputMessage;
+    this->OutputMessage = nullptr;
+    if (msg && msg[0] != '\0')
+    {
+        const std::size_t n = std::strlen(msg) + 1;
+        this->OutputMessage = new char[n];
+        std::memcpy(this->OutputMessage, msg, n);
+    }
+}
+
+//------------------------------------------------------------------------------
 int vtkSHYXTetMeshRegionPartition::FillInputPortInformation(int port, vtkInformation* info)
 {
     if (port == 0)
@@ -579,6 +733,7 @@ void vtkSHYXTetMeshRegionPartition::PrintSelf(ostream& os, vtkIndent indent)
     os << indent << "NumberOfRegions: " << this->NumberOfRegions << std::endl;
     os << indent << "BalanceBand: " << this->BalanceBand << std::endl;
     os << indent << "UseFaceAreaWeights: " << (this->UseFaceAreaWeights ? "ON" : "OFF") << std::endl;
+    os << indent << "OutputMessage: " << (this->OutputMessage ? this->OutputMessage : "") << std::endl;
     this->Superclass::PrintSelf(os, indent);
 }
 
@@ -603,7 +758,11 @@ int vtkSHYXTetMeshRegionPartition::RequestData(
         return 0;
     }
 
+    const double tTotal = vtkTimerLog::GetUniversalTime();
+    PartitionProfile profile;
+
     // Collect tetrahedral cells; map dual-graph node index -> original cell id.
+    double tPhase = vtkTimerLog::GetUniversalTime();
     std::vector<vtkIdType> nodeToCell;
     for (vtkIdType ci = 0; ci < numCells; ++ci)
     {
@@ -619,29 +778,36 @@ int vtkSHYXTetMeshRegionPartition::RequestData(
         vtkErrorMacro("Input contains no VTK_TETRA cells.");
         return 0;
     }
+    profile.collectTetsMs = elapsedMs(tPhase);
 
     vtkPoints* points = input->GetPoints();
 
     // Build the dual graph: tets sharing a triangular face are connected, with the
     // capacity set to the shared face area (or 1 when area weights are disabled).
+    //
+    // Instead of a serial hash map over all faces, emit the 4 faces of every tet into a
+    // flat array (in parallel), sort it (parallel), then a single linear scan pairs up
+    // equal-keyed faces into edges. This is cache friendly and scales across threads.
     static const int faceVerts[4][3] = { { 0, 1, 2 }, { 0, 1, 3 }, { 0, 2, 3 }, { 1, 2, 3 } };
 
-    DualAdjacency adj(numNodes);
-    std::unordered_map<FaceKey, std::pair<int, double>, FaceKeyHash> faceMap;
-    faceMap.reserve(numNodes * 4);
+    const bool useArea = this->UseFaceAreaWeights;
+    std::vector<FaceRecord> faces(static_cast<std::size_t>(numNodes) * 4);
 
-    vtkNew<vtkIdList> ptIds;
-    for (int node = 0; node < numNodes; ++node)
-    {
-        input->GetCellPoints(nodeToCell[node], ptIds);
-        if (ptIds->GetNumberOfIds() != 4)
+    auto emitTetFaces = [&](vtkIdType node, vtkIdList* ids) {
+        input->GetCellPoints(nodeToCell[node], ids);
+        const std::size_t base = static_cast<std::size_t>(node) * 4;
+        if (ids->GetNumberOfIds() != 4)
         {
-            continue;
+            for (int f = 0; f < 4; ++f)
+            {
+                faces[base + f] = FaceRecord{ -1, -1, -1, -1, 1.0 }; // never matches
+            }
+            return;
         }
         vtkIdType p[4];
         for (int k = 0; k < 4; ++k)
         {
-            p[k] = ptIds->GetId(k);
+            p[k] = ids->GetId(k);
         }
         for (int f = 0; f < 4; ++f)
         {
@@ -651,7 +817,7 @@ int vtkSHYXTetMeshRegionPartition::RequestData(
             FaceKey key = makeFaceKey(v0, v1, v2);
 
             double cap = 1.0;
-            if (this->UseFaceAreaWeights)
+            if (useArea)
             {
                 double a[3], b[3], c[3];
                 points->GetPoint(v0, a);
@@ -663,31 +829,83 @@ int vtkSHYXTetMeshRegionPartition::RequestData(
                     cap = kEps;
                 }
             }
+            faces[base + f] = FaceRecord{ key.a, key.b, key.c, static_cast<int>(node), cap };
+        }
+    };
 
-            auto it = faceMap.find(key);
-            if (it == faceMap.end())
-            {
-                faceMap.emplace(key, std::make_pair(node, cap));
-            }
-            else
-            {
-                int other = it->second.first;
-                if (other >= 0 && other != node)
-                {
-                    adj[node].push_back({ other, cap });
-                    adj[other].push_back({ node, cap });
-                }
-                it->second.first = -1; // face already matched (ignore further sharers)
-            }
+    tPhase = vtkTimerLog::GetUniversalTime();
+#ifdef VESPA_USE_SMP
+    vtkSMPThreadLocalObject<vtkIdList> tlIds;
+    vtkSMPTools::For(0, numNodes, [&](vtkIdType begin, vtkIdType end) {
+        vtkIdList* ids = tlIds.Local();
+        for (vtkIdType node = begin; node < end; ++node)
+        {
+            emitTetFaces(node, ids);
+        }
+    });
+#else
+    {
+        vtkNew<vtkIdList> ids;
+        for (vtkIdType node = 0; node < numNodes; ++node)
+        {
+            emitTetFaces(node, ids);
         }
     }
+#endif
+    profile.faceEmitMs = elapsedMs(tPhase);
+
+    tPhase = vtkTimerLog::GetUniversalTime();
+#ifdef VESPA_USE_SMP
+    vtkSMPTools::Sort(faces.begin(), faces.end(), faceRecordLess);
+#else
+    std::sort(faces.begin(), faces.end(), faceRecordLess);
+#endif
+    profile.faceSortMs = elapsedMs(tPhase);
+
+    tPhase = vtkTimerLog::GetUniversalTime();
+    // Linear scan: a run of equal-keyed faces shared by two tets is an internal face.
+    DualAdjacency adj(numNodes);
+    const std::size_t numFaces = faces.size();
+    for (std::size_t i = 0; i < numFaces;)
+    {
+        std::size_t j = i + 1;
+        while (j < numFaces && faces[j].sameFaceAs(faces[i]))
+        {
+            ++j;
+        }
+        if (faces[i].owner >= 0 && j - i >= 2)
+        {
+            // Pair the first two sharers (manifold case). Extra sharers of a non-manifold
+            // face are ignored, matching the previous behavior.
+            int u = faces[i].owner;
+            int v = faces[i + 1].owner;
+            if (v >= 0 && u != v)
+            {
+                double cap = faces[i].cap;
+                adj[u].push_back({ v, cap });
+                adj[v].push_back({ u, cap });
+            }
+        }
+        i = j;
+    }
+
+    std::size_t numDualEdges = 0;
+    for (const auto& nbrs : adj)
+    {
+        numDualEdges += nbrs.size();
+    }
+    numDualEdges /= 2;
+    profile.adjScanMs = elapsedMs(tPhase);
 
     // Assign region labels.
     std::vector<int> regionOf(numNodes, 0);
+    tPhase = vtkTimerLog::GetUniversalTime();
     std::vector<std::vector<int>> comps = connectedComponents(adj);
+    profile.topComponentsMs = elapsedMs(tPhase);
     const int numComps = static_cast<int>(comps.size());
 
     int producedRegions = 0;
+    tPhase = vtkTimerLog::GetUniversalTime();
     if (this->PartitionMethod == CONNECTED_COMPONENTS)
     {
         for (int c = 0; c < numComps; ++c)
@@ -709,11 +927,13 @@ int vtkSHYXTetMeshRegionPartition::RequestData(
 
         int nextLabel = 0;
         partitionRecursive(allNodes, this->NumberOfRegions, adj, this->BalanceBand, regionOf,
-            nextLabel);
+            nextLabel, &profile);
         producedRegions = nextLabel;
     }
+    profile.labelRegionsMs = elapsedMs(tPhase);
 
     // Build output: original mesh + RegionId cell/point arrays.
+    tPhase = vtkTimerLog::GetUniversalTime();
     output->ShallowCopy(input);
 
     vtkNew<vtkIntArray> cellRegion;
@@ -728,12 +948,26 @@ int vtkSHYXTetMeshRegionPartition::RequestData(
     pointRegion->SetNumberOfTuples(input->GetNumberOfPoints());
     pointRegion->FillValue(-1);
 
+    // Cell RegionId: each node maps to a distinct cell id, so writes are independent.
+#ifdef VESPA_USE_SMP
+    vtkSMPTools::For(0, numNodes, [&](vtkIdType begin, vtkIdType end) {
+        for (vtkIdType node = begin; node < end; ++node)
+        {
+            cellRegion->SetValue(nodeToCell[node], regionOf[node]);
+        }
+    });
+#else
+    for (vtkIdType node = 0; node < numNodes; ++node)
+    {
+        cellRegion->SetValue(nodeToCell[node], regionOf[node]);
+    }
+#endif
+
+    // Point RegionId: points are shared between tets, so keep this serial to avoid races.
+    vtkNew<vtkIdList> ptIds;
     for (int node = 0; node < numNodes; ++node)
     {
-        vtkIdType ci = nodeToCell[node];
-        cellRegion->SetValue(ci, regionOf[node]);
-
-        input->GetCellPoints(ci, ptIds);
+        input->GetCellPoints(nodeToCell[node], ptIds);
         for (vtkIdType k = 0; k < ptIds->GetNumberOfIds(); ++k)
         {
             pointRegion->SetValue(ptIds->GetId(k), regionOf[node]);
@@ -743,6 +977,14 @@ int vtkSHYXTetMeshRegionPartition::RequestData(
     output->GetCellData()->AddArray(cellRegion);
     output->GetCellData()->SetActiveScalars("RegionId");
     output->GetPointData()->AddArray(pointRegion);
+    profile.writeOutputMs = elapsedMs(tPhase);
+
+    profile.totalMs = elapsedMs(tTotal);
+    const std::string msg = formatPartitionProfile(profile, numNodes, numCells, numDualEdges,
+        numComps, producedRegions, this->PartitionMethod, this->NumberOfRegions,
+        this->UseFaceAreaWeights, this->BalanceBand);
+    this->SetOutputMessageNoModified(msg.c_str());
+    vtkWarningMacro(<< this->OutputMessage);
 
     vtkDebugMacro(<< "Decomposed " << numNodes << " tetrahedra into " << producedRegions
                   << " region(s) across " << numComps << " connected component(s).");
