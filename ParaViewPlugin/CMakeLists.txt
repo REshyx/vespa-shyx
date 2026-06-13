@@ -144,6 +144,7 @@ paraview_add_plugin(VESPAPlugin
     "SHYXSurfaceToVolumeMesh.xml"
     "SHYXTetGen.xml"
     "SHYXTetGenMeshOptimize.xml"
+    "SHYXTetMeshRegionPartition.xml"
     "SHYXFTLEFilter.xml"
     "SHYXFlipSelectedCellsWinding.xml"
     "SHYXGeodesicDistance.xml"

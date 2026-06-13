@@ -1,0 +1,11 @@
+NAME
+  vtkSHYXTetMeshRegionPartition
+DESCRIPTION
+  "Connectivity-based domain decomposition of a tetrahedral mesh using dual-graph min-cut bisection."
+GROUPS
+  Meshing
+DEPENDS
+  VTK::CommonExecutionModel
+PRIVATE_DEPENDS
+  VTK::CommonCore
+  VTK::CommonDataModel

@@ -1,0 +1,102 @@
+<ServerManagerConfiguration>
+  <ProxyGroup name="filters">
+    <SourceProxy class="vtkSHYXTetMeshRegionPartition"
+                 label="SHYX Tet Mesh Region Partition"
+                 name="SHYXTetMeshRegionPartition">
+      <Documentation
+          short_help="Decompose a tetrahedral mesh into regions by connectivity (graph min-cut)."
+          long_help="Takes a vtkUnstructuredGrid containing tetrahedra (e.g. a TetGen result) and tags every tetrahedron with a RegionId cell array. The dual graph treats each tet as a node and connects tets that share a triangular face. Connected Components labels each face-connected body. Balanced Min-Cut Bisection recursively splits the dual graph with a graph-theoretic minimum cut (Dinic max-flow / min-cut) so the number of cut shared faces (or their total area) between subdomains is minimized while the parts stay balanced. Non-tetrahedral cells are passed through with RegionId = -1."/>
+
+      <InputProperty name="Input"
+                     command="SetInputConnection">
+        <ProxyGroupDomain name="groups">
+          <Group name="sources"/>
+          <Group name="filters"/>
+        </ProxyGroupDomain>
+        <DataTypeDomain name="input_type">
+          <DataType value="vtkUnstructuredGrid"/>
+        </DataTypeDomain>
+        <Documentation>Tetrahedral mesh to decompose.</Documentation>
+      </InputProperty>
+
+      <IntVectorProperty command="SetPartitionMethod"
+                         name="PartitionMethod"
+                         label="Partition Method"
+                         number_of_elements="1"
+                         default_values="1">
+        <EnumerationDomain name="enum">
+          <Entry text="Connected Components" value="0"/>
+          <Entry text="Balanced Min-Cut Bisection" value="1"/>
+        </EnumerationDomain>
+        <Documentation>
+          Connected Components: one region per face-connected body.
+          Balanced Min-Cut Bisection: recursively bisect the dual graph with a minimum cut.
+        </Documentation>
+      </IntVectorProperty>
+
+      <IntVectorProperty command="SetNumberOfRegions"
+                         name="NumberOfRegions"
+                         label="Number Of Regions"
+                         number_of_elements="1"
+                         default_values="4">
+        <IntRangeDomain name="range" min="1" max="256"/>
+        <Documentation>
+          Target number of regions for Balanced Min-Cut Bisection. If the mesh has more
+          connected components than this, the component count wins (regions never span
+          disconnected bodies).
+        </Documentation>
+        <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="enabled_state"
+                                   property="PartitionMethod"
+                                   value="1"/>
+        </Hints>
+      </IntVectorProperty>
+
+      <DoubleVectorProperty command="SetBalanceBand"
+                           name="BalanceBand"
+                           label="Balance Band"
+                           number_of_elements="1"
+                           default_values="0.3"
+                           panel_visibility="advanced">
+        <DoubleRangeDomain name="range" min="0" max="1"/>
+        <Documentation>
+          Fraction of nodes left free for the min-cut on each bisection (the rest are anchored
+          half to each flow terminal by graph distance). 0 anchors everything and forces a
+          balanced median split (the cut is not optimized); larger values give the min-cut more
+          freedom to shrink the interface at the cost of balance (1 = pure global min-cut,
+          smallest interface but possibly very unbalanced).
+        </Documentation>
+        <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="enabled_state"
+                                   property="PartitionMethod"
+                                   value="1"/>
+        </Hints>
+      </DoubleVectorProperty>
+
+      <IntVectorProperty command="SetUseFaceAreaWeights"
+                         name="UseFaceAreaWeights"
+                         label="Use Face Area Weights"
+                         number_of_elements="1"
+                         default_values="1"
+                         panel_visibility="advanced">
+        <BooleanDomain name="bool"/>
+        <Documentation>
+          When ON, min-cut capacities are the shared-face areas, so bisections minimize interface
+          area. When OFF, each shared face has unit capacity (minimize cut face count).
+        </Documentation>
+        <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="enabled_state"
+                                   property="PartitionMethod"
+                                   value="1"/>
+        </Hints>
+      </IntVectorProperty>
+
+      <Hints>
+        <ShowInMenu category="SHYX"/>
+      </Hints>
+    </SourceProxy>
+  </ProxyGroup>
+</ServerManagerConfiguration>
