@@ -1051,7 +1051,7 @@ int vtkSHYXTetMeshRegionPartition::RequestData(
 
     // ShallowCopy keeps the input's point-data active scalars; clear them so coloring
     // uses CellData RegionId (one scalar per tetrahedron).
-    output->GetPointData()->SetActiveScalars(static_cast<vtkAbstractArray*>(nullptr));
+    output->GetPointData()->SetActiveScalars(nullptr);
     output->GetCellData()->SetActiveScalars("RegionId");
     vtkDataObject::SetActiveAttribute(output->GetInformation(),
         vtkDataObject::FIELD_ASSOCIATION_CELLS, "RegionId", vtkDataSetAttributes::SCALARS);

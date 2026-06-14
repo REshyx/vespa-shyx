@@ -117,9 +117,10 @@
                  label="SHYX Point Cloud Surface SDF"
                  name="SHYXPointCloudSurfaceSDF">
       <Documentation short_help="Signed distance from point cloud to a surface (VTK ImplicitPolyDataDistance).">
-        For each point in the first input (vtkPolyData point cloud), evaluates signed distance to the
+        For each point in the first input (point cloud vtkDataSet), evaluates signed distance to the
         second input using vtkImplicitPolyDataDistance (internal clean + triangulation, vtkCellLocator,
-        angle-weighted pseudonormals). Open surfaces are allowed. The scalar array is named SDF.
+        angle-weighted pseudonormals). Non-polydata reference surfaces are extracted with
+        vtkDataSetSurfaceFilter. Open surfaces are allowed. The scalar array is named SDF.
       </Documentation>
 
       <InputProperty name="PointCloud"
@@ -130,10 +131,10 @@
           <Group name="filters"/>
         </ProxyGroupDomain>
         <DataTypeDomain name="input_type">
-          <DataType value="vtkPolyData"/>
+          <DataType value="vtkDataSet"/>
         </DataTypeDomain>
         <Documentation>
-          Point cloud (vtkPolyData points; optional vertex cells are preserved).
+          Point cloud (vtkPolyData or any vtkDataSet; all points are sampled; one vtkVertex per point when none exist).
         </Documentation>
       </InputProperty>
 
@@ -145,10 +146,10 @@
           <Group name="filters"/>
         </ProxyGroupDomain>
         <DataTypeDomain name="input_type">
-          <DataType value="vtkPolyData"/>
+          <DataType value="vtkDataSet"/>
         </DataTypeDomain>
         <Documentation>
-          Reference surface (triangulated; non-closed meshes are allowed).
+          Reference surface (vtkPolyData or vtkDataSet; volume inputs are surfaced with vtkDataSetSurfaceFilter).
         </Documentation>
       </InputProperty>
 

@@ -2,9 +2,11 @@
  * @class   vtkCGALPointCloudSurfaceSignedDistance
  * @brief   Signed distance from point cloud samples to a reference surface (VTK only)
  *
- * For each point in the first input (point cloud as vtkPolyData), computes the signed
- * distance to the second input using vtkImplicitPolyDataDistance (cell locator + angle-
- * weighted pseudonormals). The surface does not need to be closed. Optional cell normals
+ * For each point in the first input (point cloud; vtkPolyData or any vtkDataSet whose
+ * points are sampled), computes the signed distance to the second input using
+ * vtkImplicitPolyDataDistance (cell locator + angle-weighted pseudonormals). The reference
+ * surface accepts vtkPolyData or vtkDataSet; non-polydata inputs are converted with
+ * vtkDataSetSurfaceFilter. The surface does not need to be closed. Optional cell normals
  * on the surface are used when present; otherwise VTK computes triangle normals from
  * geometry.
  */
