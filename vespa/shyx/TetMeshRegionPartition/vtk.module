@@ -1,7 +1,7 @@
 NAME
   vtkSHYXTetMeshRegionPartition
 DESCRIPTION
-  "Connectivity-based domain decomposition of a tetrahedral mesh using dual-graph min-cut bisection."
+  "Connectivity-based domain decomposition of a tetrahedral mesh using dual-graph METIS k-way or min-cut bisection."
 GROUPS
   Meshing
 DEPENDS

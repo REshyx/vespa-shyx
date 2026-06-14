@@ -23,14 +23,18 @@
                          name="PartitionMethod"
                          label="Partition Method"
                          number_of_elements="1"
-                         default_values="1">
+                         default_values="2">
         <EnumerationDomain name="enum">
           <Entry text="Connected Components" value="0"/>
           <Entry text="Balanced Min-Cut Bisection" value="1"/>
+          <Entry text="METIS k-way" value="2"/>
         </EnumerationDomain>
         <Documentation>
           Connected Components: one region per face-connected body.
-          Balanced Min-Cut Bisection: recursively bisect the dual graph with a minimum cut.
+          Balanced Min-Cut Bisection: recursively bisect the dual graph with a built-in minimum cut
+          (best cut quality, but does not scale to millions of tetrahedra).
+          METIS k-way: multilevel partitioning via METIS (default, scales to millions of tets in
+          seconds; run per connected component with CONTIG so regions stay connected).
         </Documentation>
       </IntVectorProperty>
 
@@ -41,15 +45,15 @@
                          default_values="4">
         <IntRangeDomain name="range" min="1" max="256"/>
         <Documentation>
-          Target number of regions for Balanced Min-Cut Bisection. If the mesh has more
-          connected components than this, the component count wins (regions never span
+          Target number of regions for Balanced Min-Cut Bisection or METIS k-way. If the mesh has
+          more connected components than this, the component count wins (regions never span
           disconnected bodies).
         </Documentation>
         <Hints>
           <PropertyWidgetDecorator type="GenericDecorator"
                                    mode="enabled_state"
                                    property="PartitionMethod"
-                                   value="1"/>
+                                   values="1 2"/>
         </Hints>
       </IntVectorProperty>
 
@@ -83,28 +87,17 @@
                          panel_visibility="advanced">
         <BooleanDomain name="bool"/>
         <Documentation>
-          When ON, min-cut capacities are the shared-face areas, so bisections minimize interface
-          area. When OFF, each shared face has unit capacity (minimize cut face count).
+          When ON, edge weights are the shared-face areas, so the cut minimizes interface area.
+          When OFF, each shared face has unit weight (minimize cut face count). Applies to both
+          Balanced Min-Cut and METIS k-way.
         </Documentation>
         <Hints>
           <PropertyWidgetDecorator type="GenericDecorator"
                                    mode="enabled_state"
                                    property="PartitionMethod"
-                                   value="1"/>
+                                   values="1 2"/>
         </Hints>
       </IntVectorProperty>
-
-      <StringVectorProperty name="OutputMessage"
-                            command="GetOutputMessage"
-                            label="Timing Report"
-                            number_of_elements="1"
-                            information_only="1"
-                            panel_visibility="advanced">
-        <Documentation>
-          Read-only timing breakdown from the last pipeline update. The same text is printed to
-          View → Output Messages (vtkWarningMacro).
-        </Documentation>
-      </StringVectorProperty>
 
       <Hints>
         <ShowInMenu category="SHYX"/>

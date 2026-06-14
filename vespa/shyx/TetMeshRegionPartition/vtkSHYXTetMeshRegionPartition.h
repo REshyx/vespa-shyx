@@ -7,20 +7,21 @@
  * cell array (and a matching point array).
  *
  * The decomposition operates on the dual graph of the mesh: every tetrahedron is a graph node
- * and two tetrahedra are connected when they share a triangular face. Two strategies are
+ * and two tetrahedra are connected when they share a triangular face. Three strategies are
  * provided:
  *
- *  - Connected Components: each maximal set of face-connected tetrahedra becomes one region
- *    (graph connected components via union-find). Useful when a "mesh" actually contains several
- *    physically disjoint bodies.
+ *  - Connected Components: each maximal set of face-connected tetrahedra becomes one region.
+ *    Useful when a "mesh" actually contains several physically disjoint bodies.
  *
  *  - Balanced Min-Cut Bisection: regions are produced by recursively bisecting the dual graph
- *    with a graph-theoretic minimum cut (Dinic max-flow / min-cut). For each bisection the two
- *    graph-diameter endpoints are used as flow terminals; a balance band anchors the extreme
- *    nodes of each terminal with infinite capacity so the optimal cut surface (minimum total
- *    shared-face area / count) is found inside a controllable middle band. This keeps the parts
- *    balanced while still minimizing the interface between subdomains. Connected components are
- *    always split before any bisection, so a region never straddles disconnected bodies.
+ *    with a graph-theoretic minimum cut (Dinic max-flow / min-cut). Best cut quality, but the
+ *    max-flow does not scale to millions of tetrahedra.
+ *
+ *  - METIS k-way (default): multilevel k-way partitioning via METIS, run independently per
+ *    connected component with the CONTIG option so each region stays connected. Scales to
+ *    millions of tetrahedra in seconds. Requires building with METIS (VESPA_USE_METIS).
+ *
+ * All strategies split connected components first, so a region never straddles disconnected bodies.
  *
  * Non-tetrahedral cells are passed through unchanged and assigned RegionId = -1.
  *
@@ -47,18 +48,25 @@ public:
     enum PartitionMethods
     {
         CONNECTED_COMPONENTS = 0,
-        BALANCED_MIN_CUT = 1
+        BALANCED_MIN_CUT = 1,
+        METIS_KWAY = 2
     };
 
     ///@{
     /**
-     * Partitioning strategy. CONNECTED_COMPONENTS (0) labels each face-connected body.
-     * BALANCED_MIN_CUT (1, default) recursively bisects the dual graph with a min-cut.
+     * Partitioning strategy.
+     *  - CONNECTED_COMPONENTS (0): label each face-connected body.
+     *  - BALANCED_MIN_CUT (1): recursively bisect the dual graph with a built-in Dinic min-cut.
+     *    Highest cut quality but does not scale (max-flow on millions of nodes is very slow).
+     *  - METIS_KWAY (2, default): multilevel k-way partitioning via METIS. Scales to millions of
+     *    tetrahedra in seconds. Run per connected component with the CONTIG option so every region
+     *    stays connected. Requires the plugin to be built with METIS (VESPA_USE_METIS).
      */
-    vtkSetClampMacro(PartitionMethod, int, CONNECTED_COMPONENTS, BALANCED_MIN_CUT);
+    vtkSetClampMacro(PartitionMethod, int, CONNECTED_COMPONENTS, METIS_KWAY);
     vtkGetMacro(PartitionMethod, int);
     void SetPartitionMethodToConnectedComponents() { this->SetPartitionMethod(CONNECTED_COMPONENTS); }
     void SetPartitionMethodToBalancedMinCut() { this->SetPartitionMethod(BALANCED_MIN_CUT); }
+    void SetPartitionMethodToMetisKway() { this->SetPartitionMethod(METIS_KWAY); }
     ///@}
 
     ///@{
@@ -95,11 +103,6 @@ public:
     vtkBooleanMacro(UseFaceAreaWeights, bool);
     ///@}
 
-    ///@{
-    /** Read-only summary from the last pipeline update (also printed to Output Messages). */
-    vtkGetStringMacro(OutputMessage);
-    ///@}
-
 protected:
     vtkSHYXTetMeshRegionPartition();
     ~vtkSHYXTetMeshRegionPartition() override;
@@ -107,17 +110,12 @@ protected:
     int FillInputPortInformation(int port, vtkInformation* info) override;
     int RequestData(vtkInformation*, vtkInformationVector**, vtkInformationVector*) override;
 
-    int PartitionMethod = BALANCED_MIN_CUT;
+    int PartitionMethod = METIS_KWAY;
     int NumberOfRegions = 4;
     double BalanceBand = 0.3;
     bool UseFaceAreaWeights = false;
 
 private:
-    /** Updates OutputMessage without calling Modified() (avoids update loops). */
-    void SetOutputMessageNoModified(const char* msg);
-
-    char* OutputMessage = nullptr;
-
     vtkSHYXTetMeshRegionPartition(const vtkSHYXTetMeshRegionPartition&) = delete;
     void operator=(const vtkSHYXTetMeshRegionPartition&) = delete;
 };
