@@ -617,6 +617,64 @@ int enforceConnectedRegions(const DualAdjacency& adj, std::vector<int>& regionOf
     return next;
 }
 
+// ---------------------------------------------------------------------------
+// Mark overlap halo: tetrahedra within 'overlapLayers' dual-graph hops inward from a
+// partition interface (neighbor in a different region), staying inside the same region.
+void markOverlapLayers(const DualAdjacency& adj, const std::vector<int>& regionOf, int overlapLayers,
+    std::vector<char>& overlap)
+{
+    const int n = static_cast<int>(regionOf.size());
+    overlap.assign(n, 0);
+    if (overlapLayers <= 0)
+    {
+        return;
+    }
+
+    std::vector<int> dist(n, -1);
+    std::queue<int> q;
+    for (int i = 0; i < n; ++i)
+    {
+        const int ri = regionOf[i];
+        for (const auto& nbCap : adj[i])
+        {
+            if (regionOf[nbCap.first] != ri)
+            {
+                dist[i] = 0;
+                q.push(i);
+                break;
+            }
+        }
+    }
+
+    while (!q.empty())
+    {
+        const int v = q.front();
+        q.pop();
+        if (dist[v] + 1 >= overlapLayers)
+        {
+            continue;
+        }
+        const int rv = regionOf[v];
+        for (const auto& nbCap : adj[v])
+        {
+            const int w = nbCap.first;
+            if (regionOf[w] == rv && dist[w] < 0)
+            {
+                dist[w] = dist[v] + 1;
+                q.push(w);
+            }
+        }
+    }
+
+    for (int i = 0; i < n; ++i)
+    {
+        if (dist[i] >= 0 && dist[i] < overlapLayers)
+        {
+            overlap[i] = 1;
+        }
+    }
+}
+
 #ifdef VESPA_USE_METIS
 // ---------------------------------------------------------------------------
 // Call METIS with raw pointers. For nparts <= 8 use recursive bisection (lighter and
@@ -786,6 +844,7 @@ void vtkSHYXTetMeshRegionPartition::PrintSelf(ostream& os, vtkIndent indent)
     os << indent << "NumberOfRegions: " << this->NumberOfRegions << std::endl;
     os << indent << "BalanceBand: " << this->BalanceBand << std::endl;
     os << indent << "UseFaceAreaWeights: " << (this->UseFaceAreaWeights ? "ON" : "OFF") << std::endl;
+    os << indent << "OverlapLayers: " << this->OverlapLayers << std::endl;
     this->Superclass::PrintSelf(os, indent);
 }
 
@@ -1005,6 +1064,9 @@ int vtkSHYXTetMeshRegionPartition::RequestData(
         producedRegions = nextLabel;
     }
 
+    std::vector<char> overlapOf;
+    markOverlapLayers(adj, regionOf, this->OverlapLayers, overlapOf);
+
     // Build output: original mesh + RegionId cell/point arrays.
     output->ShallowCopy(input);
 
@@ -1020,34 +1082,57 @@ int vtkSHYXTetMeshRegionPartition::RequestData(
     pointRegion->SetNumberOfTuples(input->GetNumberOfPoints());
     pointRegion->FillValue(-1);
 
+    vtkNew<vtkIntArray> cellOverlap;
+    cellOverlap->SetName("Overlap");
+    cellOverlap->SetNumberOfComponents(1);
+    cellOverlap->SetNumberOfTuples(numCells);
+    cellOverlap->FillValue(0);
+
+    vtkNew<vtkIntArray> pointOverlap;
+    pointOverlap->SetName("Overlap");
+    pointOverlap->SetNumberOfComponents(1);
+    pointOverlap->SetNumberOfTuples(input->GetNumberOfPoints());
+    pointOverlap->FillValue(0);
+
     // Cell RegionId: each node maps to a distinct cell id, so writes are independent.
 #ifdef VESPA_USE_SMP
     vtkSMPTools::For(0, numNodes, [&](vtkIdType begin, vtkIdType end) {
         for (vtkIdType node = begin; node < end; ++node)
         {
             cellRegion->SetValue(nodeToCell[node], regionOf[node]);
+            cellOverlap->SetValue(nodeToCell[node], overlapOf[node]);
         }
     });
 #else
     for (vtkIdType node = 0; node < numNodes; ++node)
     {
         cellRegion->SetValue(nodeToCell[node], regionOf[node]);
+        cellOverlap->SetValue(nodeToCell[node], overlapOf[node]);
     }
 #endif
 
-    // Point RegionId: points are shared between tets, so keep this serial to avoid races.
+    // Point RegionId / Overlap: points are shared between tets, so keep this serial.
     vtkNew<vtkIdList> ptIds;
     for (int node = 0; node < numNodes; ++node)
     {
         input->GetCellPoints(nodeToCell[node], ptIds);
+        const int region = regionOf[node];
+        const int overlap = overlapOf[node];
         for (vtkIdType k = 0; k < ptIds->GetNumberOfIds(); ++k)
         {
-            pointRegion->SetValue(ptIds->GetId(k), regionOf[node]);
+            const vtkIdType pid = ptIds->GetId(k);
+            pointRegion->SetValue(pid, region);
+            if (overlap)
+            {
+                pointOverlap->SetValue(pid, 1);
+            }
         }
     }
 
     output->GetCellData()->AddArray(cellRegion);
+    output->GetCellData()->AddArray(cellOverlap);
     output->GetPointData()->AddArray(pointRegion);
+    output->GetPointData()->AddArray(pointOverlap);
 
     // ShallowCopy keeps the input's point-data active scalars; clear them so coloring
     // uses CellData RegionId (one scalar per tetrahedron).
@@ -1057,7 +1142,8 @@ int vtkSHYXTetMeshRegionPartition::RequestData(
         vtkDataObject::FIELD_ASSOCIATION_CELLS, "RegionId", vtkDataSetAttributes::SCALARS);
 
     vtkDebugMacro(<< "Decomposed " << numNodes << " tetrahedra into " << producedRegions
-                  << " region(s) across " << numComps << " connected component(s).");
+                  << " region(s) across " << numComps << " connected component(s); overlap layers = "
+                  << this->OverlapLayers << ".");
 
     return 1;
 }

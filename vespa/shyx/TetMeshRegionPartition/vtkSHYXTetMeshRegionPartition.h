@@ -4,7 +4,10 @@
  *
  * vtkSHYXTetMeshRegionPartition partitions a tetrahedral vtkUnstructuredGrid (e.g. a TetGen
  * result) into a requested number of regions and tags every tetrahedron with a "RegionId"
- * cell array (and a matching point array).
+ * cell array (and a matching point array). An optional "Overlap" cell/point array marks the
+ * halo near each partition interface: tetrahedra within OverlapLayers dual-graph hops inward
+ * from a cut face (staying inside their own region). Default OverlapLayers is 1 (interface
+ * cells only); increase to widen the band.
  *
  * The decomposition operates on the dual graph of the mesh: every tetrahedron is a graph node
  * and two tetrahedra are connected when they share a triangular face. Three strategies are
@@ -103,6 +106,17 @@ public:
     vtkBooleanMacro(UseFaceAreaWeights, bool);
     ///@}
 
+    ///@{
+    /**
+     * Width of the overlap halo measured in dual-graph hops inward from each partition
+     * interface (tetrahedra that share a face with a different region). Expansion never
+     * crosses into another region. 0 disables overlap marking (Overlap array is all 0).
+     * Default 1 marks interface tetrahedra only; 2 adds one layer of interior neighbors, etc.
+     */
+    vtkSetClampMacro(OverlapLayers, int, 0, VTK_INT_MAX);
+    vtkGetMacro(OverlapLayers, int);
+    ///@}
+
 protected:
     vtkSHYXTetMeshRegionPartition();
     ~vtkSHYXTetMeshRegionPartition() override;
@@ -114,6 +128,7 @@ protected:
     int NumberOfRegions = 4;
     double BalanceBand = 0.3;
     bool UseFaceAreaWeights = false;
+    int OverlapLayers = 1;
 
 private:
     vtkSHYXTetMeshRegionPartition(const vtkSHYXTetMeshRegionPartition&) = delete;
