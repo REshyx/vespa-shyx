@@ -1,8 +1,10 @@
 #include "vtkSHYXTetMeshRegionPartition.h"
 
 #include <vtkCell.h>
+#include <vtkCellArray.h>
 #include <vtkCellData.h>
 #include <vtkDataObject.h>
+#include <vtkFloatArray.h>
 #include <vtkIdList.h>
 #include <vtkInformation.h>
 #include <vtkInformationVector.h>
@@ -12,6 +14,7 @@
 #include <vtkObjectFactory.h>
 #include <vtkPointData.h>
 #include <vtkPoints.h>
+#include <vtkPolyData.h>
 #include <vtkUnstructuredGrid.h>
 
 #ifdef VESPA_USE_SMP
@@ -814,13 +817,116 @@ bool partitionWithMetis(const std::vector<std::vector<int>>& comps, int totalPar
 }
 #endif // VESPA_USE_METIS
 
+// ---------------------------------------------------------------------------
+// Emit the dual graph as vtkPolyData: vertex at each tet centroid, line per edge.
+void buildDualGraphPolyData(vtkUnstructuredGrid* input, vtkPoints* meshPoints,
+    const std::vector<vtkIdType>& nodeToCell, const DualAdjacency& adj,
+    const std::vector<int>& regionOf, const std::vector<char>& overlapOf, vtkPolyData* graphOut)
+{
+    const int numNodes = static_cast<int>(nodeToCell.size());
+    vtkNew<vtkPoints> dualPts;
+    dualPts->SetNumberOfPoints(numNodes);
+
+    vtkNew<vtkIdList> cellPts;
+    for (int node = 0; node < numNodes; ++node)
+    {
+        input->GetCellPoints(nodeToCell[node], cellPts);
+        double centroid[3] = { 0.0, 0.0, 0.0 };
+        const vtkIdType npts = cellPts->GetNumberOfIds();
+        const vtkIdType denom = (npts > 0) ? npts : 1;
+        for (vtkIdType k = 0; k < npts; ++k)
+        {
+            double p[3];
+            meshPoints->GetPoint(cellPts->GetId(k), p);
+            centroid[0] += p[0];
+            centroid[1] += p[1];
+            centroid[2] += p[2];
+        }
+        centroid[0] /= denom;
+        centroid[1] /= denom;
+        centroid[2] /= denom;
+        dualPts->SetPoint(node, centroid);
+    }
+
+    vtkNew<vtkCellArray> verts;
+    for (vtkIdType node = 0; node < numNodes; ++node)
+    {
+        verts->InsertNextCell(1);
+        verts->InsertCellPoint(node);
+    }
+
+    vtkNew<vtkCellArray> lines;
+    std::size_t numLines = 0;
+    for (int i = 0; i < numNodes; ++i)
+    {
+        for (const auto& nbCap : adj[i])
+        {
+            if (i < nbCap.first)
+            {
+                ++numLines;
+            }
+        }
+    }
+
+    vtkNew<vtkFloatArray> edgeWeight;
+    edgeWeight->SetName("EdgeWeight");
+    edgeWeight->SetNumberOfComponents(1);
+    edgeWeight->SetNumberOfTuples(static_cast<vtkIdType>(numNodes + numLines));
+    edgeWeight->FillValue(0.0f);
+
+    vtkIdType lineCell = 0;
+    for (int i = 0; i < numNodes; ++i)
+    {
+        for (const auto& nbCap : adj[i])
+        {
+            if (i < nbCap.first)
+            {
+                lines->InsertNextCell(2);
+                lines->InsertCellPoint(i);
+                lines->InsertCellPoint(nbCap.first);
+                edgeWeight->SetValue(numNodes + lineCell++, nbCap.second);
+            }
+        }
+    }
+
+    vtkNew<vtkIntArray> pointRegion;
+    pointRegion->SetName("RegionId");
+    pointRegion->SetNumberOfComponents(1);
+    pointRegion->SetNumberOfTuples(numNodes);
+    vtkNew<vtkIntArray> pointCellId;
+    pointCellId->SetName("TetCellId");
+    pointCellId->SetNumberOfComponents(1);
+    pointCellId->SetNumberOfTuples(numNodes);
+    vtkNew<vtkIntArray> pointOverlap;
+    pointOverlap->SetName("Overlap");
+    pointOverlap->SetNumberOfComponents(1);
+    pointOverlap->SetNumberOfTuples(numNodes);
+    for (int node = 0; node < numNodes; ++node)
+    {
+        pointRegion->SetValue(node, regionOf[node]);
+        pointCellId->SetValue(node, static_cast<int>(nodeToCell[node]));
+        pointOverlap->SetValue(node, overlapOf[node]);
+    }
+
+    graphOut->Initialize();
+    graphOut->SetPoints(dualPts);
+    graphOut->SetVerts(verts);
+    graphOut->SetLines(lines);
+    graphOut->GetPointData()->AddArray(pointRegion);
+    graphOut->GetPointData()->AddArray(pointCellId);
+    graphOut->GetPointData()->AddArray(pointOverlap);
+    graphOut->GetPointData()->SetActiveScalars("RegionId");
+    graphOut->GetCellData()->AddArray(edgeWeight);
+    graphOut->GetCellData()->SetActiveScalars("EdgeWeight");
+}
+
 } // namespace
 
 //------------------------------------------------------------------------------
 vtkSHYXTetMeshRegionPartition::vtkSHYXTetMeshRegionPartition()
 {
     this->SetNumberOfInputPorts(1);
-    this->SetNumberOfOutputPorts(1);
+    this->SetNumberOfOutputPorts(2);
 }
 
 //------------------------------------------------------------------------------
@@ -832,6 +938,22 @@ int vtkSHYXTetMeshRegionPartition::FillInputPortInformation(int port, vtkInforma
     if (port == 0)
     {
         info->Set(vtkAlgorithm::INPUT_REQUIRED_DATA_TYPE(), "vtkUnstructuredGrid");
+        return 1;
+    }
+    return 0;
+}
+
+//------------------------------------------------------------------------------
+int vtkSHYXTetMeshRegionPartition::FillOutputPortInformation(int port, vtkInformation* info)
+{
+    if (port == 0)
+    {
+        info->Set(vtkDataObject::DATA_TYPE_NAME(), "vtkUnstructuredGrid");
+        return 1;
+    }
+    if (port == 1)
+    {
+        info->Set(vtkDataObject::DATA_TYPE_NAME(), "vtkPolyData");
         return 1;
     }
     return 0;
@@ -854,9 +976,10 @@ int vtkSHYXTetMeshRegionPartition::RequestData(
     vtkInformationVector* outputVector)
 {
     vtkUnstructuredGrid* input = vtkUnstructuredGrid::GetData(inputVector[0]);
-    vtkUnstructuredGrid* output = vtkUnstructuredGrid::GetData(outputVector);
+    vtkUnstructuredGrid* output = vtkUnstructuredGrid::GetData(outputVector, 0);
+    vtkPolyData* dualGraphOut = vtkPolyData::GetData(outputVector, 1);
 
-    if (!input || !output)
+    if (!input || !output || !dualGraphOut)
     {
         vtkErrorMacro("Missing input or output.");
         return 0;
@@ -1140,6 +1263,9 @@ int vtkSHYXTetMeshRegionPartition::RequestData(
     output->GetCellData()->SetActiveScalars("RegionId");
     vtkDataObject::SetActiveAttribute(output->GetInformation(),
         vtkDataObject::FIELD_ASSOCIATION_CELLS, "RegionId", vtkDataSetAttributes::SCALARS);
+
+    buildDualGraphPolyData(
+        input, points, nodeToCell, adj, regionOf, overlapOf, dualGraphOut);
 
     vtkDebugMacro(<< "Decomposed " << numNodes << " tetrahedra into " << producedRegions
                   << " region(s) across " << numComps << " connected component(s); overlap layers = "

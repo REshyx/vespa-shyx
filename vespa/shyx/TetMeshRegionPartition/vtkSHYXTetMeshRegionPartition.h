@@ -28,6 +28,9 @@
  *
  * Non-tetrahedral cells are passed through unchanged and assigned RegionId = -1.
  *
+ * Output port 0 is the tagged mesh. Output port 1 is a vtkPolyData dual-graph preview:
+ * one vertex per tetrahedron (at the tet centroid) and one line per shared-face adjacency.
+ *
  * @sa
  * vtkConnectivityFilter vtkSHYXTetGen
  */
@@ -122,6 +125,7 @@ protected:
     ~vtkSHYXTetMeshRegionPartition() override;
 
     int FillInputPortInformation(int port, vtkInformation* info) override;
+    int FillOutputPortInformation(int port, vtkInformation* info) override;
     int RequestData(vtkInformation*, vtkInformationVector**, vtkInformationVector*) override;
 
     int PartitionMethod = METIS_KWAY;

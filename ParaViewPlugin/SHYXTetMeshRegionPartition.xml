@@ -5,7 +5,10 @@
                  name="SHYXTetMeshRegionPartition">
       <Documentation
           short_help="Decompose a tetrahedral mesh into regions by connectivity (graph min-cut)."
-          long_help="Takes a vtkUnstructuredGrid containing tetrahedra (e.g. a TetGen result) and tags every tetrahedron with a RegionId cell array. Optionally marks an Overlap cell/point array: tetrahedra within OverlapLayers dual-graph hops inward from each partition interface (default 1 = interface cells only). The dual graph treats each tet as a node and connects tets that share a triangular face. Connected Components labels each face-connected body. Balanced Min-Cut Bisection recursively splits the dual graph with a graph-theoretic minimum cut (Dinic max-flow / min-cut) so the number of cut shared faces (or their total area) between subdomains is minimized while the parts stay balanced. Non-tetrahedral cells are passed through with RegionId = -1."/>
+          long_help="Takes a vtkUnstructuredGrid containing tetrahedra (e.g. a TetGen result) and tags every tetrahedron with a RegionId cell array. Optionally marks an Overlap cell/point array: tetrahedra within OverlapLayers dual-graph hops inward from each partition interface (default 1 = interface cells only). The dual graph treats each tet as a node and connects tets that share a triangular face. Connected Components labels each face-connected body. Balanced Min-Cut Bisection recursively splits the dual graph with a graph-theoretic minimum cut (Dinic max-flow / min-cut) so the number of cut shared faces (or their total area) between subdomains is minimized while the parts stay balanced. Non-tetrahedral cells are passed through with RegionId = -1. Output port 1 is a vtkPolyData preview of the dual graph (tet centroid vertices and shared-face edges)."/>
+
+      <OutputPort name="Partitioned mesh" index="0" id="port0"/>
+      <OutputPort name="Dual graph" index="1" id="port1"/>
 
       <InputProperty name="Input"
                      command="SetInputConnection">
@@ -115,6 +118,7 @@
 
       <Hints>
         <ShowInMenu category="SHYX"/>
+        <RepresentationType view="RenderView" type="Wireframe" port="1"/>
       </Hints>
     </SourceProxy>
   </ProxyGroup>
