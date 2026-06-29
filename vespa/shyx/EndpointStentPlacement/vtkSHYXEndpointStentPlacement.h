@@ -5,7 +5,8 @@
  * Port 0 is the vessel surface (vtkPolyData). Port 1 is a centerline polyline (vtkPolyData with
  * vtkLine / vtkPolyLine cells). The stent axis is the shortest path along the centerline graph
  * between Point1VertexId and Point2VertexId (same method as vtkSHYXEnhancedRuler). StentLength is
- * the path arc length; StentRadius may be taken from CenterlineRadiusArrayName at the path midpoint.
+ * the path arc length; StentDiameter may be taken from CenterlineRadiusArrayName at the path midpoint
+ * (diameter = 2 × inscribed sphere radius).
  *
  * Deformation logic matches vtkSHYXVascularStentPlacement: strict flat-capped slab, optional geodesic
  * band smoothing, and the same output point-data arrays.
@@ -42,8 +43,8 @@ public:
     vtkGetMacro(StentLength, double);
     vtkSetClampMacro(StentLength, double, 0.0, VTK_DOUBLE_MAX);
 
-    vtkGetMacro(StentRadius, double);
-    vtkSetClampMacro(StentRadius, double, 0.0, VTK_DOUBLE_MAX);
+    vtkGetMacro(StentDiameter, double);
+    vtkSetClampMacro(StentDiameter, double, 0.0, VTK_DOUBLE_MAX);
 
     /** Maximum arc length between consecutive samples on the stent axis polyline; 0 disables densification. */
     vtkGetMacro(StentAxisSampleSpacing, double);
@@ -54,8 +55,8 @@ public:
     vtkSetMacro(PreferInputPointNormals, bool);
     vtkBooleanMacro(PreferInputPointNormals, bool);
 
-    /** Point-data array name on Centerline; when non-empty, StentRadius is updated from the path
-     *  midpoint vertex (default: MaximumInscribedSphereRadius, e.g. VMTK). */
+    /** Point-data array name on Centerline; when non-empty, StentDiameter is updated from the path
+     *  midpoint vertex (2 × array value; default array: MaximumInscribedSphereRadius, e.g. VMTK). */
     vtkGetStringMacro(CenterlineRadiusArrayName);
     vtkSetStringMacro(CenterlineRadiusArrayName);
 
@@ -109,7 +110,7 @@ protected:
     /** Sentinel -1: on first execute with centerline, initialize to the last centerline point id. */
     vtkIdType Point2VertexId = -1;
     double StentLength = 10.0;
-    double StentRadius = 1.0;
+    double StentDiameter = 2.0;
     double StentAxisSampleSpacing = 0.0;
     bool PreferInputPointNormals = false;
     char* CenterlineRadiusArrayName = nullptr;

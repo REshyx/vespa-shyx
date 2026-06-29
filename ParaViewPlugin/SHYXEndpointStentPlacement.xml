@@ -4,7 +4,7 @@
                  class="vtkSHYXEndpointStentPlacement"
                  label="SHYX Endpoint Stent Placement">
       <Documentation
-          long_help="Stent-like deformation along a centerline segment between two interactive endpoints. Port 0: vessel vtkPolyData; port 1: centerline polyline. Drag the two handles to snap endpoints on the centerline; StentLength is the shortest path distance along the centerline graph; StentRadius may be taken from CenterlineRadiusArrayName at the path midpoint. Deformation matches SHYX Vascular Stent Placement (strict flat-capped slab, optional geodesic band smooth, same output arrays)."
+          long_help="Stent-like deformation along a centerline segment between two interactive endpoints. Port 0: vessel vtkPolyData; port 1: centerline polyline. Drag the two handles to snap endpoints on the centerline; StentLength is the shortest path distance along the centerline graph; StentDiameter may be taken from CenterlineRadiusArrayName at the path midpoint (2 × inscribed sphere radius). Deformation matches SHYX Vascular Stent Placement (strict flat-capped slab, optional geodesic band smooth, same output arrays)."
           short_help="Stent placement with two centerline-snapped endpoints."/>
 
       <InputProperty name="Input" command="SetInputConnection">
@@ -88,16 +88,16 @@
         </Documentation>
       </DoubleVectorProperty>
 
-      <DoubleVectorProperty name="StentRadius"
-                            label="Stent Radius"
-                            command="SetStentRadius"
+      <DoubleVectorProperty name="StentDiameter"
+                            label="Stent Diameter"
+                            command="SetStentDiameter"
                             number_of_elements="1"
-                            default_values="1.0"
+                            default_values="2.0"
                             animateable="1">
         <DoubleRangeDomain name="range" min="0.0" max="1e12"/>
         <Documentation>
-          Measured vessel radius at the path midpoint. Updated by 3D drag / CenterlineRadiusArrayName;
-          overridden when a catalog diameter is selected (radius = diameter / 2).
+          Measured vessel diameter at the path midpoint (2 × inscribed sphere radius). Updated by 3D drag /
+          CenterlineRadiusArrayName; overridden when a catalog diameter is selected.
         </Documentation>
       </DoubleVectorProperty>
 
@@ -117,8 +117,8 @@
           <Entry text="4.0" value="6"/>
         </EnumerationDomain>
         <Documentation>
-          Coronary stent nominal diameter. Custom keeps the measured radius from interaction; a catalog entry
-          sets StentRadius to half the listed diameter.
+          Coronary stent nominal diameter. Custom keeps the measured diameter from interaction; a catalog entry
+          sets StentDiameter to the listed value.
         </Documentation>
       </IntVectorProperty>
 
@@ -191,8 +191,8 @@
           </RequiredProperties>
         </ArrayListDomain>
         <Documentation>
-          Point-data scalar on Centerline. After each interactive snap, StentRadius is set from this array
-          at the path midpoint vertex. Choose (None) to keep the current radius.
+          Point-data scalar on Centerline. After each interactive snap, StentDiameter is set to twice this array
+          at the path midpoint vertex. Choose (None) to keep the current diameter.
         </Documentation>
         <Hints>
           <ArraySelectionWidget icon_type="point"/>

@@ -1156,7 +1156,7 @@ void vtkSHYXEndpointStentPlacement::PrintSelf(ostream& os, vtkIndent indent)
     os << indent << "Point1VertexId: " << this->Point1VertexId << "\n";
     os << indent << "Point2VertexId: " << this->Point2VertexId << "\n";
     os << indent << "StentLength: " << this->StentLength << "\n";
-    os << indent << "StentRadius: " << this->StentRadius << "\n";
+    os << indent << "StentDiameter: " << this->StentDiameter << "\n";
     os << indent << "StentAxisSampleSpacing: " << this->StentAxisSampleSpacing << "\n";
     os << indent << "PreferInputPointNormals: " << (this->PreferInputPointNormals ? "on" : "off") << "\n";
     os << indent << "CenterlineRadiusArrayName: "
@@ -1276,7 +1276,7 @@ int vtkSHYXEndpointStentPlacement::RequestData(vtkInformation* vtkNotUsed(reques
         if (RadiusFromCenterlineArray(
                 centerline, this->CenterlineRadiusArrayName, midVertexId, radiusFromArray))
         {
-            this->StentRadius = radiusFromArray;
+            this->StentDiameter = 2.0 * radiusFromArray;
         }
     }
 
@@ -1290,11 +1290,11 @@ int vtkSHYXEndpointStentPlacement::RequestData(vtkInformation* vtkNotUsed(reques
         this->StentLength = measuredPathLen;
     }
 
-    double effectiveRadius = this->StentRadius;
+    double effectiveRadius = 0.5 * this->StentDiameter;
     if (this->StentCatalogDiameterIndex > vtkSHYXCoronaryStentCatalog::kCustomIndex)
     {
         effectiveRadius = vtkSHYXCoronaryStentCatalog::RadiusMm(this->StentCatalogDiameterIndex);
-        this->StentRadius = effectiveRadius;
+        this->StentDiameter = vtkSHYXCoronaryStentCatalog::DiameterMm(this->StentCatalogDiameterIndex);
     }
 
     const vtkIdType refId1 = id1;
@@ -1326,7 +1326,7 @@ int vtkSHYXEndpointStentPlacement::RequestData(vtkInformation* vtkNotUsed(reques
 
     if (effectiveLength <= kEps || effectiveRadius <= kEps)
     {
-        vtkWarningMacro(<< "StentLength or StentRadius too small; passing geometry through unchanged.");
+        vtkWarningMacro(<< "StentLength or StentDiameter too small; passing geometry through unchanged.");
         output->DeepCopy(surface);
         const vtkIdType nPtsEarly = output->GetNumberOfPoints();
         const char* affectNameEarly = EffectiveAffectMaskName(this->AffectMaskArrayName);

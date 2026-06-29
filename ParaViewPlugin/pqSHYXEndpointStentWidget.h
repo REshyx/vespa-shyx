@@ -16,7 +16,7 @@ class vtkPoints;
 /**
  * Two-endpoint distance widget for SHYX Endpoint Stent Placement. Endpoints snap to centerline
  * port 1 (screen-ray pick, same as Enhanced Ruler on a surface). On release, StentLength is set
- * from the centerline path distance and StentRadius from CenterlineRadiusArrayName at the path
+ * from the centerline path distance and StentDiameter from CenterlineRadiusArrayName at the path
  * midpoint when configured.
  */
 class pqSHYXEndpointStentWidget : public pqInteractivePropertyWidget

@@ -87,7 +87,7 @@ pqSHYXEndpointStentWidget::pqSHYXEndpointStentWidget(
 {
     auto* vbox = new QVBoxLayout(this);
     auto* info = new QLabel(
-        tr("Drag the two handles along the centerline to measure length and radius, then pick a "
+        tr("Drag the two handles along the centerline to measure length and diameter, then pick a "
            "nominal coronary stent size from the catalog dropdowns (or use Custom to keep measured "
            "values). Catalog length expands or contracts both endpoints stepwise along the "
            "centerline until path length first crosses the catalog value."),
@@ -323,7 +323,7 @@ bool pqSHYXEndpointStentWidget::promoteCheckedEndpointsToUncheckedIfNeeded()
     promoteInt("Point1VertexId");
     promoteInt("Point2VertexId");
     promoteDouble("StentLength");
-    promoteDouble("StentRadius");
+    promoteDouble("StentDiameter");
 
     return changed;
 }
@@ -403,7 +403,7 @@ bool pqSHYXEndpointStentWidget::ensureEndpointsSyncedFromCenterline()
     this->updateStentLengthAndRadius(id1, id2);
 
     for (const char* propName :
-        { "Point1", "Point2", "Point1VertexId", "Point2VertexId", "StentLength", "StentRadius" })
+        { "Point1", "Point2", "Point1VertexId", "Point2VertexId", "StentLength", "StentDiameter" })
     {
         if (vtkSMProperty* prop = filter->GetProperty(propName))
         {
@@ -503,9 +503,10 @@ void pqSHYXEndpointStentWidget::syncStentPreview()
     const bool showPreview = !this->ShowStentPreviewCheck || this->ShowStentPreviewCheck->isChecked();
     rep->SetShowStentPreview(showPreview ? 1 : 0);
 
-    vtkSMPropertyHelper radiusHelper(filter, "StentRadius");
-    radiusHelper.SetUseUnchecked(true);
-    const double radius = radiusHelper.GetAsDouble();
+    vtkSMPropertyHelper diameterHelper(filter, "StentDiameter");
+    diameterHelper.SetUseUnchecked(true);
+    const double diameter = diameterHelper.GetAsDouble();
+    const double radius = 0.5 * diameter;
     if (vtkSMNewWidgetRepresentationProxy* wdg = this->widgetProxy())
     {
         vtkSMPropertyHelper(wdg, "StentRadius").Set(radius);
@@ -849,7 +850,7 @@ void pqSHYXEndpointStentWidget::markCatalogPropertiesModified()
         return;
     }
     for (const char* propName :
-        { "StentCatalogDiameterIndex", "StentCatalogLengthIndex", "StentLength", "StentRadius",
+        { "StentCatalogDiameterIndex", "StentCatalogLengthIndex", "StentLength", "StentDiameter",
             "Point1", "Point2", "Point1VertexId", "Point2VertexId" })
     {
         if (vtkSMProperty* prop = filter->GetProperty(propName))
@@ -871,9 +872,9 @@ void pqSHYXEndpointStentWidget::applyCatalogDiameter(int catalogIndex)
     {
         return;
     }
-    const double radius = vtkSHYXCoronaryStentCatalog::RadiusMm(catalogIndex);
+    const double diameter = vtkSHYXCoronaryStentCatalog::DiameterMm(catalogIndex);
     vtkSMUncheckedPropertyHelper(filter, "StentCatalogDiameterIndex").Set(catalogIndex);
-    vtkSMUncheckedPropertyHelper(filter, "StentRadius").Set(radius);
+    vtkSMUncheckedPropertyHelper(filter, "StentDiameter").Set(diameter);
     this->markCatalogPropertiesModified();
 }
 
@@ -1040,7 +1041,7 @@ void pqSHYXEndpointStentWidget::updateStentLengthAndRadius(vtkIdType id1, vtkIdT
     const double r = arr->GetComponent(midId, 0);
     if (std::isfinite(r) && r > 0.0)
     {
-        vtkSMUncheckedPropertyHelper(filter, "StentRadius").Set(r);
+        vtkSMUncheckedPropertyHelper(filter, "StentDiameter").Set(2.0 * r);
     }
 }
 
@@ -1083,14 +1084,13 @@ void pqSHYXEndpointStentWidget::refreshRulerLabel(bool includePathLength)
     }
 
     vtkSMProxy* filter = this->proxy();
-    double radius = 0.0;
+    double diameter = 0.0;
     if (filter)
     {
-        vtkSMPropertyHelper rh(filter, "StentRadius");
-        rh.SetUseUnchecked(true);
-        radius = rh.GetAsDouble();
+        vtkSMPropertyHelper dh(filter, "StentDiameter");
+        dh.SetUseUnchecked(true);
+        diameter = dh.GetAsDouble();
     }
-    const double diameter = 2.0 * radius;
     const int nearDiam = vtkSHYXCoronaryStentCatalog::NearestDiameterIndex(diameter);
     const int nearLen = (pathLen > 0.0 && std::isfinite(pathLen))
         ? vtkSHYXCoronaryStentCatalog::NearestLengthIndex(pathLen)
@@ -1109,7 +1109,7 @@ void pqSHYXEndpointStentWidget::refreshRulerLabel(bool includePathLength)
         }
         const char* diamHint = "";
         char diamHintBuf[48] = {};
-        if (radius > 0.0 && nearDiam > vtkSHYXCoronaryStentCatalog::kCustomIndex)
+        if (diameter > 0.0 && nearDiam > vtkSHYXCoronaryStentCatalog::kCustomIndex)
         {
             snprintf(diamHintBuf, sizeof(diamHintBuf), " (nearest %g)",
                 vtkSHYXCoronaryStentCatalog::DiameterMm(nearDiam));
@@ -1191,7 +1191,7 @@ void pqSHYXEndpointStentWidget::snapEndpointsAndUpdateStentParams()
     this->updateStentLengthAndRadius(id1, id2);
 
     for (const char* propName :
-        { "Point1", "Point2", "Point1VertexId", "Point2VertexId", "StentLength", "StentRadius",
+        { "Point1", "Point2", "Point1VertexId", "Point2VertexId", "StentLength", "StentDiameter",
             "StentCatalogDiameterIndex", "StentCatalogLengthIndex" })
     {
         if (vtkSMProperty* prop = filter->GetProperty(propName))
