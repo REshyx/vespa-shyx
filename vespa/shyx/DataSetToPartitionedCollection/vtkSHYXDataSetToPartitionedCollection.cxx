@@ -41,6 +41,7 @@
 #include <limits>
 #include <numeric>
 #include <set>
+#include <sstream>
 #include <string>
 #include <vector>
 
@@ -860,8 +861,39 @@ void AppendPdcBlock(vtkPartitionedDataSetCollection* coll, unsigned int& blockIn
   ++blockIndex;
 }
 
+std::vector<std::string> ParseBlockNames(const char* names)
+{
+  std::vector<std::string> result;
+  if (!names || names[0] == '\0')
+  {
+    return result;
+  }
+
+  std::stringstream stream(names);
+  std::string line;
+  while (std::getline(stream, line))
+  {
+    if (!line.empty() && line.back() == '\r')
+    {
+      line.pop_back();
+    }
+    result.push_back(line);
+  }
+  return result;
+}
+
+std::string ResolveBlockName(
+  const std::vector<std::string>& customNames, unsigned int blockIndex, const std::string& fallback)
+{
+  if (blockIndex < customNames.size() && !customNames[blockIndex].empty())
+  {
+    return customNames[blockIndex];
+  }
+  return fallback;
+}
+
 void BuildIossAssembly(vtkPartitionedDataSetCollection* coll, bool hasTet,
-  unsigned int nSideNodePairs)
+  unsigned int nSideNodePairs, const std::vector<std::string>& blockNames)
 {
   vtkNew<vtkDataAssembly> rootAsm;
   rootAsm->SetRootNodeName("IOSS");
@@ -874,16 +906,17 @@ void BuildIossAssembly(vtkPartitionedDataSetCollection* coll, bool hasTet,
 
   if (hasTet)
   {
-    const char* elemName = "tetrahedra";
+    const std::string elemName = ResolveBlockName(blockNames, dsCursor, "tetrahedra");
     const int leaf =
-      rootAsm->AddNode(vtkDataAssembly::MakeValidNodeName(elemName).c_str(), elemBlocksNode);
-    rootAsm->SetAttribute(leaf, "label", elemName);
+      rootAsm->AddNode(vtkDataAssembly::MakeValidNodeName(elemName.c_str()).c_str(), elemBlocksNode);
+    rootAsm->SetAttribute(leaf, "label", elemName.c_str());
     rootAsm->AddDataSetIndex(leaf, dsCursor++);
   }
 
   for (unsigned int i = 0; i < nSideNodePairs; ++i)
   {
-    const std::string nodeName = "node" + std::to_string(i);
+    const std::string nodeName =
+      ResolveBlockName(blockNames, dsCursor, "node" + std::to_string(i));
     const int leafN = rootAsm->AddNode(
       vtkDataAssembly::MakeValidNodeName(nodeName.c_str()).c_str(), nodeSetsNode);
     rootAsm->SetAttribute(leafN, "label", nodeName.c_str());
@@ -891,7 +924,8 @@ void BuildIossAssembly(vtkPartitionedDataSetCollection* coll, bool hasTet,
   }
   for (unsigned int i = 0; i < nSideNodePairs; ++i)
   {
-    const std::string sideName = "side" + std::to_string(i);
+    const std::string sideName =
+      ResolveBlockName(blockNames, dsCursor, "side" + std::to_string(i));
     const int leafS = rootAsm->AddNode(
       vtkDataAssembly::MakeValidNodeName(sideName.c_str()).c_str(), sideSetsNode);
     rootAsm->SetAttribute(leafS, "label", sideName.c_str());
@@ -914,6 +948,7 @@ vtkSHYXDataSetToPartitionedCollection::vtkSHYXDataSetToPartitionedCollection()
 vtkSHYXDataSetToPartitionedCollection::~vtkSHYXDataSetToPartitionedCollection()
 {
   this->SetPartitionPointArrayName(nullptr);
+  this->SetBlockNames(nullptr);
 }
 
 //------------------------------------------------------------------------------
@@ -925,6 +960,7 @@ void vtkSHYXDataSetToPartitionedCollection::PrintSelf(ostream& os, vtkIndent ind
      << (this->PartitionPointArrayName ? this->PartitionPointArrayName : "(null)") << "\n";
   os << indent << "SortByArea: " << this->SortByArea << "\n";
   os << indent << "CustomPostReorder: " << this->CustomPostReorder << "\n";
+  os << indent << "BlockNames: " << (this->BlockNames ? this->BlockNames : "(null)") << "\n";
 }
 
 //------------------------------------------------------------------------------
@@ -974,6 +1010,7 @@ int vtkSHYXDataSetToPartitionedCollection::RequestData(vtkInformation* vtkNotUse
   unsigned int blockIndex = 0;
   int nextEntityId = 1;
   vtkSmartPointer<vtkUnstructuredGrid> volumeGridForIoss;
+  const std::vector<std::string> customBlockNames = ParseBlockNames(this->BlockNames);
 
   vtkUnstructuredGrid* ug = vtkUnstructuredGrid::SafeDownCast(input);
   vtkNew<vtkPolyData> surfaceWork;
@@ -1013,7 +1050,8 @@ int vtkSHYXDataSetToPartitionedCollection::RequestData(vtkInformation* vtkNotUse
         surfaceWork->DeepCopy(surf->GetOutput());
         PrepareTetBoundarySurfaceForIoss(volumeGridForIoss, surfaceWork.GetPointer());
 
-        AppendPdcBlock(result, blockIndex, volumeGridForIoss, "tetrahedra", nextEntityId++);
+        const std::string volumeName = ResolveBlockName(customBlockNames, blockIndex, "tetrahedra");
+        AppendPdcBlock(result, blockIndex, volumeGridForIoss, volumeName.c_str(), nextEntityId++);
       }
     }
   }
@@ -1101,16 +1139,18 @@ int vtkSHYXDataSetToPartitionedCollection::RequestData(vtkInformation* vtkNotUse
 
   for (unsigned int i = 0; i < nPairs; ++i)
   {
-    const std::string nodeName = "node" + std::to_string(i);
+    const std::string nodeName =
+      ResolveBlockName(customBlockNames, blockIndex, "node" + std::to_string(i));
     AppendPdcBlock(result, blockIndex, preparedNodes[i], nodeName.c_str(), nextEntityId++);
   }
   for (unsigned int i = 0; i < nPairs; ++i)
   {
-    const std::string sideName = "side" + std::to_string(i);
+    const std::string sideName =
+      ResolveBlockName(customBlockNames, blockIndex, "side" + std::to_string(i));
     AppendPdcBlock(result, blockIndex, preparedSides[i], sideName.c_str(), nextEntityId++);
   }
 
-  BuildIossAssembly(result, volumeGridForIoss != nullptr, nPairs);
+  BuildIossAssembly(result, volumeGridForIoss != nullptr, nPairs, customBlockNames);
 
   output->ShallowCopy(result);
 

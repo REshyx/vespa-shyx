@@ -61,6 +61,14 @@ public:
   vtkGetMacro(CustomPostReorder, int);
   vtkBooleanMacro(CustomPostReorder, int);
 
+  /**
+   * Newline-separated names for the output partitioned datasets, in output order:
+   * tetrahedra (when present), all node sets, then all side sets. Empty / missing
+   * entries fall back to tetrahedra, node{i}, side{i}.
+   */
+  vtkSetStringMacro(BlockNames);
+  vtkGetStringMacro(BlockNames);
+
 protected:
   vtkSHYXDataSetToPartitionedCollection();
   ~vtkSHYXDataSetToPartitionedCollection() override;
@@ -79,6 +87,7 @@ protected:
    * than three patches.
    */
   int CustomPostReorder = 1;
+  char* BlockNames = nullptr;
 
 private:
   vtkSHYXDataSetToPartitionedCollection(const vtkSHYXDataSetToPartitionedCollection&) = delete;

@@ -55,6 +55,21 @@
         </Documentation>
       </IntVectorProperty>
 
+      <StringVectorProperty name="BlockNames" label="Block Names" command="SetBlockNames"
+          number_of_elements="1" default_values="" animateable="0">
+        <Documentation>
+          Newline-separated names for output partitioned datasets in output order: tetrahedra (if present),
+          all node sets, then all side sets. Empty or missing entries use the default tetrahedra / node{i} /
+          side{i} names.
+        </Documentation>
+      </StringVectorProperty>
+
+      <PropertyGroup label="Partitioned block names"
+                     panel_widget="shyx_partitioned_block_names"
+                     panel_visibility="default">
+        <Property function="Names" name="BlockNames"/>
+      </PropertyGroup>
+
       <Hints>
         <ShowInMenu category="SHYX" icon=":/VESPA/SHYX_DataSet_To_Partitioned_Collection.png"/>
         <ShowInMenu category="Vascular" icon=":/VESPA/SHYX_DataSet_To_Partitioned_Collection.png"/>
