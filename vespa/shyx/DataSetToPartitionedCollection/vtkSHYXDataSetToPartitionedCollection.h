@@ -62,6 +62,28 @@ public:
   vtkBooleanMacro(CustomPostReorder, int);
 
   /**
+   * When non-zero, BoundaryRadialValueNormal uses BoundaryRadialValue * sideNormal. Otherwise it
+   * uses sideNormal. BoundaryRadialValue itself is always computed.
+   */
+  vtkSetMacro(ComputeBoundaryRadialValue, int);
+  vtkGetMacro(ComputeBoundaryRadialValue, int);
+  vtkBooleanMacro(ComputeBoundaryRadialValue, int);
+
+  /** Exponent a used to convert raw radial coordinate x to BoundaryRadialValue = 1 - x^a. */
+  vtkSetMacro(BoundaryRadialNormalFalloffFactor, double);
+  vtkGetMacro(BoundaryRadialNormalFalloffFactor, double);
+
+  /**
+   * Newline-separated values aligned with the output block order (tetrahedra, node sets, side
+   * sets). Values in each row are tab-separated Variable1, Variable2, ... entries. Only side-set
+   * entries are used. Any non-zero value enables writes to volume points. Values are stored in
+   * BoundaryVariable1, BoundaryVariable2, ... arrays. BoundaryRadialValueNormal does not multiply
+   * these variables. Repeated writes to the same volume node are warned and averaged.
+   */
+  vtkSetStringMacro(BoundaryVariables);
+  vtkGetStringMacro(BoundaryVariables);
+
+  /**
    * Newline-separated names for the output partitioned datasets, in output order:
    * tetrahedra (when present), all node sets, then all side sets. Empty / missing
    * entries fall back to tetrahedra, node{i}, side{i}.
@@ -87,6 +109,9 @@ protected:
    * than three patches.
    */
   int CustomPostReorder = 1;
+  int ComputeBoundaryRadialValue = 0;
+  double BoundaryRadialNormalFalloffFactor = 1.0;
+  char* BoundaryVariables = nullptr;
   char* BlockNames = nullptr;
 
 private:

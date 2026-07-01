@@ -55,6 +55,27 @@
         </Documentation>
       </IntVectorProperty>
 
+      <IntVectorProperty name="ComputeBoundaryRadialValue" label="Compute Boundary Radial Value"
+          command="SetComputeBoundaryRadialValue" number_of_elements="1" default_values="0"
+          animateable="0">
+        <BooleanDomain name="bool"/>
+        <Documentation>
+          BoundaryRadialValue is always computed as 1 - x^a on side and node set blocks. When this
+          option is enabled, BoundaryRadialValueNormal uses BoundaryRadialValue * sideNormal. When
+          disabled, BoundaryRadialValueNormal uses sideNormal.
+        </Documentation>
+      </IntVectorProperty>
+
+      <DoubleVectorProperty name="BoundaryRadialNormalFalloffFactor"
+          label="Boundary Radial Normal Falloff Factor (a)"
+          command="SetBoundaryRadialNormalFalloffFactor" number_of_elements="1"
+          default_values="1.0" animateable="0">
+        <DoubleRangeDomain name="range" min="-1e12" max="1e12"/>
+        <Documentation>
+          Exponent a in BoundaryRadialValue = 1 - x^a, where x is the raw radial coordinate.
+        </Documentation>
+      </DoubleVectorProperty>
+
       <StringVectorProperty name="BlockNames" label="Block Names" command="SetBlockNames"
           number_of_elements="1" default_values="" animateable="0">
         <Documentation>
@@ -64,10 +85,24 @@
         </Documentation>
       </StringVectorProperty>
 
+      <StringVectorProperty name="BoundaryVariables" label="Boundary Variables"
+          command="SetBoundaryVariables" number_of_elements="1" default_values="" animateable="0"
+          panel_visibility="never">
+        <Documentation>
+          Newline-separated rows aligned with the output block order; values in each row are
+          tab-separated Variable1, Variable2, ... entries. Only side set rows are used. All zero
+          variables disable writing to tetrahedra points for that side. Non-zero values are written to
+          tetrahedra point-data scalars BoundaryVariable1, BoundaryVariable2, ... and also enable
+          BoundaryRadialValueNormal. BoundaryRadialValueNormal does not multiply these variables. If
+          several sides touch the same node, repeated writes are warned and averaged.
+        </Documentation>
+      </StringVectorProperty>
+
       <PropertyGroup label="Partitioned block names"
                      panel_widget="shyx_partitioned_block_names"
                      panel_visibility="default">
         <Property function="Names" name="BlockNames"/>
+        <Property function="BoundaryVariables" name="BoundaryVariables"/>
       </PropertyGroup>
 
       <Hints>

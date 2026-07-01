@@ -4,8 +4,8 @@
 #include "pqPropertyWidget.h"
 
 #include <QList>
-#include <QPair>
 #include <QString>
+#include <QStringList>
 
 class QStandardItem;
 class QStandardItemModel;
@@ -25,6 +25,13 @@ class pqSHYXPartitionedBlockNamesWidget : public pqPropertyWidget
   typedef pqPropertyWidget Superclass;
 
 public:
+  struct BlockRow
+  {
+    QString Type;
+    QString Name;
+    QStringList Variables;
+  };
+
   pqSHYXPartitionedBlockNamesWidget(
     vtkSMProxy* proxy, vtkSMPropertyGroup* smgroup, QWidget* parent = nullptr);
   ~pqSHYXPartitionedBlockNamesWidget() override;
@@ -39,17 +46,23 @@ Q_SIGNALS:
 private Q_SLOTS:
   void onItemChanged(QStandardItem* item);
   void onRefreshClicked();
+  void onAddVariableClicked();
+  void onDeleteVariableClicked();
 
 private:
   void rebuildFromProperty();
-  void rebuildRows(const QList<QPair<QString, QString>>& typedNames);
+  void rebuildRows(const QList<BlockRow>& rows);
   void writeBackProperty();
+  void setVariableColumnCount(int count);
   QList<QString> currentNamesFromProperty() const;
-  QList<QPair<QString, QString>> collectCurrentOutputNames() const;
+  QList<QStringList> currentBoundaryVariablesFromProperty() const;
+  QList<BlockRow> collectCurrentOutputNames() const;
 
   QStandardItemModel* Model = nullptr;
   QTreeView* View = nullptr;
-  QString PropertyName;
+  QString NamesPropertyName;
+  QString BoundaryVariablesPropertyName;
+  int VariableColumnCount = 1;
   bool UpdatingFromProperty = false;
   bool UpdatingFromUI = false;
 };
