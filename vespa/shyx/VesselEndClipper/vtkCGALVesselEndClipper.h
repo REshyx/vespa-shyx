@@ -144,7 +144,6 @@ public:
 
     /**
      * Read-only diagnostic text from the last pipeline update (RequestData).
-     * Also printed to the ParaView Output Messages window via vtkWarningMacro.
      */
     vtkGetStringMacro(OutputMessage);
 

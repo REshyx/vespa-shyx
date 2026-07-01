@@ -184,7 +184,6 @@ void vtkCGALVesselEndClipper::LogUpdateReasonAtRequestData(
         << " prev out0=" << this->LastLoggedOutputMTime;
 
     this->SetOutputMessageNoModified(oss.str().c_str());
-    vtkWarningMacro(<< this->OutputMessage);
 
     this->LastLoggedInput0MTime = in0MTime;
     this->LastLoggedInput1MTime = in1MTime;
