@@ -33,7 +33,9 @@ namespace
 constexpr int kColIndex = 0;
 constexpr int kColType = 1;
 constexpr int kColName = 2;
-constexpr int kFirstVariableCol = 3;
+constexpr int kColWriteNormal = 3;
+constexpr int kFirstVariableCol = 4;
+constexpr char kNodeSetNamePrefix[] = "node_";
 
 vtkSMProperty* propertyFromGroup(
   vtkSMPropertyGroup* group, vtkSMProxy* proxy, const char* function, const char* fallbackName)
@@ -101,7 +103,7 @@ void appendChildren(vtkDataAssembly* assembly, int parent, const QString& type,
   for (int i = 0; i < n; ++i)
   {
     const int child = assembly->GetChild(parent, i);
-    rows.push_back({ type, labelForNode(assembly, child), QStringList{ QStringLiteral("0") } });
+    rows.push_back({ type, labelForNode(assembly, child), false, QStringList{ QStringLiteral("0") } });
   }
 }
 }
@@ -116,9 +118,11 @@ pqSHYXPartitionedBlockNamesWidget::pqSHYXPartitionedBlockNamesWidget(
   vbox->setSpacing(4);
 
   auto* tip = new QLabel(
-    tr("Double-click the Name column to edit block names. For Side set rows, edit Variable columns "
-       "to write BoundaryVariable1/2/... and enable BoundaryRadialValueNormal; all zeros disable it. "
-       "Use Refresh after the filter has produced output to populate the block list."),
+    tr("Double-click Side set Name cells to edit paired side/node block names. For Side set rows, "
+       "check Write Normal to accumulate BoundaryRadialValueNormal onto tetrahedra volume points; "
+       "edit Variable columns to write BoundaryVariable1/2/... when non-zero. Node set names mirror "
+       "the matching Side set row with a \"node_\" prefix. Use Refresh after the filter has produced "
+       "output to populate the block list."),
     this);
   tip->setWordWrap(true);
   tip->setStyleSheet(QStringLiteral("color: gray; font-size: 11px;"));
@@ -143,6 +147,7 @@ pqSHYXPartitionedBlockNamesWidget::pqSHYXPartitionedBlockNamesWidget(
   header->setSectionResizeMode(kColIndex, QHeaderView::ResizeToContents);
   header->setSectionResizeMode(kColType, QHeaderView::ResizeToContents);
   header->setSectionResizeMode(kColName, QHeaderView::Stretch);
+  header->setSectionResizeMode(kColWriteNormal, QHeaderView::ResizeToContents);
   header->setStretchLastSection(false);
 
   vbox->addWidget(this->View, 1);
@@ -194,6 +199,17 @@ pqSHYXPartitionedBlockNamesWidget::pqSHYXPartitionedBlockNamesWidget(
       SIGNAL(blockNamesChanged()), varsProp);
   }
 
+  vtkSMProperty* writeNormalsProp =
+    propertyFromGroup(smgroup, smproxy, "BoundaryWriteNormals", "BoundaryWriteNormals");
+  if (writeNormalsProp)
+  {
+    const char* pname = smproxy ? smproxy->GetPropertyName(writeNormalsProp) : nullptr;
+    this->BoundaryWriteNormalsPropertyName =
+      QString::fromUtf8(pname ? pname : "BoundaryWriteNormals");
+    this->addPropertyLink(this, this->BoundaryWriteNormalsPropertyName.toUtf8().data(),
+      SIGNAL(blockNamesChanged()), writeNormalsProp);
+  }
+
   this->setChangeAvailableAsChangeFinished(true);
   this->onRefreshClicked();
 }
@@ -208,7 +224,8 @@ bool pqSHYXPartitionedBlockNamesWidget::event(QEvent* e)
   {
     auto* devt = static_cast<QDynamicPropertyChangeEvent*>(e);
     const QString name = QString::fromLatin1(devt->propertyName());
-    if (name == this->NamesPropertyName || name == this->BoundaryVariablesPropertyName)
+    if (name == this->NamesPropertyName || name == this->BoundaryVariablesPropertyName ||
+      name == this->BoundaryWriteNormalsPropertyName)
     {
       this->rebuildFromProperty();
       return true;
@@ -235,11 +252,13 @@ void pqSHYXPartitionedBlockNamesWidget::reset()
 void pqSHYXPartitionedBlockNamesWidget::onItemChanged(QStandardItem* item)
 {
   if (!item || this->UpdatingFromProperty ||
-    (item->column() != kColName && item->column() < kFirstVariableCol))
+    (item->column() != kColName && item->column() != kColWriteNormal &&
+      item->column() < kFirstVariableCol))
   {
     return;
   }
 
+  this->syncNodeRowsFromSideRows();
   this->writeBackProperty();
 }
 
@@ -249,6 +268,7 @@ void pqSHYXPartitionedBlockNamesWidget::onRefreshClicked()
   QList<BlockRow> rows = this->collectCurrentOutputNames();
   const QList<QString> customNames = this->currentNamesFromProperty();
   const QList<QStringList> variables = this->currentBoundaryVariablesFromProperty();
+  const QList<int> writeNormals = this->currentBoundaryWriteNormalsFromProperty();
 
   for (int i = 0; i < rows.size() && i < customNames.size(); ++i)
   {
@@ -266,11 +286,16 @@ void pqSHYXPartitionedBlockNamesWidget::onRefreshClicked()
     }
   }
 
+  for (int i = 0; i < rows.size() && i < writeNormals.size(); ++i)
+  {
+    rows[i].WriteNormal = writeNormals[i] != 0;
+  }
+
   if (rows.isEmpty() && !customNames.isEmpty())
   {
     for (const QString& name : customNames)
     {
-      rows.push_back({ tr("Block"), name, QStringList{ QStringLiteral("0") } });
+      rows.push_back({ tr("Block"), name, false, QStringList{ QStringLiteral("0") } });
     }
   }
 
@@ -281,6 +306,7 @@ void pqSHYXPartitionedBlockNamesWidget::onRefreshClicked()
 void pqSHYXPartitionedBlockNamesWidget::onAddVariableClicked()
 {
   this->setVariableColumnCount(this->VariableColumnCount + 1);
+  this->syncNodeRowsFromSideRows();
   this->writeBackProperty();
 }
 
@@ -300,6 +326,7 @@ void pqSHYXPartitionedBlockNamesWidget::onDeleteVariableClicked()
   this->Model->removeColumn(removeColumn);
   this->VariableColumnCount = std::max(1, this->Model->columnCount() - kFirstVariableCol);
   this->setVariableColumnCount(this->VariableColumnCount);
+  this->syncNodeRowsFromSideRows();
   this->writeBackProperty();
 }
 
@@ -314,14 +341,16 @@ void pqSHYXPartitionedBlockNamesWidget::rebuildFromProperty()
   QScopedValueRollback<bool> guard(this->UpdatingFromProperty, true);
   const QList<QString> names = this->currentNamesFromProperty();
   const QList<QStringList> variables = this->currentBoundaryVariablesFromProperty();
+  const QList<int> writeNormals = this->currentBoundaryWriteNormalsFromProperty();
 
   if (this->Model->rowCount() == 0)
   {
     QList<BlockRow> rows;
     for (int i = 0; i < names.size(); ++i)
     {
-      rows.push_back(
-        { tr("Block"), names[i], i < variables.size() ? variables[i] : QStringList{ QStringLiteral("0") } });
+      rows.push_back({ tr("Block"), names[i],
+        i < writeNormals.size() ? writeNormals[i] != 0 : false,
+        i < variables.size() ? variables[i] : QStringList{ QStringLiteral("0") } });
     }
     this->rebuildRows(rows);
     return;
@@ -336,6 +365,11 @@ void pqSHYXPartitionedBlockNamesWidget::rebuildFromProperty()
     }
     auto* typeItem = this->Model->item(row, kColType);
     const bool isSideSet = typeItem && typeItem->text() == tr("Side set");
+    if (auto* writeNormalItem = this->Model->item(row, kColWriteNormal))
+    {
+      const bool checked = isSideSet && row < writeNormals.size() && writeNormals[row] != 0;
+      writeNormalItem->setCheckState(checked ? Qt::Checked : Qt::Unchecked);
+    }
     for (int c = 0; c < this->VariableColumnCount; ++c)
     {
       if (auto* item = this->Model->item(row, kFirstVariableCol + c))
@@ -347,6 +381,7 @@ void pqSHYXPartitionedBlockNamesWidget::rebuildFromProperty()
       }
     }
   }
+  this->syncNodeRowsFromSideRows();
 }
 
 // ---------------------------------------------------------------------------
@@ -377,12 +412,33 @@ void pqSHYXPartitionedBlockNamesWidget::rebuildRows(
     auto* typeItem = new QStandardItem(rows[row].Type);
     typeItem->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable | Qt::ItemNeverHasChildren);
 
-    auto* nameItem = new QStandardItem(rows[row].Name);
-    nameItem->setFlags(
-      Qt::ItemIsEnabled | Qt::ItemIsSelectable | Qt::ItemIsEditable | Qt::ItemNeverHasChildren);
-
-    QList<QStandardItem*> items = { indexItem, typeItem, nameItem };
     const bool isSideSet = rows[row].Type == tr("Side set");
+    auto* nameItem = new QStandardItem(rows[row].Name);
+    if (isSideSet)
+    {
+      nameItem->setFlags(
+        Qt::ItemIsEnabled | Qt::ItemIsSelectable | Qt::ItemIsEditable | Qt::ItemNeverHasChildren);
+    }
+    else
+    {
+      nameItem->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable | Qt::ItemNeverHasChildren);
+    }
+
+    auto* writeNormalItem = new QStandardItem();
+    writeNormalItem->setTextAlignment(Qt::AlignCenter);
+    if (isSideSet)
+    {
+      writeNormalItem->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable | Qt::ItemIsUserCheckable |
+        Qt::ItemNeverHasChildren);
+      writeNormalItem->setCheckState(rows[row].WriteNormal ? Qt::Checked : Qt::Unchecked);
+    }
+    else
+    {
+      writeNormalItem->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable | Qt::ItemNeverHasChildren);
+      writeNormalItem->setCheckState(Qt::Unchecked);
+    }
+
+    QList<QStandardItem*> items = { indexItem, typeItem, nameItem, writeNormalItem };
     for (int c = 0; c < this->VariableColumnCount; ++c)
     {
       const QString value = (c < rows[row].Variables.size() && !rows[row].Variables[c].isEmpty())
@@ -404,6 +460,7 @@ void pqSHYXPartitionedBlockNamesWidget::rebuildRows(
 
     this->Model->appendRow(items);
   }
+  this->syncNodeRowsFromSideRows();
 }
 
 // ---------------------------------------------------------------------------
@@ -416,30 +473,28 @@ void pqSHYXPartitionedBlockNamesWidget::writeBackProperty()
 
   QStringList names;
   QStringList variableRows;
+  QStringList writeNormalRows;
   names.reserve(this->Model->rowCount());
   variableRows.reserve(this->Model->rowCount());
+  writeNormalRows.reserve(this->Model->rowCount());
+  this->syncNodeRowsFromSideRows();
   for (int row = 0; row < this->Model->rowCount(); ++row)
   {
     auto* nameItem = this->Model->item(row, kColName);
-    auto* typeItem = this->Model->item(row, kColType);
     names.push_back(nameItem ? nameItem->text().trimmed() : QString());
+    auto* typeItem = this->Model->item(row, kColType);
+    const bool isSideSet = typeItem && typeItem->text() == tr("Side set");
+    auto* writeNormalItem = this->Model->item(row, kColWriteNormal);
+    const bool writeNormal =
+      isSideSet && writeNormalItem && writeNormalItem->checkState() == Qt::Checked;
+    writeNormalRows.push_back(writeNormal ? QStringLiteral("1") : QStringLiteral("0"));
     QStringList variables;
-    if (typeItem && typeItem->text() == tr("Side set"))
+    for (int c = 0; c < this->VariableColumnCount; ++c)
     {
-      for (int c = 0; c < this->VariableColumnCount; ++c)
-      {
-        auto* item = this->Model->item(row, kFirstVariableCol + c);
-        bool ok = false;
-        const double value = item ? item->text().trimmed().toDouble(&ok) : 0.0;
-        variables.push_back(ok ? QString::number(value, 'g', 16) : QStringLiteral("0"));
-      }
-    }
-    else
-    {
-      for (int c = 0; c < this->VariableColumnCount; ++c)
-      {
-        variables.push_back(QStringLiteral("0"));
-      }
+      auto* item = this->Model->item(row, kFirstVariableCol + c);
+      bool ok = false;
+      const double value = item ? item->text().trimmed().toDouble(&ok) : 0.0;
+      variables.push_back(ok ? QString::number(value, 'g', 16) : QStringLiteral("0"));
     }
     variableRows.push_back(variables.join(QLatin1Char('\t')));
   }
@@ -452,9 +507,70 @@ void pqSHYXPartitionedBlockNamesWidget::writeBackProperty()
       this->setProperty(
         this->BoundaryVariablesPropertyName.toUtf8().data(), variableRows.join(QLatin1Char('\n')));
     }
+    if (!this->BoundaryWriteNormalsPropertyName.isEmpty())
+    {
+      this->setProperty(this->BoundaryWriteNormalsPropertyName.toUtf8().data(),
+        writeNormalRows.join(QLatin1Char('\n')));
+    }
   }
 
   Q_EMIT this->blockNamesChanged();
+}
+
+// ---------------------------------------------------------------------------
+void pqSHYXPartitionedBlockNamesWidget::syncNodeRowsFromSideRows()
+{
+  if (!this->Model)
+  {
+    return;
+  }
+
+  QList<int> sideRows;
+  QList<int> nodeRows;
+  for (int row = 0; row < this->Model->rowCount(); ++row)
+  {
+    auto* typeItem = this->Model->item(row, kColType);
+    if (!typeItem)
+    {
+      continue;
+    }
+    if (typeItem->text() == tr("Side set"))
+    {
+      sideRows.push_back(row);
+    }
+    else if (typeItem->text() == tr("Node set"))
+    {
+      nodeRows.push_back(row);
+    }
+  }
+
+  QSignalBlocker blocker(this->Model);
+  const int nPairs = std::min(sideRows.size(), nodeRows.size());
+  for (int i = 0; i < nPairs; ++i)
+  {
+    const int sideRow = sideRows[i];
+    const int nodeRow = nodeRows[i];
+    if (auto* nodeName = this->Model->item(nodeRow, kColName))
+    {
+      auto* sideName = this->Model->item(sideRow, kColName);
+      nodeName->setText(sideName ? QString::fromLatin1(kNodeSetNamePrefix) + sideName->text() : QString());
+    }
+    if (auto* nodeWriteNormal = this->Model->item(nodeRow, kColWriteNormal))
+    {
+      auto* sideWriteNormal = this->Model->item(sideRow, kColWriteNormal);
+      nodeWriteNormal->setCheckState(
+        sideWriteNormal ? sideWriteNormal->checkState() : Qt::Unchecked);
+    }
+    for (int c = 0; c < this->VariableColumnCount; ++c)
+    {
+      auto* nodeVariable = this->Model->item(nodeRow, kFirstVariableCol + c);
+      auto* sideVariable = this->Model->item(sideRow, kFirstVariableCol + c);
+      if (nodeVariable)
+      {
+        nodeVariable->setText(sideVariable ? sideVariable->text() : QStringLiteral("0"));
+      }
+    }
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -469,7 +585,7 @@ void pqSHYXPartitionedBlockNamesWidget::setVariableColumnCount(int count)
   this->VariableColumnCount = count;
   this->Model->setColumnCount(kFirstVariableCol + count);
 
-  QStringList labels = { tr("#"), tr("Type"), tr("Name") };
+  QStringList labels = { tr("#"), tr("Type"), tr("Name"), tr("Write Normal") };
   for (int i = 0; i < count; ++i)
   {
     labels.push_back(tr("Variable%1").arg(i + 1));
@@ -482,6 +598,7 @@ void pqSHYXPartitionedBlockNamesWidget::setVariableColumnCount(int count)
     header->setSectionResizeMode(kColIndex, QHeaderView::ResizeToContents);
     header->setSectionResizeMode(kColType, QHeaderView::ResizeToContents);
     header->setSectionResizeMode(kColName, QHeaderView::Stretch);
+    header->setSectionResizeMode(kColWriteNormal, QHeaderView::ResizeToContents);
     for (int c = 0; c < count; ++c)
     {
       header->setSectionResizeMode(kFirstVariableCol + c, QHeaderView::ResizeToContents);
@@ -577,6 +694,36 @@ QList<QStringList> pqSHYXPartitionedBlockNamesWidget::currentBoundaryVariablesFr
 }
 
 // ---------------------------------------------------------------------------
+QList<int> pqSHYXPartitionedBlockNamesWidget::currentBoundaryWriteNormalsFromProperty() const
+{
+  QList<int> flags;
+  if (this->BoundaryWriteNormalsPropertyName.isEmpty())
+  {
+    return flags;
+  }
+
+  const QVariant value = this->property(this->BoundaryWriteNormalsPropertyName.toUtf8().data());
+  const QString text = value.toString();
+  if (text.isEmpty())
+  {
+    return flags;
+  }
+
+  const QStringList split = text.split(QLatin1Char('\n'), Qt::KeepEmptyParts);
+  for (QString line : split)
+  {
+    if (line.endsWith(QLatin1Char('\r')))
+    {
+      line.chop(1);
+    }
+    bool ok = false;
+    const int flag = line.trimmed().toInt(&ok);
+    flags.push_back(ok && flag != 0 ? 1 : 0);
+  }
+  return flags;
+}
+
+// ---------------------------------------------------------------------------
 QList<pqSHYXPartitionedBlockNamesWidget::BlockRow>
 pqSHYXPartitionedBlockNamesWidget::collectCurrentOutputNames() const
 {
@@ -601,8 +748,8 @@ pqSHYXPartitionedBlockNamesWidget::collectCurrentOutputNames() const
   const int sideSets = firstNodeByAnyPath(assembly, "/IOSS/side_sets", "/side_sets");
 
   appendChildren(assembly, elemBlocks, tr("Element block"), rows);
-  appendChildren(assembly, nodeSets, tr("Node set"), rows);
   appendChildren(assembly, sideSets, tr("Side set"), rows);
+  appendChildren(assembly, nodeSets, tr("Node set"), rows);
 
   return rows;
 }

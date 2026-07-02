@@ -4,8 +4,8 @@
                  class="vtkSHYXDataSetToPartitionedCollection"
                  label="SHYX DataSet To Partitioned Collection">
       <Documentation
-          short_help="Split dataset into tet volume, then node sets, then side sets as a PartitionedDataSetCollection."
-          long_help="Tetrahedra (if any) are extracted first under vtkDataAssembly IOSS/element_blocks/tetrahedra with contiguous GlobalIds (1..N) for IOSS writers. PartitionedDataSetCollection block order is then all node{i} blocks (node_sets), then all side{i} blocks (side_sets). When Partition Point Array Name is set on the extracted boundary vtkPolyData, vtkThreshold with THRESHOLD_BETWEEN (endpoints inclusive in VTK; All Scalars off: any corner qualifies) keeps cells whose first component lies in (-inf, 0]; vtkGeometryFilter and vtkPolyDataConnectivityFilter plus vtkAppendPolyData merge all such connected components into one side/node pair if non-empty. A second vtkThreshold pass (also any corner, BETWEEN) keeps first component in [1, +inf); vtkPolyDataConnectivityFilter splits that sub-mesh into n connected regions, each its own side/node pair. A cell whose corners all lie strictly in (0, 1) may belong to neither pass. Patch order is the merged non-positive patch first (if present), then the n patches at or above 1 (up to n+1 pairs). If the array is missing or the wrong length, or the name is cleared, or both passes yield no cells, the full surface is split with vtkPolyDataNormals (Feature Angle) and vtkPolyDataConnectivityFilter instead. Sort By Area and Custom Post Reorder apply to the full list of patches. Block metadata sets NAME and vtkIOSSReader ENTITY_ID."/>
+          short_help="Split dataset into tet volume, then side/node set pairs as a PartitionedDataSetCollection."
+          long_help="Tetrahedra (if any) are extracted first under vtkDataAssembly IOSS/element_blocks/tetrahedra with contiguous GlobalIds (1..N) for IOSS writers. PartitionedDataSetCollection block order is then all node{i} blocks (node_sets), then all side{i} blocks (side_sets), while the Partitioned block names panel lists editable side sets before mirrored node sets. When Partition Point Array Name is set on the extracted boundary vtkPolyData, vtkThreshold with THRESHOLD_BETWEEN (endpoints inclusive in VTK; All Scalars off: any corner qualifies) keeps cells whose first component lies in (-inf, 0]; vtkGeometryFilter and vtkPolyDataConnectivityFilter plus vtkAppendPolyData merge all such connected components into one side/node pair if non-empty. A second vtkThreshold pass (also any corner, BETWEEN) keeps first component in [1, +inf); vtkPolyDataConnectivityFilter splits that sub-mesh into n connected regions, each its own side/node pair. A cell whose corners all lie strictly in (0, 1) may belong to neither pass. Patch order is the merged non-positive patch first (if present), then the n patches at or above 1 (up to n+1 pairs). If the array is missing or the wrong length, or the name is cleared, or both passes yield no cells, the full surface is split with vtkPolyDataNormals (Feature Angle) and vtkPolyDataConnectivityFilter instead. Sort By Area and Custom Post Reorder apply to the full list of patches. Block metadata sets NAME and vtkIOSSReader ENTITY_ID."/>
 
       <OutputPort name="Partitioned collection" index="0" id="port0"/>
 
@@ -60,9 +60,9 @@
           animateable="0">
         <BooleanDomain name="bool"/>
         <Documentation>
-          BoundaryRadialValue is always computed as 1 - x^a on side and node set blocks. When this
-          option is enabled, BoundaryRadialValueNormal uses BoundaryRadialValue * sideNormal. When
-          disabled, BoundaryRadialValueNormal uses sideNormal.
+          When enabled, compute BoundaryRadialValue = 1 - x^a on side and node set blocks, and
+          BoundaryRadialValueNormal uses BoundaryRadialValue * sideNormal. When disabled,
+          BoundaryRadialValue is not computed, and BoundaryRadialValueNormal uses sideNormal.
         </Documentation>
       </IntVectorProperty>
 
@@ -74,14 +74,20 @@
         <Documentation>
           Exponent a in BoundaryRadialValue = 1 - x^a, where x is the raw radial coordinate.
         </Documentation>
+        <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="visibility"
+                                   property="ComputeBoundaryRadialValue"
+                                   value="1"/>
+        </Hints>
       </DoubleVectorProperty>
 
       <StringVectorProperty name="BlockNames" label="Block Names" command="SetBlockNames"
           number_of_elements="1" default_values="" animateable="0">
         <Documentation>
-          Newline-separated names for output partitioned datasets in output order: tetrahedra (if present),
-          all node sets, then all side sets. Empty or missing entries use the default tetrahedra / node{i} /
-          side{i} names.
+          Newline-separated names in Partitioned block names panel order: tetrahedra (if present),
+          all side sets, then mirrored node sets. Only side-set rows are editable in the custom widget;
+          node-set names are refreshed from the corresponding side-set name with a node_ prefix.
         </Documentation>
       </StringVectorProperty>
 
@@ -89,12 +95,22 @@
           command="SetBoundaryVariables" number_of_elements="1" default_values="" animateable="0"
           panel_visibility="never">
         <Documentation>
-          Newline-separated rows aligned with the output block order; values in each row are
-          tab-separated Variable1, Variable2, ... entries. Only side set rows are used. All zero
-          variables disable writing to tetrahedra points for that side. Non-zero values are written to
-          tetrahedra point-data scalars BoundaryVariable1, BoundaryVariable2, ... and also enable
-          BoundaryRadialValueNormal. BoundaryRadialValueNormal does not multiply these variables. If
-          several sides touch the same node, repeated writes are warned and averaged.
+          Newline-separated rows aligned with the Partitioned block names panel order; values in each
+          row are tab-separated Variable1, Variable2, ... entries. Side set rows are used by the filter,
+          and node set rows mirror the corresponding side row in the widget. Non-zero values are written
+          to tetrahedra point-data scalars BoundaryVariable1, BoundaryVariable2, ... Repeated writes to
+          the same volume node are warned and averaged.
+        </Documentation>
+      </StringVectorProperty>
+
+      <StringVectorProperty name="BoundaryWriteNormals" label="Boundary Write Normals"
+          command="SetBoundaryWriteNormals" number_of_elements="1" default_values=""
+          animateable="0" panel_visibility="never">
+        <Documentation>
+          Newline-separated 0/1 flags aligned with the Partitioned block names panel order. Only side
+          set rows are used. When non-zero, that side's BoundaryRadialValueNormal is accumulated onto
+          tetrahedra volume points (independent of BoundaryVariables). Repeated writes to the same volume
+          node are warned and averaged.
         </Documentation>
       </StringVectorProperty>
 
@@ -103,6 +119,7 @@
                      panel_visibility="default">
         <Property function="Names" name="BlockNames"/>
         <Property function="BoundaryVariables" name="BoundaryVariables"/>
+        <Property function="BoundaryWriteNormals" name="BoundaryWriteNormals"/>
       </PropertyGroup>
 
       <Hints>

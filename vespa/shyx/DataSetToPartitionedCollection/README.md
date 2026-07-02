@@ -28,6 +28,7 @@
 | **FeatureAngle** | `double` | `70.0` | **特征角阈值**（回退路径）。 |
 | **SortByArea** | `int` (布尔) | `1` (True) | **按面积排序**（对当前 **全部** patch 列表：≤0 的合并片 + ≥1 的各连通片）。 |
 | **CustomPostReorder** | `int` (布尔) | `1` (True) | **自定义重排**（在面积排序之后，对当前 patch 列表生效）。 |
-| **ComputeBoundaryRadialValue** | `int` (布尔) | `0` (False) | `BoundaryRadialValueNormal` 是否乘以 `BoundaryRadialValue`。启用时为 `BoundaryRadialValue * sideNormal`；关闭时为 `sideNormal`。 |
-| **BoundaryRadialNormalFalloffFactor** | `double` | `1.0` | 指数参数 `a`：`BoundaryRadialValue = 1 - x^a`，其中 `x` 为原始径向坐标。 |
-| **BoundaryVariables** | `char*` | 空 | 由 `Partitioned block names` 面板的 Side set `Variable1/2/...` 列维护；默认 `Variable1=0`，不写体点。非 0 时写入四面体体块点数据 `BoundaryRadialValueNormal`，并把变量列写入独立标量数组 `BoundaryVariable1`、`BoundaryVariable2`……。重复写入同一体点时 warning 并取平均值。 |
+| **ComputeBoundaryRadialValue** | `int` (布尔) | `0` (False) | 是否计算 `BoundaryRadialValue` 并将其乘入 `BoundaryRadialValueNormal`。启用时计算 `BoundaryRadialValue = 1 - x^a`，normal 为 `BoundaryRadialValue * sideNormal`；关闭时不生成 `BoundaryRadialValue`，normal 为 `sideNormal`。 |
+| **BoundaryRadialNormalFalloffFactor** | `double` | `1.0` | 指数参数 `a`；仅在 `ComputeBoundaryRadialValue` 启用时使用。 |
+| **BoundaryVariables** | `char*` | 空 | 由 `Partitioned block names` 面板的 Side set `Variable1/2/...` 列维护；默认 `Variable1=0` 不写体点。非 0 时写入四面体体块点数据 `BoundaryVariable1`、`BoundaryVariable2`……。重复写入同一体点时 warning 并取平均值。 |
+| **BoundaryWriteNormals** | `char*` | 空 | 由 `Partitioned block names` 面板的 Side set `Write Normal` 列维护（0/1，按行对齐）。勾选时将该 side 的 `BoundaryRadialValueNormal` 累加到四面体体块点数据；与 Variable 无关。`BoundaryRadialValue` 不再写入体块。重复写入同一体点时 warning 并取平均值。 |

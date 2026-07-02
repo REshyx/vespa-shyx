@@ -63,7 +63,7 @@ public:
 
   /**
    * When non-zero, BoundaryRadialValueNormal uses BoundaryRadialValue * sideNormal. Otherwise it
-   * uses sideNormal. BoundaryRadialValue itself is always computed.
+   * uses sideNormal and BoundaryRadialValue is not computed.
    */
   vtkSetMacro(ComputeBoundaryRadialValue, int);
   vtkGetMacro(ComputeBoundaryRadialValue, int);
@@ -74,19 +74,31 @@ public:
   vtkGetMacro(BoundaryRadialNormalFalloffFactor, double);
 
   /**
-   * Newline-separated values aligned with the output block order (tetrahedra, node sets, side
-   * sets). Values in each row are tab-separated Variable1, Variable2, ... entries. Only side-set
-   * entries are used. Any non-zero value enables writes to volume points. Values are stored in
-   * BoundaryVariable1, BoundaryVariable2, ... arrays. BoundaryRadialValueNormal does not multiply
-   * these variables. Repeated writes to the same volume node are warned and averaged.
+   * Newline-separated values aligned with the Partitioned block names panel order (tetrahedra,
+   * side sets, mirrored node sets). Values in each row are tab-separated Variable1, Variable2, ...
+   * entries. Only side-set entries are used by the filter. Volume point arrays are always
+   * initialized on the tetrahedra block (zeros when no side contributes). Non-zero side rows
+   * accumulate onto volume points; repeated writes are averaged. Values are stored in
+   * BoundaryVariable1, BoundaryVariable2, ... arrays. Repeated writes to the same volume node are
+   * warned and averaged. Use BoundaryWriteNormals to control BoundaryRadialValueNormal volume
+   * accumulation independently.
    */
   vtkSetStringMacro(BoundaryVariables);
   vtkGetStringMacro(BoundaryVariables);
 
   /**
-   * Newline-separated names for the output partitioned datasets, in output order:
-   * tetrahedra (when present), all node sets, then all side sets. Empty / missing
-   * entries fall back to tetrahedra, node{i}, side{i}.
+   * Newline-separated 0/1 flags aligned with the Partitioned block names panel order. Only side-set
+   * rows are used. When non-zero, that side's BoundaryRadialValueNormal is accumulated onto
+   * tetrahedra volume points (independent of BoundaryVariables).
+   */
+  vtkSetStringMacro(BoundaryWriteNormals);
+  vtkGetStringMacro(BoundaryWriteNormals);
+
+  /**
+   * Newline-separated names aligned with the Partitioned block names panel order:
+   * tetrahedra (when present), all side sets, then mirrored node sets. Only side-set names are
+   * editable in the custom widget; corresponding node sets use the same base name with a \c node_
+   * prefix.
    */
   vtkSetStringMacro(BlockNames);
   vtkGetStringMacro(BlockNames);
@@ -105,13 +117,14 @@ protected:
   int SortByArea = 1;
   /**
    * When non-zero (default), after ordering (e.g. by area), move the 3rd patch to the front and
-   * the 1st patch to the end; 2nd stays next, then original 4th…(n-1) in order. No effect if fewer
+   * the 1st patch to the end; 2nd stays next, then original 4th...(n-1) in order. No effect if fewer
    * than three patches.
    */
   int CustomPostReorder = 1;
   int ComputeBoundaryRadialValue = 0;
   double BoundaryRadialNormalFalloffFactor = 1.0;
   char* BoundaryVariables = nullptr;
+  char* BoundaryWriteNormals = nullptr;
   char* BlockNames = nullptr;
 
 private:

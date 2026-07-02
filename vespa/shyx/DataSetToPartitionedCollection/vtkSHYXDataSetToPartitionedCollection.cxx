@@ -60,6 +60,27 @@ constexpr double kPartitionGeOneInclusive = 1.0;
 constexpr const char* kBoundaryRadialValueArrayName = "BoundaryRadialValue";
 constexpr const char* kBoundaryRadialNormalArrayName = "BoundaryRadialValueNormal";
 constexpr const char* kBoundaryVariableArrayPrefix = "BoundaryVariable";
+constexpr const char* kNodeSetNamePrefix = "node_";
+
+struct VolumeBoundaryDuplicateWrites
+{
+  vtkIdType normal = 0;
+  vtkIdType variables = 0;
+};
+
+std::string JoinArrayNames(const std::vector<std::string>& names)
+{
+  std::ostringstream joined;
+  for (size_t i = 0; i < names.size(); ++i)
+  {
+    if (i > 0)
+    {
+      joined << ", ";
+    }
+    joined << names[i];
+  }
+  return joined.str();
+}
 
 /** vtkIOSSWriter expects contiguous global ids (1..N) per volume block. */
 void SetContiguousGlobalIds(vtkUnstructuredGrid* ug)
@@ -829,98 +850,143 @@ void InitializeVolumeBoundaryVariableArrays(
   }
 }
 
-vtkIdType AccumulateBoundaryRadialNormalToVolume(
-  vtkPolyData* side, vtkUnstructuredGrid* volume, const char* radialArrayName,
-  const char* vectorArrayName, const std::vector<std::string>& variableArrayNames,
-  const std::vector<double>& variables, bool useRadialValueForNormal,
-  std::vector<unsigned int>& volumePointWriteCounts)
+VolumeBoundaryDuplicateWrites AccumulateBoundaryRadialNormalToVolume(vtkPolyData* side,
+  vtkUnstructuredGrid* volume, const char* radialArrayName, const char* vectorArrayName,
+  const std::vector<std::string>& variableArrayNames, const std::vector<double>& variables,
+  bool writeNormal, bool writeVariables, bool useRadialValueForNormal,
+  std::vector<unsigned int>& volumeNormalWriteCounts,
+  std::vector<unsigned int>& volumeVariableWriteCounts)
 {
-  if (!side || !volume || !radialArrayName || radialArrayName[0] == '\0' || !vectorArrayName ||
-    vectorArrayName[0] == '\0' || variableArrayNames.empty() || variables.empty())
+  VolumeBoundaryDuplicateWrites duplicates;
+  if (!side || !volume || (!writeNormal && !writeVariables))
   {
-    return 0;
+    return duplicates;
+  }
+  if (writeNormal && (!vectorArrayName || vectorArrayName[0] == '\0'))
+  {
+    return duplicates;
+  }
+  if (writeVariables && (variableArrayNames.empty() || variables.empty()))
+  {
+    return duplicates;
   }
 
-  double normal[3];
-  if (!ComputeAverageCellNormal(side, normal))
+  double normal[3] = { 0.0, 0.0, 0.0 };
+  if (writeNormal && !ComputeAverageCellNormal(side, normal))
   {
-    return 0;
+    return duplicates;
   }
 
-  vtkDataArray* sideValues =
-    vtkDataArray::SafeDownCast(side->GetPointData()->GetArray(radialArrayName));
+  vtkDataArray* sideValues = (writeNormal && useRadialValueForNormal)
+    ? vtkDataArray::SafeDownCast(side->GetPointData()->GetArray(radialArrayName))
+    : nullptr;
   vtkDataArray* sideGids = vtkDataArray::SafeDownCast(side->GetPointData()->GetGlobalIds());
-  vtkDoubleArray* volumeVectors =
-    vtkDoubleArray::SafeDownCast(volume->GetPointData()->GetArray(vectorArrayName));
-  if (!sideValues || !sideGids || !volumeVectors || sideValues->GetNumberOfComponents() < 1 ||
-    sideValues->GetNumberOfTuples() != side->GetNumberOfPoints() ||
-    sideGids->GetNumberOfTuples() != side->GetNumberOfPoints() ||
-    volumeVectors->GetNumberOfComponents() != 3 ||
-    volumeVectors->GetNumberOfTuples() != volume->GetNumberOfPoints())
+  vtkDoubleArray* volumeVectors = writeNormal
+    ? vtkDoubleArray::SafeDownCast(volume->GetPointData()->GetArray(vectorArrayName))
+    : nullptr;
+  if (!sideGids || sideGids->GetNumberOfTuples() != side->GetNumberOfPoints())
   {
-    return 0;
+    return duplicates;
+  }
+  if (writeNormal &&
+    (!volumeVectors || volumeVectors->GetNumberOfComponents() != 3 ||
+      volumeVectors->GetNumberOfTuples() != volume->GetNumberOfPoints()))
+  {
+    return duplicates;
+  }
+  if (writeNormal && useRadialValueForNormal &&
+    (!sideValues || sideValues->GetNumberOfComponents() < 1 ||
+      sideValues->GetNumberOfTuples() != side->GetNumberOfPoints()))
+  {
+    return duplicates;
   }
 
   std::vector<vtkDoubleArray*> volumeVariables;
-  volumeVariables.reserve(variableArrayNames.size());
-  for (const std::string& arrayName : variableArrayNames)
+  if (writeVariables)
   {
-    vtkDoubleArray* arr = vtkDoubleArray::SafeDownCast(volume->GetPointData()->GetArray(arrayName.c_str()));
-    if (!arr || arr->GetNumberOfComponents() != 1 ||
-      arr->GetNumberOfTuples() != volume->GetNumberOfPoints())
+    volumeVariables.reserve(variableArrayNames.size());
+    for (const std::string& arrayName : variableArrayNames)
     {
-      return 0;
+      vtkDoubleArray* arr =
+        vtkDoubleArray::SafeDownCast(volume->GetPointData()->GetArray(arrayName.c_str()));
+      if (!arr || arr->GetNumberOfComponents() != 1 ||
+        arr->GetNumberOfTuples() != volume->GetNumberOfPoints())
+      {
+        return duplicates;
+      }
+      volumeVariables.push_back(arr);
     }
-    volumeVariables.push_back(arr);
   }
 
   const vtkIdType nVolumePts = volume->GetNumberOfPoints();
-  if (static_cast<vtkIdType>(volumePointWriteCounts.size()) != nVolumePts)
+  if (static_cast<vtkIdType>(volumeNormalWriteCounts.size()) != nVolumePts)
   {
-    volumePointWriteCounts.assign(static_cast<size_t>(nVolumePts), 0);
+    volumeNormalWriteCounts.assign(static_cast<size_t>(nVolumePts), 0);
+  }
+  if (static_cast<vtkIdType>(volumeVariableWriteCounts.size()) != nVolumePts)
+  {
+    volumeVariableWriteCounts.assign(static_cast<size_t>(nVolumePts), 0);
   }
 
-  vtkIdType duplicateWrites = 0;
+  vtkIdType duplicateNormalWrites = 0;
+  vtkIdType duplicateVariableWrites = 0;
   for (vtkIdType p = 0; p < side->GetNumberOfPoints(); ++p)
   {
-    const double v = sideValues->GetComponent(p, 0);
-    if (!vtkMath::IsFinite(v))
-    {
-      continue;
-    }
-
     const vtkIdType volumePointId = static_cast<vtkIdType>(sideGids->GetComponent(p, 0)) - 1;
     if (volumePointId < 0 || volumePointId >= nVolumePts)
     {
       continue;
     }
 
-    if (volumePointWriteCounts[static_cast<size_t>(volumePointId)] > 0)
+    if (writeNormal)
     {
-      ++duplicateWrites;
+      const double v = useRadialValueForNormal ? sideValues->GetComponent(p, 0) : 1.0;
+      if (!vtkMath::IsFinite(v))
+      {
+        continue;
+      }
+
+      if (volumeNormalWriteCounts[static_cast<size_t>(volumePointId)] > 0)
+      {
+        ++duplicateNormalWrites;
+      }
+
+      double out[3];
+      volumeVectors->GetTuple(volumePointId, out);
+      const double normalWeight = useRadialValueForNormal ? v : 1.0;
+      out[0] += normalWeight * normal[0];
+      out[1] += normalWeight * normal[1];
+      out[2] += normalWeight * normal[2];
+      volumeVectors->SetTuple(volumePointId, out);
+      ++volumeNormalWriteCounts[static_cast<size_t>(volumePointId)];
     }
 
-    double out[3];
-    volumeVectors->GetTuple(volumePointId, out);
-    const double normalWeight = useRadialValueForNormal ? v : 1.0;
-    out[0] += normalWeight * normal[0];
-    out[1] += normalWeight * normal[1];
-    out[2] += normalWeight * normal[2];
-    volumeVectors->SetTuple(volumePointId, out);
-    for (size_t i = 0; i < volumeVariables.size(); ++i)
+    if (writeVariables)
     {
-      const double value = i < variables.size() && vtkMath::IsFinite(variables[i]) ? variables[i] : 0.0;
-      volumeVariables[i]->SetValue(volumePointId, volumeVariables[i]->GetValue(volumePointId) + value);
+      if (volumeVariableWriteCounts[static_cast<size_t>(volumePointId)] > 0)
+      {
+        ++duplicateVariableWrites;
+      }
+
+      for (size_t i = 0; i < volumeVariables.size(); ++i)
+      {
+        const double value =
+          i < variables.size() && vtkMath::IsFinite(variables[i]) ? variables[i] : 0.0;
+        volumeVariables[i]->SetValue(
+          volumePointId, volumeVariables[i]->GetValue(volumePointId) + value);
+      }
+      ++volumeVariableWriteCounts[static_cast<size_t>(volumePointId)];
     }
-    ++volumePointWriteCounts[static_cast<size_t>(volumePointId)];
   }
-  return duplicateWrites;
+  duplicates.normal = duplicateNormalWrites;
+  duplicates.variables = duplicateVariableWrites;
+  return duplicates;
 }
 
-void AverageRepeatedBoundaryRadialNormalWrites(
-  vtkUnstructuredGrid* volume, const char* vectorArrayName,
+void AverageRepeatedBoundaryRadialNormalWrites(vtkUnstructuredGrid* volume, const char* vectorArrayName,
   const std::vector<std::string>& variableArrayNames,
-  const std::vector<unsigned int>& writeCounts)
+  const std::vector<unsigned int>& normalWriteCounts,
+  const std::vector<unsigned int>& variableWriteCounts)
 {
   if (!volume || !vectorArrayName || vectorArrayName[0] == '\0')
   {
@@ -931,7 +997,7 @@ void AverageRepeatedBoundaryRadialNormalWrites(
     vtkDoubleArray::SafeDownCast(volume->GetPointData()->GetArray(vectorArrayName));
   if (!volumeVectors || volumeVectors->GetNumberOfComponents() != 3 ||
     volumeVectors->GetNumberOfTuples() != volume->GetNumberOfPoints() ||
-    static_cast<vtkIdType>(writeCounts.size()) != volume->GetNumberOfPoints())
+    static_cast<vtkIdType>(normalWriteCounts.size()) != volume->GetNumberOfPoints())
   {
     return;
   }
@@ -950,21 +1016,81 @@ void AverageRepeatedBoundaryRadialNormalWrites(
 
   for (vtkIdType p = 0; p < volume->GetNumberOfPoints(); ++p)
   {
-    const unsigned int count = writeCounts[static_cast<size_t>(p)];
-    if (count <= 1)
+    const unsigned int normalCount = normalWriteCounts[static_cast<size_t>(p)];
+    if (normalCount > 1)
+    {
+      double out[3];
+      volumeVectors->GetTuple(p, out);
+      out[0] /= static_cast<double>(normalCount);
+      out[1] /= static_cast<double>(normalCount);
+      out[2] /= static_cast<double>(normalCount);
+      volumeVectors->SetTuple(p, out);
+    }
+
+    const unsigned int variableCount =
+      variableWriteCounts.size() == static_cast<size_t>(volume->GetNumberOfPoints())
+      ? variableWriteCounts[static_cast<size_t>(p)]
+      : 0u;
+    if (variableCount <= 1)
     {
       continue;
     }
-    double out[3];
-    volumeVectors->GetTuple(p, out);
-    out[0] /= static_cast<double>(count);
-    out[1] /= static_cast<double>(count);
-    out[2] /= static_cast<double>(count);
-    volumeVectors->SetTuple(p, out);
     for (vtkDoubleArray* arr : volumeVariables)
     {
-      arr->SetValue(p, arr->GetValue(p) / static_cast<double>(count));
+      arr->SetValue(p, arr->GetValue(p) / static_cast<double>(variableCount));
     }
+  }
+}
+
+void AddBoundaryVolumeFieldArraysToSide(vtkPolyData* side, const char* radialArrayName,
+  const char* vectorArrayName, const std::vector<std::string>& variableArrayNames,
+  const std::vector<double>& variables, bool useRadialValueForNormal)
+{
+  if (!side || !vectorArrayName || vectorArrayName[0] == '\0')
+  {
+    return;
+  }
+
+  vtkDataArray* radial = useRadialValueForNormal
+    ? vtkDataArray::SafeDownCast(side->GetPointData()->GetArray(radialArrayName))
+    : nullptr;
+  if (useRadialValueForNormal &&
+    (!radial || radial->GetNumberOfComponents() < 1 ||
+      radial->GetNumberOfTuples() != side->GetNumberOfPoints()))
+  {
+    return;
+  }
+
+  double normal[3];
+  if (!ComputeAverageCellNormal(side, normal))
+  {
+    normal[0] = normal[1] = normal[2] = 0.0;
+  }
+
+  vtkNew<vtkDoubleArray> normalArray;
+  normalArray->SetName(vectorArrayName);
+  normalArray->SetNumberOfComponents(3);
+  normalArray->SetNumberOfTuples(side->GetNumberOfPoints());
+  for (vtkIdType p = 0; p < side->GetNumberOfPoints(); ++p)
+  {
+    const double v = useRadialValueForNormal ? radial->GetComponent(p, 0) : 1.0;
+    const double weight = useRadialValueForNormal && vtkMath::IsFinite(v) ? v : 1.0;
+    const double tuple[3] = { weight * normal[0], weight * normal[1], weight * normal[2] };
+    normalArray->SetTuple(p, tuple);
+  }
+  side->GetPointData()->RemoveArray(vectorArrayName);
+  side->GetPointData()->AddArray(normalArray);
+
+  for (size_t i = 0; i < variableArrayNames.size(); ++i)
+  {
+    vtkNew<vtkDoubleArray> arr;
+    arr->SetName(variableArrayNames[i].c_str());
+    arr->SetNumberOfComponents(1);
+    arr->SetNumberOfTuples(side->GetNumberOfPoints());
+    const double value = i < variables.size() && vtkMath::IsFinite(variables[i]) ? variables[i] : 0.0;
+    arr->Fill(value);
+    side->GetPointData()->RemoveArray(variableArrayNames[i].c_str());
+    side->GetPointData()->AddArray(arr);
   }
 }
 
@@ -1413,27 +1539,6 @@ size_t CountBoundaryVariables(const std::vector<std::vector<double>>& values)
   return nVariables;
 }
 
-bool HasNonZeroBoundaryVariable(
-  const std::vector<std::vector<double>>& values, bool hasTet, unsigned int nSideNodePairs)
-{
-  const unsigned int sideOffset = (hasTet ? 1u : 0u) + nSideNodePairs;
-  for (unsigned int i = 0; i < nSideNodePairs; ++i)
-  {
-    if (sideOffset + i >= values.size())
-    {
-      continue;
-    }
-    for (double value : values[sideOffset + i])
-    {
-      if (value != 0.0 && vtkMath::IsFinite(value))
-      {
-        return true;
-      }
-    }
-  }
-  return false;
-}
-
 bool HasNonZeroBoundaryVariableRow(const std::vector<double>& values)
 {
   for (double value : values)
@@ -1446,6 +1551,35 @@ bool HasNonZeroBoundaryVariableRow(const std::vector<double>& values)
   return false;
 }
 
+std::vector<int> ParseLineIntFlags(const char* values)
+{
+  std::vector<int> result;
+  if (!values || values[0] == '\0')
+  {
+    return result;
+  }
+
+  std::stringstream stream(values);
+  std::string line;
+  while (std::getline(stream, line))
+  {
+    if (!line.empty() && line.back() == '\r')
+    {
+      line.pop_back();
+    }
+    std::stringstream lineStream(line);
+    int flag = 0;
+    lineStream >> flag;
+    result.push_back(flag != 0 ? 1 : 0);
+  }
+  return result;
+}
+
+bool ResolveWriteNormal(const std::vector<int>& flags, unsigned int blockIndex)
+{
+  return blockIndex < flags.size() && flags[blockIndex] != 0;
+}
+
 std::string ResolveBlockName(
   const std::vector<std::string>& customNames, unsigned int blockIndex, const std::string& fallback)
 {
@@ -1454,6 +1588,15 @@ std::string ResolveBlockName(
     return customNames[blockIndex];
   }
   return fallback;
+}
+
+std::string ResolveNodeSetBlockName(const std::vector<std::string>& customNames,
+  unsigned int customSideOffset, unsigned int nSideNodePairs, unsigned int pairIndex,
+  const std::string& sideName)
+{
+  const unsigned int nodeNameIndex = customSideOffset + nSideNodePairs + pairIndex;
+  const std::string fallback = std::string(kNodeSetNamePrefix) + sideName;
+  return ResolveBlockName(customNames, nodeNameIndex, fallback);
 }
 
 void BuildIossAssembly(vtkPartitionedDataSetCollection* coll, bool hasTet,
@@ -1467,6 +1610,7 @@ void BuildIossAssembly(vtkPartitionedDataSetCollection* coll, bool hasTet,
   const int nodeSetsNode = rootAsm->AddNode("node_sets");
 
   unsigned int dsCursor = 0;
+  const unsigned int customSideOffset = hasTet ? 1u : 0u;
 
   if (hasTet)
   {
@@ -1479,8 +1623,10 @@ void BuildIossAssembly(vtkPartitionedDataSetCollection* coll, bool hasTet,
 
   for (unsigned int i = 0; i < nSideNodePairs; ++i)
   {
+    const std::string sideName =
+      ResolveBlockName(blockNames, customSideOffset + i, "side" + std::to_string(i));
     const std::string nodeName =
-      ResolveBlockName(blockNames, dsCursor, "node" + std::to_string(i));
+      ResolveNodeSetBlockName(blockNames, customSideOffset, nSideNodePairs, i, sideName);
     const int leafN = rootAsm->AddNode(
       vtkDataAssembly::MakeValidNodeName(nodeName.c_str()).c_str(), nodeSetsNode);
     rootAsm->SetAttribute(leafN, "label", nodeName.c_str());
@@ -1489,7 +1635,7 @@ void BuildIossAssembly(vtkPartitionedDataSetCollection* coll, bool hasTet,
   for (unsigned int i = 0; i < nSideNodePairs; ++i)
   {
     const std::string sideName =
-      ResolveBlockName(blockNames, dsCursor, "side" + std::to_string(i));
+      ResolveBlockName(blockNames, customSideOffset + i, "side" + std::to_string(i));
     const int leafS = rootAsm->AddNode(
       vtkDataAssembly::MakeValidNodeName(sideName.c_str()).c_str(), sideSetsNode);
     rootAsm->SetAttribute(leafS, "label", sideName.c_str());
@@ -1507,6 +1653,7 @@ vtkSHYXDataSetToPartitionedCollection::vtkSHYXDataSetToPartitionedCollection()
   this->SetNumberOfOutputPorts(1);
   this->SetPartitionPointArrayName("EndpointIndex");
   this->SetBoundaryVariables("");
+  this->SetBoundaryWriteNormals("");
 }
 
 //------------------------------------------------------------------------------
@@ -1514,6 +1661,7 @@ vtkSHYXDataSetToPartitionedCollection::~vtkSHYXDataSetToPartitionedCollection()
 {
   this->SetPartitionPointArrayName(nullptr);
   this->SetBoundaryVariables(nullptr);
+  this->SetBoundaryWriteNormals(nullptr);
   this->SetBlockNames(nullptr);
 }
 
@@ -1531,6 +1679,8 @@ void vtkSHYXDataSetToPartitionedCollection::PrintSelf(ostream& os, vtkIndent ind
      << this->BoundaryRadialNormalFalloffFactor << "\n";
   os << indent << "BoundaryVariables: "
      << (this->BoundaryVariables ? this->BoundaryVariables : "(null)") << "\n";
+  os << indent << "BoundaryWriteNormals: "
+     << (this->BoundaryWriteNormals ? this->BoundaryWriteNormals : "(null)") << "\n";
   os << indent << "BlockNames: " << (this->BlockNames ? this->BlockNames : "(null)") << "\n";
 }
 
@@ -1584,6 +1734,7 @@ int vtkSHYXDataSetToPartitionedCollection::RequestData(vtkInformation* vtkNotUse
   const std::vector<std::string> customBlockNames = ParseBlockNames(this->BlockNames);
   const std::vector<std::vector<double>> boundaryVariables =
     ParseLineDoubleMatrix(this->BoundaryVariables);
+  const std::vector<int> boundaryWriteNormals = ParseLineIntFlags(this->BoundaryWriteNormals);
 
   vtkUnstructuredGrid* ug = vtkUnstructuredGrid::SafeDownCast(input);
   vtkNew<vtkPolyData> surfaceWork;
@@ -1683,20 +1834,22 @@ int vtkSHYXDataSetToPartitionedCollection::RequestData(vtkInformation* vtkNotUse
 
   const unsigned int nPairs = static_cast<unsigned int>(sidePieces.size());
   vtkIdType nextStandaloneSurfacePointGid = 1;
+  const bool computeBoundaryRadialValue = this->ComputeBoundaryRadialValue != 0;
   const size_t nBoundaryVariables = CountBoundaryVariables(boundaryVariables);
   const std::vector<std::string> boundaryVariableArrayNames =
     BoundaryVariableArrayNames(nBoundaryVariables);
-  const bool writeVolumeNormals = volumeGridForIoss &&
-    HasNonZeroBoundaryVariable(boundaryVariables, volumeGridForIoss != nullptr, nPairs);
+  const bool writeVolumeNormals = volumeGridForIoss != nullptr;
   if (writeVolumeNormals)
   {
     InitializeVolumeBoundaryRadialNormalArray(volumeGridForIoss, kBoundaryRadialNormalArrayName);
     InitializeVolumeBoundaryVariableArrays(volumeGridForIoss, boundaryVariableArrayNames);
   }
   std::vector<unsigned int> volumeNormalWriteCounts;
+  std::vector<unsigned int> volumeVariableWriteCounts;
   if (writeVolumeNormals)
   {
     volumeNormalWriteCounts.assign(static_cast<size_t>(volumeGridForIoss->GetNumberOfPoints()), 0);
+    volumeVariableWriteCounts.assign(static_cast<size_t>(volumeGridForIoss->GetNumberOfPoints()), 0);
   }
 
   std::vector<vtkSmartPointer<vtkPolyData>> preparedSides;
@@ -1718,29 +1871,46 @@ int vtkSHYXDataSetToPartitionedCollection::RequestData(vtkInformation* vtkNotUse
     {
       AssignStandalonePatchPointGlobalIds(sideCopy, nextStandaloneSurfacePointGid);
     }
-    AddBoundaryRadialValueArray(
-      sideCopy, kBoundaryRadialValueArrayName, this->BoundaryRadialNormalFalloffFactor);
+    if (computeBoundaryRadialValue)
+    {
+      AddBoundaryRadialValueArray(
+        sideCopy, kBoundaryRadialValueArrayName, this->BoundaryRadialNormalFalloffFactor);
+    }
+    std::vector<double> variables(nBoundaryVariables, 0.0);
     if (writeVolumeNormals)
     {
-      const unsigned int sideBlockIndex = 1u + nPairs + i;
-      const std::vector<double> variables =
-        ResolveLineDoubles(boundaryVariables, sideBlockIndex, nBoundaryVariables);
-      if (!HasNonZeroBoundaryVariableRow(variables))
+      const unsigned int sideBlockIndex = (volumeGridForIoss ? 1u : 0u) + i;
+      variables = ResolveLineDoubles(boundaryVariables, sideBlockIndex, nBoundaryVariables);
+      AddBoundaryVolumeFieldArraysToSide(sideCopy,
+        computeBoundaryRadialValue ? kBoundaryRadialValueArrayName : nullptr,
+        kBoundaryRadialNormalArrayName, boundaryVariableArrayNames, variables,
+        computeBoundaryRadialValue);
+      const bool writeNormal = ResolveWriteNormal(boundaryWriteNormals, sideBlockIndex);
+      const bool writeVariables = HasNonZeroBoundaryVariableRow(variables);
+      if (writeNormal || writeVariables)
       {
-        SetContiguousCellGlobalIdsPolyData(sideCopy);
-        vtkSmartPointer<vtkPolyData> nodePd = BuildNodeSetPolyData(sideCopy);
-        preparedSides.emplace_back(sideCopy.GetPointer());
-        preparedNodes.emplace_back(nodePd);
-        continue;
-      }
-      const vtkIdType duplicateWrites = AccumulateBoundaryRadialNormalToVolume(sideCopy,
-        volumeGridForIoss, kBoundaryRadialValueArrayName, kBoundaryRadialNormalArrayName,
-        boundaryVariableArrayNames, variables, this->ComputeBoundaryRadialValue != 0,
-        volumeNormalWriteCounts);
-      if (duplicateWrites > 0)
-      {
-        vtkWarningMacro(<< "Averaging " << duplicateWrites
-                        << " repeated BoundaryRadialValueNormal point writes for side" << i << ".");
+        const VolumeBoundaryDuplicateWrites duplicateWrites =
+          AccumulateBoundaryRadialNormalToVolume(sideCopy, volumeGridForIoss,
+            computeBoundaryRadialValue ? kBoundaryRadialValueArrayName : nullptr,
+            kBoundaryRadialNormalArrayName, boundaryVariableArrayNames, variables, writeNormal,
+            writeVariables, this->ComputeBoundaryRadialValue != 0, volumeNormalWriteCounts,
+            volumeVariableWriteCounts);
+        if (duplicateWrites.normal > 0 || duplicateWrites.variables > 0)
+        {
+          std::ostringstream msg;
+          msg << "Averaging repeated volume boundary point writes for side" << i << ":";
+          if (duplicateWrites.normal > 0)
+          {
+            msg << " " << duplicateWrites.normal << " for " << kBoundaryRadialNormalArrayName;
+          }
+          if (duplicateWrites.variables > 0)
+          {
+            msg << (duplicateWrites.normal > 0 ? "; " : " ") << duplicateWrites.variables << " for "
+                << JoinArrayNames(boundaryVariableArrayNames);
+          }
+          msg << ".";
+          vtkWarningMacro(<< msg.str());
+        }
       }
     }
     SetContiguousCellGlobalIdsPolyData(sideCopy);
@@ -1753,19 +1923,22 @@ int vtkSHYXDataSetToPartitionedCollection::RequestData(vtkInformation* vtkNotUse
   if (writeVolumeNormals)
   {
     AverageRepeatedBoundaryRadialNormalWrites(volumeGridForIoss, kBoundaryRadialNormalArrayName,
-      boundaryVariableArrayNames, volumeNormalWriteCounts);
+      boundaryVariableArrayNames, volumeNormalWriteCounts, volumeVariableWriteCounts);
   }
 
+  const unsigned int customSideOffset = volumeGridForIoss ? 1u : 0u;
   for (unsigned int i = 0; i < nPairs; ++i)
   {
+    const std::string sideName =
+      ResolveBlockName(customBlockNames, customSideOffset + i, "side" + std::to_string(i));
     const std::string nodeName =
-      ResolveBlockName(customBlockNames, blockIndex, "node" + std::to_string(i));
+      ResolveNodeSetBlockName(customBlockNames, customSideOffset, nPairs, i, sideName);
     AppendPdcBlock(result, blockIndex, preparedNodes[i], nodeName.c_str(), nextEntityId++);
   }
   for (unsigned int i = 0; i < nPairs; ++i)
   {
-    const std::string sideName =
-      ResolveBlockName(customBlockNames, blockIndex, "side" + std::to_string(i));
+    const std::string sideName = ResolveBlockName(
+      customBlockNames, customSideOffset + i, "side" + std::to_string(i));
     AppendPdcBlock(result, blockIndex, preparedSides[i], sideName.c_str(), nextEntityId++);
   }
 
