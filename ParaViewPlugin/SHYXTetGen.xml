@@ -214,6 +214,45 @@
         <Property name="MaxVolume"/>
       </PropertyGroup>
 
+      <IntVectorProperty command="SetUseSurfaceDensitySizing"
+                         name="UseSurfaceDensitySizing"
+                         label="Use surface density sizing"
+                         number_of_elements="1"
+                         default_values="0">
+        <BooleanDomain name="bool"/>
+        <Documentation>
+          When ON, each PLC vertex gets a TetGen mesh size h (-m) equal to the mean length of
+          its incident surface triangle edges, times Surface sizing scale. TetGen propagates h
+          into the volume by linear interpolation during quality refinement (-q). Useful when
+          the input surface is already adaptively remeshed (fine where curved, coarse elsewhere).
+          Incompatible with neither quality meshing nor -m; -q is enabled automatically if needed.
+        </Documentation>
+      </IntVectorProperty>
+
+      <DoubleVectorProperty command="SetSurfaceSizingScale"
+                           name="SurfaceSizingScale"
+                           label="Surface sizing scale"
+                           number_of_elements="1"
+                           default_values="1">
+        <DoubleRangeDomain name="range" min="1e-6" max="1000"/>
+        <Documentation>
+          Multiplier on the mean incident surface edge length when Use surface density sizing
+          is ON. Values &lt; 1 produce a finer volume mesh; values &gt; 1 coarsen relative to
+          the surface triangle size.
+        </Documentation>
+        <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="visibility"
+                                   property="UseSurfaceDensitySizing"
+                                   value="1"/>
+        </Hints>
+      </DoubleVectorProperty>
+
+      <PropertyGroup label="Surface density sizing (-m)">
+        <Property name="UseSurfaceDensitySizing"/>
+        <Property name="SurfaceSizingScale"/>
+      </PropertyGroup>
+
       <Hints>
         <ShowInMenu category="SHYX" icon=":/VESPA/SHYX_TetGen.png"/>
         <ShowInMenu category="Vascular" icon=":/VESPA/SHYX_TetGen.png"/>

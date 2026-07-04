@@ -81,6 +81,8 @@ void vtkSHYXTetGen::PrintSelf(ostream& os, vtkIndent indent)
     os << indent << "UseCDT: " << (this->UseCDT ? "ON" : "OFF") << std::endl;
     os << indent << "CDTRefine: " << this->CDTRefine << std::endl;
     os << indent << "Epsilon: " << this->Epsilon << std::endl;
+    os << indent << "UseSurfaceDensitySizing: " << (this->UseSurfaceDensitySizing ? "ON" : "OFF") << std::endl;
+    os << indent << "SurfaceSizingScale: " << this->SurfaceSizingScale << std::endl;
     os << indent << "ProbeInputPointData: " << (this->ProbeInputPointData ? "ON" : "OFF") << std::endl;
     os << indent << "MaskArrayEnabled: " << (this->MaskArrayEnabled ? "ON" : "OFF") << std::endl;
     if (const char* const maskName = this->GetMaskArrayName())
@@ -168,6 +170,89 @@ bool ApplyMaskArrayToSurface(vtkPolyData* surface, const char* arrayName)
     cellToPoint->Update();
 
     surface->ShallowCopy(cellToPoint->GetOutput());
+    return true;
+}
+
+bool ComputeSurfaceVertexSizing(vtkPolyData* input, double scale, std::vector<REAL>& metrics)
+{
+    vtkPoints* const points = input->GetPoints();
+    if (!points || input->GetNumberOfCells() == 0)
+    {
+        return false;
+    }
+
+    const vtkIdType numPoints = points->GetNumberOfPoints();
+    std::vector<double> edgeLengthSum(static_cast<size_t>(numPoints), 0.0);
+    std::vector<vtkIdType> edgeCount(static_cast<size_t>(numPoints), 0);
+
+    auto accumulateEdge = [&](vtkIdType idA, vtkIdType idB) {
+        if (idA < 0 || idB < 0 || idA >= numPoints || idB >= numPoints || idA == idB)
+        {
+            return;
+        }
+        double pA[3];
+        double pB[3];
+        points->GetPoint(idA, pA);
+        points->GetPoint(idB, pB);
+        const double dx = pA[0] - pB[0];
+        const double dy = pA[1] - pB[1];
+        const double dz = pA[2] - pB[2];
+        const double len = std::sqrt(dx * dx + dy * dy + dz * dz);
+        if (len <= 0.0)
+        {
+            return;
+        }
+        edgeLengthSum[static_cast<size_t>(idA)] += len;
+        edgeCount[static_cast<size_t>(idA)]++;
+        edgeLengthSum[static_cast<size_t>(idB)] += len;
+        edgeCount[static_cast<size_t>(idB)]++;
+    };
+
+    for (vtkIdType cellId = 0; cellId < input->GetNumberOfCells(); ++cellId)
+    {
+        vtkCell* cell = input->GetCell(cellId);
+        if (!cell || cell->GetCellType() != VTK_TRIANGLE || cell->GetNumberOfPoints() != 3)
+        {
+            continue;
+        }
+        const vtkIdType ids[3] = {
+            cell->GetPointId(0),
+            cell->GetPointId(1),
+            cell->GetPointId(2),
+        };
+        accumulateEdge(ids[0], ids[1]);
+        accumulateEdge(ids[1], ids[2]);
+        accumulateEdge(ids[2], ids[0]);
+    }
+
+    metrics.assign(static_cast<size_t>(numPoints), 0.0);
+    double fallbackH = 0.0;
+    for (vtkIdType i = 0; i < numPoints; ++i)
+    {
+        const vtkIdType count = edgeCount[static_cast<size_t>(i)];
+        if (count > 0)
+        {
+            const double h = scale * edgeLengthSum[static_cast<size_t>(i)] / static_cast<double>(count);
+            metrics[static_cast<size_t>(i)] = static_cast<REAL>(h);
+            if (h > fallbackH)
+            {
+                fallbackH = h;
+            }
+        }
+    }
+
+    if (fallbackH <= 0.0)
+    {
+        return false;
+    }
+
+    for (vtkIdType i = 0; i < numPoints; ++i)
+    {
+        if (metrics[static_cast<size_t>(i)] <= 0.0)
+        {
+            metrics[static_cast<size_t>(i)] = static_cast<REAL>(fallbackH);
+        }
+    }
     return true;
 }
 } // namespace
@@ -310,6 +395,18 @@ static void deallocateTetgenioFacets(tetgenio& in)
 }
 
 //------------------------------------------------------------------------------
+static void deallocateTetgenioInput(tetgenio& in)
+{
+    deallocateTetgenioFacets(in);
+    if (in.pointmtrlist)
+    {
+        delete[] in.pointmtrlist;
+        in.pointmtrlist = nullptr;
+    }
+    in.numberofpointmtrs = 0;
+}
+
+//------------------------------------------------------------------------------
 int vtkSHYXTetGen::RequestData(
     vtkInformation* vtkNotUsed(request),
     vtkInformationVector** inputVector,
@@ -335,11 +432,34 @@ int vtkSHYXTetGen::RequestData(
     if (!vtkToTetgenio(input, in))
     {
         vtkErrorMacro("Failed to convert input to TetGen format.");
-        deallocateTetgenioFacets(in);
+        deallocateTetgenioInput(in);
         return 0;
     }
 
-    // Build TetGen command switches: p = PLC, Y = nobisect, q = quality, a = max volume
+    std::vector<REAL> surfaceSizingMetrics;
+    if (this->UseSurfaceDensitySizing)
+    {
+        if (!ComputeSurfaceVertexSizing(input, this->SurfaceSizingScale, surfaceSizingMetrics))
+        {
+            vtkErrorMacro("Failed to derive surface density sizing from input triangles.");
+            deallocateTetgenioInput(in);
+            return 0;
+        }
+        if (static_cast<int>(surfaceSizingMetrics.size()) != in.numberofpoints)
+        {
+            vtkErrorMacro("Surface sizing metric count does not match input points.");
+            deallocateTetgenioInput(in);
+            return 0;
+        }
+        in.numberofpointmtrs = 1;
+        in.pointmtrlist = new REAL[in.numberofpoints];
+        for (int i = 0; i < in.numberofpoints; ++i)
+        {
+            in.pointmtrlist[i] = surfaceSizingMetrics[static_cast<size_t>(i)];
+        }
+    }
+
+    // Build TetGen command switches: p = PLC, Y = nobisect, q = quality, a = max volume, m = sizing
     // Advanced: C = docheck, D = CDT, D# = cdtrefine, T = epsilon
     std::vector<char> switches(256, '\0');
     char* sw = switches.data();
@@ -362,19 +482,32 @@ int vtkSHYXTetGen::RequestData(
         len += std::snprintf(sw + len, 16, "D%d", this->CDTRefine); // cdtrefine
     }
     // Enable quality mesh if either MaxRadiusEdgeRatio or MinDihedralAngle is set (> 0)
-    // 0 value means no limit for that specific parameter. MaxRadiusEdgeRatio must be >= 1.2 when > 0
-    if (this->MaxRadiusEdgeRatio > 0.0 || this->MinDihedralAngle > 0.0)
+    // Surface density sizing (-m) also requires -q.
+    const bool useQualityMesh = this->MaxRadiusEdgeRatio > 0.0 || this->MinDihedralAngle > 0.0 ||
+        this->UseSurfaceDensitySizing;
+    if (useQualityMesh)
     {
-        // Ensure valid ranges: MaxRadiusEdgeRatio >= 1.2 when > 0, MinDihedralAngle > 0 and < 90 when > 0
-        // If MaxRadiusEdgeRatio is 0, use 0 (no limit on radius ratio)
-        // If MinDihedralAngle is 0, use 0 (no limit on dihedral angle)
-        double radiusRatio = this->MaxRadiusEdgeRatio > 0.0 ? 
-            (this->MaxRadiusEdgeRatio >= 1.2 ? this->MaxRadiusEdgeRatio : 1.8) : 0.0;
-        double dihedralAngle = this->MinDihedralAngle > 0.0 ? 
-            (this->MinDihedralAngle > 0.0 && this->MinDihedralAngle < 90.0 ? this->MinDihedralAngle : 0.0) : 0.0;
+        double radiusRatio = 0.0;
+        double dihedralAngle = 0.0;
+        if (this->UseSurfaceDensitySizing && this->MaxRadiusEdgeRatio <= 0.0 &&
+            this->MinDihedralAngle <= 0.0)
+        {
+            radiusRatio = 1.8;
+        }
+        else
+        {
+            radiusRatio = this->MaxRadiusEdgeRatio > 0.0 ?
+                (this->MaxRadiusEdgeRatio >= 1.2 ? this->MaxRadiusEdgeRatio : 1.8) : 0.0;
+            dihedralAngle = this->MinDihedralAngle > 0.0 ?
+                (this->MinDihedralAngle > 0.0 && this->MinDihedralAngle < 90.0 ? this->MinDihedralAngle : 0.0) : 0.0;
+        }
         len += std::snprintf(sw + len, 32, "q%g/%g",
             static_cast<double>(radiusRatio),
             static_cast<double>(dihedralAngle));
+    }
+    if (this->UseSurfaceDensitySizing)
+    {
+        len += std::snprintf(sw + len, 8, "m");
     }
     if (effectiveMaxVolume > 0.0)
     {
@@ -392,7 +525,7 @@ int vtkSHYXTetGen::RequestData(
 
     tetrahedralize(sw, &in, &out, nullptr, nullptr);
 
-    deallocateTetgenioFacets(in);
+    deallocateTetgenioInput(in);
 
     if (out.numberoftetrahedra == 0)
     {

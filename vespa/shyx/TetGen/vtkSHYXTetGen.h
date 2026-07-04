@@ -102,6 +102,27 @@ public:
 
     ///@{
     /**
+     * When ON, derive a per-vertex TetGen mesh size (target edge length h) from the
+     * input surface triangle edge lengths and pass it as point metrics with -m.
+     * Each vertex h is the mean length of its incident surface edges, times
+     * SurfaceSizingScale. Requires quality meshing (-q). Default OFF.
+     */
+    vtkGetMacro(UseSurfaceDensitySizing, bool);
+    vtkSetMacro(UseSurfaceDensitySizing, bool);
+    vtkBooleanMacro(UseSurfaceDensitySizing, bool);
+    ///@}
+
+    ///@{
+    /**
+     * Multiplier applied to the mean incident surface edge length when
+     * UseSurfaceDensitySizing is ON. Default 1.0.
+     */
+    vtkGetMacro(SurfaceSizingScale, double);
+    vtkSetClampMacro(SurfaceSizingScale, double, 1e-6, 1000.0);
+    ///@}
+
+    ///@{
+    /**
      * When ON and the input has point data arrays, run vtkProbeFilter after meshing:
      * volume mesh points sample the input surface (point data only; input cell data is not used).
      * No new cell data is produced. Default OFF.
@@ -142,6 +163,8 @@ protected:
     bool UseCDT = false;
     int CDTRefine = 7;
     double Epsilon = 1e-8;
+    bool UseSurfaceDensitySizing = false;
+    double SurfaceSizingScale = 1.0;
     bool ProbeInputPointData = false;
     bool MaskArrayEnabled = false;
 
