@@ -16,6 +16,7 @@
 #include <vtkDataSet.h>
 #include <vtkAlgorithm.h>
 #include <vtkPiecewiseFunction.h>
+#include <vtkCellData.h>
 #include <vtkPointData.h>
 #include <vtkPVDataInformation.h>
 #include <vtkPVArrayInformation.h>
@@ -367,11 +368,18 @@ void pqArrayCurveMapperPanel::onRefreshInputRange()
     if (!arrayName || arrayName[0] == '\0')
         return;
 
-    auto* pointInfo = dataInfo->GetPointDataInformation();
-    if (!pointInfo)
-        return;
-
-    auto* arrayInfo = pointInfo->GetArrayInformation(arrayName);
+    vtkPVArrayInformation* arrayInfo = nullptr;
+    if (auto* cellInfo = dataInfo->GetCellDataInformation())
+    {
+        arrayInfo = cellInfo->GetArrayInformation(arrayName);
+    }
+    if (!arrayInfo)
+    {
+        if (auto* pointInfo = dataInfo->GetPointDataInformation())
+        {
+            arrayInfo = pointInfo->GetArrayInformation(arrayName);
+        }
+    }
     if (!arrayInfo)
         return;
 
@@ -594,7 +602,11 @@ std::vector<double> pqArrayCurveMapperPanel::computeOutputHistogram(int numBins)
     if (!arrayName || arrayName[0] == '\0')
         return bins;
 
-    auto* arr = ds->GetPointData()->GetArray(arrayName);
+    vtkDataArray* arr = ds->GetCellData()->GetArray(arrayName);
+    if (!arr)
+    {
+        arr = ds->GetPointData()->GetArray(arrayName);
+    }
     if (!arr)
         return bins;
 

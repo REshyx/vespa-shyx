@@ -2,13 +2,13 @@
  * @class   vtkArrayCurveMapper
  * @brief   Map an array through a piecewise transfer curve to a new scalar range.
  *
- * vtkArrayCurveMapper takes a user-selected point-data array (scalar or
- * vector) and evaluates a piecewise-linear transfer curve
+ * vtkArrayCurveMapper takes a user-selected point- or cell-data array
+ * (scalar or vector) and evaluates a piecewise-linear transfer curve
  * (vtkPiecewiseFunction) whose X axis spans InputRange and Y axis spans
  * OutputRange.  For vector arrays the magnitude is used.  Input values
  * are clamped to [InputRangeMin, InputRangeMax] before curve evaluation.
- * The mapped values are stored as a new scalar (1-component) point-data
- * array on the output.
+ * The mapped values are stored as a new scalar (1-component) array on the
+ * same attribute type (point or cell) as the input.
  */
 
 #ifndef vtkArrayCurveMapper_h

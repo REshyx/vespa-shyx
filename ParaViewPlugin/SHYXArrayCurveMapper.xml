@@ -4,7 +4,7 @@
                  class="vtkArrayCurveMapper"
                  label="SHYX Array Curve Mapper">
       <Documentation
-          long_help="Map an array (scalar or vector) through an adjustable piecewise-linear curve to a new scalar range. For vector arrays the magnitude is used. Select an input array, specify input and output ranges, edit the transfer curve, and the result is a new scalar point-data array."
+          long_help="Map an array (scalar or vector) through an adjustable piecewise-linear curve to a new scalar range. For vector arrays the magnitude is used. Select a point- or cell-data input array, specify input and output ranges, edit the transfer curve, and the result is a new scalar array on the same attribute type as the input."
           short_help="Map array values through an editable curve to a target scalar range."/>
 
       <InputProperty name="Input" command="SetInputConnection">
@@ -15,7 +15,7 @@
         <DataTypeDomain name="input_type">
           <DataType value="vtkDataSet"/>
         </DataTypeDomain>
-        <InputArrayDomain name="point_arrays" attribute_type="point" optional="0"/>
+        <InputArrayDomain name="input_arrays" optional="1"/>
       </InputProperty>
 
       <StringVectorProperty command="SetInputArrayName"
@@ -24,16 +24,16 @@
                             number_of_elements="1"
                             default_values="">
         <ArrayListDomain name="array_list"
-                         input_domain_name="point_arrays">
+                         input_domain_name="input_arrays">
           <RequiredProperties>
             <Property function="Input" name="Input"/>
           </RequiredProperties>
         </ArrayListDomain>
         <Documentation>
-          The point-data array to map. For vector arrays, the magnitude is used.
+          The point- or cell-data array to map. For vector arrays, the magnitude is used.
         </Documentation>
         <Hints>
-          <ArraySelectionWidget icon_type="point"/>
+          <ArraySelectionWidget/>
         </Hints>
       </StringVectorProperty>
 

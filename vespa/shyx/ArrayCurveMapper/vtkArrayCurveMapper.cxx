@@ -10,6 +10,7 @@
 #include <vtkNew.h>
 #include <vtkObjectFactory.h>
 #include <vtkPiecewiseFunction.h>
+#include <vtkCellData.h>
 #include <vtkPointData.h>
 
 #include <algorithm>
@@ -24,6 +25,44 @@ void onCurveModified(vtkObject* vtkNotUsed(caller), unsigned long vtkNotUsed(eve
 {
     auto* self = static_cast<vtkArrayCurveMapper*>(clientData);
     self->Modified();
+}
+
+/** Prefer cell data when both point and cell arrays match (same as other SHYX filters). */
+bool ResolveInputArray(vtkDataSet* input, const char* arrayName, vtkDataArray*& outArray, bool& isPointData)
+{
+    outArray = nullptr;
+    isPointData = false;
+    if (!input || !arrayName || arrayName[0] == '\0')
+    {
+        return false;
+    }
+
+    vtkDataArray* const cellArr = input->GetCellData()->GetArray(arrayName);
+    vtkDataArray* const ptArr = input->GetPointData()->GetArray(arrayName);
+    const vtkIdType nCells = input->GetNumberOfCells();
+    const vtkIdType nPts = input->GetNumberOfPoints();
+    const bool cellOk = (cellArr != nullptr && cellArr->GetNumberOfTuples() == nCells);
+    const bool ptOk = (ptArr != nullptr && ptArr->GetNumberOfTuples() == nPts);
+
+    if (cellOk && ptOk)
+    {
+        outArray = cellArr;
+        isPointData = false;
+        return true;
+    }
+    if (cellOk)
+    {
+        outArray = cellArr;
+        isPointData = false;
+        return true;
+    }
+    if (ptOk)
+    {
+        outArray = ptArr;
+        isPointData = true;
+        return true;
+    }
+    return false;
 }
 } // namespace
 
@@ -107,9 +146,9 @@ int vtkArrayCurveMapper::RequestData(
     vtkDataSet* input = vtkDataSet::GetData(inputVector[0]);
     vtkDataSet* output = vtkDataSet::GetData(outputVector);
 
-    if (!input || input->GetNumberOfPoints() == 0)
+    if (!input)
     {
-        vtkErrorMacro("Input is empty or null.");
+        vtkErrorMacro("Input is null.");
         return 0;
     }
 
@@ -120,10 +159,12 @@ int vtkArrayCurveMapper::RequestData(
         return 1;
     }
 
-    vtkDataArray* srcArray = input->GetPointData()->GetArray(this->InputArrayName.c_str());
-    if (!srcArray)
+    vtkDataArray* srcArray = nullptr;
+    bool isPointData = false;
+    if (!ResolveInputArray(input, this->InputArrayName.c_str(), srcArray, isPointData))
     {
-        vtkErrorMacro("Array '" << this->InputArrayName << "' not found on input point data.");
+        vtkErrorMacro("Array '" << this->InputArrayName
+                                << "' not found on input point or cell data.");
         return 0;
     }
 
@@ -174,6 +215,13 @@ int vtkArrayCurveMapper::RequestData(
         dstArray->SetValue(i, mapped);
     }
 
-    output->GetPointData()->AddArray(dstArray);
+    if (isPointData)
+    {
+        output->GetPointData()->AddArray(dstArray);
+    }
+    else
+    {
+        output->GetCellData()->AddArray(dstArray);
+    }
     return 1;
 }
