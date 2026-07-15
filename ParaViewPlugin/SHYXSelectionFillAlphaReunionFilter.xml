@@ -3,12 +3,15 @@
     <SourceProxy name="SHYXSelectionFillAlphaReunionFilter"
                  class="vtkSHYXSelectionFillAlphaReunionFilter"
                  label="SHYX Selection: Fill, Alpha Wrap, Union">
-      <Documentation short_help="Split by selection, hole-fill both, Alpha wrap selection, then CGAL union.">
+      <Documentation short_help="Split by selection, hole-fill both, Alpha wrap selection, CGAL union with face origin, then local bridge remesh/smooth.">
         Splits the surface into the selected and unselected regions, fills boundary holes (CGAL) on
         each part, runs Alpha Wrapping on the selected part (CGAL 5.5+), and merges the two
-        closed-oriented surfaces with a CGAL PMP boolean union. When the unselected part is empty
-        (entire surface selected), only the selected path is output. Use Selection on port 1, or
-        a cell data mask (SelectionCellArrayName) like other SHYX selection tools.
+        closed-oriented surfaces with a CGAL PMP boolean union that tracks which faces came from
+        the Alpha-Wrapped mesh. Those faces are marked exactly (no distance heuristic), dilated by
+        a few face rings across the boolean seam, then locally remeshed and smoothed. When the
+        unselected part is empty (entire surface selected), only the selected path is output. Use
+        Selection on port 1, or a cell data mask (SelectionCellArrayName) like other SHYX selection
+        tools.
       </Documentation>
 
       <InputProperty name="Input" command="SetInputConnection">
@@ -93,7 +96,7 @@
                             name="Alpha"
                             label="Alpha"
                             number_of_elements="1"
-                            default_values="1.0"
+                            default_values="4.0"
                             panel_visibility="advanced"
                             animateable="1">
         <Documentation>Alpha wrap parameter (maximum circumradius of faces in the result).</Documentation>
@@ -103,7 +106,7 @@
                             name="Offset"
                             label="Offset"
                             number_of_elements="1"
-                            default_values="1.0"
+                            default_values="0.05"
                             panel_visibility="advanced"
                             animateable="1">
         <Documentation>Alpha wrap offset (dilatation / shrink factor depending on context).</Documentation>
@@ -141,6 +144,158 @@
           Probe the original full surface onto the merged result.
         </Documentation>
       </IntVectorProperty>
+
+      <IntVectorProperty command="SetEnableBridgeCleanup"
+                         name="EnableBridgeCleanup"
+                         label="Bridge cleanup after union"
+                         number_of_elements="1"
+                         default_values="1"
+                         animateable="0">
+        <BooleanDomain name="bool"/>
+        <Documentation>
+          Mark faces that originated from the Alpha-Wrapped mesh during CGAL corefinement union
+          (precise provenance), dilate a few face rings over the boolean seam, then run a local
+          isotropic remesh + constrained smooth.
+        </Documentation>
+      </IntVectorProperty>
+
+      <IntVectorProperty command="SetBridgeDilateLayers"
+                         name="BridgeDilateLayers"
+                         label="Bridge: dilate layers"
+                         number_of_elements="1"
+                         default_values="3"
+                         animateable="0">
+        <IntRangeDomain name="range" min="0" max="64"/>
+        <Documentation>
+          Face-ring expansion of the Alpha-Wrap mark so the messy union seam is included.
+        </Documentation>
+        <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="enabled_state"
+                                   property="EnableBridgeCleanup"
+                                   value="1"/>
+        </Hints>
+      </IntVectorProperty>
+
+      <DoubleVectorProperty command="SetBridgeTargetEdgeLength"
+                            name="BridgeTargetEdgeLength"
+                            label="Bridge: remesh target edge length"
+                            number_of_elements="1"
+                            default_values="-1"
+                            panel_visibility="advanced"
+                            animateable="0">
+        <Documentation>
+          Target edge length for local isotropic remesh. &lt;= 0 uses the mean edge length of the
+          dilated cleanup patch.
+        </Documentation>
+        <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="enabled_state"
+                                   property="EnableBridgeCleanup"
+                                   value="1"/>
+        </Hints>
+      </DoubleVectorProperty>
+
+      <IntVectorProperty command="SetBridgeRemeshIterations"
+                         name="BridgeRemeshIterations"
+                         label="Bridge: remesh iterations"
+                         number_of_elements="1"
+                         default_values="3"
+                         panel_visibility="advanced"
+                         animateable="0">
+        <IntRangeDomain name="range" min="1" max="50"/>
+        <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="enabled_state"
+                                   property="EnableBridgeCleanup"
+                                   value="1"/>
+        </Hints>
+      </IntVectorProperty>
+
+      <IntVectorProperty command="SetBridgeRemeshRelaxationSteps"
+                         name="BridgeRemeshRelaxationSteps"
+                         label="Bridge: remesh relaxation steps"
+                         number_of_elements="1"
+                         default_values="3"
+                         panel_visibility="advanced"
+                         animateable="0">
+        <IntRangeDomain name="range" min="0" max="50"/>
+        <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="enabled_state"
+                                   property="EnableBridgeCleanup"
+                                   value="1"/>
+        </Hints>
+      </IntVectorProperty>
+
+      <IntVectorProperty command="SetBridgeSmoothIterations"
+                         name="BridgeSmoothIterations"
+                         label="Bridge: shape smooth iterations (MCF)"
+                         number_of_elements="1"
+                         default_values="8"
+                         panel_visibility="advanced"
+                         animateable="0">
+        <IntRangeDomain name="range" min="0" max="50"/>
+        <Documentation>
+          Post-remesh CGAL smooth_shape (mean curvature flow) iterations on the cleanup patch
+          (0 = remesh only). This is after remesh and does change the surface shape.
+        </Documentation>
+        <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="enabled_state"
+                                   property="EnableBridgeCleanup"
+                                   value="1"/>
+        </Hints>
+      </IntVectorProperty>
+
+      <DoubleVectorProperty command="SetBridgeSmoothTimeStep"
+                            name="BridgeSmoothTimeStep"
+                            label="Bridge: shape smooth time step"
+                            number_of_elements="1"
+                            default_values="0.0025"
+                            panel_visibility="advanced"
+                            animateable="0">
+        <Documentation>
+          Time step for smooth_shape. Larger values move more per iteration (more shrinkage risk).
+        </Documentation>
+        <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="enabled_state"
+                                   property="EnableBridgeCleanup"
+                                   value="1"/>
+        </Hints>
+      </DoubleVectorProperty>
+
+      <IntVectorProperty command="SetExportBridgeMask"
+                         name="ExportBridgeMask"
+                         label="Bridge: export cleanup mask array"
+                         number_of_elements="1"
+                         default_values="1"
+                         panel_visibility="advanced"
+                         animateable="0">
+        <BooleanDomain name="bool"/>
+        <Documentation>
+          Attach cell array SHYXBridgeCleanupMask (1 = cleanup patch) for debugging. Survives
+          bridge remesh (post-remesh mask = remeshed cleanup region).
+        </Documentation>
+        <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="enabled_state"
+                                   property="EnableBridgeCleanup"
+                                   value="1"/>
+        </Hints>
+      </IntVectorProperty>
+
+      <PropertyGroup label="Bridge cleanup (after union)">
+        <Property name="EnableBridgeCleanup"/>
+        <Property name="BridgeDilateLayers"/>
+        <Property name="BridgeTargetEdgeLength"/>
+        <Property name="BridgeRemeshIterations"/>
+        <Property name="BridgeRemeshRelaxationSteps"/>
+        <Property name="BridgeSmoothIterations"/>
+        <Property name="BridgeSmoothTimeStep"/>
+        <Property name="ExportBridgeMask"/>
+      </PropertyGroup>
 
       <Hints>
         <ShowInMenu category="SHYX" icon=":/VESPA/VESPA_Hole_Filling.png"/>
