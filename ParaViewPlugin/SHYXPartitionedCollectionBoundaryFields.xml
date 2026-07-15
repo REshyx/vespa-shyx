@@ -1,0 +1,95 @@
+<ServerManagerConfiguration>
+  <ProxyGroup name="filters">
+    <SourceProxy name="SHYXPartitionedCollectionBoundaryFields"
+                 class="vtkSHYXPartitionedCollectionBoundaryFields"
+                 label="SHYX Partitioned Collection Boundary Fields">
+      <Documentation
+          short_help="Modify boundary radial/normal/variable fields and block names on an existing partitioned collection."
+          long_help="Accepts vtkPartitionedDataSetCollection (e.g. from SHYX DataSet To Partitioned Collection). For each side set: optionally computes BoundaryRadialValue = 1 - x^a, writes BoundaryRadialValueNormal and BoundaryVariable* point/cell arrays (overwriting same-named arrays), mirrors point data onto paired node sets, and optionally accumulates normals / variables onto the tetrahedra element block. Block names and vtkDataAssembly labels can be edited in the Partitioned block names panel."/>
+
+      <OutputPort name="Partitioned collection" index="0" id="port0"/>
+
+      <InputProperty name="Input" command="SetInputConnection">
+        <ProxyGroupDomain name="groups">
+          <Group name="sources"/>
+          <Group name="filters"/>
+        </ProxyGroupDomain>
+        <DataTypeDomain name="input_type">
+          <DataType value="vtkPartitionedDataSetCollection"/>
+        </DataTypeDomain>
+      </InputProperty>
+
+      <IntVectorProperty name="ComputeBoundaryRadialValue" label="Compute Boundary Radial Value"
+          command="SetComputeBoundaryRadialValue" number_of_elements="1" default_values="0"
+          animateable="0">
+        <BooleanDomain name="bool"/>
+        <Documentation>
+          When enabled, compute BoundaryRadialValue = 1 - x^a on side and node set blocks, and
+          BoundaryRadialValueNormal uses BoundaryRadialValue * sideNormal. When disabled,
+          BoundaryRadialValue is not computed, and BoundaryRadialValueNormal uses sideNormal.
+        </Documentation>
+      </IntVectorProperty>
+
+      <DoubleVectorProperty name="BoundaryRadialNormalFalloffFactor"
+          label="Boundary Radial Normal Falloff Factor (a)"
+          command="SetBoundaryRadialNormalFalloffFactor" number_of_elements="1"
+          default_values="1.0" animateable="0">
+        <DoubleRangeDomain name="range" min="-1e12" max="1e12"/>
+        <Documentation>
+          Exponent a in BoundaryRadialValue = 1 - x^a, where x is the raw radial coordinate.
+        </Documentation>
+        <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="visibility"
+                                   property="ComputeBoundaryRadialValue"
+                                   value="1"/>
+        </Hints>
+      </DoubleVectorProperty>
+
+      <StringVectorProperty name="BlockNames" label="Block Names" command="SetBlockNames"
+          number_of_elements="1" default_values="" animateable="0">
+        <Documentation>
+          Newline-separated names in Partitioned block names panel order: tetrahedra (if present),
+          all side sets, then mirrored node sets. Only side-set rows are editable in the custom widget;
+          node-set names are refreshed from the corresponding side-set name with a node_ prefix.
+        </Documentation>
+      </StringVectorProperty>
+
+      <StringVectorProperty name="BoundaryVariables" label="Boundary Variables"
+          command="SetBoundaryVariables" number_of_elements="1" default_values="" animateable="0"
+          panel_visibility="never">
+        <Documentation>
+          Newline-separated rows aligned with the Partitioned block names panel order; values in each
+          row are tab-separated Variable1, Variable2, ... entries. Side set rows are used by the filter,
+          and node set rows mirror the corresponding side row in the widget. Non-zero values are written
+          to tetrahedra point-data scalars BoundaryVariable1, BoundaryVariable2, ... Repeated writes to
+          the same volume node are warned and averaged.
+        </Documentation>
+      </StringVectorProperty>
+
+      <StringVectorProperty name="BoundaryWriteNormals" label="Boundary Write Normals"
+          command="SetBoundaryWriteNormals" number_of_elements="1" default_values=""
+          animateable="0" panel_visibility="never">
+        <Documentation>
+          Newline-separated 0/1 flags aligned with the Partitioned block names panel order. Only side
+          set rows are used. When non-zero, that side's BoundaryRadialValueNormal is accumulated onto
+          tetrahedra volume points (independent of BoundaryVariables). Repeated writes to the same volume
+          node are warned and averaged.
+        </Documentation>
+      </StringVectorProperty>
+
+      <PropertyGroup label="Partitioned block names"
+                     panel_widget="shyx_partitioned_block_names"
+                     panel_visibility="default">
+        <Property function="Names" name="BlockNames"/>
+        <Property function="BoundaryVariables" name="BoundaryVariables"/>
+        <Property function="BoundaryWriteNormals" name="BoundaryWriteNormals"/>
+      </PropertyGroup>
+
+      <Hints>
+        <ShowInMenu category="SHYX" icon=":/VESPA/SHYX_DataSet_To_Partitioned_Collection.png"/>
+        <ShowInMenu category="Vascular" icon=":/VESPA/SHYX_DataSet_To_Partitioned_Collection.png"/>
+      </Hints>
+    </SourceProxy>
+  </ProxyGroup>
+</ServerManagerConfiguration>

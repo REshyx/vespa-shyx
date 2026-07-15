@@ -40,6 +40,7 @@ SHYX 模块是 VESPA 插件中的重要组成部分，主要专注于**血管与
 * [**Array Curve Mapper (数组曲线映射)**](./ArrayCurveMapper/README.md) - 通过界面上可编辑的分段线性曲线，将标量或矢量映射到新的标量范围。
 * [**Bidirectional Streamline Merge (双向流线合并)**](./BidirectionalStreamlineMerge/README.md) - 合并同一种子点生成的双向流线，并支持沿线积分与差分计算。
 * [**DataSet To Partitioned Collection (数据集转分区集合)**](./DataSetToPartitionedCollection/README.md) - 为 IOSS/Exodus 输出准备，提取体网格和表面分区并生成对应的装配元数据。
+* [**Partitioned Collection Boundary Fields (分区集合边界场修改)**](./PartitionedCollectionBoundaryFields/README.md) - 对已划分的 vtkPartitionedDataSetCollection 写入径向法线、边界变量，并支持重命名 block。
 * [**Pulse Glyph Representation (脉冲 Glyph 表示)**](./PulseGlyphRepresentation/README.md) - GPU 实例化路径上带有脉冲缩放与旋转效果的 Glyph 动画表示。
 * [**Animated Streamline Representation (流线动画表示)**](./AnimatedStreamlineRepresentation/README.md) - 基于 GPU 自定义 Shader 渲染的流线逐帧动画表示。
 

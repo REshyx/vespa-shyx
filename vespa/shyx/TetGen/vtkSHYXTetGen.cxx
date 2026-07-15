@@ -544,21 +544,26 @@ int vtkSHYXTetGen::RequestData(
     {
         vtkPointData* const inPD = input->GetPointData();
         const bool hasPointArrays = inPD && inPD->GetNumberOfArrays() > 0;
-        const bool applyMask = this->MaskArrayEnabled;
+        bool applyMask = this->MaskArrayEnabled;
         if (hasPointArrays || applyMask)
         {
             vtkNew<vtkPolyData> probeSource;
+            if (applyMask)
+            {
+                vtkDataArray* const picked = this->GetInputArrayToProcess(0, inputVector);
+                const char* arrayName = picked ? picked->GetName() : this->GetMaskArrayName();
+                if (!arrayName || arrayName[0] == '\0')
+                {
+                    vtkWarningMacro("Mask array enabled but no array selected; probing without mask.");
+                    applyMask = false;
+                }
+            }
             if (applyMask)
             {
                 probeSource->DeepCopy(input);
 
                 vtkDataArray* const picked = this->GetInputArrayToProcess(0, inputVector);
                 const char* arrayName = picked ? picked->GetName() : this->GetMaskArrayName();
-                if (!arrayName || arrayName[0] == '\0')
-                {
-                    vtkErrorMacro("Mask array enabled but no array selected on input.");
-                    return 0;
-                }
                 if (!ApplyMaskArrayToSurface(probeSource, arrayName))
                 {
                     vtkErrorMacro("Failed to apply mask array \"" << arrayName << "\".");

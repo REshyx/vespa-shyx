@@ -140,7 +140,7 @@
                          name="ProbeInputPointData"
                          label="Probe input point data"
                          number_of_elements="1"
-                         default_values="0">
+                         default_values="1">
         <BooleanDomain name="bool"/>
         <Documentation>
           When ON, after TetGen, vtkProbeFilter samples the input surface point arrays onto
@@ -154,7 +154,7 @@
                          name="MaskArrayEnabled"
                          label="Mask array"
                          number_of_elements="1"
-                         default_values="0">
+                         default_values="1">
         <BooleanDomain name="bool"/>
         <Documentation>
           Requires Probe input point data. When both are ON, binarize the selected array in place
@@ -218,7 +218,7 @@
                          name="UseSurfaceDensitySizing"
                          label="Use surface density sizing"
                          number_of_elements="1"
-                         default_values="0">
+                         default_values="1">
         <BooleanDomain name="bool"/>
         <Documentation>
           When ON, each PLC vertex gets a TetGen mesh size h (-m) equal to the mean length of

@@ -105,7 +105,7 @@ public:
      * When ON, derive a per-vertex TetGen mesh size (target edge length h) from the
      * input surface triangle edge lengths and pass it as point metrics with -m.
      * Each vertex h is the mean length of its incident surface edges, times
-     * SurfaceSizingScale. Requires quality meshing (-q). Default OFF.
+     * SurfaceSizingScale. Requires quality meshing (-q). Default ON.
      */
     vtkGetMacro(UseSurfaceDensitySizing, bool);
     vtkSetMacro(UseSurfaceDensitySizing, bool);
@@ -125,7 +125,7 @@ public:
     /**
      * When ON and the input has point data arrays, run vtkProbeFilter after meshing:
      * volume mesh points sample the input surface (point data only; input cell data is not used).
-     * No new cell data is produced. Default OFF.
+     * No new cell data is produced. Default ON.
      */
     vtkGetMacro(ProbeInputPointData, bool);
     vtkSetMacro(ProbeInputPointData, bool);
@@ -136,7 +136,7 @@ public:
     /**
      * When ON (and Probe input point data is ON), binarize the chosen input array in place
      * (values <= 0 -> 0, > 0 -> 1). Cell-centered arrays are converted to point data via
-     * vtkCellDataToPointData before probing. Array slot 0 (ParaView picker).
+     * vtkCellDataToPointData before probing. Array slot 0 (ParaView picker). Default ON.
      */
     vtkGetMacro(MaskArrayEnabled, bool);
     vtkSetMacro(MaskArrayEnabled, bool);
@@ -163,10 +163,10 @@ protected:
     bool UseCDT = false;
     int CDTRefine = 7;
     double Epsilon = 1e-8;
-    bool UseSurfaceDensitySizing = false;
+    bool UseSurfaceDensitySizing = true;
     double SurfaceSizingScale = 1.0;
-    bool ProbeInputPointData = false;
-    bool MaskArrayEnabled = false;
+    bool ProbeInputPointData = true;
+    bool MaskArrayEnabled = true;
 
 private:
     vtkSHYXTetGen(const vtkSHYXTetGen&) = delete;

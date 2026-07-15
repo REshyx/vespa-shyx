@@ -1,0 +1,12 @@
+NAME
+  vtkSHYXPartitionedCollectionBoundaryFields
+  DESCRIPTION
+  "Modify vtkPartitionedDataSetCollection boundary radial/normal/variable fields and block names."
+GROUPS
+  Meshing
+DEPENDS
+  VTK::CommonCore
+  VTK::CommonDataModel
+  VTK::CommonExecutionModel
+  VTK::FiltersCore
+  VTK::IOIOSS
