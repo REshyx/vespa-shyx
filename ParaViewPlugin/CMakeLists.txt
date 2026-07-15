@@ -214,8 +214,20 @@ paraview_add_plugin(VESPAPlugin
      ${VMTK_CENTERLINES_SERVER_MANAGER_XML}
   UI_INTERFACES ${acm_interfaces} ${vespa_obb_box_interfaces} ${vespa_endclipper_plane_interfaces} ${vespa_selection_plane_clipper_interfaces} ${vespa_stent_cylinder_interfaces} ${vespa_enhanced_ruler_interfaces} ${vespa_endpoint_stent_interfaces} ${shyx_partitioned_block_names_interfaces} ${shyx_openings_table_interfaces} ${vespa_plugin_qt_auto_interfaces}
   SOURCES ${acm_sources} ${vespa_obb_box_sources} ${vespa_endclipper_plane_sources} ${vespa_selection_plane_clipper_sources} ${vespa_stent_cylinder_sources} ${vespa_enhanced_ruler_sources} ${vespa_endpoint_stent_sources} ${shyx_partitioned_block_names_sources} ${shyx_openings_table_sources}
-    pqArrayCurveMapperPanel.cxx
-    pqArrayCurveMapperPanel.h
+    TransferCurve/pqArrayCurveMapperPanel.cxx
+    TransferCurve/pqArrayCurveMapperPanel.h
+    TransferCurve/pqSHYXTransferCurveWidget.cxx
+    TransferCurve/pqSHYXTransferCurveWidget.h
+    TransferCurve/vtkSHYXTransferChartXY.cxx
+    TransferCurve/vtkSHYXTransferChartXY.h
+    TransferCurve/vtkSHYXGrayHistogramPiecewiseFunctionItem.cxx
+    TransferCurve/vtkSHYXGrayHistogramPiecewiseFunctionItem.h
+    TransferCurve/vtkSHYXCompositeControlPointsItem.cxx
+    TransferCurve/vtkSHYXCompositeControlPointsItem.h
+    TransferCurve/vtkSHYXInputRangeHandlesItem.cxx
+    TransferCurve/vtkSHYXInputRangeHandlesItem.h
+    TransferCurve/vtkSHYXOutputRangeHandlesItem.cxx
+    TransferCurve/vtkSHYXOutputRangeHandlesItem.h
     pqVESPAOBBInteractiveBoxWidget.cxx
     pqVESPAOBBInteractiveBoxWidget.h
     pqVESPAEndClipperPlaneHandlesWidget.cxx
@@ -234,6 +246,8 @@ if (PARAVIEW_USE_QT)
   set_target_properties(VESPAPlugin PROPERTIES AUTOUIC ON)
   set_property(TARGET VESPAPlugin APPEND PROPERTY
     AUTOUIC_SEARCH_PATHS "${CMAKE_CURRENT_SOURCE_DIR}/Resources/UI")
+  target_include_directories(VESPAPlugin PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}/TransferCurve")
 endif ()
 
 target_link_libraries(VESPAPlugin
@@ -248,6 +262,7 @@ if (PARAVIEW_USE_QT)
     PRIVATE
       ParaView::RemotingViews
       ParaView::pqApplicationComponents
+      VTK::ChartsCore
       VTK::InteractionWidgets
       vtkSHYXSelectionPlaneClipper
       vtkSHYXVascularStentPlacement

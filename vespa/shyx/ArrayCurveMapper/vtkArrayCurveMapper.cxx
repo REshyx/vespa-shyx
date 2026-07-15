@@ -171,8 +171,8 @@ int vtkArrayCurveMapper::RequestData(
     vtkPiecewiseFunction* curve = this->CurveTransferFunction;
     if (curve->GetSize() < 2)
     {
-        curve->AddPoint(this->InputRangeMin, 0.0);
-        curve->AddPoint(this->InputRangeMax, 1.0);
+        curve->AddPoint(this->InputRangeMin, this->OutputRangeMin);
+        curve->AddPoint(this->InputRangeMax, this->OutputRangeMax);
     }
 
     const int numComp = srcArray->GetNumberOfComponents();
@@ -210,8 +210,8 @@ int vtkArrayCurveMapper::RequestData(
         }
 
         raw = std::max(inMin, std::min(inMax, raw));
-        double t = curve->GetValue(raw);
-        double mapped = outMin + t * (outMax - outMin);
+        // Curve Y is in physical output units (clamped to OutputRange).
+        double mapped = std::max(outMin, std::min(outMax, curve->GetValue(raw)));
         dstArray->SetValue(i, mapped);
     }
 

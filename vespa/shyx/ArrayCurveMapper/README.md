@@ -16,9 +16,9 @@
    - 对于多维向量（如坐标或速度），计算其模长 (Magnitude) 作为标量值。
    - 对于标量数据，直接读取。
    - 将提取的数值严格限制 (Clamp) 在 `[InputRangeMin, InputRangeMax]` 区间内。
-4. **曲线映射 (Curve Evaluation)**：使用限制后的数值在 `vtkPiecewiseFunction` 中进行查询，获取介于 0 到 1 之间的映射比例参数 `t`。
-5. **范围重映射 (Remapping)**：通过线性插值公式 `MappedValue = OutputRangeMin + t * (OutputRangeMax - OutputRangeMin)`，将映射结果缩放至目标范围，并存入新数组。
-6. **输出装载**：将生成的新数组以 `OutputArrayName` 为名，挂载至输出数据集的 `PointData` 中。
+4. **曲线映射 (Curve Evaluation)**：使用限制后的数值在 `vtkPiecewiseFunction` 中查询。曲线 **Y 轴为物理输出值**（落在 OutputRange 内），不再使用归一化 `t`。
+5. **输出钳制**：将曲线求值结果再钳制到 `[OutputRangeMin, OutputRangeMax]`，并存入新数组。
+6. **输出装载**：将生成的新数组以 `OutputArrayName` 为名，挂载至与输入相同的属性类型（Point/Cell Data）。
 
 ---
 
@@ -30,8 +30,8 @@
 * **`InputArrayName`** (string): 输入数组名称。指定需进行映射处理的数据列。
 * **`OutputArrayName`** (string): 输出数组名称。默认值为 `"MappedArray"`，表示映射后生成的新数组名称。
 * **`InputRangeMin` / `InputRangeMax`** (double): 输入数据范围限制（默认 `[0.0, 1.0]`）。超出此区间的原始值将被截断并限制在该边界上。
-* **`OutputRangeMin` / `OutputRangeMax`** (double): 输出数据的目标范围（默认 `[0.0, 1.0]`）。曲线映射后的比例参数将被线性缩放至该物理范围内。
-* **`CurveTransferFunction`** (`vtkPiecewiseFunction*`): 分段线性传递函数，决定了数据非线性映射的规则曲线。
+* **`OutputRangeMin` / `OutputRangeMax`** (double): 输出数据的目标范围（默认 `[0.0, 1.0]`）。曲线控制点的 Y 值与此范围一致。
+* **`CurveTransferFunction`** (`vtkPiecewiseFunction*`): 分段线性传递函数；X = 输入值，Y = 映射后的输出值。面板提供可编辑曲线与输入/输出直方图预览。
 
 ### 渲染与视觉表现参数 (预留扩展)
 * **`RepresentationMode`** (int): 表现模式，包括表面 (`REPRESENTATION_SURFACE`=0)、体积 (`REPRESENTATION_VOLUME`=1) 和点高斯 (`REPRESENTATION_POINT_GAUSSIAN`=2)。

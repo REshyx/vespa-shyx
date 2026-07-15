@@ -52,7 +52,10 @@
                             label="Input Range Min"
                             number_of_elements="1"
                             default_values="0.0">
-        <Documentation>Minimum of the input value range.</Documentation>
+        <Documentation>
+          Minimum of the input value range. The panel initializes this from the
+          selected array data range when still at the default placeholder.
+        </Documentation>
       </DoubleVectorProperty>
 
       <DoubleVectorProperty command="SetInputRangeMax"
@@ -60,7 +63,10 @@
                             label="Input Range Max"
                             number_of_elements="1"
                             default_values="1.0">
-        <Documentation>Maximum of the input value range.</Documentation>
+        <Documentation>
+          Maximum of the input value range. The panel initializes this from the
+          selected array data range when still at the default placeholder.
+        </Documentation>
       </DoubleVectorProperty>
 
       <DoubleVectorProperty command="SetOutputRangeMin"
@@ -68,7 +74,10 @@
                             label="Output Range Min"
                             number_of_elements="1"
                             default_values="0.0">
-        <Documentation>Minimum value of the output mapped range.</Documentation>
+        <Documentation>
+          Minimum value of the output mapped range. Defaults to the selected
+          array data minimum (same as input range) when first opened.
+        </Documentation>
       </DoubleVectorProperty>
 
       <DoubleVectorProperty command="SetOutputRangeMax"
@@ -76,7 +85,10 @@
                             label="Output Range Max"
                             number_of_elements="1"
                             default_values="1.0">
-        <Documentation>Maximum value of the output mapped range.</Documentation>
+        <Documentation>
+          Maximum value of the output mapped range. Defaults to the selected
+          array data maximum (same as input range) when first opened.
+        </Documentation>
       </DoubleVectorProperty>
 
       <ProxyProperty command="SetCurveTransferFunction"
@@ -84,7 +96,8 @@
                      label="Transfer Curve">
         <Documentation>
           Drag control points to shape the transfer curve.
-          X = normalised input [0,1], Y = normalised output [0,1].
+          X = input value (clamped to Input Range), Y = mapped output value
+          (clamped to Output Range). The panel shows live input/output histograms.
         </Documentation>
         <ProxyGroupDomain name="groups">
           <Group name="piecewise_functions"/>
