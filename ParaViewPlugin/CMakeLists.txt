@@ -137,6 +137,23 @@ if (PARAVIEW_USE_QT)
     ${animated_streamline_autostart_sources}
     ${CMAKE_SOURCE_DIR}/vespa/shyx/AnimatedStreamlineRepresentation/pqAnimatedStreamlineAnimationManager.cxx
     ${CMAKE_SOURCE_DIR}/vespa/shyx/AnimatedStreamlineRepresentation/pqAnimatedStreamlineAnimationManager.h)
+
+  paraview_plugin_add_auto_start(
+    CLASS_NAME "pqSHYXSphereSelectionAutoStart"
+    STARTUP onStartup
+    SHUTDOWN onShutdown
+    INTERFACES sphere_selection_autostart_interfaces
+    SOURCES sphere_selection_autostart_sources)
+
+  list(APPEND vespa_plugin_qt_auto_interfaces ${sphere_selection_autostart_interfaces})
+  list(APPEND vespa_plugin_qt_auto_sources
+    ${sphere_selection_autostart_sources}
+    pqSHYXSphereSelectionAutoStart.cxx
+    pqSHYXSphereSelectionAutoStart.h
+    pqSHYXSphereSelectionViewFrameActions.cxx
+    pqSHYXSphereSelectionViewFrameActions.h
+    pqSHYXSphereSelectionController.cxx
+    pqSHYXSphereSelectionController.h)
 endif ()
 
 paraview_add_plugin(VESPAPlugin

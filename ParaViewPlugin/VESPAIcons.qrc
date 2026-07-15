@@ -13,6 +13,7 @@
     <file alias="SHYX_Point_Cloud_Surface_SDF.png">../icon/SHYX_Point_Cloud_Surface_SDF.png</file>
     <file alias="SHYX_Radius_Neighbor_Count.png">../icon/SHYX_Radius_Neighbor_Count.png</file>
     <file alias="SHYX_Skeleton_Extraction.png">../icon/SHYX_Skeleton_Extraction.png</file>
+    <file alias="SHYX_Sphere_Selection.svg">../icon/SHYX_Sphere_Selection.svg</file>
     <file alias="SHYX_Surface_Tip_Extractor.png">../icon/SHYX_Surface_Tip_Extractor.png</file>
     <file alias="SHYX_Surface_to_Volume_Mesh.png">../icon/SHYX_Surface_to_Volume_Mesh.png</file>
     <file alias="SHYX_TetGen.png">../icon/SHYX_TetGen.png</file>
