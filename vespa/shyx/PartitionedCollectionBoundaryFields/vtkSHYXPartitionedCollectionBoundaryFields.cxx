@@ -7,6 +7,7 @@
 #include <vtkDataAssembly.h>
 #include <vtkDataObject.h>
 #include <vtkDoubleArray.h>
+#include <vtkGeometryFilter.h>
 #include <vtkIdList.h>
 #include <vtkIdTypeArray.h>
 #include <vtkInformation.h>
@@ -169,6 +170,33 @@ vtkDataSet* GetDataSetFromPdcBlock(vtkPartitionedDataSetCollection* coll, unsign
     return nullptr;
   }
   return pds->GetPartition(0);
+}
+
+/** Return side-set geometry as vtkPolyData. Already-PolyData inputs are returned as-is;
+ * otherwise vtkGeometryFilter converts (e.g. IOSS/Exodus vtkUnstructuredGrid side sets). */
+vtkSmartPointer<vtkPolyData> ForceDataSetToPolyData(vtkDataSet* ds)
+{
+  if (!ds)
+  {
+    return nullptr;
+  }
+  if (auto* pd = vtkPolyData::SafeDownCast(ds))
+  {
+    return pd;
+  }
+
+  vtkNew<vtkGeometryFilter> geometry;
+  geometry->SetInputData(ds);
+  geometry->Update();
+  vtkPolyData* out = geometry->GetOutput();
+  if (!out)
+  {
+    return nullptr;
+  }
+
+  vtkSmartPointer<vtkPolyData> copy = vtkSmartPointer<vtkPolyData>::New();
+  copy->DeepCopy(out);
+  return copy;
 }
 
 void SetPartitionDataSetBlock(
@@ -1185,12 +1213,12 @@ int vtkSHYXPartitionedCollectionBoundaryFields::RequestData(vtkInformation* vtkN
 
   for (unsigned int i = 0; i < nPairs; ++i)
   {
-    vtkPolyData* sideInput =
-      vtkPolyData::SafeDownCast(GetDataSetFromPdcBlock(result, layout.SideSetPdcIndices[i]));
+    vtkDataSet* sideDs = GetDataSetFromPdcBlock(result, layout.SideSetPdcIndices[i]);
+    vtkSmartPointer<vtkPolyData> sideInput = ForceDataSetToPolyData(sideDs);
     if (!sideInput)
     {
       vtkWarningMacro(<< "Side set at PDC index " << layout.SideSetPdcIndices[i]
-                      << " is not vtkPolyData; skipping.");
+                      << " could not be converted to vtkPolyData; skipping.");
       continue;
     }
 
