@@ -1,7 +1,7 @@
 NAME
   vtkSHYXSelectionFillAlphaReunionFilter
 DESCRIPTION
-  "SHYX: split by selection, hole-fill, Alpha Wrap selected, hole-fill unselected, CGAL boolean union with face-origin tracking, local bridge remesh/smooth."
+  "SHYX: split by selection, hole-fill, Alpha Wrap selected, hole-fill unselected, CGAL boolean union with face-origin tracking, local bridge remesh + smooth/fair."
 GROUPS
   Meshing
 DEPENDS

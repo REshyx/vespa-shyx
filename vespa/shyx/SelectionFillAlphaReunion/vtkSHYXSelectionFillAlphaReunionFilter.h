@@ -4,9 +4,10 @@
  *          then CGAL boolean union with face-origin tracking; optionally clean the AW/original bridge.
  *
  * After union, faces imported from the Alpha-Wrapped mesh are marked exactly via a corefinement
- * visitor (no distance heuristic). The mask is dilated by a few face rings across the boolean
- * seam, then a local CGAL isotropic remesh (with relaxation) and constrained smooth_shape (MCF)
- * are applied on that patch.
+ * visitor (no distance heuristic). By default that AW region is dilated by a few face rings;
+ * optionally the cleanup seed is only the AW/original boolean seam, then dilated the same way.
+ * A local CGAL isotropic remesh (with relaxation) and a selectable post-process
+ * (constrained smooth_shape / MCF, or fair with C0–C2 continuity) run on that patch.
  *
  * @sa vtkSHYXHoleFillFilter, vtkCGALAlphaWrapping, vtkSHYXBooleanOperationFilter
  */
@@ -68,7 +69,8 @@ public:
   //@{
   /**
    * After a successful boolean union, mark faces that originated from the Alpha-Wrapped mesh
-   * (corefinement visitor), dilate, then locally remesh + smooth that patch. Default ON.
+   * (corefinement visitor), seed a cleanup patch (all AW faces, or the AW/original seam when
+   * BridgeDilateFromSeam is on), dilate, then locally remesh + smooth/fair. Default ON.
    * No-op when the unselected part is empty (no union).
    */
   vtkGetMacro(EnableBridgeCleanup, bool);
@@ -78,11 +80,23 @@ public:
 
   //@{
   /**
-   * Face-ring dilation of the precise AW face mark so the boolean seam is included. Default 3.
-   * AW faces are those imported from the Alpha-Wrapped operand during CGAL corefinement union.
+   * Face-ring dilation of the cleanup seed. Default 3.
+   * Seed is either all AW faces (BridgeDilateFromSeam off) or only the AW/original seam band
+   * (BridgeDilateFromSeam on).
    */
   vtkGetMacro(BridgeDilateLayers, int);
   vtkSetClampMacro(BridgeDilateLayers, int, 0, 64);
+  //@}
+
+  //@{
+  /**
+   * When true, start cleanup from faces on the AW/original boolean seam (edge-adjacent to the
+   * opposite origin), then dilate BridgeDilateLayers. When false (default), start from all faces
+   * imported from the Alpha-Wrapped operand, then dilate.
+   */
+  vtkGetMacro(BridgeDilateFromSeam, bool);
+  vtkSetMacro(BridgeDilateFromSeam, bool);
+  vtkBooleanMacro(BridgeDilateFromSeam, bool);
   //@}
 
   //@{
@@ -111,8 +125,20 @@ public:
 
   //@{
   /**
-   * Extra CGAL smooth_shape (mean curvature flow) iterations on the remeshed patch after remesh.
-   * 0 disables. Default 8. Unlike angle/area mesh smoothing, this visibly moves the surface.
+   * Post-remesh smoothing on the cleanup patch (strict interior free; outside + boundary fixed):
+   *  - 0: None — remesh only
+   *  - 1: CGAL smooth_shape (mean curvature flow) — C0 at the seam
+   *  - 2: CGAL fair — C0/C1/C2 at the seam via BridgeFairContinuity
+   * Default 2 (fair).
+   */
+  vtkGetMacro(BridgeSmoothMethod, int);
+  vtkSetClampMacro(BridgeSmoothMethod, int, 0, 2);
+  //@}
+
+  //@{
+  /**
+   * CGAL smooth_shape iterations when BridgeSmoothMethod is Shape MCF. 0 skips the MCF pass
+   * (no vertex motion after remesh). Default 8.
    */
   vtkGetMacro(BridgeSmoothIterations, int);
   vtkSetClampMacro(BridgeSmoothIterations, int, 0, 50);
@@ -125,6 +151,16 @@ public:
    */
   vtkGetMacro(BridgeSmoothTimeStep, double);
   vtkSetMacro(BridgeSmoothTimeStep, double);
+  //@}
+
+  //@{
+  /**
+   * CGAL fairing_continuity when BridgeSmoothMethod is Fair: 0 = C0, 1 = C1, 2 = C2.
+   * Higher continuity needs a wider fixed collar; the keep-fixed mask (outside + patch boundary)
+   * is enough for C1. Default 1.
+   */
+  vtkGetMacro(BridgeFairContinuity, int);
+  vtkSetClampMacro(BridgeFairContinuity, int, 0, 2);
   //@}
 
   //@{
@@ -156,11 +192,14 @@ protected:
 
   bool EnableBridgeCleanup = true;
   int BridgeDilateLayers = 3;
+  bool BridgeDilateFromSeam = false;
   double BridgeTargetEdgeLength = -1.0;
   int BridgeRemeshIterations = 3;
   int BridgeRemeshRelaxationSteps = 3;
+  int BridgeSmoothMethod = 2; // 0 = none, 1 = MCF, 2 = fair
   int BridgeSmoothIterations = 8;
   double BridgeSmoothTimeStep = 0.0025;
+  int BridgeFairContinuity = 1;
   bool ExportBridgeMask = true;
 
 private:

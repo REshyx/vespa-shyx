@@ -3,15 +3,16 @@
     <SourceProxy name="SHYXSelectionFillAlphaReunionFilter"
                  class="vtkSHYXSelectionFillAlphaReunionFilter"
                  label="SHYX Selection: Fill, Alpha Wrap, Union">
-      <Documentation short_help="Split by selection, hole-fill both, Alpha wrap selection, CGAL union with face origin, then local bridge remesh/smooth.">
+      <Documentation short_help="Split by selection, hole-fill both, Alpha wrap selection, CGAL union with face origin, then local bridge remesh/smooth or fair.">
         Splits the surface into the selected and unselected regions, fills boundary holes (CGAL) on
         each part, runs Alpha Wrapping on the selected part (CGAL 5.5+), and merges the two
         closed-oriented surfaces with a CGAL PMP boolean union that tracks which faces came from
-        the Alpha-Wrapped mesh. Those faces are marked exactly (no distance heuristic), dilated by
-        a few face rings across the boolean seam, then locally remeshed and smoothed. When the
-        unselected part is empty (entire surface selected), only the selected path is output. Use
-        Selection on port 1, or a cell data mask (SelectionCellArrayName) like other SHYX selection
-        tools.
+        the Alpha-Wrapped mesh. Those faces are marked exactly (no distance heuristic). Cleanup
+        either dilates the full AW region or (checkbox) starts from the AW/original boolean seam,
+        then locally remeshes and post-smooths (smooth_shape MCF or fair with C0–C2 at the patch
+        boundary). When the unselected part is empty (entire surface selected), only the selected
+        path is output. Use Selection on port 1, or a cell data mask (SelectionCellArrayName) like
+        other SHYX selection tools.
       </Documentation>
 
       <InputProperty name="Input" command="SetInputConnection">
@@ -154,9 +155,29 @@
         <BooleanDomain name="bool"/>
         <Documentation>
           Mark faces that originated from the Alpha-Wrapped mesh during CGAL corefinement union
-          (precise provenance), dilate a few face rings over the boolean seam, then run a local
-          isotropic remesh + constrained smooth.
+          (precise provenance), seed/dilate a cleanup patch (whole AW region or union seam), then
+          run a local isotropic remesh + constrained smooth_shape (MCF) or fair.
         </Documentation>
+      </IntVectorProperty>
+
+      <IntVectorProperty command="SetBridgeDilateFromSeam"
+                         name="BridgeDilateFromSeam"
+                         label="Bridge: dilate from union seam"
+                         number_of_elements="1"
+                         default_values="0"
+                         animateable="0">
+        <BooleanDomain name="bool"/>
+        <Documentation>
+          Off (default): expand from all Alpha-Wrap faces, then remesh/smooth that patch.
+          On: seed only faces on the AW/original boolean seam, expand by dilate layers, then
+          remesh/smooth — a band around the union junction instead of the whole AW region.
+        </Documentation>
+        <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="enabled_state"
+                                   property="EnableBridgeCleanup"
+                                   value="1"/>
+        </Hints>
       </IntVectorProperty>
 
       <IntVectorProperty command="SetBridgeDilateLayers"
@@ -167,7 +188,8 @@
                          animateable="0">
         <IntRangeDomain name="range" min="0" max="64"/>
         <Documentation>
-          Face-ring expansion of the Alpha-Wrap mark so the messy union seam is included.
+          Face-ring expansion of the cleanup seed (all AW faces, or the union seam when
+          BridgeDilateFromSeam is on).
         </Documentation>
         <Hints>
           <PropertyWidgetDecorator type="GenericDecorator"
@@ -228,22 +250,51 @@
         </Hints>
       </IntVectorProperty>
 
+      <IntVectorProperty command="SetBridgeSmoothMethod"
+                         name="BridgeSmoothMethod"
+                         label="Bridge: post-remesh method"
+                         number_of_elements="1"
+                         default_values="2"
+                         panel_visibility="advanced"
+                         animateable="0">
+        <EnumerationDomain name="enum">
+          <Entry text="None (remesh only)" value="0"/>
+          <Entry text="Shape MCF (smooth_shape)" value="1"/>
+          <Entry text="Fair" value="2"/>
+        </EnumerationDomain>
+        <Documentation>
+          After remesh, optionally smooth the cleanup-patch interior with CGAL smooth_shape
+          (mean curvature flow, C0 at the seam) or fair (C0–C2 via Bridge Fair Continuity).
+          None leaves the remeshed patch as-is.
+        </Documentation>
+        <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="enabled_state"
+                                   property="EnableBridgeCleanup"
+                                   value="1"/>
+        </Hints>
+      </IntVectorProperty>
+
       <IntVectorProperty command="SetBridgeSmoothIterations"
                          name="BridgeSmoothIterations"
-                         label="Bridge: shape smooth iterations (MCF)"
+                         label="Bridge: shape smooth iterations"
                          number_of_elements="1"
                          default_values="8"
                          panel_visibility="advanced"
                          animateable="0">
         <IntRangeDomain name="range" min="0" max="50"/>
         <Documentation>
-          Post-remesh CGAL smooth_shape (mean curvature flow) iterations on the cleanup patch
-          (0 = remesh only). This is after remesh and does change the surface shape.
+          CGAL smooth_shape iterations on the cleanup patch (0 = no MCF motion). Only used when
+          Bridge post-remesh method is Shape MCF.
         </Documentation>
         <Hints>
           <PropertyWidgetDecorator type="GenericDecorator"
                                    mode="enabled_state"
                                    property="EnableBridgeCleanup"
+                                   value="1"/>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="visibility"
+                                   property="BridgeSmoothMethod"
                                    value="1"/>
         </Hints>
       </IntVectorProperty>
@@ -263,8 +314,40 @@
                                    mode="enabled_state"
                                    property="EnableBridgeCleanup"
                                    value="1"/>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="visibility"
+                                   property="BridgeSmoothMethod"
+                                   value="1"/>
         </Hints>
       </DoubleVectorProperty>
+
+      <IntVectorProperty command="SetBridgeFairContinuity"
+                         name="BridgeFairContinuity"
+                         label="Bridge: fair continuity"
+                         number_of_elements="1"
+                         default_values="1"
+                         panel_visibility="advanced"
+                         animateable="0">
+        <EnumerationDomain name="enum">
+          <Entry text="C0" value="0"/>
+          <Entry text="C1" value="1"/>
+          <Entry text="C2" value="2"/>
+        </EnumerationDomain>
+        <Documentation>
+          CGAL fairing_continuity at the cleanup-patch boundary (0=C0, 1=C1, 2=C2). Only used when
+          Bridge post-remesh method is Fair. Default C1.
+        </Documentation>
+        <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="enabled_state"
+                                   property="EnableBridgeCleanup"
+                                   value="1"/>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="visibility"
+                                   property="BridgeSmoothMethod"
+                                   value="2"/>
+        </Hints>
+      </IntVectorProperty>
 
       <IntVectorProperty command="SetExportBridgeMask"
                          name="ExportBridgeMask"
@@ -288,12 +371,15 @@
 
       <PropertyGroup label="Bridge cleanup (after union)">
         <Property name="EnableBridgeCleanup"/>
+        <Property name="BridgeDilateFromSeam"/>
         <Property name="BridgeDilateLayers"/>
         <Property name="BridgeTargetEdgeLength"/>
         <Property name="BridgeRemeshIterations"/>
         <Property name="BridgeRemeshRelaxationSteps"/>
+        <Property name="BridgeSmoothMethod"/>
         <Property name="BridgeSmoothIterations"/>
         <Property name="BridgeSmoothTimeStep"/>
+        <Property name="BridgeFairContinuity"/>
         <Property name="ExportBridgeMask"/>
       </PropertyGroup>
 

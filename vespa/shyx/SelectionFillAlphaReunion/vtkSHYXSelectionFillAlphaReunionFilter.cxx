@@ -25,6 +25,7 @@
 
 #include <CGAL/Polygon_mesh_processing/corefinement.h>
 #include <CGAL/Polygon_mesh_processing/orientation.h>
+#include <CGAL/Polygon_mesh_processing/fair.h>
 #include <CGAL/Polygon_mesh_processing/remesh.h>
 #include <CGAL/Polygon_mesh_processing/smooth_shape.h>
 #include <CGAL/boost/graph/helpers.h>
@@ -573,6 +574,61 @@ void DilateCellMask(vtkPolyData* mesh, std::vector<char>& mask, int layers)
   }
 }
 
+/**
+ * Mark faces that share an edge with a face of opposite origin (AW vs non-AW).
+ * Both sides of each such edge are included so the cleanup seed straddles the boolean seam.
+ */
+void MarkSeamFacesFromOriginMask(vtkPolyData* mesh, const std::vector<char>& originMask,
+  std::vector<char>& seamMask)
+{
+  seamMask.clear();
+  if (!mesh || originMask.empty())
+  {
+    return;
+  }
+
+  const vtkIdType nCells = mesh->GetNumberOfCells();
+  if (static_cast<vtkIdType>(originMask.size()) != nCells)
+  {
+    return;
+  }
+
+  seamMask.assign(static_cast<size_t>(nCells), 0);
+  mesh->BuildLinks();
+
+  vtkNew<vtkIdList> cellPts;
+  vtkNew<vtkIdList> neighbors;
+  for (vtkIdType cid = 0; cid < nCells; ++cid)
+  {
+    const char origin = originMask[static_cast<size_t>(cid)];
+    mesh->GetCellPoints(cid, cellPts);
+    const vtkIdType npts = cellPts->GetNumberOfIds();
+    if (npts < 2)
+    {
+      continue;
+    }
+    for (vtkIdType k = 0; k < npts; ++k)
+    {
+      const vtkIdType p0 = cellPts->GetId(k);
+      const vtkIdType p1 = cellPts->GetId((k + 1) % npts);
+      mesh->GetCellEdgeNeighbors(cid, p0, p1, neighbors);
+      for (vtkIdType j = 0; j < neighbors->GetNumberOfIds(); ++j)
+      {
+        const vtkIdType nid = neighbors->GetId(j);
+        if (nid < 0 || nid >= nCells)
+        {
+          continue;
+        }
+        if (originMask[static_cast<size_t>(nid)] != origin)
+        {
+          seamMask[static_cast<size_t>(cid)] = 1;
+          seamMask[static_cast<size_t>(nid)] = 1;
+        }
+      }
+    }
+  }
+}
+
 double MeanEdgeLengthOfMaskedFaces(vtkPolyData* mesh, const std::vector<char>& mask)
 {
   if (!mesh || mask.empty())
@@ -637,14 +693,18 @@ void AttachBridgeMaskArray(vtkPolyData* mesh, const std::vector<char>& mask, con
 }
 
 /**
- * Local isotropic remesh (+ relaxation) and constrained angle/area smooth on a dilated AW patch.
+ * Local isotropic remesh (+ relaxation) and optional constrained smooth_shape or fair on a
+ * dilated AW patch.
  * Returns false on hard failure (caller may keep the pre-cleanup mesh).
  * If @a outMaskAfter is non-null, it is filled in VTK cell order with 1 = cleanup patch after remesh
  * (faces that were outside the input mask keep 0; remeshed/new faces in the patch are 1).
+ *
+ * @a smoothMethod: 0 = none, 1 = smooth_shape (MCF), 2 = fair.
  */
-bool LocalRemeshAndSmoothBridge(vtkPolyData* mesh, const std::vector<char>& mask,
-  double targetEdgeLength, int remeshIterations, int remeshRelaxationSteps, int smoothIterations,
-  double smoothTimeStep, vtkPolyData* out, std::string& error, std::vector<char>* outMaskAfter = nullptr)
+bool LocalRemeshAndPostSmoothBridge(vtkPolyData* mesh, const std::vector<char>& mask,
+  double targetEdgeLength, int remeshIterations, int remeshRelaxationSteps, int smoothMethod,
+  int smoothIterations, double smoothTimeStep, int fairContinuity, vtkPolyData* out,
+  std::string& error, std::vector<char>* outMaskAfter = nullptr)
 {
   error.clear();
   if (outMaskAfter)
@@ -818,17 +878,53 @@ bool LocalRemeshAndSmoothBridge(vtkPolyData* mesh, const std::vector<char>& mask
         .protect_constraints(true)
         .edge_is_constrained_map(featureEdges));
 
-    if (smoothIterations > 0)
+    if (smoothMethod == 1)
     {
-      // Post-remesh shape smooth (MCF). angle_and_area mainly equalizes triangles and barely
-      // changes the surface; smooth_shape moves along mean curvature so iterations are visible.
-      // keepFixed already freezes outside + patch-boundary vertices.
-      const double dt = (smoothTimeStep > 0.0) ? smoothTimeStep : 1e-3;
-      pmp::smooth_shape(sm, dt,
-        pmp::parameters::number_of_iterations(static_cast<unsigned int>(smoothIterations))
-          .vertex_is_constrained_map(keepFixed)
-          .do_scale(false));
+      // Post-remesh shape smooth (MCF). keepFixed freezes outside + patch-boundary (C0 only).
+      if (smoothIterations > 0)
+      {
+        const double dt = (smoothTimeStep > 0.0) ? smoothTimeStep : 1e-3;
+        pmp::smooth_shape(sm, dt,
+          pmp::parameters::number_of_iterations(static_cast<unsigned int>(smoothIterations))
+            .vertex_is_constrained_map(keepFixed)
+            .do_scale(false));
+      }
     }
+    else if (smoothMethod == 2)
+    {
+      // Free only strict patch interior; outside + patch-boundary stay fixed and act as
+      // boundary conditions. fairing_continuity 1/2 preserves C1/C2 at the seam.
+      std::vector<Graph_Verts> fairVerts;
+      fairVerts.reserve(static_cast<std::size_t>(sm.number_of_vertices()));
+      for (Graph_Verts v : sm.vertices())
+      {
+        if (!boost::get(keepFixed, v))
+        {
+          fairVerts.push_back(v);
+        }
+      }
+
+      if (fairVerts.empty())
+      {
+        // Remesh-only is still a success; nothing free to fair.
+      }
+      else if (fairVerts.size() == static_cast<std::size_t>(sm.number_of_vertices()))
+      {
+        // Avoid CGAL shrinking the whole mesh to the origin; keep remesh only.
+        error = "bridge fair skipped: no fixed boundary vertices (entire mesh in cleanup patch).";
+      }
+      else
+      {
+        const unsigned int cont =
+          static_cast<unsigned int>(std::max(0, std::min(fairContinuity, 2)));
+        if (!pmp::fair(sm, fairVerts, pmp::parameters::fairing_continuity(cont)))
+        {
+          // Keep remeshed mesh; fair left positions unchanged when the system fails.
+          error = "CGAL fair() failed on bridge patch (linear system not solved); kept remesh.";
+        }
+      }
+    }
+    // smoothMethod == 0: remesh only.
   }
   catch (const std::exception& e)
   {
@@ -898,11 +994,14 @@ void vtkSHYXSelectionFillAlphaReunionFilter::PrintSelf(ostream& os, vtkIndent in
      << (this->OrientToBoundVolumeWhenNeeded ? "on" : "off") << "\n";
   os << indent << "EnableBridgeCleanup: " << (this->EnableBridgeCleanup ? "on" : "off") << "\n";
   os << indent << "BridgeDilateLayers: " << this->BridgeDilateLayers << "\n";
+  os << indent << "BridgeDilateFromSeam: " << (this->BridgeDilateFromSeam ? "on" : "off") << "\n";
   os << indent << "BridgeTargetEdgeLength: " << this->BridgeTargetEdgeLength << "\n";
   os << indent << "BridgeRemeshIterations: " << this->BridgeRemeshIterations << "\n";
   os << indent << "BridgeRemeshRelaxationSteps: " << this->BridgeRemeshRelaxationSteps << "\n";
+  os << indent << "BridgeSmoothMethod: " << this->BridgeSmoothMethod << "\n";
   os << indent << "BridgeSmoothIterations: " << this->BridgeSmoothIterations << "\n";
   os << indent << "BridgeSmoothTimeStep: " << this->BridgeSmoothTimeStep << "\n";
+  os << indent << "BridgeFairContinuity: " << this->BridgeFairContinuity << "\n";
   os << indent << "ExportBridgeMask: " << (this->ExportBridgeMask ? "on" : "off") << "\n";
 }
 
@@ -1090,12 +1189,20 @@ int vtkSHYXSelectionFillAlphaReunionFilter::RequestData(
   }
 
   bool bridgeCleanupRan = false;
-  std::vector<char> bridgeMask = awFaceMask;
+  std::vector<char> bridgeMask;
   std::vector<char> maskAfterRemesh;
 
   if (this->EnableBridgeCleanup && united->GetNumberOfCells() > 0)
   {
     const double meshLen = united->GetLength();
+    if (this->BridgeDilateFromSeam)
+    {
+      MarkSeamFacesFromOriginMask(united, awFaceMask, bridgeMask);
+    }
+    else
+    {
+      bridgeMask = awFaceMask;
+    }
     DilateCellMask(united, bridgeMask, this->BridgeDilateLayers);
 
     std::size_t nMarked = 0;
@@ -1106,8 +1213,16 @@ int vtkSHYXSelectionFillAlphaReunionFilter::RequestData(
 
     if (nMarked == 0)
     {
-      vtkWarningMacro(<< "Bridge cleanup: no Alpha-Wrap faces found in the union result. "
-                         "Skipping local remesh/smooth.");
+      if (this->BridgeDilateFromSeam)
+      {
+        vtkWarningMacro(<< "Bridge cleanup: no AW/original seam faces found in the union result. "
+                           "Skipping local remesh/smooth.");
+      }
+      else
+      {
+        vtkWarningMacro(<< "Bridge cleanup: no Alpha-Wrap faces found in the union result. "
+                           "Skipping local remesh/smooth.");
+      }
       output->ShallowCopy(united);
     }
     else
@@ -1125,10 +1240,14 @@ int vtkSHYXSelectionFillAlphaReunionFilter::RequestData(
       vtkNew<vtkPolyData> cleaned;
       std::string err;
       std::vector<char>* maskOutPtr = this->ExportBridgeMask ? &maskAfterRemesh : nullptr;
-      if (LocalRemeshAndSmoothBridge(united, bridgeMask, targetLen, this->BridgeRemeshIterations,
-            this->BridgeRemeshRelaxationSteps, this->BridgeSmoothIterations, this->BridgeSmoothTimeStep,
-            cleaned, err, maskOutPtr))
+      if (LocalRemeshAndPostSmoothBridge(united, bridgeMask, targetLen, this->BridgeRemeshIterations,
+            this->BridgeRemeshRelaxationSteps, this->BridgeSmoothMethod, this->BridgeSmoothIterations,
+            this->BridgeSmoothTimeStep, this->BridgeFairContinuity, cleaned, err, maskOutPtr))
       {
+        if (!err.empty())
+        {
+          vtkWarningMacro(<< "Bridge cleanup note: " << err);
+        }
         output->ShallowCopy(cleaned);
         bridgeCleanupRan = true;
       }
