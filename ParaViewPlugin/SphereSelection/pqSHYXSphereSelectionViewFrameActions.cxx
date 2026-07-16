@@ -64,9 +64,6 @@ void pqSHYXSphereSelectionViewFrameActions::frameConnected(pqViewFrame* frame, p
     QIcon(":/VESPA/SHYX_Sphere_Selection.svg"), tr("Sphere cell selection"));
   action->setObjectName(QLatin1String(kActionObjectName));
   action->setCheckable(true);
-  action->setToolTip(tr(
-    "Toggle interactive sphere selection: select cells inside a movable sphere "
-    "(drag to move, hover+wheel to resize)"));
 
   // Owned by the action so it dies with the frame/action.
   new pqSHYXSphereSelectionController(renderView, frame, action, action);

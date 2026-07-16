@@ -148,12 +148,12 @@ if (PARAVIEW_USE_QT)
   list(APPEND vespa_plugin_qt_auto_interfaces ${sphere_selection_autostart_interfaces})
   list(APPEND vespa_plugin_qt_auto_sources
     ${sphere_selection_autostart_sources}
-    pqSHYXSphereSelectionAutoStart.cxx
-    pqSHYXSphereSelectionAutoStart.h
-    pqSHYXSphereSelectionViewFrameActions.cxx
-    pqSHYXSphereSelectionViewFrameActions.h
-    pqSHYXSphereSelectionController.cxx
-    pqSHYXSphereSelectionController.h)
+    SphereSelection/pqSHYXSphereSelectionAutoStart.cxx
+    SphereSelection/pqSHYXSphereSelectionAutoStart.h
+    SphereSelection/pqSHYXSphereSelectionViewFrameActions.cxx
+    SphereSelection/pqSHYXSphereSelectionViewFrameActions.h
+    SphereSelection/pqSHYXSphereSelectionController.cxx
+    SphereSelection/pqSHYXSphereSelectionController.h)
 endif ()
 
 paraview_add_plugin(VESPAPlugin
@@ -247,7 +247,8 @@ if (PARAVIEW_USE_QT)
   set_property(TARGET VESPAPlugin APPEND PROPERTY
     AUTOUIC_SEARCH_PATHS "${CMAKE_CURRENT_SOURCE_DIR}/Resources/UI")
   target_include_directories(VESPAPlugin PRIVATE
-    "${CMAKE_CURRENT_SOURCE_DIR}/TransferCurve")
+    "${CMAKE_CURRENT_SOURCE_DIR}/TransferCurve"
+    "${CMAKE_CURRENT_SOURCE_DIR}/SphereSelection")
 endif ()
 
 target_link_libraries(VESPAPlugin

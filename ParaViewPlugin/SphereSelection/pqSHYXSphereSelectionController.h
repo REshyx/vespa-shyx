@@ -55,6 +55,8 @@ private:
   void dragToDisplay(int displayX, int displayY);
   void applySelection();
   void captureBaselineSelection();
+  void installToggleActionContextMenu();
+  void updateToggleActionTooltip();
   int currentSelectionModifier() const;
   pqDataRepresentation* resolveRepresentation() const;
   vtkDataSet* resolveDataSet(pqDataRepresentation* repr) const;
@@ -75,10 +77,14 @@ private:
   double Center[3] = { 0.0, 0.0, 0.0 };
   double Radius = 1.0;
   double DragDepth = 0.5;
+  // Center - clickWorld at press, so drag keeps the grab point under the cursor.
+  double DragGrabOffset[3] = { 0.0, 0.0, 0.0 };
 
   bool Enabled = false;
   bool Hovering = false;
   bool Dragging = false;
+  bool DeferSelectionUntilRelease = false;
+  bool PendingSelectionApply = false;
 };
 
 #endif

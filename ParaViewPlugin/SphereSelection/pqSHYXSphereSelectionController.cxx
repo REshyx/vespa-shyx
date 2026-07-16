@@ -33,10 +33,17 @@
 #include "vtkSMSourceProxy.h"
 #include "vtkSelectionNode.h"
 #include "vtkSmartPointer.h"
+// Qt defines emit as a macro; TBB profiling.h has methods named emit().
+#ifdef emit
+#  undef emit
+#endif
+#include "vtkSMPThreadLocalObject.h"
+#include "vtkSMPTools.h"
 #include "vtkSphereSource.h"
 
 #include <QAction>
-#include <QDebug>
+#include <QMenu>
+#include <QToolBar>
 #include <QtGlobal>
 
 #include <algorithm>
@@ -85,6 +92,7 @@ pqSHYXSphereSelectionController::pqSHYXSphereSelectionController(
   , ToggleAction(toggleAction)
 {
   QObject::connect(toggleAction, &QAction::toggled, this, &pqSHYXSphereSelectionController::onToggled);
+  this->installToggleActionContextMenu();
 }
 
 //-----------------------------------------------------------------------------
@@ -275,6 +283,7 @@ void pqSHYXSphereSelectionController::disableSphere()
   this->Enabled = false;
   this->Hovering = false;
   this->Dragging = false;
+  this->PendingSelectionApply = false;
 
   if (this->View)
   {
@@ -471,12 +480,20 @@ void pqSHYXSphereSelectionController::dragToDisplay(int displayX, int displayY)
 
   double world[4];
   vtkInteractorObserver::ComputeDisplayToWorld(ren, displayX, displayY, this->DragDepth, world);
-  this->Center[0] = world[0];
-  this->Center[1] = world[1];
-  this->Center[2] = world[2];
+  this->Center[0] = world[0] + this->DragGrabOffset[0];
+  this->Center[1] = world[1] + this->DragGrabOffset[1];
+  this->Center[2] = world[2] + this->DragGrabOffset[2];
   this->updateSphereGeometry();
-  this->applySelection();
-  this->renderView();
+  if (this->DeferSelectionUntilRelease)
+  {
+    this->PendingSelectionApply = true;
+    this->renderView();
+  }
+  else
+  {
+    this->applySelection();
+    this->renderView();
+  }
 }
 
 //-----------------------------------------------------------------------------
@@ -521,6 +538,17 @@ void pqSHYXSphereSelectionController::handleInteractorEvent(unsigned long eid)
           ren->SetWorldPoint(this->Center[0], this->Center[1], this->Center[2], 1.0);
           ren->WorldToDisplay();
           this->DragDepth = ren->GetDisplayPoint()[2];
+
+          double clickWorld[4];
+          vtkInteractorObserver::ComputeDisplayToWorld(
+            ren, pos[0], pos[1], this->DragDepth, clickWorld);
+          this->DragGrabOffset[0] = this->Center[0] - clickWorld[0];
+          this->DragGrabOffset[1] = this->Center[1] - clickWorld[1];
+          this->DragGrabOffset[2] = this->Center[2] - clickWorld[2];
+        }
+        else
+        {
+          this->DragGrabOffset[0] = this->DragGrabOffset[1] = this->DragGrabOffset[2] = 0.0;
         }
         this->Observer->AbortFlagOn();
       }
@@ -531,6 +559,12 @@ void pqSHYXSphereSelectionController::handleInteractorEvent(unsigned long eid)
       if (this->Dragging)
       {
         this->Dragging = false;
+        if (this->DeferSelectionUntilRelease && this->PendingSelectionApply)
+        {
+          this->applySelection();
+          this->PendingSelectionApply = false;
+          this->renderView();
+        }
         this->Observer->AbortFlagOn();
       }
       break;
@@ -649,27 +683,35 @@ void pqSHYXSphereSelectionController::applySelection()
   }
 
   const double r2 = this->Radius * this->Radius;
-  std::vector<vtkIdType> ids;
-  ids.reserve(static_cast<size_t>(std::min<vtkIdType>(ds->GetNumberOfCells(), 1024)));
-
-  vtkNew<vtkIdList> ptIds;
+  const double center[3] = { this->Center[0], this->Center[1], this->Center[2] };
   const vtkIdType nCells = ds->GetNumberOfCells();
-  for (vtkIdType cid = 0; cid < nCells; ++cid)
-  {
-    ds->GetCellPoints(cid, ptIds);
-    const vtkIdType npts = ptIds->GetNumberOfIds();
-    bool inside = false;
-    for (vtkIdType i = 0; i < npts; ++i)
+
+  std::vector<unsigned char> insideMask(static_cast<size_t>(nCells), 0);
+  vtkSMPThreadLocalObject<vtkIdList> tlPtIds;
+  vtkSMPTools::For(0, nCells, [&](vtkIdType begin, vtkIdType end) {
+    vtkIdList* ptIds = tlPtIds.Local();
+    for (vtkIdType cid = begin; cid < end; ++cid)
     {
-      double p[3];
-      ds->GetPoint(ptIds->GetId(i), p);
-      if (vtkMath::Distance2BetweenPoints(p, this->Center) <= r2)
+      ds->GetCellPoints(cid, ptIds);
+      const vtkIdType npts = ptIds->GetNumberOfIds();
+      for (vtkIdType i = 0; i < npts; ++i)
       {
-        inside = true;
-        break;
+        double p[3];
+        ds->GetPoint(ptIds->GetId(i), p);
+        if (vtkMath::Distance2BetweenPoints(p, center) <= r2)
+        {
+          insideMask[static_cast<size_t>(cid)] = 1;
+          break;
+        }
       }
     }
-    if (inside)
+  });
+
+  std::vector<vtkIdType> ids;
+  ids.reserve(static_cast<size_t>(std::min<vtkIdType>(nCells, 1024)));
+  for (vtkIdType cid = 0; cid < nCells; ++cid)
+  {
+    if (insideMask[static_cast<size_t>(cid)])
     {
       ids.push_back(cid);
     }
@@ -744,4 +786,61 @@ void pqSHYXSphereSelectionController::applySelection()
       selMgr->select(this->TargetPort);
     }
   }
+}
+
+//-----------------------------------------------------------------------------
+void pqSHYXSphereSelectionController::installToggleActionContextMenu()
+{
+  if (!this->Frame || !this->ToggleAction)
+  {
+    return;
+  }
+
+  QToolBar* toolbar = this->Frame->findChild<QToolBar*>();
+  if (!toolbar)
+  {
+    return;
+  }
+
+  QWidget* button = toolbar->widgetForAction(this->ToggleAction);
+  if (!button)
+  {
+    return;
+  }
+
+  button->setContextMenuPolicy(Qt::CustomContextMenu);
+  QObject::connect(button, &QWidget::customContextMenuRequested, this,
+    [this, button](const QPoint& pos) {
+      QMenu menu(button);
+      QAction* deferAction = menu.addAction(tr("Apply selection on release only"));
+      deferAction->setCheckable(true);
+      QObject::connect(&menu, &QMenu::aboutToShow, this, [deferAction, this]() {
+        deferAction->setChecked(this->DeferSelectionUntilRelease);
+      });
+      QObject::connect(deferAction, &QAction::triggered, this, [this, deferAction]() {
+        this->DeferSelectionUntilRelease = deferAction->isChecked();
+        this->updateToggleActionTooltip();
+      });
+      menu.exec(button->mapToGlobal(pos));
+    });
+  this->updateToggleActionTooltip();
+}
+
+//-----------------------------------------------------------------------------
+void pqSHYXSphereSelectionController::updateToggleActionTooltip()
+{
+  if (!this->ToggleAction)
+  {
+    return;
+  }
+
+  QString tip = tr(
+    "Toggle interactive sphere selection: select cells inside a movable sphere "
+    "(drag to move, hover+wheel to resize). Right-click for options.");
+  if (this->DeferSelectionUntilRelease)
+  {
+    tip += QLatin1Char('\n');
+    tip += tr("Selection is applied when the drag is released.");
+  }
+  this->ToggleAction->setToolTip(tip);
 }
