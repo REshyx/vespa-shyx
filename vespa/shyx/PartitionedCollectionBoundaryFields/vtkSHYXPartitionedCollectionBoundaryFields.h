@@ -40,9 +40,10 @@ public:
   /**
    * Newline-separated values aligned with the Partitioned block names panel order (tetrahedra,
    * side sets, mirrored node sets). Values in each row are tab-separated Variable1, Variable2, ...
-   * entries. Only side-set entries are used. Non-zero side rows accumulate onto volume points as
-   * BoundaryVariable1, BoundaryVariable2, ... (existing arrays are overwritten). Repeated writes to
-   * the same volume node are warned and averaged.
+   * entries. Only side-set entries are used. Finite side values accumulate onto volume points as
+   * BoundaryVariable1, BoundaryVariable2, ... (initialized to NaN; NaN / empty cells are not written;
+   * existing arrays are overwritten). Repeated writes to the same volume node are warned and
+   * averaged, same as BoundaryRadialValueNormal.
    */
   vtkSetStringMacro(BoundaryVariables);
   vtkGetStringMacro(BoundaryVariables);
@@ -50,7 +51,8 @@ public:
   /**
    * Newline-separated 0/1 flags aligned with the Partitioned block names panel order. Only side-set
    * rows are used. When non-zero, that side's BoundaryRadialValueNormal is accumulated onto
-   * tetrahedra volume points (independent of BoundaryVariables).
+   * tetrahedra volume points (independent of BoundaryVariables). Volume normals are initialized to
+   * NaN; unchecked sides leave those points empty.
    */
   vtkSetStringMacro(BoundaryWriteNormals);
   vtkGetStringMacro(BoundaryWriteNormals);

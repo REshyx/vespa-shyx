@@ -39,6 +39,7 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <cstdlib>
 #include <limits>
 #include <map>
 #include <numeric>
@@ -807,7 +808,7 @@ void InitializeVolumeBoundaryRadialNormalArray(vtkUnstructuredGrid* volume, cons
   values->SetName(arrayName);
   values->SetNumberOfComponents(3);
   values->SetNumberOfTuples(volume->GetNumberOfPoints());
-  values->Fill(0.0);
+  values->Fill(std::numeric_limits<double>::quiet_NaN());
 
   volume->GetPointData()->RemoveArray(arrayName);
   volume->GetPointData()->AddArray(values);
@@ -843,7 +844,7 @@ void InitializeVolumeBoundaryVariableArrays(
     values->SetName(arrayName.c_str());
     values->SetNumberOfComponents(1);
     values->SetNumberOfTuples(volume->GetNumberOfPoints());
-    values->Fill(0.0);
+    values->Fill(std::numeric_limits<double>::quiet_NaN());
 
     volume->GetPointData()->RemoveArray(arrayName.c_str());
     volume->GetPointData()->AddArray(values);
@@ -855,7 +856,7 @@ VolumeBoundaryDuplicateWrites AccumulateBoundaryRadialNormalToVolume(vtkPolyData
   const std::vector<std::string>& variableArrayNames, const std::vector<double>& variables,
   bool writeNormal, bool writeVariables, bool useRadialValueForNormal,
   std::vector<unsigned int>& volumeNormalWriteCounts,
-  std::vector<unsigned int>& volumeVariableWriteCounts)
+  std::vector<std::vector<unsigned int>>& volumeVariableWriteCounts)
 {
   VolumeBoundaryDuplicateWrites duplicates;
   if (!side || !volume || (!writeNormal && !writeVariables))
@@ -923,9 +924,19 @@ VolumeBoundaryDuplicateWrites AccumulateBoundaryRadialNormalToVolume(vtkPolyData
   {
     volumeNormalWriteCounts.assign(static_cast<size_t>(nVolumePts), 0);
   }
-  if (static_cast<vtkIdType>(volumeVariableWriteCounts.size()) != nVolumePts)
+  if (writeVariables)
   {
-    volumeVariableWriteCounts.assign(static_cast<size_t>(nVolumePts), 0);
+    if (volumeVariableWriteCounts.size() != volumeVariables.size())
+    {
+      volumeVariableWriteCounts.assign(volumeVariables.size(), {});
+    }
+    for (std::vector<unsigned int>& counts : volumeVariableWriteCounts)
+    {
+      if (static_cast<vtkIdType>(counts.size()) != nVolumePts)
+      {
+        counts.assign(static_cast<size_t>(nVolumePts), 0);
+      }
+    }
   }
 
   vtkIdType duplicateNormalWrites = 0;
@@ -951,31 +962,60 @@ VolumeBoundaryDuplicateWrites AccumulateBoundaryRadialNormalToVolume(vtkPolyData
         ++duplicateNormalWrites;
       }
 
-      double out[3];
-      volumeVectors->GetTuple(volumePointId, out);
       const double normalWeight = useRadialValueForNormal ? v : 1.0;
-      out[0] += normalWeight * normal[0];
-      out[1] += normalWeight * normal[1];
-      out[2] += normalWeight * normal[2];
-      volumeVectors->SetTuple(volumePointId, out);
-      ++volumeNormalWriteCounts[static_cast<size_t>(volumePointId)];
+      const double contribution[3] = { normalWeight * normal[0], normalWeight * normal[1],
+        normalWeight * normal[2] };
+      unsigned int& writeCount = volumeNormalWriteCounts[static_cast<size_t>(volumePointId)];
+      if (writeCount == 0)
+      {
+        volumeVectors->SetTuple(volumePointId, contribution);
+      }
+      else
+      {
+        double out[3];
+        volumeVectors->GetTuple(volumePointId, out);
+        out[0] += contribution[0];
+        out[1] += contribution[1];
+        out[2] += contribution[2];
+        volumeVectors->SetTuple(volumePointId, out);
+      }
+      ++writeCount;
     }
 
     if (writeVariables)
     {
-      if (volumeVariableWriteCounts[static_cast<size_t>(volumePointId)] > 0)
+      bool wroteAnyVariable = false;
+      bool duplicateThisPoint = false;
+      for (size_t i = 0; i < volumeVariables.size(); ++i)
+      {
+        if (i >= variables.size() || !vtkMath::IsFinite(variables[i]))
+        {
+          continue;
+        }
+
+        unsigned int& writeCount = volumeVariableWriteCounts[i][static_cast<size_t>(volumePointId)];
+        if (writeCount > 0)
+        {
+          duplicateThisPoint = true;
+        }
+
+        const double value = variables[i];
+        const double current = volumeVariables[i]->GetValue(volumePointId);
+        if (!vtkMath::IsFinite(current) || writeCount == 0)
+        {
+          volumeVariables[i]->SetValue(volumePointId, value);
+        }
+        else
+        {
+          volumeVariables[i]->SetValue(volumePointId, current + value);
+        }
+        ++writeCount;
+        wroteAnyVariable = true;
+      }
+      if (wroteAnyVariable && duplicateThisPoint)
       {
         ++duplicateVariableWrites;
       }
-
-      for (size_t i = 0; i < volumeVariables.size(); ++i)
-      {
-        const double value =
-          i < variables.size() && vtkMath::IsFinite(variables[i]) ? variables[i] : 0.0;
-        volumeVariables[i]->SetValue(
-          volumePointId, volumeVariables[i]->GetValue(volumePointId) + value);
-      }
-      ++volumeVariableWriteCounts[static_cast<size_t>(volumePointId)];
     }
   }
   duplicates.normal = duplicateNormalWrites;
@@ -986,7 +1026,7 @@ VolumeBoundaryDuplicateWrites AccumulateBoundaryRadialNormalToVolume(vtkPolyData
 void AverageRepeatedBoundaryRadialNormalWrites(vtkUnstructuredGrid* volume, const char* vectorArrayName,
   const std::vector<std::string>& variableArrayNames,
   const std::vector<unsigned int>& normalWriteCounts,
-  const std::vector<unsigned int>& variableWriteCounts)
+  const std::vector<std::vector<unsigned int>>& variableWriteCounts)
 {
   if (!volume || !vectorArrayName || vectorArrayName[0] == '\0')
   {
@@ -1027,17 +1067,20 @@ void AverageRepeatedBoundaryRadialNormalWrites(vtkUnstructuredGrid* volume, cons
       volumeVectors->SetTuple(p, out);
     }
 
-    const unsigned int variableCount =
-      variableWriteCounts.size() == static_cast<size_t>(volume->GetNumberOfPoints())
-      ? variableWriteCounts[static_cast<size_t>(p)]
-      : 0u;
-    if (variableCount <= 1)
+    for (size_t i = 0; i < volumeVariables.size(); ++i)
     {
-      continue;
-    }
-    for (vtkDoubleArray* arr : volumeVariables)
-    {
-      arr->SetValue(p, arr->GetValue(p) / static_cast<double>(variableCount));
+      if (i >= variableWriteCounts.size() ||
+        static_cast<vtkIdType>(variableWriteCounts[i].size()) != volume->GetNumberOfPoints())
+      {
+        continue;
+      }
+      const unsigned int variableCount = variableWriteCounts[i][static_cast<size_t>(p)];
+      if (variableCount <= 1)
+      {
+        continue;
+      }
+      volumeVariables[i]->SetValue(
+        p, volumeVariables[i]->GetValue(p) / static_cast<double>(variableCount));
     }
   }
 }
@@ -1087,7 +1130,9 @@ void AddBoundaryVolumeFieldArraysToSide(vtkPolyData* side, const char* radialArr
     arr->SetName(variableArrayNames[i].c_str());
     arr->SetNumberOfComponents(1);
     arr->SetNumberOfTuples(side->GetNumberOfPoints());
-    const double value = i < variables.size() && vtkMath::IsFinite(variables[i]) ? variables[i] : 0.0;
+    const double value = i < variables.size() && vtkMath::IsFinite(variables[i])
+      ? variables[i]
+      : std::numeric_limits<double>::quiet_NaN();
     arr->Fill(value);
     side->GetPointData()->RemoveArray(variableArrayNames[i].c_str());
     side->GetPointData()->AddArray(arr);
@@ -1484,6 +1529,7 @@ std::vector<std::string> ParseBlockNames(const char* names)
 
 std::vector<std::vector<double>> ParseLineDoubleMatrix(const char* values)
 {
+  const double nanv = std::numeric_limits<double>::quiet_NaN();
   std::vector<std::vector<double>> result;
   if (!values || values[0] == '\0')
   {
@@ -1498,16 +1544,49 @@ std::vector<std::vector<double>> ParseLineDoubleMatrix(const char* values)
     {
       line.pop_back();
     }
-    std::stringstream lineStream(line);
     std::vector<double> row;
-    double value = 0.0;
-    while (lineStream >> value)
+    size_t start = 0;
+    while (start <= line.size())
     {
-      row.push_back(value);
+      const size_t tab = line.find('\t', start);
+      std::string token =
+        tab == std::string::npos ? line.substr(start) : line.substr(start, tab - start);
+      while (!token.empty() && (token.front() == ' ' || token.front() == '\t'))
+      {
+        token.erase(token.begin());
+      }
+      while (!token.empty() && (token.back() == ' ' || token.back() == '\t'))
+      {
+        token.pop_back();
+      }
+
+      if (token.empty())
+      {
+        row.push_back(nanv);
+      }
+      else
+      {
+        char* end = nullptr;
+        const double value = std::strtod(token.c_str(), &end);
+        if (end != token.c_str() && end && *end == '\0' && vtkMath::IsFinite(value))
+        {
+          row.push_back(value);
+        }
+        else
+        {
+          row.push_back(nanv);
+        }
+      }
+
+      if (tab == std::string::npos)
+      {
+        break;
+      }
+      start = tab + 1;
     }
     if (row.empty())
     {
-      row.push_back(0.0);
+      row.push_back(nanv);
     }
     result.push_back(row);
   }
@@ -1517,7 +1596,7 @@ std::vector<std::vector<double>> ParseLineDoubleMatrix(const char* values)
 std::vector<double> ResolveLineDoubles(
   const std::vector<std::vector<double>>& values, unsigned int blockIndex, size_t nVariables)
 {
-  std::vector<double> result(nVariables, 0.0);
+  std::vector<double> result(nVariables, std::numeric_limits<double>::quiet_NaN());
   if (blockIndex >= values.size())
   {
     return result;
@@ -1539,11 +1618,11 @@ size_t CountBoundaryVariables(const std::vector<std::vector<double>>& values)
   return nVariables;
 }
 
-bool HasNonZeroBoundaryVariableRow(const std::vector<double>& values)
+bool HasFiniteBoundaryVariableRow(const std::vector<double>& values)
 {
   for (double value : values)
   {
-    if (value != 0.0 && vtkMath::IsFinite(value))
+    if (vtkMath::IsFinite(value))
     {
       return true;
     }
@@ -1845,11 +1924,15 @@ int vtkSHYXDataSetToPartitionedCollection::RequestData(vtkInformation* vtkNotUse
     InitializeVolumeBoundaryVariableArrays(volumeGridForIoss, boundaryVariableArrayNames);
   }
   std::vector<unsigned int> volumeNormalWriteCounts;
-  std::vector<unsigned int> volumeVariableWriteCounts;
+  std::vector<std::vector<unsigned int>> volumeVariableWriteCounts;
   if (writeVolumeNormals)
   {
     volumeNormalWriteCounts.assign(static_cast<size_t>(volumeGridForIoss->GetNumberOfPoints()), 0);
-    volumeVariableWriteCounts.assign(static_cast<size_t>(volumeGridForIoss->GetNumberOfPoints()), 0);
+    volumeVariableWriteCounts.assign(nBoundaryVariables, {});
+    for (std::vector<unsigned int>& counts : volumeVariableWriteCounts)
+    {
+      counts.assign(static_cast<size_t>(volumeGridForIoss->GetNumberOfPoints()), 0);
+    }
   }
 
   std::vector<vtkSmartPointer<vtkPolyData>> preparedSides;
@@ -1876,7 +1959,7 @@ int vtkSHYXDataSetToPartitionedCollection::RequestData(vtkInformation* vtkNotUse
       AddBoundaryRadialValueArray(
         sideCopy, kBoundaryRadialValueArrayName, this->BoundaryRadialNormalFalloffFactor);
     }
-    std::vector<double> variables(nBoundaryVariables, 0.0);
+    std::vector<double> variables(nBoundaryVariables, std::numeric_limits<double>::quiet_NaN());
     if (writeVolumeNormals)
     {
       const unsigned int sideBlockIndex = (volumeGridForIoss ? 1u : 0u) + i;
@@ -1886,7 +1969,7 @@ int vtkSHYXDataSetToPartitionedCollection::RequestData(vtkInformation* vtkNotUse
         kBoundaryRadialNormalArrayName, boundaryVariableArrayNames, variables,
         computeBoundaryRadialValue);
       const bool writeNormal = ResolveWriteNormal(boundaryWriteNormals, sideBlockIndex);
-      const bool writeVariables = HasNonZeroBoundaryVariableRow(variables);
+      const bool writeVariables = HasFiniteBoundaryVariableRow(variables);
       if (writeNormal || writeVariables)
       {
         const VolumeBoundaryDuplicateWrites duplicateWrites =

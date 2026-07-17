@@ -22,6 +22,7 @@
 #include "vtkInteractorObserver.h"
 #include "vtkMath.h"
 #include "vtkNew.h"
+#include "vtkPolyData.h"
 #include "vtkPolyDataMapper.h"
 #include "vtkProperty.h"
 #include "vtkRenderWindowInteractor.h"
@@ -33,15 +34,17 @@
 #include "vtkSMSourceProxy.h"
 #include "vtkSelectionNode.h"
 #include "vtkSmartPointer.h"
+#include "vtkStaticCellLocator.h"
+#include "vtkStaticPointLocator.h"
+#include "vtkPointSet.h"
 // Qt defines emit as a macro; TBB profiling.h has methods named emit().
 #ifdef emit
 #  undef emit
 #endif
-#include "vtkSMPThreadLocalObject.h"
-#include "vtkSMPTools.h"
 #include "vtkSphereSource.h"
 
 #include <QAction>
+#include <QApplication>
 #include <QMenu>
 #include <QToolBar>
 #include <QtGlobal>
@@ -213,7 +216,13 @@ bool pqSHYXSphereSelectionController::enableSphere()
   this->TargetRepresentation = repr;
   this->TargetPort = repr->getOutputPortFromInput();
 
-  if (!this->snapToCenterVertex() || !this->computeInitialRadius())
+  QApplication::setOverrideCursor(Qt::WaitCursor);
+  const bool prepared = this->ensureSpatialCaches(ds);
+  const bool snapped = prepared && this->snapToCenterVertex();
+  const bool radiusOk = snapped && this->computeInitialRadius();
+  QApplication::restoreOverrideCursor();
+
+  if (!radiusOk)
   {
     qWarning("SHYX sphere selection: failed to initialize sphere at view center.");
     this->TargetRepresentation = nullptr;
@@ -278,6 +287,7 @@ void pqSHYXSphereSelectionController::disableSphere()
   this->Mapper = nullptr;
   this->Sphere = nullptr;
   this->BaselineAppendSelections = nullptr;
+  // Keep PointLocator/CellLocator caches across toggles (keyed by dataset mtime).
   this->TargetRepresentation = nullptr;
   this->TargetPort = nullptr;
   this->Enabled = false;
@@ -313,10 +323,57 @@ void pqSHYXSphereSelectionController::renderView()
 }
 
 //-----------------------------------------------------------------------------
+bool pqSHYXSphereSelectionController::ensureSpatialCaches(vtkDataSet* ds)
+{
+  if (!ds || ds->GetNumberOfPoints() == 0)
+  {
+    return false;
+  }
+
+  const vtkMTimeType mtime = ds->GetMTime();
+  if (this->CachedDataSet == ds && this->CachedDataMTime == mtime && this->CellLocator)
+  {
+    return true;
+  }
+
+  // BuildCells is cheap if already built by the mapper; avoid BuildLinks (very costly).
+  if (auto* pd = vtkPolyData::SafeDownCast(ds))
+  {
+    pd->BuildCells();
+  }
+
+  auto* ps = vtkPointSet::SafeDownCast(ds);
+  if (!ps)
+  {
+    this->PointLocator = nullptr;
+    this->CellLocator = nullptr;
+    this->CachedDataSet = nullptr;
+    this->CachedDataMTime = 0;
+    return false;
+  }
+
+  // Cell locator drives selection queries. Point locator is built lazily only if
+  // surface pick fails during snap.
+  this->CellLocator = vtkSmartPointer<vtkStaticCellLocator>::New();
+  this->CellLocator->SetDataSet(ps);
+  this->CellLocator->BuildLocator();
+
+  if (!(this->PointLocator && this->CachedDataSet == ds && this->CachedDataMTime == mtime))
+  {
+    this->PointLocator = nullptr;
+  }
+
+  this->CachedDataSet = ds;
+  this->CachedDataMTime = mtime;
+  return true;
+}
+
+//-----------------------------------------------------------------------------
 bool pqSHYXSphereSelectionController::snapToCenterVertex()
 {
   vtkRenderer* ren = this->renderer();
   vtkDataSet* ds = this->resolveDataSet(this->TargetRepresentation);
+  vtkSMRenderViewProxy* rmp = this->View ? this->View->getRenderViewProxy() : nullptr;
   if (!ren || !ds || ds->GetNumberOfPoints() == 0)
   {
     return false;
@@ -328,65 +385,64 @@ bool pqSHYXSphereSelectionController::snapToCenterVertex()
     return false;
   }
 
-  const double cx = 0.5 * size[0];
-  const double cy = 0.5 * size[1];
+  const int displayPos[2] = { size[0] / 2, size[1] / 2 };
+  double world[3] = { 0.0, 0.0, 0.0 };
+  double normal[3] = { 0.0, 0.0, 0.0 };
 
-  vtkIdType bestId = 0;
-  double bestDist2 = std::numeric_limits<double>::max();
-  double bestWorld[3] = { 0.0, 0.0, 0.0 };
+  // Hardware/surface pick at view center — O(pick), not O(numPoints).
+  if (rmp &&
+    rmp->ConvertDisplayToPointOnSurface(displayPos, world, normal, /*snapOnMeshPoint=*/true))
+  {
+    if (std::isfinite(world[0]) && std::isfinite(world[1]) && std::isfinite(world[2]))
+    {
+      this->Center[0] = world[0];
+      this->Center[1] = world[1];
+      this->Center[2] = world[2];
+      return true;
+    }
+  }
+
+  double b[6];
+  ds->GetBounds(b);
+  world[0] = 0.5 * (b[0] + b[1]);
+  world[1] = 0.5 * (b[2] + b[3]);
+  world[2] = 0.5 * (b[4] + b[5]);
+
+  // Fallback: nearest vertex to bounds center via locator / linear scan.
+  if (!(this->PointLocator && this->CachedDataSet == ds))
+  {
+    if (auto* ps = vtkPointSet::SafeDownCast(ds))
+    {
+      this->PointLocator = vtkSmartPointer<vtkStaticPointLocator>::New();
+      this->PointLocator->SetDataSet(ps);
+      this->PointLocator->BuildLocator();
+    }
+  }
+  if (this->PointLocator && this->CachedDataSet == ds)
+  {
+    const vtkIdType id = this->PointLocator->FindClosestPoint(world);
+    if (id >= 0)
+    {
+      ds->GetPoint(id, this->Center);
+      return true;
+    }
+  }
 
   const vtkIdType npts = ds->GetNumberOfPoints();
+  vtkIdType bestId = 0;
+  double bestDist2 = std::numeric_limits<double>::max();
   for (vtkIdType i = 0; i < npts; ++i)
   {
     double p[3];
     ds->GetPoint(i, p);
-    ren->SetWorldPoint(p[0], p[1], p[2], 1.0);
-    ren->WorldToDisplay();
-    double* d = ren->GetDisplayPoint();
-    if (d[2] < 0.0 || d[2] > 1.0)
-    {
-      continue;
-    }
-    const double dx = d[0] - cx;
-    const double dy = d[1] - cy;
-    const double dist2 = dx * dx + dy * dy;
+    const double dist2 = vtkMath::Distance2BetweenPoints(world, p);
     if (dist2 < bestDist2)
     {
       bestDist2 = dist2;
       bestId = i;
-      bestWorld[0] = p[0];
-      bestWorld[1] = p[1];
-      bestWorld[2] = p[2];
     }
   }
-
-  if (bestDist2 == std::numeric_limits<double>::max())
-  {
-    // Fallback: geometric centroid of bounds mid, then nearest point in world space.
-    double b[6];
-    ds->GetBounds(b);
-    const double mid[3] = { 0.5 * (b[0] + b[1]), 0.5 * (b[2] + b[3]), 0.5 * (b[4] + b[5]) };
-    bestDist2 = std::numeric_limits<double>::max();
-    for (vtkIdType i = 0; i < npts; ++i)
-    {
-      double p[3];
-      ds->GetPoint(i, p);
-      const double dist2 = vtkMath::Distance2BetweenPoints(mid, p);
-      if (dist2 < bestDist2)
-      {
-        bestDist2 = dist2;
-        bestId = i;
-        bestWorld[0] = p[0];
-        bestWorld[1] = p[1];
-        bestWorld[2] = p[2];
-      }
-    }
-    Q_UNUSED(bestId);
-  }
-
-  this->Center[0] = bestWorld[0];
-  this->Center[1] = bestWorld[1];
-  this->Center[2] = bestWorld[2];
+  ds->GetPoint(bestId, this->Center);
   return true;
 }
 
@@ -682,15 +738,54 @@ void pqSHYXSphereSelectionController::applySelection()
     return;
   }
 
+  if (!this->ensureSpatialCaches(ds))
+  {
+    return;
+  }
+
   const double r2 = this->Radius * this->Radius;
   const double center[3] = { this->Center[0], this->Center[1], this->Center[2] };
   const vtkIdType nCells = ds->GetNumberOfCells();
 
-  std::vector<unsigned char> insideMask(static_cast<size_t>(nCells), 0);
-  vtkSMPThreadLocalObject<vtkIdList> tlPtIds;
-  vtkSMPTools::For(0, nCells, [&](vtkIdType begin, vtkIdType end) {
-    vtkIdList* ptIds = tlPtIds.Local();
-    for (vtkIdType cid = begin; cid < end; ++cid)
+  std::vector<vtkIdType> ids;
+  ids.reserve(1024);
+
+  vtkNew<vtkIdList> ptIds;
+
+  // Query only cells whose bbox overlaps the sphere AABB, then keep those with a
+  // vertex inside the sphere — much cheaper than scanning all cells / BuildLinks.
+  if (this->CellLocator && this->CachedDataSet == ds)
+  {
+    double bbox[6] = { center[0] - this->Radius, center[0] + this->Radius,
+      center[1] - this->Radius, center[1] + this->Radius, center[2] - this->Radius,
+      center[2] + this->Radius };
+    vtkNew<vtkIdList> candidateCells;
+    this->CellLocator->FindCellsWithinBounds(bbox, candidateCells);
+    const vtkIdType nCand = candidateCells->GetNumberOfIds();
+    for (vtkIdType i = 0; i < nCand; ++i)
+    {
+      const vtkIdType cid = candidateCells->GetId(i);
+      if (cid < 0 || cid >= nCells)
+      {
+        continue;
+      }
+      ds->GetCellPoints(cid, ptIds);
+      const vtkIdType npts = ptIds->GetNumberOfIds();
+      for (vtkIdType p = 0; p < npts; ++p)
+      {
+        double xyz[3];
+        ds->GetPoint(ptIds->GetId(p), xyz);
+        if (vtkMath::Distance2BetweenPoints(xyz, center) <= r2)
+        {
+          ids.push_back(cid);
+          break;
+        }
+      }
+    }
+  }
+  else
+  {
+    for (vtkIdType cid = 0; cid < nCells; ++cid)
     {
       ds->GetCellPoints(cid, ptIds);
       const vtkIdType npts = ptIds->GetNumberOfIds();
@@ -700,20 +795,10 @@ void pqSHYXSphereSelectionController::applySelection()
         ds->GetPoint(ptIds->GetId(i), p);
         if (vtkMath::Distance2BetweenPoints(p, center) <= r2)
         {
-          insideMask[static_cast<size_t>(cid)] = 1;
+          ids.push_back(cid);
           break;
         }
       }
-    }
-  });
-
-  std::vector<vtkIdType> ids;
-  ids.reserve(static_cast<size_t>(std::min<vtkIdType>(nCells, 1024)));
-  for (vtkIdType cid = 0; cid < nCells; ++cid)
-  {
-    if (insideMask[static_cast<size_t>(cid)])
-    {
-      ids.push_back(cid);
     }
   }
 

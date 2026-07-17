@@ -77,11 +77,11 @@ public:
    * Newline-separated values aligned with the Partitioned block names panel order (tetrahedra,
    * side sets, mirrored node sets). Values in each row are tab-separated Variable1, Variable2, ...
    * entries. Only side-set entries are used by the filter. Volume point arrays are always
-   * initialized on the tetrahedra block (zeros when no side contributes). Non-zero side rows
-   * accumulate onto volume points; repeated writes are averaged. Values are stored in
-   * BoundaryVariable1, BoundaryVariable2, ... arrays. Repeated writes to the same volume node are
-   * warned and averaged. Use BoundaryWriteNormals to control BoundaryRadialValueNormal volume
-   * accumulation independently.
+   * initialized on the tetrahedra block (NaN when no side contributes). Finite side values
+   * accumulate onto volume points; NaN / empty cells are not written. Repeated writes to the same
+   * volume node are warned and averaged. Values are stored in BoundaryVariable1,
+   * BoundaryVariable2, ... arrays. Use BoundaryWriteNormals to control BoundaryRadialValueNormal
+   * volume accumulation independently.
    */
   vtkSetStringMacro(BoundaryVariables);
   vtkGetStringMacro(BoundaryVariables);
@@ -89,7 +89,8 @@ public:
   /**
    * Newline-separated 0/1 flags aligned with the Partitioned block names panel order. Only side-set
    * rows are used. When non-zero, that side's BoundaryRadialValueNormal is accumulated onto
-   * tetrahedra volume points (independent of BoundaryVariables).
+   * tetrahedra volume points (independent of BoundaryVariables). Volume normals are initialized to
+   * NaN; unchecked sides leave those points empty.
    */
   vtkSetStringMacro(BoundaryWriteNormals);
   vtkGetStringMacro(BoundaryWriteNormals);

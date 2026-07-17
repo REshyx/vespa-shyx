@@ -7,7 +7,7 @@
 - **输入**：带 `vtkDataAssembly`（IOSS element_blocks / side_sets / node_sets）的 `vtkPartitionedDataSetCollection`
 - **径向值**：可选计算 `BoundaryRadialValue = 1 - x^a`（点/单元数据）
 - **法线**：写入 `BoundaryRadialValueNormal`（side/node set 点数据；可选累加到四面体体块）
-- **变量**：按面板为每个 side set 写入 `BoundaryVariable1`、`BoundaryVariable2`、…（非零时累加到体块）
+- **变量**：按面板为每个 side set 写入 `BoundaryVariable1`、`BoundaryVariable2`、…（有限值累加到体块；空/NaN 不写；体块数组初始化为 NaN）
 - **覆盖**：同名数组存在时直接覆盖
 - **命名**：通过 **Partitioned block names** 面板编辑 side set 名称；node set 自动加 `node_` 前缀
 

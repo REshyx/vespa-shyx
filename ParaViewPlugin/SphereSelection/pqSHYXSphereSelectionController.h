@@ -5,6 +5,7 @@
 #include <QPointer>
 
 #include "vtkSmartPointer.h"
+#include "vtkType.h"
 
 class pqDataRepresentation;
 class pqOutputPort;
@@ -19,6 +20,8 @@ class vtkPolyDataMapper;
 class vtkRenderer;
 class vtkSMSourceProxy;
 class vtkSphereSource;
+class vtkStaticCellLocator;
+class vtkStaticPointLocator;
 
 /**
  * Per-view interactive sphere used to select cells whose vertices fall inside the ball.
@@ -61,6 +64,8 @@ private:
   pqDataRepresentation* resolveRepresentation() const;
   vtkDataSet* resolveDataSet(pqDataRepresentation* repr) const;
   vtkRenderer* renderer() const;
+  /** BuildCells (main thread) + cache point/cell locators; skip if data unchanged. */
+  bool ensureSpatialCaches(vtkDataSet* ds);
 
   QPointer<pqRenderView> View;
   QPointer<pqViewFrame> Frame;
@@ -73,6 +78,10 @@ private:
   vtkSmartPointer<vtkActor> Actor;
   vtkSmartPointer<vtkCallbackCommand> Observer;
   vtkSmartPointer<vtkSMSourceProxy> BaselineAppendSelections;
+  vtkSmartPointer<vtkStaticPointLocator> PointLocator;
+  vtkSmartPointer<vtkStaticCellLocator> CellLocator;
+  vtkDataSet* CachedDataSet = nullptr;
+  vtkMTimeType CachedDataMTime = 0;
 
   double Center[3] = { 0.0, 0.0, 0.0 };
   double Radius = 1.0;

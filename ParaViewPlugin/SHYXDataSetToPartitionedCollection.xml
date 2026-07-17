@@ -97,9 +97,10 @@
         <Documentation>
           Newline-separated rows aligned with the Partitioned block names panel order; values in each
           row are tab-separated Variable1, Variable2, ... entries. Side set rows are used by the filter,
-          and node set rows mirror the corresponding side row in the widget. Non-zero values are written
-          to tetrahedra point-data scalars BoundaryVariable1, BoundaryVariable2, ... Repeated writes to
-          the same volume node are warned and averaged.
+          and node set rows mirror the corresponding side row in the widget. Finite values are written
+          to tetrahedra point-data scalars BoundaryVariable1, BoundaryVariable2, ... (initialized to
+          NaN; empty / NaN cells are not written). Repeated writes to the same volume node are warned
+          and averaged.
         </Documentation>
       </StringVectorProperty>
 

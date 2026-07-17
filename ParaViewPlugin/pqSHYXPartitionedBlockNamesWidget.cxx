@@ -103,7 +103,7 @@ void appendChildren(vtkDataAssembly* assembly, int parent, const QString& type,
   for (int i = 0; i < n; ++i)
   {
     const int child = assembly->GetChild(parent, i);
-    rows.push_back({ type, labelForNode(assembly, child), false, QStringList{ QStringLiteral("0") } });
+    rows.push_back({ type, labelForNode(assembly, child), false, QStringList{ QString() } });
   }
 }
 }
@@ -120,9 +120,9 @@ pqSHYXPartitionedBlockNamesWidget::pqSHYXPartitionedBlockNamesWidget(
   auto* tip = new QLabel(
     tr("Double-click Side set Name cells to edit paired side/node block names. For Side set rows, "
        "check Write Normal to accumulate BoundaryRadialValueNormal onto tetrahedra volume points; "
-       "edit Variable columns to write BoundaryVariable1/2/... when non-zero. Node set names mirror "
-       "the matching Side set row with a \"node_\" prefix. Use Refresh after the filter has produced "
-       "output to populate the block list."),
+       "edit Variable columns to write BoundaryVariable1/2/... when finite (leave empty / NaN to "
+       "skip). Node set names mirror the matching Side set row with a \"node_\" prefix. Use Refresh "
+       "after the filter has produced output to populate the block list."),
     this);
   tip->setWordWrap(true);
   tip->setStyleSheet(QStringLiteral("color: gray; font-size: 11px;"));
@@ -295,7 +295,7 @@ void pqSHYXPartitionedBlockNamesWidget::onRefreshClicked()
   {
     for (const QString& name : customNames)
     {
-      rows.push_back({ tr("Block"), name, false, QStringList{ QStringLiteral("0") } });
+      rows.push_back({ tr("Block"), name, false, QStringList{ QString() } });
     }
   }
 
@@ -350,7 +350,7 @@ void pqSHYXPartitionedBlockNamesWidget::rebuildFromProperty()
     {
       rows.push_back({ tr("Block"), names[i],
         i < writeNormals.size() ? writeNormals[i] != 0 : false,
-        i < variables.size() ? variables[i] : QStringList{ QStringLiteral("0") } });
+        i < variables.size() ? variables[i] : QStringList{ QString() } });
     }
     this->rebuildRows(rows);
     return;
@@ -376,7 +376,7 @@ void pqSHYXPartitionedBlockNamesWidget::rebuildFromProperty()
       {
         const QString value = (isSideSet && row < variables.size() && c < variables[row].size())
           ? variables[row][c]
-          : QStringLiteral("0");
+          : QString();
         item->setText(value);
       }
     }
@@ -443,8 +443,8 @@ void pqSHYXPartitionedBlockNamesWidget::rebuildRows(
     {
       const QString value = (c < rows[row].Variables.size() && !rows[row].Variables[c].isEmpty())
         ? rows[row].Variables[c]
-        : QStringLiteral("0");
-      auto* variableItem = new QStandardItem(isSideSet ? value : QStringLiteral("0"));
+        : QString();
+      auto* variableItem = new QStandardItem(isSideSet ? value : QString());
       if (isSideSet)
       {
         variableItem->setFlags(
@@ -493,8 +493,9 @@ void pqSHYXPartitionedBlockNamesWidget::writeBackProperty()
     {
       auto* item = this->Model->item(row, kFirstVariableCol + c);
       bool ok = false;
-      const double value = item ? item->text().trimmed().toDouble(&ok) : 0.0;
-      variables.push_back(ok ? QString::number(value, 'g', 16) : QStringLiteral("0"));
+      const QString text = item ? item->text().trimmed() : QString();
+      const double value = text.toDouble(&ok);
+      variables.push_back(ok ? QString::number(value, 'g', 16) : QString());
     }
     variableRows.push_back(variables.join(QLatin1Char('\t')));
   }
@@ -567,7 +568,7 @@ void pqSHYXPartitionedBlockNamesWidget::syncNodeRowsFromSideRows()
       auto* sideVariable = this->Model->item(sideRow, kFirstVariableCol + c);
       if (nodeVariable)
       {
-        nodeVariable->setText(sideVariable ? sideVariable->text() : QStringLiteral("0"));
+        nodeVariable->setText(sideVariable ? sideVariable->text() : QString());
       }
     }
   }
@@ -615,7 +616,7 @@ void pqSHYXPartitionedBlockNamesWidget::setVariableColumnCount(int count)
       const int col = kFirstVariableCol + c;
       if (!this->Model->item(row, col))
       {
-        auto* item = new QStandardItem(QStringLiteral("0"));
+        auto* item = new QStandardItem(QString());
         if (isSideSet)
         {
           item->setFlags(
