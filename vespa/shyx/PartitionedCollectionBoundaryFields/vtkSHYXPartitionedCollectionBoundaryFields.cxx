@@ -22,12 +22,14 @@
 #include <vtkPoints.h>
 #include <vtkPolyData.h>
 #include <vtkSmartPointer.h>
+#include <vtkTriangle.h>
 #include <vtkUnstructuredGrid.h>
 
 #include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstdlib>
+#include <iomanip>
 #include <limits>
 #include <map>
 #include <sstream>
@@ -312,6 +314,125 @@ bool ComputeAverageCellNormal(vtkPolyData* pd, double normal[3])
   normal[1] /= len;
   normal[2] /= len;
   return true;
+}
+
+double ComputeSurfaceArea(vtkPolyData* pd)
+{
+  if (!pd || !pd->GetPoints())
+  {
+    return 0.0;
+  }
+
+  double area = 0.0;
+  vtkNew<vtkIdList> cpts;
+  double p0[3], p1[3], p2[3];
+  for (vtkIdType cid = 0; cid < pd->GetNumberOfCells(); ++cid)
+  {
+    pd->GetCellPoints(cid, cpts);
+    if (cpts->GetNumberOfIds() < 3)
+    {
+      continue;
+    }
+    pd->GetPoint(cpts->GetId(0), p0);
+    for (vtkIdType k = 1; k + 1 < cpts->GetNumberOfIds(); ++k)
+    {
+      pd->GetPoint(cpts->GetId(k), p1);
+      pd->GetPoint(cpts->GetId(k + 1), p2);
+      area += vtkTriangle::TriangleArea(p0, p1, p2);
+    }
+  }
+  return area;
+}
+
+struct InletOptStats
+{
+  double nx = 0.0;
+  double ny = 0.0;
+  double nz = 0.0;
+  double xi = 0.0;
+  double yi = 0.0;
+  double zi = 0.0;
+  double xf = 0.0;
+  double yf = 0.0;
+  double zf = 0.0;
+  double area = 0.0;
+};
+
+std::string FormatCommaSeparated(const std::vector<double>& values)
+{
+  std::ostringstream oss;
+  oss << std::fixed << std::setprecision(6);
+  for (size_t i = 0; i < values.size(); ++i)
+  {
+    if (i > 0)
+    {
+      oss << ',';
+    }
+    oss << values[i];
+  }
+  return oss.str();
+}
+
+std::string FormatInletOptText(const std::vector<InletOptStats>& inlets, double normalScale,
+  double boundsScale, double flowFactorScale, double areaScale)
+{
+  if (inlets.empty())
+  {
+    return "# no inlet sidesets (check Write Normal on side sets)\n";
+  }
+
+  double totalArea = 0.0;
+  for (const InletOptStats& inlet : inlets)
+  {
+    totalArea += inlet.area;
+  }
+
+  std::vector<double> nx, ny, nz, xi, yi, zi, xf, yf, zf, flowfactor, area;
+  nx.reserve(inlets.size());
+  ny.reserve(inlets.size());
+  nz.reserve(inlets.size());
+  xi.reserve(inlets.size());
+  yi.reserve(inlets.size());
+  zi.reserve(inlets.size());
+  xf.reserve(inlets.size());
+  yf.reserve(inlets.size());
+  zf.reserve(inlets.size());
+  flowfactor.reserve(inlets.size());
+  area.reserve(inlets.size());
+
+  for (const InletOptStats& inlet : inlets)
+  {
+    nx.push_back(inlet.nx * normalScale);
+    ny.push_back(inlet.ny * normalScale);
+    nz.push_back(inlet.nz * normalScale);
+    xi.push_back(inlet.xi * boundsScale);
+    yi.push_back(inlet.yi * boundsScale);
+    zi.push_back(inlet.zi * boundsScale);
+    xf.push_back(inlet.xf * boundsScale);
+    yf.push_back(inlet.yf * boundsScale);
+    zf.push_back(inlet.zf * boundsScale);
+    area.push_back(inlet.area * areaScale);
+    flowfactor.push_back(
+      (totalArea > 0.0 ? inlet.area / totalArea : 0.0) * flowFactorScale);
+  }
+
+  std::ostringstream oss;
+  oss << "# inlet sidesets (Write Normal): " << inlets.size() << "\n"
+      << "# scales: normal=" << normalScale << " bounds=" << boundsScale
+      << " flowfactor=" << flowFactorScale << " area=" << areaScale << "\n"
+      << "# inlet_*i are the lower bound and inlet_*f are the upper bound\n"
+      << "-inlet_nx " << FormatCommaSeparated(nx) << "\n"
+      << "-inlet_ny " << FormatCommaSeparated(ny) << "\n"
+      << "-inlet_nz " << FormatCommaSeparated(nz) << "\n"
+      << "-inlet_xi " << FormatCommaSeparated(xi) << "\n"
+      << "-inlet_yi " << FormatCommaSeparated(yi) << "\n"
+      << "-inlet_zi " << FormatCommaSeparated(zi) << "\n"
+      << "-inlet_xf " << FormatCommaSeparated(xf) << "\n"
+      << "-inlet_yf " << FormatCommaSeparated(yf) << "\n"
+      << "-inlet_zf " << FormatCommaSeparated(zf) << "\n"
+      << "-inlet_flowfactor " << FormatCommaSeparated(flowfactor) << "\n"
+      << "-inlet_area " << FormatCommaSeparated(area) << "\n";
+  return oss.str();
 }
 
 void AddBoundaryRadialValueArray(vtkPolyData* pd, const char* arrayName, double exponent)
@@ -1159,6 +1280,7 @@ vtkSHYXPartitionedCollectionBoundaryFields::vtkSHYXPartitionedCollectionBoundary
   this->SetNumberOfOutputPorts(1);
   this->SetBoundaryVariables("");
   this->SetBoundaryWriteNormals("");
+  this->SetInletOptText("");
 }
 
 //------------------------------------------------------------------------------
@@ -1167,6 +1289,7 @@ vtkSHYXPartitionedCollectionBoundaryFields::~vtkSHYXPartitionedCollectionBoundar
   this->SetBoundaryVariables(nullptr);
   this->SetBoundaryWriteNormals(nullptr);
   this->SetBlockNames(nullptr);
+  this->SetInletOptText(nullptr);
 }
 
 //------------------------------------------------------------------------------
@@ -1181,6 +1304,11 @@ void vtkSHYXPartitionedCollectionBoundaryFields::PrintSelf(ostream& os, vtkInden
   os << indent << "BoundaryWriteNormals: "
      << (this->BoundaryWriteNormals ? this->BoundaryWriteNormals : "(null)") << "\n";
   os << indent << "BlockNames: " << (this->BlockNames ? this->BlockNames : "(null)") << "\n";
+  os << indent << "InletOptText: " << (this->InletOptText ? this->InletOptText : "(null)") << "\n";
+  os << indent << "InletOptNormalScale: " << this->InletOptNormalScale << "\n";
+  os << indent << "InletOptBoundsScale: " << this->InletOptBoundsScale << "\n";
+  os << indent << "InletOptFlowFactorScale: " << this->InletOptFlowFactorScale << "\n";
+  os << indent << "InletOptAreaScale: " << this->InletOptAreaScale << "\n";
 }
 
 //------------------------------------------------------------------------------
@@ -1236,6 +1364,7 @@ int vtkSHYXPartitionedCollectionBoundaryFields::RequestData(vtkInformation* vtkN
   {
     vtkWarningMacro(<< "Input vtkDataAssembly is missing or does not describe element/side/node sets. "
                     << "Passing through unchanged.");
+    this->SetInletOptText("# no inlet sidesets (missing assembly layout)\n");
     output->ShallowCopy(result);
     return 1;
   }
@@ -1244,6 +1373,7 @@ int vtkSHYXPartitionedCollectionBoundaryFields::RequestData(vtkInformation* vtkN
   if (nSideSets == 0)
   {
     vtkWarningMacro(<< "No side sets found in vtkDataAssembly. Passing through unchanged.");
+    this->SetInletOptText("# no inlet sidesets (no side sets)\n");
     output->ShallowCopy(result);
     return 1;
   }
@@ -1294,6 +1424,7 @@ int vtkSHYXPartitionedCollectionBoundaryFields::RequestData(vtkInformation* vtkN
     SetPartitionDataSetBlock(result, layout.ElementBlockPdcIndex, volumeGrid);
   }
 
+  std::vector<InletOptStats> inletOptStats;
   for (unsigned int i = 0; i < nPairs; ++i)
   {
     vtkDataSet* sideDs = GetDataSetFromPdcBlock(result, layout.SideSetPdcIndices[i]);
@@ -1301,7 +1432,9 @@ int vtkSHYXPartitionedCollectionBoundaryFields::RequestData(vtkInformation* vtkN
     if (!sideInput)
     {
       vtkWarningMacro(<< "Side set at PDC index " << layout.SideSetPdcIndices[i]
-                      << " could not be converted to vtkPolyData; skipping.");
+                      << " has no geometry (empty or null partition) and could not be converted to "
+                      << "vtkPolyData; skipping. Check the upstream reader: the corresponding side "
+                      << "set may be unselected / not loaded.");
       continue;
     }
 
@@ -1316,14 +1449,34 @@ int vtkSHYXPartitionedCollectionBoundaryFields::RequestData(vtkInformation* vtkN
     const unsigned int sideBlockIndex = customSideOffset + i;
     const std::vector<double> variables =
       ResolveLineDoubles(boundaryVariables, sideBlockIndex, nBoundaryVariables);
+    const bool writeNormal = ResolveWriteNormal(boundaryWriteNormals, sideBlockIndex);
     AddBoundaryVolumeFieldArraysToSide(sideCopy,
       computeBoundaryRadialValue ? kBoundaryRadialValueArrayName : nullptr,
       kBoundaryRadialNormalArrayName, boundaryVariableArrayNames, variables,
       computeBoundaryRadialValue);
 
+    if (writeNormal)
+    {
+      InletOptStats stats;
+      double normal[3] = { 0.0, 0.0, 0.0 };
+      ComputeAverageCellNormal(sideCopy, normal);
+      stats.nx = normal[0];
+      stats.ny = normal[1];
+      stats.nz = normal[2];
+      double bounds[6] = { 0.0, 0.0, 0.0, 0.0, 0.0, 0.0 };
+      sideCopy->GetBounds(bounds);
+      stats.xi = bounds[0];
+      stats.xf = bounds[1];
+      stats.yi = bounds[2];
+      stats.yf = bounds[3];
+      stats.zi = bounds[4];
+      stats.zf = bounds[5];
+      stats.area = ComputeSurfaceArea(sideCopy);
+      inletOptStats.push_back(stats);
+    }
+
     if (volumeGrid)
     {
-      const bool writeNormal = ResolveWriteNormal(boundaryWriteNormals, sideBlockIndex);
       const bool writeVariables = HasFiniteBoundaryVariableRow(variables);
       if (writeNormal || writeVariables)
       {
@@ -1365,6 +1518,10 @@ int vtkSHYXPartitionedCollectionBoundaryFields::RequestData(vtkInformation* vtkN
       boundaryVariableArrayNames, volumeNormalWriteCounts, volumeVariableWriteCounts);
     SetPartitionDataSetBlock(result, layout.ElementBlockPdcIndex, volumeGrid);
   }
+
+  this->SetInletOptText(FormatInletOptText(inletOptStats, this->InletOptNormalScale,
+    this->InletOptBoundsScale, this->InletOptFlowFactorScale, this->InletOptAreaScale)
+                          .c_str());
 
   layout.SideSetPdcIndices.resize(nPairs);
   layout.NodeSetPdcIndices.resize(nPairs);
