@@ -1,0 +1,215 @@
+<ServerManagerConfiguration>
+  <ProxyGroup name="filters">
+    <SourceProxy name="SHYXAutoStreamline"
+                 class="vtkSHYXAutoStreamline"
+                 label="SHYX Auto Streamline">
+      <Documentation
+        long_help="Single volume input: extract outer surface, vortex cores, cull seeds too close to that surface via absolute SDF, uniformly subsample with MaskPoints (bounds-based), then integrate streamlines (pure VTK)."
+        short_help="Volume → surface extract → vortex seeds → cull → sample → streamlines.">
+        Pipeline (VTK only, one volume port): vtkDataSetSurfaceFilter → vtkVortexCore →
+        absolute distance to extracted surface (vtkImplicitPolyDataDistance) →
+        keep points with |SDF| ≥ MinSurfaceDistance →
+        vtkMaskPoints (MaximumNumberOfPoints, Uniform Spatial Bounds) → vtkStreamTracer.
+        Output port 0: streamlines. Port 1: sampled seed points.
+      </Documentation>
+
+      <OutputPort index="0" name="Streamlines"/>
+      <OutputPort index="1" name="SeedPoints"/>
+
+      <InputProperty command="SetInputConnection"
+                     name="Input"
+                     label="Volume">
+        <ProxyGroupDomain name="groups">
+          <Group name="sources"/>
+          <Group name="filters"/>
+        </ProxyGroupDomain>
+        <DataTypeDomain name="input_type">
+          <DataType value="vtkDataSet"/>
+        </DataTypeDomain>
+        <InputArrayDomain name="input_array1"
+                          number_of_components="3"
+                          optional="0"/>
+        <Documentation>
+          Volume flow field. Outer surface is extracted with vtkDataSetSurfaceFilter for near-wall seed culling;
+          the same dataset drives vortex cores and streamline integration (point-centered 3-component vectors).
+        </Documentation>
+      </InputProperty>
+
+      <StringVectorProperty name="SelectInputVectors"
+                            command="SetInputArrayToProcess"
+                            number_of_elements="5"
+                            element_types="0 0 0 0 2"
+                            label="Vectors">
+        <ArrayListDomain name="array_list" attribute_type="Vectors"
+                         input_domain_name="input_array1">
+          <RequiredProperties>
+            <Property name="Input" function="Input"/>
+          </RequiredProperties>
+        </ArrayListDomain>
+        <Documentation>
+          Vector array for vortex cores and streamlines.
+        </Documentation>
+      </StringVectorProperty>
+
+      <!-- Surface distance cull -->
+      <DoubleVectorProperty command="SetMinSurfaceDistance"
+                            name="MinSurfaceDistance"
+                            label="Min Surface Distance"
+                            default_values="0.0"
+                            number_of_elements="1">
+        <BoundsDomain default_mode="min"
+                      mode="scaled_extent"
+                      name="bounds"
+                      scale_factor="0.01">
+          <RequiredProperties>
+            <Property function="Input" name="Input"/>
+          </RequiredProperties>
+        </BoundsDomain>
+        <Documentation>
+          Discard vortex-core points with absolute distance to the extracted volume surface below this value.
+        </Documentation>
+      </DoubleVectorProperty>
+
+      <!-- MaskPoints uniform spatial -->
+      <IntVectorProperty command="SetMaximumNumberOfPoints"
+                         name="MaximumNumberOfPoints"
+                         label="Maximum Number of Points"
+                         default_values="1000"
+                         number_of_elements="1">
+        <IntRangeDomain min="0" name="range"/>
+        <Documentation>
+          Maximum seed count after Uniform Spatial Distribution (Bounds Based) MaskPoints.
+        </Documentation>
+      </IntVectorProperty>
+
+      <IntVectorProperty command="SetRandomSeed"
+                         name="RandomSeed"
+                         label="Random Seed"
+                         default_values="1"
+                         number_of_elements="1"
+                         panel_visibility="advanced">
+        <IntRangeDomain name="range"/>
+        <Documentation>
+          Seed for the RNG used by MaskPoints uniform spatial (bounds) sampling.
+          Same seed → same subset of seed points (reproducible); change it to get a different subsample.
+        </Documentation>
+      </IntVectorProperty>
+
+      <!-- StreamTracer -->
+      <IntVectorProperty command="SetIntegrationDirection"
+                         name="IntegrationDirection"
+                         default_values="2"
+                         number_of_elements="1">
+        <EnumerationDomain name="enum">
+          <Entry text="FORWARD" value="0"/>
+          <Entry text="BACKWARD" value="1"/>
+          <Entry text="BOTH" value="2"/>
+        </EnumerationDomain>
+        <Documentation>
+          Streamline integration direction(s).
+        </Documentation>
+      </IntVectorProperty>
+
+      <IntVectorProperty command="SetIntegratorType"
+                         name="IntegratorType"
+                         default_values="2"
+                         number_of_elements="1">
+        <EnumerationDomain name="enum">
+          <Entry text="Runge-Kutta 2" value="0"/>
+          <Entry text="Runge-Kutta 4" value="1"/>
+          <Entry text="Runge-Kutta 4-5" value="2"/>
+        </EnumerationDomain>
+      </IntVectorProperty>
+
+      <IntVectorProperty command="SetIntegrationStepUnit"
+                         name="IntegrationStepUnit"
+                         label="Integration Step Unit"
+                         default_values="2"
+                         number_of_elements="1"
+                         panel_visibility="advanced">
+        <EnumerationDomain name="enum">
+          <Entry text="Length" value="1"/>
+          <Entry text="Cell Length" value="2"/>
+        </EnumerationDomain>
+      </IntVectorProperty>
+
+      <DoubleVectorProperty command="SetInitialIntegrationStep"
+                            name="InitialIntegrationStep"
+                            label="Initial Step Length"
+                            default_values="0.2"
+                            number_of_elements="1"
+                            panel_visibility="advanced">
+        <DoubleRangeDomain name="range"/>
+      </DoubleVectorProperty>
+
+      <DoubleVectorProperty command="SetMaximumPropagation"
+                            name="MaximumPropagation"
+                            label="Maximum Streamline Length"
+                            default_values="1.0"
+                            number_of_elements="1">
+        <BoundsDomain default_mode="max"
+                      mode="scaled_extent"
+                      name="bounds"
+                      scale_factor="1.0">
+          <RequiredProperties>
+            <Property function="Input" name="Input"/>
+          </RequiredProperties>
+        </BoundsDomain>
+      </DoubleVectorProperty>
+
+      <IntVectorProperty command="SetMaximumNumberOfSteps"
+                         name="MaximumNumberOfSteps"
+                         label="Maximum Steps"
+                         default_values="2000"
+                         number_of_elements="1"
+                         panel_visibility="advanced">
+        <IntRangeDomain name="range"/>
+      </IntVectorProperty>
+
+      <DoubleVectorProperty command="SetTerminalSpeed"
+                            name="TerminalSpeed"
+                            default_values="1.0e-12"
+                            number_of_elements="1"
+                            panel_visibility="advanced">
+        <DoubleRangeDomain name="range"/>
+      </DoubleVectorProperty>
+
+      <IntVectorProperty command="SetInterpolatorType"
+                         name="InterpolatorType"
+                         default_values="0"
+                         number_of_elements="1"
+                         panel_visibility="advanced">
+        <EnumerationDomain name="enum">
+          <Entry text="Interpolator with Point Locator" value="0"/>
+          <Entry text="Interpolator with Cell Locator" value="1"/>
+        </EnumerationDomain>
+      </IntVectorProperty>
+
+      <PropertyGroup label="Surface Distance Cull">
+        <Property name="MinSurfaceDistance"/>
+      </PropertyGroup>
+
+      <PropertyGroup label="Seed Sampling (Mask Points)">
+        <Property name="MaximumNumberOfPoints"/>
+        <Property name="RandomSeed"/>
+      </PropertyGroup>
+
+      <PropertyGroup label="Stream Tracer">
+        <Property name="IntegrationDirection"/>
+        <Property name="IntegratorType"/>
+        <Property name="IntegrationStepUnit"/>
+        <Property name="InitialIntegrationStep"/>
+        <Property name="MaximumPropagation"/>
+        <Property name="MaximumNumberOfSteps"/>
+        <Property name="TerminalSpeed"/>
+        <Property name="InterpolatorType"/>
+      </PropertyGroup>
+
+      <Hints>
+        <ShowInMenu category="SHYX" icon=":/VESPA/SHYX_Bidirectional_Streamline_Merge.png"/>
+        <RepresentationType view="RenderView" type="Surface" port="0"/>
+        <RepresentationType view="RenderView" type="Point Gaussian" port="1"/>
+      </Hints>
+    </SourceProxy>
+  </ProxyGroup>
+</ServerManagerConfiguration>

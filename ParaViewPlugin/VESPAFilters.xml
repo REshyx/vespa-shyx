@@ -153,6 +153,19 @@
         </Documentation>
       </InputProperty>
 
+      <IntVectorProperty name="TakeAbsoluteValue"
+                         label="Take Absolute Value"
+                         command="SetTakeAbsoluteValue"
+                         number_of_elements="1"
+                         default_values="1"
+                         animateable="0">
+        <BooleanDomain name="bool"/>
+        <Documentation>
+          If ON (default), store the absolute value of the signed distance in the SDF array.
+          If OFF, keep the signed distance (negative inside / positive outside).
+        </Documentation>
+      </IntVectorProperty>
+
       <Hints>
         <ShowInMenu category="SHYX" icon=":/VESPA/SHYX_Point_Cloud_Surface_SDF.png"/>
       </Hints>

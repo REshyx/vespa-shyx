@@ -202,6 +202,7 @@ paraview_add_plugin(VESPAPlugin
     "SHYXEndpointStentWidgetRepresentation.xml"
     "SHYXVectorFieldTopology.xml"
     "SHYXArrayCurveMapper.xml"
+    "SHYXAutoStreamline.xml"
     "SHYXAutorefineSelfIntersectionFilter.xml"
     "SHYXBooleanOperationFilter.xml"
     "SHYXShapeSmoothing.xml"

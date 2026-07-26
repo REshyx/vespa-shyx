@@ -1,0 +1,14 @@
+NAME
+  vtkSHYXAutoStreamline
+DESCRIPTION
+  "Auto streamlines: vortex cores → surface-distance cull → uniform seed sample → StreamTracer (VTK only)."
+GROUPS
+  Meshing
+DEPENDS
+  VTK::CommonExecutionModel
+  VTK::FiltersCore
+  VTK::FiltersFlowPaths
+  VTK::FiltersGeometry
+PRIVATE_DEPENDS
+  VTK::CommonCore
+  VTK::CommonDataModel

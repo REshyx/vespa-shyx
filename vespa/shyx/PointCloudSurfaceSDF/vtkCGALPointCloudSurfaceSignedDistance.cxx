@@ -13,6 +13,8 @@
 #include <vtkPolyData.h>
 #include <vtkSMPTools.h>
 
+#include <cmath>
+
 namespace
 {
 
@@ -107,6 +109,7 @@ vtkCGALPointCloudSurfaceSignedDistance::vtkCGALPointCloudSurfaceSignedDistance()
 void vtkCGALPointCloudSurfaceSignedDistance::PrintSelf(ostream& os, vtkIndent indent)
 {
   this->Superclass::PrintSelf(os, indent);
+  os << indent << "TakeAbsoluteValue: " << (this->TakeAbsoluteValue ? "On" : "Off") << "\n";
 }
 
 //------------------------------------------------------------------------------
@@ -170,13 +173,18 @@ int vtkCGALPointCloudSurfaceSignedDistance::RequestData(
   sdf->SetNumberOfComponents(1);
   sdf->SetNumberOfTuples(nPts);
 
+  const bool takeAbs = this->TakeAbsoluteValue != 0;
   vtkSMPTools::For(0, nPts, [&](vtkIdType begin, vtkIdType end) {
     for (vtkIdType i = begin; i < end; ++i)
     {
       double q[3];
       pointCloud->GetPoint(i, q);
-      const float v = static_cast<float>(distance->EvaluateFunction(q));
-      sdf->SetTuple1(i, v);
+      double v = distance->EvaluateFunction(q);
+      if (takeAbs)
+      {
+        v = std::abs(v);
+      }
+      sdf->SetTuple1(i, static_cast<float>(v));
     }
   });
 

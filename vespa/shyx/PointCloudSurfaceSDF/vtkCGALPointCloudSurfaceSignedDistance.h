@@ -30,12 +30,21 @@ public:
    */
   void SetSourceConnection(vtkAlgorithmOutput* algOutput);
 
+  /**
+   * If ON (default), store |signed distance| in the SDF array instead of the signed value.
+   */
+  vtkGetMacro(TakeAbsoluteValue, vtkTypeBool);
+  vtkSetMacro(TakeAbsoluteValue, vtkTypeBool);
+  vtkBooleanMacro(TakeAbsoluteValue, vtkTypeBool);
+
 protected:
   vtkCGALPointCloudSurfaceSignedDistance();
   ~vtkCGALPointCloudSurfaceSignedDistance() override = default;
 
   int RequestData(vtkInformation*, vtkInformationVector**, vtkInformationVector*) override;
   int FillInputPortInformation(int port, vtkInformation* info) override;
+
+  vtkTypeBool TakeAbsoluteValue = 1;
 
 private:
   vtkCGALPointCloudSurfaceSignedDistance(const vtkCGALPointCloudSurfaceSignedDistance&) = delete;
