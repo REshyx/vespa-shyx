@@ -1,0 +1,157 @@
+<ServerManagerConfiguration>
+  <ProxyGroup name="filters">
+    <SourceProxy name="SHYXPartitionedCollectionBoundaryAssignment"
+                 class="vtkSHYXPartitionedCollectionBoundaryAssignment"
+                 label="SHYX Partitioned Collection Boundary Assignment">
+      <Documentation
+          short_help="Classify wall/inlet/outlet; port 0 = input passthrough, port 1 = inlet OPT debug geometry."
+          long_help="Accepts vtkPartitionedDataSetCollection (e.g. from SHYX DataSet To Partitioned Collection). Sorts side/node pairs by side-set area (descending) for classification, emits Boundary assignment + a full options file (PV template for Single inlet, HV template for Single outlet; inlet_* filled pre-merge). Optional Merge inlets (default on, Single outlet): after per-inlet OPT stats, merges inlet side/node sets into one pair on port 0 — assignment text is post-merge. Port 0 is the (possibly merged) collection with FieldData stamps. Port 1 is drawn from those two texts: Point Label for every sideset id; AABB/normals for inlets only (OPT values, bounds restored by 1/BoundsScale). Does not write BoundaryRadialValue / BoundaryVariable arrays — use SHYX Partitioned Collection Boundary Fields for that."/>
+
+      <OutputPort name="Partitioned collection" index="0" id="port0"/>
+      <OutputPort name="Assignment debug" index="1" id="port1"/>
+
+      <InputProperty name="Input" command="SetInputConnection">
+        <ProxyGroupDomain name="groups">
+          <Group name="sources"/>
+          <Group name="filters"/>
+        </ProxyGroupDomain>
+        <DataTypeDomain name="input_type">
+          <DataType value="vtkPartitionedDataSetCollection"/>
+        </DataTypeDomain>
+      </InputProperty>
+
+      <IntVectorProperty name="FlowBoundaryMode" label="Flow Boundary Mode"
+          command="SetFlowBoundaryMode" number_of_elements="1" default_values="0"
+          animateable="0">
+        <EnumerationDomain name="enum">
+          <Entry text="Single inlet (rest outlets)" value="0"/>
+          <Entry text="Single outlet (rest inlets)" value="1"/>
+        </EnumerationDomain>
+        <Documentation>
+          Reorders side/node pairs by side-set area (descending) before classifying. Index 0 is
+          always wall (largest). Index 1 is the single inlet (mode 0) or single outlet (mode 1);
+          remaining openings take the other role. The options file fills inlet_* from classified
+          inlets (always computed before any inlet merge).
+        </Documentation>
+      </IntVectorProperty>
+
+      <IntVectorProperty name="MergeInletsIntoOneSideSet" label="Merge inlets into one side set"
+          command="SetMergeInletsIntoOneSideSet" number_of_elements="1" default_values="1"
+          animateable="0">
+        <BooleanDomain name="bool"/>
+        <Documentation>
+          When enabled (default) and Flow Boundary Mode is Single outlet, append all classified
+          inlet side/node sets into one pair on port 0 after per-inlet OPT stats are collected.
+          Boundary assignment text (file 1) reflects the post-merge map; options file (file 2)
+          is the full PV/HV template with pre-merge per-inlet normals/bounds/flowfactor/area.
+          No effect in Single inlet mode (only one inlet).
+        </Documentation>
+        <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="enabled_state"
+                                   property="FlowBoundaryMode"
+                                   value="1"/>
+        </Hints>
+      </IntVectorProperty>
+
+      <IntVectorProperty name="CustomAdapter" label="Custom adapter"
+          command="SetCustomAdapter" number_of_elements="1" default_values="1"
+          animateable="0">
+        <BooleanDomain name="bool"/>
+        <Documentation>
+          When enabled (default), Boundary assignment keeps the header and "nodeset: ..." summary
+          with real ENTITY_IDs, but remaps data-row sideset ids: wall→3, inlet→1, outlets→21,22,...
+          in row order (regardless of original ENTITY_ID).
+        </Documentation>
+      </IntVectorProperty>
+
+      <PropertyGroup label="Flow boundary mode">
+        <Property name="FlowBoundaryMode"/>
+        <Property name="MergeInletsIntoOneSideSet"/>
+        <Property name="CustomAdapter"/>
+      </PropertyGroup>
+
+      <StringVectorProperty name="BoundaryAssignmentText" label="Boundary assignment (id/nodeset/sideset)"
+          command="GetBoundaryAssignmentText" information_only="1" number_of_elements="1"
+          default_values="" animateable="0" panel_visibility="default">
+        <Documentation>
+          After Apply (and area-descending reorder), lists side set Exodus ENTITY_ID values:
+          header, a "nodeset: inlet/wall/outlet ..." summary (real ids), then rows "id sidesetId".
+          With Custom adapter on, data-row sideset ids are remapped (wall=3, inlet=1, outlets from 21).
+          When Merge inlets is on (Single outlet), this map is post-merge (one inlet sideset id).
+          Also stored on output FieldData as SHYXBoundaryAssignmentText.
+          Shown via shyx_boundary_assignment_info (refreshes after dataUpdated).
+        </Documentation>
+      </StringVectorProperty>
+
+      <DoubleVectorProperty name="InletOptNormalScale" label="Normal scale (nx/ny/nz)"
+          command="SetInletOptNormalScale" number_of_elements="1" default_values="-1.0"
+          animateable="0">
+        <DoubleRangeDomain name="range" min="-1e12" max="1e12"/>
+        <Documentation>
+          Multiplier for -inlet_nx/ny/nz. Default -1 so normals point into the vessel interior.
+        </Documentation>
+      </DoubleVectorProperty>
+
+      <DoubleVectorProperty name="InletOptBoundsScale" label="Bounds scale (xi..zf)"
+          command="SetInletOptBoundsScale" number_of_elements="1" default_values="0.1"
+          animateable="0">
+        <DoubleRangeDomain name="range" min="-1e12" max="1e12"/>
+        <Documentation>
+          Multiplier for -inlet_xi/yi/zi and -inlet_xf/yf/zf. Default 0.1.
+        </Documentation>
+      </DoubleVectorProperty>
+
+      <DoubleVectorProperty name="InletOptFlowFactorScale" label="Flowfactor scale"
+          command="SetInletOptFlowFactorScale" number_of_elements="1" default_values="1.0"
+          animateable="0">
+        <DoubleRangeDomain name="range" min="-1e12" max="1e12"/>
+        <Documentation>
+          Multiplier for -inlet_flowfactor after area/totalArea. Default 1.
+        </Documentation>
+      </DoubleVectorProperty>
+
+      <DoubleVectorProperty name="InletOptAreaScale" label="Area scale"
+          command="SetInletOptAreaScale" number_of_elements="1" default_values="1.0"
+          animateable="0">
+        <DoubleRangeDomain name="range" min="-1e12" max="1e12"/>
+        <Documentation>
+          Multiplier for -inlet_area. Default 1.
+        </Documentation>
+      </DoubleVectorProperty>
+
+      <StringVectorProperty name="InletOptText" label="Options file (OPT)"
+          command="GetInletOptText" information_only="1" number_of_elements="1"
+          default_values="" animateable="0" panel_visibility="default">
+        <Documentation>
+          After Apply, a complete solver options file: Single inlet uses the PV template;
+          Single outlet uses the HV template. Inlet_* lines are filled from classified inlets
+          (always pre-merge). -num_outlet is set from the outlet count. Scales below apply only
+          to the inlet_* values. Also stored on output FieldData as SHYXInletOptText.
+          Shown via shyx_boundary_assignment_info (refreshes after dataUpdated).
+        </Documentation>
+      </StringVectorProperty>
+
+      <PropertyGroup label="Options file scales">
+        <Property name="InletOptNormalScale"/>
+        <Property name="InletOptBoundsScale"/>
+        <Property name="InletOptFlowFactorScale"/>
+        <Property name="InletOptAreaScale"/>
+      </PropertyGroup>
+
+      <PropertyGroup label="Assignment / options text"
+                     panel_widget="shyx_boundary_assignment_info"
+                     panel_visibility="default">
+        <Property function="AssignmentText" name="BoundaryAssignmentText"/>
+        <Property function="InletOptText" name="InletOptText"/>
+      </PropertyGroup>
+
+      <Hints>
+        <Visibility replace_input="0"/>
+        <RepresentationType view="RenderView" type="Point Label" port="1"/>
+        <ShowInMenu category="SHYX" icon=":/VESPA/SHYX_DataSet_To_Partitioned_Collection.png"/>
+        <ShowInMenu category="Vascular" icon=":/VESPA/SHYX_DataSet_To_Partitioned_Collection.png"/>
+      </Hints>
+    </SourceProxy>
+  </ProxyGroup>
+</ServerManagerConfiguration>

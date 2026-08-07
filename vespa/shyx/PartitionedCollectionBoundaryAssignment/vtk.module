@@ -1,0 +1,13 @@
+NAME
+  vtkSHYXPartitionedCollectionBoundaryAssignment
+DESCRIPTION
+  "Reorder partitioned side/node sets by area and classify wall/inlet/outlet for BC map and inlet OPT text."
+GROUPS
+  Meshing
+DEPENDS
+  VTK::CommonCore
+  VTK::CommonDataModel
+  VTK::CommonExecutionModel
+  VTK::FiltersCore
+  VTK::FiltersSources
+  VTK::IOIOSS

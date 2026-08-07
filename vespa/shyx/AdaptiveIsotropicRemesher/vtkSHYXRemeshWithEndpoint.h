@@ -21,6 +21,8 @@
 
 #include "vtkSHYXAdaptiveIsotropicRemesherModule.h"
 
+#include <vector>
+
 class vtkInformation;
 
 class VTKSHYXADAPTIVEISOTROPICREMESHER_EXPORT vtkSHYXRemeshWithEndpoint : public vtkCGALPolyDataAlgorithm
@@ -140,12 +142,29 @@ public:
     vtkBooleanMacro(CapRefineSizingField, bool);
     //@}
 
+    //@{
+    /**
+     * Static histogram of the **pre-remesh** uncapped ICC sizing field on the extracted wall
+     * (same formula as VespaAdaptiveSizeGlobalUncapped). Filled once at the start of RequestData
+     * and not refreshed across remesh iterations. Panel-only; not linked to Min/Max edge length.
+     */
+    static constexpr int UncappedSizeHistBinCount = 64;
+    /** Manual getters (not vtkGetVectorMacro) so create-time SM info pulls can be logged. */
+    double* GetUncappedSizeHistCenters();
+    double* GetUncappedSizeHistCounts();
+    double* GetUncappedSizeHistRange();
+    int GetUncappedSizeHistSampleCount();
+    //@}
+
 protected:
     vtkSHYXRemeshWithEndpoint();
     ~vtkSHYXRemeshWithEndpoint() override = default;
 
     int RequestData(vtkInformation*, vtkInformationVector**, vtkInformationVector*) override;
     int FillInputPortInformation(int port, vtkInformation* info) override;
+
+    void ClearUncappedSizeHistogram();
+    void FillUncappedSizeHistogram(const std::vector<double>& uncappedSizes);
 
     bool EndpointIndexAllScalars = false;
     bool LargestConnectedRegionOnly = true;
@@ -170,6 +189,11 @@ protected:
     int CapNumberOfRelaxationSteps = 3;
     bool CapRemeshProtectConstraints = true;
     bool CapRefineSizingField = true;
+
+    double UncappedSizeHistCenters[UncappedSizeHistBinCount] = {};
+    double UncappedSizeHistCounts[UncappedSizeHistBinCount] = {};
+    double UncappedSizeHistRange[2] = { 0.0, 0.0 };
+    int UncappedSizeHistSampleCount = 0;
 
 private:
     vtkSHYXRemeshWithEndpoint(const vtkSHYXRemeshWithEndpoint&) = delete;

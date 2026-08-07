@@ -26,15 +26,15 @@
 
       <IntVectorProperty name="OccludeLabels"
                          command="SetOccludeLabels"
-                         default_values="1"
+                         default_values="0"
                          number_of_elements="1"
                          label="Occlude labels">
         <BooleanDomain name="bool" />
         <Documentation>
-          When enabled (default), labels are drawn as 3D billboards in the scene so they can be
+          When enabled, labels are drawn as 3D billboards in the scene so they can be
           hidden by opaque geometry, blend correctly with transparent objects (depth peeling), and
           use a small depth offset to reduce z-fighting with coincident surfaces (same idea as
-          Surface With Edges / selection edge highlights). When disabled, labels are drawn as a 2D
+          Surface With Edges / selection edge highlights). When disabled (default), labels are drawn as a 2D
           overlay that always appears on top.
         </Documentation>
       </IntVectorProperty>

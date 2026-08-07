@@ -139,7 +139,7 @@
                             default_values="1.5">
         <DoubleRangeDomain name="range" min="0" max="1e6"/>
         <Documentation>
-          **Expansion ratio** R caps ICC sizing jumps along edges; **≤ 1** disables. Set **0** to disable (same semantics as SHYX Adaptive Isotropic Remesher).
+          **Expansion ratio** R caps ICC sizing jumps along edges; **鈮?1** disables. Set **0** to disable (same semantics as SHYX Adaptive Isotropic Remesher).
         </Documentation>
       </DoubleVectorProperty>
 
@@ -164,6 +164,25 @@
         <Property name="AdaptiveTolerance"/>
         <Property name="AdaptiveSizingNeighborMaxRatio"/>
         <Property name="ScaleToRange"/>
+      </PropertyGroup>
+
+      <!-- Histogram panel: anchor must NOT be panel_visibility=never — pqProxyWidget skips
+           those properties and never creates the PropertyGroup panel_widget. -->
+      <IntVectorProperty name="UncappedSizeHistPanelAnchor"
+                         command="GetUncappedSizeHistSampleCount"
+                         information_only="1"
+                         number_of_elements="1"
+                         default_values="0"
+                         panel_visibility="default">
+        <Documentation>
+          Anchor property for the uncapped-size histogram panel widget (hidden by the custom
+          group widget; value unused in UI).
+        </Documentation>
+      </IntVectorProperty>
+      <PropertyGroup label="ICC size histogram"
+                     panel_widget="shyx_remesh_uncapped_histogram"
+                     panel_visibility="default">
+        <Property function="Anchor" name="UncappedSizeHistPanelAnchor"/>
       </PropertyGroup>
 
       <IntVectorProperty command="SetEnableWallRemesh"

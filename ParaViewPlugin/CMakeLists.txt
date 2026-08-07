@@ -82,6 +82,18 @@ paraview_plugin_add_property_widget(
   CLASS_NAME pqSHYXPartitionedBlockNamesWidget
   INTERFACES shyx_partitioned_block_names_interfaces
   SOURCES shyx_partitioned_block_names_sources)
+paraview_plugin_add_property_widget(
+  KIND GROUP_WIDGET
+  TYPE "shyx_boundary_assignment_info"
+  CLASS_NAME pqSHYXBoundaryAssignmentInfoWidget
+  INTERFACES shyx_boundary_assignment_info_interfaces
+  SOURCES shyx_boundary_assignment_info_sources)
+paraview_plugin_add_property_widget(
+  KIND GROUP_WIDGET
+  TYPE "shyx_remesh_uncapped_histogram"
+  CLASS_NAME pqSHYXRemeshUncappedHistogramPanel
+  INTERFACES shyx_remesh_uncapped_histogram_interfaces
+  SOURCES shyx_remesh_uncapped_histogram_sources)
 list(APPEND vespa_stent_cylinder_sources
   pqSHYXVascularStentCylinderWidget.cxx
   pqSHYXVascularStentCylinderWidget.h)
@@ -94,6 +106,12 @@ list(APPEND vespa_endpoint_stent_sources
 list(APPEND shyx_partitioned_block_names_sources
   pqSHYXPartitionedBlockNamesWidget.cxx
   pqSHYXPartitionedBlockNamesWidget.h)
+list(APPEND shyx_boundary_assignment_info_sources
+  pqSHYXBoundaryAssignmentInfoWidget.cxx
+  pqSHYXBoundaryAssignmentInfoWidget.h)
+list(APPEND shyx_remesh_uncapped_histogram_sources
+  pqSHYXRemeshUncappedHistogramPanel.cxx
+  pqSHYXRemeshUncappedHistogramPanel.h)
 
 set(shyx_openings_table_interfaces)
 set(shyx_openings_table_sources)
@@ -189,6 +207,7 @@ paraview_add_plugin(VESPAPlugin
     "SHYXDisconnectedRegionFuse.xml"
     "SHYXEdgeCollapse.xml"
     "SHYXDataSetToPartitionedCollection.xml"
+    "SHYXPartitionedCollectionBoundaryAssignment.xml"
     "SHYXPartitionedCollectionBoundaryFields.xml"
     "SHYXPartitionedCollectionWslSimulation.xml"
     "SHYXDeleteSelectedCells.xml"
@@ -214,8 +233,8 @@ paraview_add_plugin(VESPAPlugin
      ${MESH_SMOOTHING_SERVER_MANAGER_XML}
      ${ADAPTIVE_REMESHING_SERVER_MANAGER_XML}
      ${VMTK_CENTERLINES_SERVER_MANAGER_XML}
-  UI_INTERFACES ${acm_interfaces} ${vespa_obb_box_interfaces} ${vespa_endclipper_plane_interfaces} ${vespa_selection_plane_clipper_interfaces} ${vespa_stent_cylinder_interfaces} ${vespa_enhanced_ruler_interfaces} ${vespa_endpoint_stent_interfaces} ${shyx_partitioned_block_names_interfaces} ${shyx_openings_table_interfaces} ${vespa_plugin_qt_auto_interfaces}
-  SOURCES ${acm_sources} ${vespa_obb_box_sources} ${vespa_endclipper_plane_sources} ${vespa_selection_plane_clipper_sources} ${vespa_stent_cylinder_sources} ${vespa_enhanced_ruler_sources} ${vespa_endpoint_stent_sources} ${shyx_partitioned_block_names_sources} ${shyx_openings_table_sources}
+  UI_INTERFACES ${acm_interfaces} ${vespa_obb_box_interfaces} ${vespa_endclipper_plane_interfaces} ${vespa_selection_plane_clipper_interfaces} ${vespa_stent_cylinder_interfaces} ${vespa_enhanced_ruler_interfaces} ${vespa_endpoint_stent_interfaces} ${shyx_partitioned_block_names_interfaces} ${shyx_boundary_assignment_info_interfaces} ${shyx_remesh_uncapped_histogram_interfaces} ${shyx_openings_table_interfaces} ${vespa_plugin_qt_auto_interfaces}
+  SOURCES ${acm_sources} ${vespa_obb_box_sources} ${vespa_endclipper_plane_sources} ${vespa_selection_plane_clipper_sources} ${vespa_stent_cylinder_sources} ${vespa_enhanced_ruler_sources} ${vespa_endpoint_stent_sources} ${shyx_partitioned_block_names_sources} ${shyx_boundary_assignment_info_sources} ${shyx_remesh_uncapped_histogram_sources} ${shyx_openings_table_sources}
     TransferCurve/pqArrayCurveMapperPanel.cxx
     TransferCurve/pqArrayCurveMapperPanel.h
     TransferCurve/pqSHYXTransferCurveWidget.cxx
@@ -267,10 +286,14 @@ if (PARAVIEW_USE_QT)
       ParaView::pqApplicationComponents
       VTK::ChartsCore
       VTK::InteractionWidgets
+      VTK::IOIOSS
       vtkSHYXSelectionPlaneClipper
       vtkSHYXVascularStentPlacement
       vtkSHYXEndpointStentPlacement
       vtkSHYXEnhancedRuler)
+  if (VESPA_ADAPTIVE_REMESHING)
+    target_link_libraries(VESPAPlugin PRIVATE vtkSHYXAdaptiveIsotropicRemesher)
+  endif ()
 endif ()
 
 if (BUILD_TESTING AND BUILD_SHARED_LIBS)

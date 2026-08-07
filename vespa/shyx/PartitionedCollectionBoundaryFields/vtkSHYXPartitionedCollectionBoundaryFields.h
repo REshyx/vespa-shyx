@@ -8,6 +8,8 @@
  * (overwriting same-named arrays), mirror point data onto paired node sets, and optionally
  * accumulate normals / variables onto the tetrahedra element block. Block names and assembly
  * labels can be edited via the Partitioned block names panel.
+ *
+ * Inlet OPT / boundary-assignment text belongs in vtkSHYXPartitionedCollectionBoundaryAssignment.
  */
 
 #ifndef vtkSHYXPartitionedCollectionBoundaryFields_h
@@ -66,30 +68,6 @@ public:
   vtkSetStringMacro(BlockNames);
   vtkGetStringMacro(BlockNames);
 
-  /**
-   * Read-only OPT snippet for inlet side sets (those with Write Normal checked). Updated on Apply:
-   * -inlet_nx/ny/nz, -inlet_xi/yi/zi, -inlet_xf/yf/zf, -inlet_flowfactor, -inlet_area
-   * (comma-separated values, one line per key; flowfactor = area / sum of inlet areas).
-   * Scales (InletOpt*Scale) are applied only to this text, not to mesh arrays.
-   */
-  vtkGetStringMacro(InletOptText);
-
-  /** Multiplier for -inlet_nx/ny/nz in InletOptText. Default -1 (inward, into vessel). */
-  vtkSetMacro(InletOptNormalScale, double);
-  vtkGetMacro(InletOptNormalScale, double);
-
-  /** Multiplier for -inlet_xi/yi/zi and -inlet_xf/yf/zf. Default 0.1 (e.g. mm -> cm). */
-  vtkSetMacro(InletOptBoundsScale, double);
-  vtkGetMacro(InletOptBoundsScale, double);
-
-  /** Multiplier for -inlet_flowfactor. Default 1. */
-  vtkSetMacro(InletOptFlowFactorScale, double);
-  vtkGetMacro(InletOptFlowFactorScale, double);
-
-  /** Multiplier for -inlet_area. Default 1. */
-  vtkSetMacro(InletOptAreaScale, double);
-  vtkGetMacro(InletOptAreaScale, double);
-
 protected:
   vtkSHYXPartitionedCollectionBoundaryFields();
   ~vtkSHYXPartitionedCollectionBoundaryFields() override;
@@ -98,18 +76,11 @@ protected:
   int FillOutputPortInformation(int port, vtkInformation* info) override;
   int RequestData(vtkInformation*, vtkInformationVector**, vtkInformationVector*) override;
 
-  vtkSetStringMacro(InletOptText);
-
   int ComputeBoundaryRadialValue = 0;
   double BoundaryRadialNormalFalloffFactor = 1.0;
   char* BoundaryVariables = nullptr;
   char* BoundaryWriteNormals = nullptr;
   char* BlockNames = nullptr;
-  char* InletOptText = nullptr;
-  double InletOptNormalScale = -1.0;
-  double InletOptBoundsScale = 0.1;
-  double InletOptFlowFactorScale = 1.0;
-  double InletOptAreaScale = 1.0;
 
 private:
   vtkSHYXPartitionedCollectionBoundaryFields(

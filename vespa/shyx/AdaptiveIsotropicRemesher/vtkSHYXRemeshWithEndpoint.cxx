@@ -21,19 +21,27 @@
 #include <vtkTriangleFilter.h>
 
 #include <CGAL/Polygon_mesh_processing/remesh.h>
+#include <CGAL/Polygon_mesh_processing/repair_degeneracies.h>
+#include <CGAL/Polygon_mesh_processing/shape_predicates.h>
 #include <CGAL/Polygon_mesh_processing/triangulate_hole.h>
 #include <CGAL/Kernel/global_functions.h>
+#include <CGAL/boost/graph/helpers.h>
 #include <CGAL/property_map.h>
 
 #include <boost/property_map/property_map.hpp>
 
+#include <algorithm>
+#include <atomic>
+#include <chrono>
 #include <cmath>
+#include <cstdio>
 #include <exception>
 #include <limits>
 #include <memory>
 #include <optional>
 #include <queue>
-#include <algorithm>
+#include <set>
+#include <thread>
 #include <unordered_set>
 #include <utility>
 #include <vector>
@@ -361,6 +369,30 @@ vtkSHYXRemeshWithEndpoint::vtkSHYXRemeshWithEndpoint()
 }
 
 //------------------------------------------------------------------------------
+double* vtkSHYXRemeshWithEndpoint::GetUncappedSizeHistCenters()
+{
+    return this->UncappedSizeHistCenters;
+}
+
+//------------------------------------------------------------------------------
+double* vtkSHYXRemeshWithEndpoint::GetUncappedSizeHistCounts()
+{
+    return this->UncappedSizeHistCounts;
+}
+
+//------------------------------------------------------------------------------
+double* vtkSHYXRemeshWithEndpoint::GetUncappedSizeHistRange()
+{
+    return this->UncappedSizeHistRange;
+}
+
+//------------------------------------------------------------------------------
+int vtkSHYXRemeshWithEndpoint::GetUncappedSizeHistSampleCount()
+{
+    return this->UncappedSizeHistSampleCount;
+}
+
+//------------------------------------------------------------------------------
 void vtkSHYXRemeshWithEndpoint::SetEndpointIndexArrayName(const char* name)
 {
     const bool hasName = (name != nullptr && name[0] != '\0');
@@ -382,6 +414,76 @@ const char* vtkSHYXRemeshWithEndpoint::GetEndpointIndexArrayName()
         }
     }
     return nullptr;
+}
+
+//------------------------------------------------------------------------------
+void vtkSHYXRemeshWithEndpoint::ClearUncappedSizeHistogram()
+{
+    for (int i = 0; i < UncappedSizeHistBinCount; ++i)
+    {
+        this->UncappedSizeHistCenters[i] = 0.0;
+        this->UncappedSizeHistCounts[i] = 0.0;
+    }
+    this->UncappedSizeHistRange[0] = 0.0;
+    this->UncappedSizeHistRange[1] = 0.0;
+    this->UncappedSizeHistSampleCount = 0;
+}
+
+//------------------------------------------------------------------------------
+void vtkSHYXRemeshWithEndpoint::FillUncappedSizeHistogram(const std::vector<double>& uncappedSizes)
+{
+    this->ClearUncappedSizeHistogram();
+    double vmin = std::numeric_limits<double>::infinity();
+    double vmax = -std::numeric_limits<double>::infinity();
+    int nValid = 0;
+    for (double v : uncappedSizes)
+    {
+        if (!std::isfinite(v) || !(v > 0.0))
+        {
+            continue;
+        }
+        vmin = (std::min)(vmin, v);
+        vmax = (std::max)(vmax, v);
+        ++nValid;
+    }
+    if (nValid < 1 || !std::isfinite(vmin) || !std::isfinite(vmax))
+    {
+        return;
+    }
+    if (!(vmax > vmin))
+    {
+        vmax = vmin + (std::max)(1.0e-12, std::abs(vmin) * 1.0e-9);
+    }
+
+    const double span = vmax - vmin;
+    for (int i = 0; i < UncappedSizeHistBinCount; ++i)
+    {
+        this->UncappedSizeHistCenters[i] =
+            vmin + (static_cast<double>(i) + 0.5) * span / UncappedSizeHistBinCount;
+        this->UncappedSizeHistCounts[i] = 0.0;
+    }
+    for (double v : uncappedSizes)
+    {
+        if (!std::isfinite(v) || !(v > 0.0))
+        {
+            continue;
+        }
+        double t = (v - vmin) / span;
+        t = (std::min)(1.0, (std::max)(0.0, t));
+        int bin = static_cast<int>(t * (UncappedSizeHistBinCount - 1));
+        if (bin < 0)
+        {
+            bin = 0;
+        }
+        else if (bin >= UncappedSizeHistBinCount)
+        {
+            bin = UncappedSizeHistBinCount - 1;
+        }
+        this->UncappedSizeHistCounts[bin] += 1.0;
+    }
+    this->UncappedSizeHistRange[0] = vmin;
+    this->UncappedSizeHistRange[1] = vmax;
+    this->UncappedSizeHistSampleCount = nValid;
 }
 
 //------------------------------------------------------------------------------
@@ -424,6 +526,10 @@ void vtkSHYXRemeshWithEndpoint::PrintSelf(ostream& os, vtkIndent indent)
        << (this->CapRemeshProtectConstraints ? "on" : "off") << std::endl;
     os << indent << "CapRefineSizingField: " << (this->CapRefineSizingField ? "on" : "off")
        << std::endl;
+    os << indent << "UncappedSizeHistSampleCount: " << this->UncappedSizeHistSampleCount
+       << std::endl;
+    os << indent << "UncappedSizeHistRange: [" << this->UncappedSizeHistRange[0] << ", "
+       << this->UncappedSizeHistRange[1] << "]" << std::endl;
     this->Superclass::PrintSelf(os, indent);
 }
 
@@ -449,6 +555,8 @@ int vtkSHYXRemeshWithEndpoint::RequestData(
         vtkErrorMacro("Missing input or output.");
         return 0;
     }
+
+    this->ClearUncappedSizeHistogram();
 
     if (this->AdaptiveTolerance <= 0.0)
     {
@@ -552,24 +660,91 @@ int vtkSHYXRemeshWithEndpoint::RequestData(
         return 0;
     }
 
+    const auto tReq = std::chrono::steady_clock::now();
+    // Histogram panel previews (wall remesh off) only log a one-liner unless VERBOSE=1.
+    const bool profilePreviewVerbose =
+      this->EnableWallRemesh || sizingProfileVerbose();
+    std::optional<SizingProfileRunGuard> profileRun;
+    if (profilePreviewVerbose)
+    {
+        profileRun.emplace(this->EnableWallRemesh != 0);
+        char buf[384];
+        std::snprintf(buf, sizeof(buf),
+            "==== BEGIN pts=%lld cells=%lld wall=%d iters=%d recompute=%d relax=%d "
+            "min=%g max=%g tol=%g R=%g scale=%d cap=%d ====",
+            static_cast<long long>(patchIn->GetNumberOfPoints()),
+            static_cast<long long>(patchIn->GetNumberOfCells()), this->EnableWallRemesh ? 1 : 0,
+            this->NumberOfIterations, this->RemeshRecomputeCurvatureEachIteration ? 1 : 0,
+            this->NumberOfRelaxationSteps, minLen, maxLen, this->AdaptiveTolerance,
+            this->AdaptiveSizingNeighborMaxRatio, this->ScaleToRange ? 1 : 0,
+            this->EnableCapRemesh ? 1 : 0);
+        sizingProfileLog(buf);
+    }
+    else
+    {
+        char buf[128];
+        std::snprintf(buf, sizeof(buf),
+            "PREVIEW (quiet) pts=%lld cells=%lld — set VESPA_SIZING_PROFILE_VERBOSE=1 for detail",
+            static_cast<long long>(patchIn->GetNumberOfPoints()),
+            static_cast<long long>(patchIn->GetNumberOfCells()));
+        // No run guard: stays a single unmarked line.
+        sizingProfileLog(buf);
+    }
+
     std::unique_ptr<vtkCGALHelper::Vespa_surface> cgalMesh =
         std::make_unique<vtkCGALHelper::Vespa_surface>();
-    if (!vtkCGALHelper::toCGAL(patchIn, cgalMesh.get()))
     {
-        vtkErrorMacro("Could not convert extracted patch to CGAL surface (check manifold / triangles).");
-        return 0;
+        const auto tTo = std::chrono::steady_clock::now();
+        if (!vtkCGALHelper::toCGAL(patchIn, cgalMesh.get()))
+        {
+            vtkErrorMacro(
+                "Could not convert extracted patch to CGAL surface (check manifold / triangles).");
+            return 0;
+        }
+        if (profilePreviewVerbose)
+        {
+            char buf[96];
+            std::snprintf(buf, sizeof(buf), "[1] toCGAL: %.1f ms", msSince(tTo));
+            sizingProfileLog(buf);
+        }
     }
 
     try
     {
-        PrepareIccVertexNormalsForAdaptiveSizing(cgalMesh->surface, nullptr);
+        {
+            const auto tN = std::chrono::steady_clock::now();
+            PrepareIccVertexNormalsForAdaptiveSizing(cgalMesh->surface, nullptr);
+            if (profilePreviewVerbose)
+            {
+                char buf[128];
+                std::snprintf(buf, sizeof(buf), "[2] PrepareIccVertexNormals (full): %.1f ms",
+                    msSince(tN));
+                sizingProfileLog(buf);
+            }
+        }
 
+        std::vector<double> uncappedSizes;
         using SizingTy = FeatureAwareAdaptiveSizingField;
         std::optional<SizingTy> sizingStorage;
-        sizingStorage.emplace(this->AdaptiveTolerance, std::make_pair(minLen, maxLen),
-            cgalMesh->surface.faces(), cgalMesh->surface,
-            static_cast<double>(this->AdaptiveSizingNeighborMaxRatio),
-            this->ScaleToRange);
+        {
+            const auto tSz = std::chrono::steady_clock::now();
+            if (profilePreviewVerbose)
+            {
+                sizingProfileLog("[3] sizing field build ...");
+            }
+            sizingStorage.emplace(this->AdaptiveTolerance, std::make_pair(minLen, maxLen),
+                cgalMesh->surface.faces(), cgalMesh->surface,
+                static_cast<double>(this->AdaptiveSizingNeighborMaxRatio), this->ScaleToRange,
+                &uncappedSizes);
+            if (profilePreviewVerbose)
+            {
+                char buf[96];
+                std::snprintf(buf, sizeof(buf), "[3] sizing field build done: %.1f ms",
+                    msSince(tSz));
+                sizingProfileLog(buf);
+            }
+        }
+        this->FillUncappedSizeHistogram(uncappedSizes);
 
         if (this->EnableWallRemesh)
         {
@@ -594,14 +769,197 @@ int vtkSHYXRemeshWithEndpoint::RequestData(
 
             const unsigned int remeshIterations = static_cast<unsigned int>(this->NumberOfIterations);
 
-            auto doRemeshSingleIteration = [&]() {
+            auto logMeshHealth = [&](const char* tag, const SizingTy* sizingPtr) {
+                CGAL_Surface& sm = cgalMesh->surface;
+                const auto tH = std::chrono::steady_clock::now();
+
+                const std::size_t nv = static_cast<std::size_t>(sm.number_of_vertices());
+                const std::size_t ne = static_cast<std::size_t>(sm.number_of_edges());
+                const std::size_t nf = static_cast<std::size_t>(sm.number_of_faces());
+                const std::size_t nh = static_cast<std::size_t>(sm.number_of_halfedges());
+                const bool tri = CGAL::is_triangle_mesh(sm);
+                // verbose=false: avoid dumping to stderr; just bool.
+                const bool valid = CGAL::is_valid_polygon_mesh(sm, false);
+
+                std::size_t nBorderE = 0;
+                for (CGAL_Surface::Edge_index e : sm.edges())
+                {
+                    if (sm.is_border(e))
+                    {
+                        ++nBorderE;
+                    }
+                }
+
+                std::vector<CGAL_Surface::Face_index> degenFaces;
+                pmp::degenerate_faces(sm, std::back_inserter(degenFaces));
+
+                // Non-manifold heuristic: duplicated neighbor in the vertex link.
+                std::size_t nNonManifoldV = 0;
+                for (CGAL_Surface::Vertex_index v : sm.vertices())
+                {
+                    if (sm.is_removed(v))
+                    {
+                        continue;
+                    }
+                    std::vector<CGAL_Surface::Vertex_index> nbr;
+                    nbr.reserve(16);
+                    bool bad = false;
+                    for (CGAL_Surface::Halfedge_index h : CGAL::halfedges_around_target(v, sm))
+                    {
+                        const CGAL_Surface::Vertex_index u = sm.source(h);
+                        for (CGAL_Surface::Vertex_index x : nbr)
+                        {
+                            if (x == u)
+                            {
+                                bad = true;
+                                break;
+                            }
+                        }
+                        if (bad)
+                        {
+                            break;
+                        }
+                        nbr.push_back(u);
+                    }
+                    if (bad)
+                    {
+                        ++nNonManifoldV;
+                    }
+                }
+
+                double lenMin = std::numeric_limits<double>::infinity();
+                double lenMax = 0.0;
+                double lenSum = 0.0;
+                std::size_t nLen = 0;
+                std::size_t nZeroLen = 0;
+                for (CGAL_Surface::Edge_index e : sm.edges())
+                {
+                    const CGAL_Surface::Halfedge_index h = sm.halfedge(e);
+                    const auto& pa = sm.point(sm.source(h));
+                    const auto& pb = sm.point(sm.target(h));
+                    const double sq = CGAL::to_double(CGAL::squared_distance(pa, pb));
+                    const double len = std::sqrt((std::max)(0.0, sq));
+                    if (!(len > 0.0))
+                    {
+                        ++nZeroLen;
+                    }
+                    lenMin = (std::min)(lenMin, len);
+                    lenMax = (std::max)(lenMax, len);
+                    lenSum += len;
+                    ++nLen;
+                }
+
+                std::size_t nSizePos = 0;
+                std::size_t nSizeZero = 0;
+                std::size_t nFeatOn = 0;
+                if (sizingPtr)
+                {
+                    for (CGAL_Surface::Vertex_index v : sm.vertices())
+                    {
+                        const double s = CGAL::to_double(sizingPtr->at(v, sm));
+                        if (s > 0.0)
+                        {
+                            ++nSizePos;
+                        }
+                        else
+                        {
+                            ++nSizeZero;
+                        }
+                    }
+                }
+                for (CGAL_Surface::Edge_index e : sm.edges())
+                {
+                    if (boost::get(featureEdges, e))
+                    {
+                        ++nFeatOn;
+                    }
+                }
+
+                {
+                    char buf[512];
+                    std::snprintf(buf, sizeof(buf),
+                        "MESH %s nv=%zu ne=%zu nf=%zu nh=%zu valid=%d tri=%d borderE=%zu "
+                        "degenF=%zu nonManifoldV~=%zu zeroLenE=%zu featE=%zu | "
+                        "edgeLen[%.6g..%.6g] mean=%.6g | sizePos=%zu sizeZero=%zu | diag=%.1fms",
+                        tag, nv, ne, nf, nh, valid ? 1 : 0, tri ? 1 : 0, nBorderE,
+                        degenFaces.size(), nNonManifoldV, nZeroLen, nFeatOn,
+                        nLen ? lenMin : 0.0, nLen ? lenMax : 0.0,
+                        nLen ? (lenSum / static_cast<double>(nLen)) : 0.0, nSizePos, nSizeZero,
+                        msSince(tH));
+                    sizingProfileLog(buf);
+                }
+            };
+
+            auto doRemeshSingleIteration = [&](unsigned int iterIndex1Based, unsigned int iterTotal) {
+                const std::size_t nv0 =
+                    static_cast<std::size_t>(cgalMesh->surface.number_of_vertices());
+                const std::size_t nf0 =
+                    static_cast<std::size_t>(cgalMesh->surface.number_of_faces());
+                {
+                    char buf[192];
+                    std::snprintf(buf, sizeof(buf),
+                        "[4] remesh START %u/%u  nv=%zu nf=%zu", iterIndex1Based, iterTotal, nv0,
+                        nf0);
+                    sizingProfileLog(buf);
+                }
+                {
+                    char tag[64];
+                    std::snprintf(tag, sizeof(tag), "before remesh %u/%u", iterIndex1Based,
+                        iterTotal);
+                    logMeshHealth(tag, &sizing);
+                }
+
+                std::atomic<bool> remeshDone{false};
+                std::thread heartbeat([&]() {
+                    int sec = 0;
+                    while (!remeshDone.load(std::memory_order_relaxed))
+                    {
+                        std::this_thread::sleep_for(std::chrono::seconds(5));
+                        if (remeshDone.load(std::memory_order_relaxed))
+                        {
+                            break;
+                        }
+                        sec += 5;
+                        char buf[160];
+                        std::snprintf(buf, sizeof(buf),
+                            "[4] remesh STILL RUNNING %u/%u  t=%ds (inside CGAL; mesh not sampled)",
+                            iterIndex1Based, iterTotal, sec);
+                        sizingProfileLog(buf);
+                    }
+                });
+
+                const auto tRemesh = std::chrono::steady_clock::now();
                 pmp::isotropic_remeshing(
                     cgalMesh->surface.faces(), sizing, cgalMesh->surface, remeshNp(1));
+                remeshDone.store(true, std::memory_order_relaxed);
+                heartbeat.join();
+
+                const std::size_t nv1 =
+                    static_cast<std::size_t>(cgalMesh->surface.number_of_vertices());
+                const std::size_t nf1 =
+                    static_cast<std::size_t>(cgalMesh->surface.number_of_faces());
+                {
+                    char buf[192];
+                    std::snprintf(buf, sizeof(buf),
+                        "[4] remesh END   %u/%u  %.1f ms  nv %zu -> %zu (%+lld)  nf %zu -> %zu",
+                        iterIndex1Based, iterTotal, msSince(tRemesh), nv0, nv1,
+                        static_cast<long long>(nv1) - static_cast<long long>(nv0), nf0, nf1);
+                    sizingProfileLog(buf);
+                }
+                {
+                    char tag[64];
+                    std::snprintf(tag, sizeof(tag), "after remesh %u/%u", iterIndex1Based,
+                        iterTotal);
+                    logMeshHealth(tag, &sizing);
+                }
             };
+
+            sizingProfileLog("[4] WALL remesh phase begin");
+            const auto tWallAll = std::chrono::steady_clock::now();
 
             if (remeshIterations <= 1u)
             {
-                doRemeshSingleIteration();
+                doRemeshSingleIteration(1u, 1u);
             }
             else
             {
@@ -612,18 +970,28 @@ int vtkSHYXRemeshWithEndpoint::RequestData(
                     {
                         sizing.recompute_curvature(cgalMesh->surface);
                     }
-                    doRemeshSingleIteration();
+                    doRemeshSingleIteration(pass + 1u, remeshIterations);
                 }
                 if (this->RemeshRecomputeCurvatureEachIteration)
                 {
                     sizing.recompute_curvature(cgalMesh->surface);
                 }
-                doRemeshSingleIteration();
+                doRemeshSingleIteration(remeshIterations, remeshIterations);
+            }
+
+            {
+                char buf[96];
+                std::snprintf(buf, sizeof(buf), "[4] WALL remesh phase total: %.1f ms",
+                    msSince(tWallAll));
+                sizingProfileLog(buf);
             }
 
             // === Phase 2: Hole fill (FairingContinuity=0) + Cap remesh ===
             if (this->EnableCapRemesh)
             {
+                sizingProfileLog("[4b] CAP phase begin");
+                const auto tCapAll = std::chrono::steady_clock::now();
+
                 // Reset feature edges after wall remesh (new edges default to false already,
                 // but be explicit for safety).
                 for (CGAL_Surface::Edge_index e : cgalMesh->surface.edges())
@@ -634,6 +1002,7 @@ int vtkSHYXRemeshWithEndpoint::RequestData(
                 // Collect one representative border halfedge per open boundary loop.
                 std::vector<CGAL_Surface::Halfedge_index> holeStarters;
                 {
+                    const auto tHoles = std::chrono::steady_clock::now();
                     std::set<CGAL_Surface::Halfedge_index> visited;
                     for (CGAL_Surface::Halfedge_index h : cgalMesh->surface.halfedges())
                     {
@@ -648,6 +1017,10 @@ int vtkSHYXRemeshWithEndpoint::RequestData(
                             } while (cur != h);
                         }
                     }
+                    char buf[96];
+                    std::snprintf(buf, sizeof(buf), "[4b] find holes: %.1f ms n=%zu",
+                        msSince(tHoles), holeStarters.size());
+                    sizingProfileLog(buf);
                 }
 
                 if (!holeStarters.empty())
@@ -655,17 +1028,25 @@ int vtkSHYXRemeshWithEndpoint::RequestData(
                     std::vector<CGAL_Surface::Face_index> allCapFaces;
                     std::vector<CGAL_Surface::Vertex_index> allCapVertices;
 
-                    for (CGAL_Surface::Halfedge_index bh : holeStarters)
                     {
-                        std::vector<CGAL_Surface::Face_index> hf;
-                        std::vector<CGAL_Surface::Vertex_index> hv;
-                        pmp::triangulate_refine_and_fair_hole(
-                            cgalMesh->surface, bh,
-                            std::back_inserter(hf),
-                            std::back_inserter(hv),
-                            pmp::parameters::fairing_continuity(0u));
-                        allCapFaces.insert(allCapFaces.end(), hf.begin(), hf.end());
-                        allCapVertices.insert(allCapVertices.end(), hv.begin(), hv.end());
+                        const auto tFill = std::chrono::steady_clock::now();
+                        for (CGAL_Surface::Halfedge_index bh : holeStarters)
+                        {
+                            std::vector<CGAL_Surface::Face_index> hf;
+                            std::vector<CGAL_Surface::Vertex_index> hv;
+                            pmp::triangulate_refine_and_fair_hole(
+                                cgalMesh->surface, bh,
+                                std::back_inserter(hf),
+                                std::back_inserter(hv),
+                                pmp::parameters::fairing_continuity(0u));
+                            allCapFaces.insert(allCapFaces.end(), hf.begin(), hf.end());
+                            allCapVertices.insert(allCapVertices.end(), hv.begin(), hv.end());
+                        }
+                        char buf[128];
+                        std::snprintf(buf, sizeof(buf),
+                            "[4b] hole fill+fair: %.1f ms cap_faces=%zu", msSince(tFill),
+                            allCapFaces.size());
+                        sizingProfileLog(buf);
                     }
 
                     if (!allCapFaces.empty())
@@ -712,7 +1093,19 @@ int vtkSHYXRemeshWithEndpoint::RequestData(
                         };
 
                         // First iteration always uses the original allCapFaces range.
-                        pmp::isotropic_remeshing(allCapFaces, capSizing, cgalMesh->surface, capNp());
+                        {
+                            char buf[128];
+                            std::snprintf(buf, sizeof(buf),
+                                "[4b] cap remesh START 1/%u faces=%zu", capIters,
+                                allCapFaces.size());
+                            sizingProfileLog(buf);
+                            const auto tCapR = std::chrono::steady_clock::now();
+                            pmp::isotropic_remeshing(
+                                allCapFaces, capSizing, cgalMesh->surface, capNp());
+                            std::snprintf(buf, sizeof(buf), "[4b] cap remesh END   1/%u %.1f ms",
+                                capIters, msSince(tCapR));
+                            sizingProfileLog(buf);
+                        }
 
                         // Remaining iterations: optionally recompute BFS before each pass.
                         for (unsigned int pass = 1; pass < capIters; ++pass)
@@ -722,8 +1115,20 @@ int vtkSHYXRemeshWithEndpoint::RequestData(
                                 capSizing.recompute(cgalMesh->surface);
                             }
                             auto currentCapFaces = capSizing.collectCapFaces(cgalMesh->surface);
-                            pmp::isotropic_remeshing(
-                                currentCapFaces, capSizing, cgalMesh->surface, capNp());
+                            {
+                                char buf[128];
+                                std::snprintf(buf, sizeof(buf),
+                                    "[4b] cap remesh START %u/%u faces=%zu", pass + 1u, capIters,
+                                    currentCapFaces.size());
+                                sizingProfileLog(buf);
+                                const auto tCapR = std::chrono::steady_clock::now();
+                                pmp::isotropic_remeshing(
+                                    currentCapFaces, capSizing, cgalMesh->surface, capNp());
+                                std::snprintf(buf, sizeof(buf),
+                                    "[4b] cap remesh END   %u/%u %.1f ms", pass + 1u, capIters,
+                                    msSince(tCapR));
+                                sizingProfileLog(buf);
+                            }
                         }
 
                         // Tag each disconnected cap patch with ids 1..n (multiple holes),
@@ -739,7 +1144,7 @@ int vtkSHYXRemeshWithEndpoint::RequestData(
                         auto capFaceTagMap = cgalMesh->surface
                             .add_property_map<CGAL_Surface::Face_index, int>(
                                 "f:vespa_cap_idx", 0)
-                            .first;
+                                .first;
                         std::unordered_set<std::size_t> visitedCapFace;
                         visitedCapFace.reserve(capFaceList.size());
                         int componentId = 0;
@@ -839,7 +1244,19 @@ int vtkSHYXRemeshWithEndpoint::RequestData(
                                 }
                             }
                         }
+                        {
+                            char buf[96];
+                            std::snprintf(buf, sizeof(buf), "[4b] cap tag components n=%d",
+                                componentId);
+                            sizingProfileLog(buf);
+                        }
                     }
+                }
+                {
+                    char buf[96];
+                    std::snprintf(buf, sizeof(buf), "[4b] CAP phase total: %.1f ms",
+                        msSince(tCapAll));
+                    sizingProfileLog(buf);
                 }
             }
         }
@@ -850,8 +1267,19 @@ int vtkSHYXRemeshWithEndpoint::RequestData(
         return 0;
     }
 
-    vtkCGALHelper::toVTK(cgalMesh.get(), output);
-    this->interpolateAttributes(patchIn, output);
+    {
+        const auto tOut = std::chrono::steady_clock::now();
+        vtkCGALHelper::toVTK(cgalMesh.get(), output);
+        this->interpolateAttributes(patchIn, output);
+        if (profilePreviewVerbose)
+        {
+            char buf[128];
+            std::snprintf(buf, sizeof(buf), "[5] toVTK+interpolate: %.1f ms", msSince(tOut));
+            sizingProfileLog(buf);
+            std::snprintf(buf, sizeof(buf), "==== END total %.1f ms ====", msSince(tReq));
+            sizingProfileLog(buf);
+        }
+    }
 
     if (!this->EnableWallRemesh)
     {

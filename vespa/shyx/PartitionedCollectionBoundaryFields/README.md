@@ -10,6 +10,7 @@
 - **变量**：按面板为每个 side set 写入 `BoundaryVariable1`、`BoundaryVariable2`、…（有限值累加到体块；空/NaN 不写；体块数组初始化为 NaN）
 - **覆盖**：同名数组存在时直接覆盖
 - **命名**：通过 **Partitioned block names** 面板编辑 side set 名称；node set 自动加 `node_` 前缀
+- **不生成 OPT / 边界角色文本**：入口 OPT、wall/inlet/outlet 分类见 **SHYX Partitioned Collection Boundary Assignment**
 
 ## 属性
 

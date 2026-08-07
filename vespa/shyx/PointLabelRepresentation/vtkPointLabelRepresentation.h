@@ -29,11 +29,11 @@ class vtkTransform;
  * Optional VertexOnly restricts labels to points used by vertex cells (not line-only points).
  * Values are formatted as strings (see vtkLabeledDataMapper).
  *
- * When OccludeLabels is on (default), labels are drawn as 3D billboards in the main renderer so they
+ * When OccludeLabels is on, labels are drawn as 3D billboards in the main renderer so they
  * participate in depth testing and translucent blending (depth peeling). A small polygon-offset
  * toward the camera reduces z-fighting with coincident surface geometry, similar to Surface With
- * Edges line offsets and selection highlights. When OccludeLabels is off, labels use a 2D overlay
- * on the non-composited renderer (always on top), matching ParaView's data label representation.
+ * Edges line offsets and selection highlights. When OccludeLabels is off (default), labels use a 2D
+ * overlay on the non-composited renderer (always on top), matching ParaView's data label representation.
  */
 class VTKPOINTLABELREPRESENTATION_EXPORT vtkPointLabelRepresentation
   : public vtkGeometryRepresentationWithFaces
@@ -128,7 +128,7 @@ protected:
 
   int ShowPointLabels = 1;
   /** If non-zero, depth-test labels against scene geometry (default). */
-  int OccludeLabels = 1;
+  int OccludeLabels = 0;
   /** If non-zero, draw edges like Surface With Edges (default off). */
   int ShowEdges = 0;
   /** If non-zero, labels only points referenced by vertex cells (vtkPolyData::Verts or VTK_VERTEX). */

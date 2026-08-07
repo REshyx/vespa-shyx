@@ -1,0 +1,189 @@
+// Auto-synced from options_template_single_*.txt — keep in sync with those files.
+#ifndef vtkSHYXBoundaryAssignmentOptionsTemplates_h
+#define vtkSHYXBoundaryAssignmentOptionsTemplates_h
+
+namespace shyxBoundaryAssignmentOptionsTemplates
+{
+static constexpr const char* kSingleInlet = R"SHYXOPT(
+#----------- mesh options -------------#
+	-f ./Test_PPG/Meshfiles_BJSJT_20260605/HST_PV_84w.exo
+	-coord_x_scale 10 # (the scaler for the coodinates in the way: orignal_coord/coord_x_scale)
+	-coord_y_scale 10
+	-coord_z_scale 10
+	-WK3_solver 0
+
+#----------- boundary options -------------#
+	-bloodflow_bc_type 1 # (1 for resistance, 2 for impedance, and other numbers for stress free)
+	-nodeset_file ./Nodeset_Sideset_BJSJT/Nodeset_PV_HST
+	-sideset_file ./Nodeset_Sideset_BJSJT/Sideset_PV_HST
+	-Windkessel_file windkessel
+	-Q_file ./Test_PPG/Inlet_BC/Inlet_BC_BJSJT.txt
+	-R_total 2500
+	-num_outlet 10
+	#-aortic_outlet 11
+	-vin 
+	-wall
+	# inlet boundary position and normal direction
+	# inlet_*i are the lower bound and inlet_*f are the upper bound 
+	#-inlet_nx 1.0 
+	#-inlet_ny 0.0
+	#-inlet_nz 0.0
+	#-inlet_xi -6.32
+	#-inlet_yi -0.32
+	#-inlet_zi -0.32
+	#-inlet_xf -6.28
+	#-inlet_yf 0.28
+	#-inlet_zf 0.28
+	#-inlet_flowfactor 3.537 # the inverse of the inlet area
+	#-inlet_area 0.0
+	#-inflow_time_interval 0.01
+#----------- physics options -------------#
+	-viscosity 0.035
+	-fluid_density 1.060 
+	-bloodflow
+	-fluidonly
+	-initial_time 0.0
+	-final_time 0.1
+	-dt 0.01
+	-period 1.0	
+	-timestep 1 
+	-fixed_mesh 
+	-zero_initial
+ 
+#----------- KSP options -------------#
+	-ksp_type fgmres 
+	-ksp_pc_side right 
+	-ksp_gmres_restart 400 
+	-ksp_max_it 3000 
+	-ksp_rtol 1.e-3
+
+#----------- PC options -------------#
+	-pc_type asm
+	-sub_pc_type ilu
+	-sub_pc_factor_levels 1
+	-sub_pc_factor_mat_ordering_type rcm 
+	-geometric_asm
+	-geometric_asm_overlap 2
+
+#----------- SNES options -------------#
+	-snes_rtol 1.e-3
+	-snes_max_it 20
+	#-snes_view
+	#-snes_lag_jacobian 5
+	#-snes_lag_preconditioner 5
+
+#----------- Output options -------------#
+  	#-P1coords -2.33,-5.21,-7.14
+  	#-P2coords -3.82,-4.85,-7.54
+	#-P3coords -5.32,-3.93,-6.22
+  	#-P4coords -3.85,-5.15,-5.56
+	#-ffroutputname ./Test/Results/Results_HA_Follow-up/T5/ffrmonitor_HA_Follow-up_Dur.txt
+	#-flowoutputname ./Test/Results/Results_HA_Follow-up/T5/flowmonitor_HA_Follow-up_Dur.txt
+  	#-show_partition_basic
+	-basic_grid_output   # output the basic infomation
+	-coordinates         # output the basic grid information
+	-solution_output     # output the timestep solution
+	-output ./Test_PPG/Results_BJSJT_20260605/PV/HST/Results_PV_HST_R2500_Inlet_Solution  # the name of the output file
+	-Nplot 5             # how many steps between two outputs
+	
+#----------- other options  -------------#
+	-metis_parts 0
+	-mat_partitioning_type parmetis 
+	-diag_scale 1
+	-block_order 
+	-log_summary 
+)SHYXOPT";
+
+static constexpr const char* kSingleOutlet = R"SHYXOPT(
+#----------- mesh options -------------#
+	-f ./Test_PPG/Meshfiles_BJSJT_20260605/HST_HV_56w.exo
+	-coord_x_scale 10 # (the scaler for the coodinates in the way: orignal_coord/coord_x_scale)
+	-coord_y_scale 10
+	-coord_z_scale 10
+	-WK3_solver 0
+
+#----------- boundary options -------------#
+	-bloodflow_bc_type 1 # (1 for resistance, 2 for impedance, and other numbers for stress free)
+	-nodeset_file ./Nodeset_Sideset_BJSJT/Nodeset_HV
+	-sideset_file ./Nodeset_Sideset_BJSJT/Sideset_HV
+	-Windkessel_file windkessel
+	-Q_file ./Test_PPG/Inlet_BC/Hepatic_Vein_Inflowrate.txt
+	-R_total 100
+	-num_outlet 1
+	#-aortic_outlet 11
+	-vin 
+	-wall
+	# inlet boundary position and normal direction
+	# inlet_*i are the lower bound and inlet_*f are the upper bound 
+	-inlet_nx 0.0
+	-inlet_ny 0.0
+	-inlet_nz 0.0
+	-inlet_xi 0.0
+	-inlet_yi 0.0
+	-inlet_zi 0.0
+	-inlet_xf 0.0
+	-inlet_yf 0.0
+	-inlet_zf 0.0
+	-inlet_flowfactor 0.0
+	-inlet_area 0.0
+	# -inflow_time_interval 0.01
+#----------- physics options -------------#
+	-viscosity 0.035 
+	-fluid_density 1.060 
+	-bloodflow
+	-fluidonly
+	-initial_time 0.0
+	-final_time 0.1
+	-dt 0.01
+	-period 1.0	
+	-timestep 1 
+	-fixed_mesh 
+	-zero_initial
+ 
+#----------- KSP options -------------#
+	-ksp_type fgmres 
+	-ksp_pc_side right 
+	-ksp_gmres_restart 400 
+	-ksp_max_it 3000 
+	-ksp_rtol 1.e-3
+
+#----------- PC options -------------#
+	-pc_type asm
+	-sub_pc_type ilu
+	-sub_pc_factor_levels 1
+	-sub_pc_factor_mat_ordering_type rcm 
+	-geometric_asm
+	-geometric_asm_overlap 2
+
+#----------- SNES options -------------#
+	-snes_rtol 1.e-3
+	-snes_max_it 20
+	#-snes_view
+	#-snes_lag_jacobian 5
+	#-snes_lag_preconditioner 5
+
+#----------- Output options -------------#
+  	#-P1coords -2.33,-5.21,-7.14
+  	#-P2coords -3.82,-4.85,-7.54
+	#-P3coords -5.32,-3.93,-6.22
+  	#-P4coords -3.85,-5.15,-5.56
+	#-ffroutputname ./Test/Results/Results_HA_Follow-up/T5/ffrmonitor_HA_Follow-up_Dur.txt
+	#-flowoutputname ./Test/Results/Results_HA_Follow-up/T5/flowmonitor_HA_Follow-up_Dur.txt
+  	#-show_partition_basic
+	-basic_grid_output   # output the basic infomation
+	-coordinates         # output the basic grid information
+	-solution_output     # output the timestep solution
+	-output ./Test_PPG/Results_BJSJT_20260605/HV/HST/Results_HV_HST_Inlet_Solution_Zaiheng_Mesh  # the name of the output file
+	-Nplot 5             # how many steps between two outputs
+	
+#----------- other options  -------------#
+	-metis_parts 0
+	-mat_partitioning_type parmetis 
+	-diag_scale 1
+	-block_order 
+	-log_summary 
+)SHYXOPT";
+
+} // namespace shyxBoundaryAssignmentOptionsTemplates
+
+#endif
