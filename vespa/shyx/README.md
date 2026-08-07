@@ -13,7 +13,7 @@ SHYX 模块是 VESPA 插件中的重要组成部分，主要专注于**血管与
 * [**Surface To Volume Mesh (表面转体积网格 - CGAL)**](./SurfaceToVolumeMesh/README.md) - 使用 CGAL 的 Delaunay 细化从封闭表面生成四面体体积网格。
 * [**TetGen (表面转体积网格 - TetGen)**](./TetGen/README.md) - 使用 TetGen 库的约束 Delaunay 四面体化生成高质量体积网格。
 * [**Disconnected Region Fuse (不连通区域融合)**](./DisconnectedRegionFuse/README.md) - 多路表面输入（每路为一区域）之间按距离阈值融合近邻顶点；单路输入内不连通片互不合并。
-* [**Adaptive Isotropic Remesher (自适应各向同性重网格)**](./AdaptiveIsotropicRemesher/README.md) - *(需 CGAL ≥ 6.0)* 基于离散曲率的自适应尺寸场重网格滤镜。
+* [**Adaptive Isotropic Remesher (自适应各向同性重网格)**](./AdaptiveIsotropicRemesher/README.md) - *(需 CGAL ≥ 6.0)* 基于离散曲率的自适应尺寸场重网格滤镜。多轮 remesh 须 `collect_garbage`（见该 README §3）。
 * [**Selection Extrude (选区平均法线挤出)**](./SelectionExtrude/README.md) - 对表面选区计算面积加权平均法线，沿法线挤出并封闭侧壁；选区与 VESPA Region Fairing 相同（`vtkSelection` / SelectionInput），可动画调节挤出距离。
 
 ### 💧 流场与涡结构分析

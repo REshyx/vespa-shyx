@@ -12,6 +12,13 @@
  * stack as vtkSHYXAdaptiveIsotropicRemesher, without selection, feature detection, or mask logic.
  * CGAL split/collapse/flip follow CGAL defaults (all enabled); only protect/collapse/relax
  * constraint flags are exposed besides sizing and iteration controls.
+ *
+ * Multi-iteration note: wall remesh runs one CGAL \c isotropic_remeshing pass per iteration and may
+ * call \c recompute_curvature between passes. After each remesh, CGAL \c Surface_mesh often retains
+ * large amounts of removed-element garbage; a subsequent remesh without \c collect_garbage() can
+ * hang for a very long time even when the mesh is combinatorially valid and the sizing field looks
+ * healthy. This filter therefore calls \c collect_garbage() around remesh/recompute. See
+ * AdaptiveIsotropicRemesher/README.md §3.
  */
 
 #ifndef vtkSHYXRemeshWithEndpoint_h
@@ -73,6 +80,11 @@ public:
     vtkGetMacro(RemeshRecomputeCurvatureEachIteration, bool);
     vtkSetMacro(RemeshRecomputeCurvatureEachIteration, bool);
     vtkBooleanMacro(RemeshRecomputeCurvatureEachIteration, bool);
+    /**
+     * Wall remesh iteration count. Each count is one \c isotropic_remeshing(..., iterations=1).
+     * When &gt; 1, Surface_mesh garbage is compacted between passes (see class comment / README §3);
+     * chaining two filters with iterations=1 is not identical to one filter with iterations=2.
+     */
     vtkGetMacro(NumberOfIterations, int);
     vtkSetMacro(NumberOfIterations, int);
     vtkGetMacro(NumberOfRelaxationSteps, int);

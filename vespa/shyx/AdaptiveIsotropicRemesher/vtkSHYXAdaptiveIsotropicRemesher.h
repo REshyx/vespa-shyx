@@ -164,6 +164,9 @@ public:
    * re-evaluated on the updated mesh (**full surface** ICC domain; see vtkSHYXFeatureAwareAdaptiveSizingField).
    * When false, ICC runs in the sizing-field constructor immediately before multi-iteration remesh,
    * and splits only interpolate neighbor targets (faster when the iteration count is large).
+   *
+   * Between passes the Surface_mesh must be \c collect_garbage()'d; otherwise the next
+   * \c isotropic_remeshing can hang despite a valid mesh / healthy sizing (README §3).
    */
   vtkGetMacro(RemeshRecomputeCurvatureEachIteration, bool);
   vtkSetMacro(RemeshRecomputeCurvatureEachIteration, bool);

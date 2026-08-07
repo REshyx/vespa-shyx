@@ -157,6 +157,10 @@ inline double msSince(std::chrono::steady_clock::time_point t0)
  * Face_filtered_graph only for the **initial** constructor pass; refresh uses the whole surface so
  * face indices stay valid after topology changes.
  *
+ * Callers that remesh more than once on the same Surface_mesh must \c collect_garbage() between
+ * remesh/recompute passes; otherwise the next isotropic_remeshing can hang (see
+ * AdaptiveIsotropicRemesher/README.md §3).
+ *
  * ICC vertex normals: build `v:vespa_icc_normal` (global area blend) plus, when the feature mask
  * is enabled, `f:vespa_icc_in_mask`, `v:vespa_icc_n_mask`, and `v:vespa_icc_n_nonmask` via
  * `PrepareIccVertexNormalsForAdaptiveSizing` before constructing this object. `recompute_curvature`

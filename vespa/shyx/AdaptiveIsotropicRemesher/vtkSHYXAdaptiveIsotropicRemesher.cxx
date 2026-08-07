@@ -563,6 +563,12 @@ int vtkSHYXAdaptiveIsotropicRemesher::RequestData(
     };
 
     auto doRemeshSingleIteration = [&]() {
+      // Compact Surface_mesh garbage left by prior remesh; without this, a subsequent
+      // isotropic_remeshing can hang (see AdaptiveIsotropicRemesher/README.md §3).
+      if (cgalMesh->surface.has_garbage())
+      {
+        cgalMesh->surface.collect_garbage();
+      }
       if (patchRemesh)
       {
         pmp::isotropic_remeshing(
@@ -572,6 +578,10 @@ int vtkSHYXAdaptiveIsotropicRemesher::RequestData(
       {
         pmp::isotropic_remeshing(
           cgalMesh->surface.faces(), sizing, cgalMesh->surface, remeshNp(1));
+      }
+      if (cgalMesh->surface.has_garbage())
+      {
+        cgalMesh->surface.collect_garbage();
       }
     };
 
@@ -587,12 +597,20 @@ int vtkSHYXAdaptiveIsotropicRemesher::RequestData(
       {
         if (this->RemeshRecomputeCurvatureEachIteration && pass > 0)
         {
+          if (cgalMesh->surface.has_garbage())
+          {
+            cgalMesh->surface.collect_garbage();
+          }
           sizing.recompute_curvature(cgalMesh->surface);
         }
         doRemeshSingleIteration();
       }
       if (this->RemeshRecomputeCurvatureEachIteration)
       {
+        if (cgalMesh->surface.has_garbage())
+        {
+          cgalMesh->surface.collect_garbage();
+        }
         sizing.recompute_curvature(cgalMesh->surface);
       }
       fillSizingIccPreviewPort();

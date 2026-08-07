@@ -890,7 +890,38 @@ int vtkSHYXRemeshWithEndpoint::RequestData(
                 }
             };
 
+            // After isotropic_remeshing, Surface_mesh keeps removed v/e/f as garbage. A second
+            // remesh (especially after recompute_curvature) on that uncompacted mesh can hang for
+            // minutes while the same sizing on a fresh VTK→CGAL mesh finishes in seconds. Compact
+            // before/after remesh and before recompute. Details: README.md §3.
+            auto collectGarbageIfNeeded = [&](const char* why) {
+                CGAL_Surface& sm = cgalMesh->surface;
+                const bool had = sm.has_garbage();
+                const std::size_t rv = static_cast<std::size_t>(sm.number_of_removed_vertices());
+                const std::size_t re = static_cast<std::size_t>(sm.number_of_removed_edges());
+                const std::size_t rf = static_cast<std::size_t>(sm.number_of_removed_faces());
+                {
+                    char buf[192];
+                    std::snprintf(buf, sizeof(buf),
+                        "[4] garbage before %s: has=%d removed v/e/f=%zu/%zu/%zu", why,
+                        had ? 1 : 0, rv, re, rf);
+                    sizingProfileLog(buf);
+                }
+                if (had)
+                {
+                    const auto tG = std::chrono::steady_clock::now();
+                    sm.collect_garbage();
+                    char buf[160];
+                    std::snprintf(buf, sizeof(buf),
+                        "[4] collect_garbage after %s: %.1f ms  now has=%d", why, msSince(tG),
+                        sm.has_garbage() ? 1 : 0);
+                    sizingProfileLog(buf);
+                }
+            };
+
             auto doRemeshSingleIteration = [&](unsigned int iterIndex1Based, unsigned int iterTotal) {
+                collectGarbageIfNeeded("pre-remesh");
+
                 const std::size_t nv0 =
                     static_cast<std::size_t>(cgalMesh->surface.number_of_vertices());
                 const std::size_t nf0 =
@@ -946,6 +977,7 @@ int vtkSHYXRemeshWithEndpoint::RequestData(
                         static_cast<long long>(nv1) - static_cast<long long>(nv0), nf0, nf1);
                     sizingProfileLog(buf);
                 }
+                collectGarbageIfNeeded("post-remesh");
                 {
                     char tag[64];
                     std::snprintf(tag, sizeof(tag), "after remesh %u/%u", iterIndex1Based,
@@ -954,7 +986,7 @@ int vtkSHYXRemeshWithEndpoint::RequestData(
                 }
             };
 
-            sizingProfileLog("[4] WALL remesh phase begin");
+            sizingProfileLog("[4] WALL remesh phase begin (with collect_garbage between passes)");
             const auto tWallAll = std::chrono::steady_clock::now();
 
             if (remeshIterations <= 1u)
@@ -968,12 +1000,14 @@ int vtkSHYXRemeshWithEndpoint::RequestData(
                 {
                     if (this->RemeshRecomputeCurvatureEachIteration && pass > 0)
                     {
+                        collectGarbageIfNeeded("pre-recompute");
                         sizing.recompute_curvature(cgalMesh->surface);
                     }
                     doRemeshSingleIteration(pass + 1u, remeshIterations);
                 }
                 if (this->RemeshRecomputeCurvatureEachIteration)
                 {
+                    collectGarbageIfNeeded("pre-recompute");
                     sizing.recompute_curvature(cgalMesh->surface);
                 }
                 doRemeshSingleIteration(remeshIterations, remeshIterations);
