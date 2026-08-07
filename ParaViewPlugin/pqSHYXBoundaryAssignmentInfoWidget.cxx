@@ -9,6 +9,7 @@
 #include "pqView.h"
 
 #include "vtkAlgorithm.h"
+#include "vtkCommand.h"
 #include "vtkDataAssembly.h"
 #include "vtkErrorCode.h"
 #include "vtkIOSSWriter.h"
@@ -25,7 +26,9 @@
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QFont>
+#include <QFormLayout>
 #include <QLabel>
+#include <QLineEdit>
 #include <QList>
 #include <QMessageBox>
 #include <QPushButton>
@@ -34,6 +37,7 @@
 #include <QTextStream>
 #include <QTimer>
 #include <QVBoxLayout>
+#include <QWidget>
 
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
 #include <QStringConverter>
@@ -152,7 +156,49 @@ bool writeExodusIossDefault(vtkPartitionedDataSetCollection* input, const QStrin
   return true;
 }
 
+QString ensureExtension(QString name, const QString& ext)
+{
+  name = name.trimmed();
+  if (name.isEmpty())
+  {
+    return name;
+  }
+  if (!name.endsWith(ext, Qt::CaseInsensitive))
+  {
+    name += ext;
+  }
+  return name;
+}
+
 } // namespace
+
+//-----------------------------------------------------------------------------
+QString pqSHYXBoundaryAssignmentInfoWidget::defaultExoName(const QString& tag)
+{
+  return QStringLiteral("%1_0.exo").arg(tag);
+}
+
+QString pqSHYXBoundaryAssignmentInfoWidget::defaultOptName(const QString& tag)
+{
+  return QStringLiteral("options_%1_0.opt").arg(tag);
+}
+
+QString pqSHYXBoundaryAssignmentInfoWidget::defaultBcName(const QString& tag)
+{
+  return QStringLiteral("options_%1_0.bc").arg(tag);
+}
+
+QString pqSHYXBoundaryAssignmentInfoWidget::currentModeTag() const
+{
+  vtkSMProxy* filter = this->proxy();
+  if (!filter || !filter->GetProperty("FlowBoundaryMode"))
+  {
+    return QStringLiteral("PV");
+  }
+  // 0 = Single inlet → PV; 1 = Single outlet → HV
+  const int mode = vtkSMPropertyHelper(filter, "FlowBoundaryMode").GetAsInt();
+  return mode == 0 ? QStringLiteral("PV") : QStringLiteral("HV");
+}
 
 //-----------------------------------------------------------------------------
 pqSHYXBoundaryAssignmentInfoWidget::pqSHYXBoundaryAssignmentInfoWidget(
@@ -168,11 +214,44 @@ pqSHYXBoundaryAssignmentInfoWidget::pqSHYXBoundaryAssignmentInfoWidget(
   this->InletOptProp = vtkSMStringVectorProperty::SafeDownCast(
     propertyFromGroup(smgroup, smproxy, "InletOptText", "InletOptText"));
 
+  auto* namesHost = new QWidget(this);
+  auto* namesForm = new QFormLayout(namesHost);
+  namesForm->setContentsMargins(0, 0, 0, 0);
+  namesForm->setSpacing(4);
+  this->ExoNameEdit = new QLineEdit(namesHost);
+  this->OptNameEdit = new QLineEdit(namesHost);
+  this->BcNameEdit = new QLineEdit(namesHost);
+  this->ExoNameEdit->setPlaceholderText(QStringLiteral("PV_0.exo / HV_0.exo"));
+  this->OptNameEdit->setPlaceholderText(QStringLiteral("options_PV_0.opt / options_HV_0.opt"));
+  this->BcNameEdit->setPlaceholderText(QStringLiteral("options_PV_0.bc / options_HV_0.bc"));
+  this->ExoNameEdit->setToolTip(
+    tr("Exodus output basename. Default PV_0.exo (Single inlet) or HV_0.exo (Single outlet)."));
+  this->OptNameEdit->setToolTip(tr(
+    "Options file (.opt) basename for the full solver options text. "
+    "Default options_PV_0.opt or options_HV_0.opt."));
+  this->BcNameEdit->setToolTip(tr(
+    "Boundary assignment (.bc) basename. Default options_PV_0.bc or options_HV_0.bc."));
+  namesForm->addRow(tr("Exodus (.exo)"), this->ExoNameEdit);
+  namesForm->addRow(tr("Options (.opt)"), this->OptNameEdit);
+  namesForm->addRow(tr("Boundary assignment (.bc)"), this->BcNameEdit);
+  vbox->addWidget(namesHost);
+
+  this->LastAutoTag = this->currentModeTag();
+  this->ExoNameEdit->setText(defaultExoName(this->LastAutoTag));
+  this->OptNameEdit->setText(defaultOptName(this->LastAutoTag));
+  this->BcNameEdit->setText(defaultBcName(this->LastAutoTag));
+
+  if (vtkSMProperty* modeProp = smproxy->GetProperty("FlowBoundaryMode"))
+  {
+    pqCoreUtilities::connect(
+      modeProp, vtkCommand::ModifiedEvent, this, SLOT(syncExportNameDefaults()));
+  }
+
   auto* exportBtn =
-    new QPushButton(tr("Export port 0 (.exo) + assignment/options (.txt)"), this);
+    new QPushButton(tr("Export port 0 (.exo) + options (.opt) + assignment (.bc)"), this);
   exportBtn->setToolTip(tr(
-    "Choose a .exo path. Writes the Exodus file (vtkIOSSWriter defaults) plus "
-    "<name>_boundary_assignment.txt and <name>_options.txt beside it."));
+    "Choose a folder via the .exo save dialog (suggested name from the box above). "
+    "Writes the Exodus file plus the .opt and .bc files beside it using the names above."));
   vbox->addWidget(exportBtn);
   QObject::connect(exportBtn, &QPushButton::clicked, this,
     &pqSHYXBoundaryAssignmentInfoWidget::onExportClicked);
@@ -210,6 +289,38 @@ pqSHYXBoundaryAssignmentInfoWidget::pqSHYXBoundaryAssignmentInfoWidget(
 pqSHYXBoundaryAssignmentInfoWidget::~pqSHYXBoundaryAssignmentInfoWidget() = default;
 
 //-----------------------------------------------------------------------------
+void pqSHYXBoundaryAssignmentInfoWidget::syncExportNameDefaults()
+{
+  const QString tag = this->currentModeTag();
+  if (tag == this->LastAutoTag)
+  {
+    return;
+  }
+
+  const QString oldExo = defaultExoName(this->LastAutoTag);
+  const QString oldOpt = defaultOptName(this->LastAutoTag);
+  const QString oldBc = defaultBcName(this->LastAutoTag);
+  const QString newExo = defaultExoName(tag);
+  const QString newOpt = defaultOptName(tag);
+  const QString newBc = defaultBcName(tag);
+
+  // Preserve manual edits: only rewrite boxes that still hold the previous auto default.
+  if (this->ExoNameEdit && this->ExoNameEdit->text().trimmed() == oldExo)
+  {
+    this->ExoNameEdit->setText(newExo);
+  }
+  if (this->OptNameEdit && this->OptNameEdit->text().trimmed() == oldOpt)
+  {
+    this->OptNameEdit->setText(newOpt);
+  }
+  if (this->BcNameEdit && this->BcNameEdit->text().trimmed() == oldBc)
+  {
+    this->BcNameEdit->setText(newBc);
+  }
+  this->LastAutoTag = tag;
+}
+
+//-----------------------------------------------------------------------------
 void pqSHYXBoundaryAssignmentInfoWidget::setTextFromProperty(
   QTextEdit* edit, vtkSMStringVectorProperty* prop)
 {
@@ -234,6 +345,8 @@ void pqSHYXBoundaryAssignmentInfoWidget::refreshTexts()
   {
     return;
   }
+
+  this->syncExportNameDefaults();
 
   auto* source = vtkSMSourceProxy::SafeDownCast(filter);
   if (this->AssignmentProp)
@@ -330,23 +443,44 @@ void pqSHYXBoundaryAssignmentInfoWidget::onExportClicked()
     return;
   }
 
+  const QString tag = this->currentModeTag();
+  QString exoName = ensureExtension(
+    this->ExoNameEdit ? this->ExoNameEdit->text() : QString(), QStringLiteral(".exo"));
+  QString optName = ensureExtension(
+    this->OptNameEdit ? this->OptNameEdit->text() : QString(), QStringLiteral(".opt"));
+  QString bcName = ensureExtension(
+    this->BcNameEdit ? this->BcNameEdit->text() : QString(), QStringLiteral(".bc"));
+  if (exoName.isEmpty())
+  {
+    exoName = defaultExoName(tag);
+  }
+  if (optName.isEmpty())
+  {
+    optName = defaultOptName(tag);
+  }
+  if (bcName.isEmpty())
+  {
+    bcName = defaultBcName(tag);
+  }
+
   const QString exoPath = QFileDialog::getSaveFileName(pqCoreUtilities::mainWidget(),
-    tr("Export Exodus + assignment/options texts"), QString(),
+    tr("Export Exodus + options (.opt) + assignment (.bc)"), exoName,
     tr("Exodus (*.exo);;All files (*)"));
   if (exoPath.isEmpty())
   {
     return;
   }
 
-  QString exoFile = exoPath;
-  if (!exoFile.endsWith(QStringLiteral(".exo"), Qt::CaseInsensitive))
+  QString exoFile = ensureExtension(exoPath, QStringLiteral(".exo"));
+  const QString outDir = QFileInfo(exoFile).absolutePath();
+  const QString optPath = outDir + QLatin1Char('/') + QFileInfo(optName).fileName();
+  const QString bcPath = outDir + QLatin1Char('/') + QFileInfo(bcName).fileName();
+
+  // Keep the exo line edit in sync with the path the user actually chose.
+  if (this->ExoNameEdit)
   {
-    exoFile += QStringLiteral(".exo");
+    this->ExoNameEdit->setText(QFileInfo(exoFile).fileName());
   }
-  const QFileInfo fi(exoFile);
-  const QString stemPath = fi.absolutePath() + QLatin1Char('/') + fi.completeBaseName();
-  const QString assignPath = stemPath + QStringLiteral("_boundary_assignment.txt");
-  const QString optPath = stemPath + QStringLiteral("_options.txt");
 
   source->UpdatePipeline();
   source->UpdatePipelineInformation();
@@ -370,12 +504,12 @@ void pqSHYXBoundaryAssignmentInfoWidget::onExportClicked()
   const QString assignText =
     this->AssignmentEdit ? this->AssignmentEdit->toPlainText() : QString();
   const QString optText = this->InletOptEdit ? this->InletOptEdit->toPlainText() : QString();
-  if (!writeTextFile(assignPath, assignText, &error) || !writeTextFile(optPath, optText, &error))
+  if (!writeTextFile(bcPath, assignText, &error) || !writeTextFile(optPath, optText, &error))
   {
     QMessageBox::critical(this, tr("Export"), error);
     return;
   }
 
   QMessageBox::information(this, tr("Export"),
-    tr("Wrote:\n%1\n%2\n%3").arg(exoFile, assignPath, optPath));
+    tr("Wrote:\n%1\n%2\n%3").arg(exoFile, optPath, bcPath));
 }

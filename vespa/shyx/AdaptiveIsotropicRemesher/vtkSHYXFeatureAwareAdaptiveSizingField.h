@@ -14,16 +14,10 @@
 #include <boost/property_map/property_map.hpp>
 
 #include <algorithm>
-#include <atomic>
-#include <chrono>
-#include <cstdio>
-#include <cstdlib>
-#include <ctime>
 #include <functional>
 #include <limits>
 #include <optional>
 #include <queue>
-#include <string>
 #include <utility>
 #include <vector>
 
@@ -32,96 +26,6 @@
 namespace vespa_shyx_air_remesh_internals
 {
 namespace pmp_sf = CGAL::Polygon_mesh_processing;
-
-/** %TEMP%/vespa_shyx_sizing_profile.log. Set VESPA_SIZING_PROFILE_VERBOSE=1 for Dijkstra detail. */
-inline bool sizingProfileVerbose()
-{
-  const char* e = std::getenv("VESPA_SIZING_PROFILE_VERBOSE");
-  return e && e[0] == '1';
-}
-
-inline unsigned& sizingProfileTlsRunId()
-{
-  thread_local unsigned id = 0;
-  return id;
-}
-
-inline const char*& sizingProfileTlsKind()
-{
-  thread_local const char* kind = "";
-  return kind;
-}
-
-struct SizingProfileRunGuard
-{
-  explicit SizingProfileRunGuard(bool wallRemesh)
-  {
-    static std::atomic<unsigned> counter{0};
-    id_ = ++counter;
-    kind_ = wallRemesh ? "WALL" : "PREVIEW";
-    sizingProfileTlsRunId() = id_;
-    sizingProfileTlsKind() = kind_;
-  }
-  ~SizingProfileRunGuard()
-  {
-    sizingProfileTlsRunId() = 0;
-    sizingProfileTlsKind() = "";
-  }
-  unsigned id() const { return id_; }
-  const char* kind() const { return kind_; }
-
-private:
-  unsigned id_ = 0;
-  const char* kind_ = "";
-};
-
-inline void sizingProfileLog(const char* msg)
-{
-  const char* tmp = std::getenv("TEMP");
-  if (!tmp || !tmp[0])
-  {
-    tmp = std::getenv("TMP");
-  }
-  if (!tmp || !tmp[0])
-  {
-    tmp = std::getenv("TMPDIR");
-  }
-  if (!tmp || !tmp[0])
-  {
-    tmp = ".";
-  }
-  const std::string path = std::string(tmp) + "/vespa_shyx_sizing_profile.log";
-  if (FILE* f = std::fopen(path.c_str(), "a"))
-  {
-    const auto now = std::chrono::system_clock::now();
-    const std::time_t t = std::chrono::system_clock::to_time_t(now);
-    std::tm tm{};
-#if defined(_WIN32)
-    localtime_s(&tm, &t);
-#else
-    localtime_r(&t, &tm);
-#endif
-    char ts[32];
-    std::snprintf(ts, sizeof(ts), "%02d:%02d:%02d", tm.tm_hour, tm.tm_min, tm.tm_sec);
-    const unsigned run = sizingProfileTlsRunId();
-    const char* kind = sizingProfileTlsKind();
-    if (run != 0 && kind && kind[0])
-    {
-      std::fprintf(f, "%s #%u %-7s | %s\n", ts, run, kind, msg ? msg : "(null)");
-    }
-    else
-    {
-      std::fprintf(f, "%s         | %s\n", ts, msg ? msg : "(null)");
-    }
-    std::fflush(f);
-    std::fclose(f);
-  }
-}
-
-inline double msSince(std::chrono::steady_clock::time_point t0)
-{
-  return std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
-}
 
 /**
  * Curvature-driven sizing field with a single per-vertex target-length map
@@ -221,12 +125,6 @@ public:
    */
   void recompute_curvature(CGAL_Surface& mesh)
   {
-    if (sizingProfileTlsRunId() != 0 || sizingProfileVerbose())
-    {
-      sizingProfileLog("RECOMPUTE curvature begin (plain compute_vertex_normals + ICC; "
-                       "NOT full PrepareIccVertexNormals)");
-    }
-    const auto tAll = std::chrono::steady_clock::now();
     const auto vn_opt =
       mesh.property_map<vertex_descriptor, CGAL_Kernel::Vector_3>("v:vespa_icc_normal");
     if (vn_opt.has_value())
@@ -234,12 +132,6 @@ public:
       pmp_sf::compute_vertex_normals(mesh, *vn_opt);
     }
     compute_sizes_(mesh, mesh);
-    if (sizingProfileTlsRunId() != 0 || sizingProfileVerbose())
-    {
-      char buf[96];
-      std::snprintf(buf, sizeof(buf), "RECOMPUTE curvature end: %.1f ms", msSince(tAll));
-      sizingProfileLog(buf);
-    }
   }
 
   /**
@@ -313,17 +205,9 @@ private:
     using Kernel    = typename CGAL::Kernel_traits<Point_3>::Kernel;
     using Principal = vespa_shyx::Custom_principal_curvatures_and_directions<Kernel>;
     using CTag      = CGAL::dynamic_vertex_property_t<Principal>;
-
-    const auto tAll = std::chrono::steady_clock::now();
-    const std::size_t nv = static_cast<std::size_t>(mesh.number_of_vertices());
-    const std::size_t ne = static_cast<std::size_t>(mesh.number_of_edges());
-    const std::size_t nf = static_cast<std::size_t>(mesh.number_of_faces());
-
-    auto curv_map = get(CTag(), fg);
+    auto curv_map   = get(CTag(), fg);
     const auto vn_opt =
       mesh.property_map<vertex_descriptor, CGAL_Kernel::Vector_3>("v:vespa_icc_normal");
-
-    const auto tIcc = std::chrono::steady_clock::now();
     if (vn_opt.has_value())
     {
       vespa_shyx::custom_interpolated_corrected_curvatures(fg,
@@ -336,15 +220,13 @@ private:
       vespa_shyx::custom_interpolated_corrected_curvatures(
         fg, pmp_sf::parameters::vertex_principal_curvatures_and_directions_map(curv_map), &mesh);
     }
-    const double iccMs = msSince(tIcc);
 
     if (uncapped_sizes_out_)
     {
       const FT nan = std::numeric_limits<FT>::quiet_NaN();
-      uncapped_sizes_out_->assign(nv, nan);
+      uncapped_sizes_out_->assign(static_cast<std::size_t>(mesh.number_of_vertices()), nan);
     }
 
-    const auto tFill = std::chrono::steady_clock::now();
     for (auto v : vertices(fg))
     {
       const Principal vc = get(curv_map, v);
@@ -359,74 +241,8 @@ private:
       }
       put(map_g_, v, vertex_size_(tol_g_, short_g_, long_g_, max_abs));
     }
-    const double fillMs = msSince(tFill);
-
-    const auto tGrad = std::chrono::steady_clock::now();
     gradient_limit_vertex_sizes_(mesh);
-    const double gradMs = msSince(tGrad);
-
-    const auto tScale = std::chrono::steady_clock::now();
     scale_to_range_map_(mesh);
-    const double scaleMs = msSince(tScale);
-
-    // Compact sizing summary (always); edge too-long/short predicts remesh split/collapse load.
-    double sMin = std::numeric_limits<double>::infinity();
-    double sMax = 0.0;
-    std::size_t nAtMin = 0;
-    std::size_t nAtMax = 0;
-    std::size_t nPos = 0;
-    for (vertex_descriptor v : vertices(mesh))
-    {
-      const double s = static_cast<double>(get(map_g_, v));
-      if (!(s > 0.0))
-      {
-        continue;
-      }
-      ++nPos;
-      sMin = (std::min)(sMin, s);
-      sMax = (std::max)(sMax, s);
-      if (s <= static_cast<double>(short_g_) * 1.0000001)
-      {
-        ++nAtMin;
-      }
-      if (s >= static_cast<double>(long_g_) * 0.9999999)
-      {
-        ++nAtMax;
-      }
-    }
-    std::size_t nTooLong = 0;
-    std::size_t nTooShort = 0;
-    for (CGAL_Surface::Edge_index e : mesh.edges())
-    {
-      const halfedge_descriptor h = mesh.halfedge(e);
-      if (is_too_long(mesh.source(h), mesh.target(h), mesh))
-      {
-        ++nTooLong;
-      }
-      if (is_too_short(h, mesh))
-      {
-        ++nTooShort;
-      }
-    }
-
-    {
-      char buf[384];
-      std::snprintf(buf, sizeof(buf),
-        "SIZING done %.1fms (icc=%.1f fill=%.1f expand=%.1f scale=%.1f) nv=%zu ne=%zu nf=%zu "
-        "R=%g min=%g max=%g | size[%.6g..%.6g] atMin=%zu(%.1f%%) atMax=%zu | "
-        "edges tooLong=%zu(%.1f%%) tooShort=%zu(%.1f%%)",
-        msSince(tAll), iccMs, fillMs, gradMs, scaleMs, nv, ne, nf,
-        static_cast<double>(neighbor_max_ratio_), static_cast<double>(short_g_),
-        static_cast<double>(long_g_),
-        nPos ? sMin : 0.0, nPos ? sMax : 0.0, nAtMin,
-        nPos ? (100.0 * static_cast<double>(nAtMin) / static_cast<double>(nPos)) : 0.0, nAtMax,
-        nTooLong, ne ? (100.0 * static_cast<double>(nTooLong) / static_cast<double>(ne)) : 0.0,
-        nTooShort, ne ? (100.0 * static_cast<double>(nTooShort) / static_cast<double>(ne)) : 0.0);
-      if (sizingProfileTlsRunId() != 0 || sizingProfileVerbose())
-      {
-        sizingProfileLog(buf);
-      }
-    }
   }
 
   /** Unclamped ICC edge length; NaN when curvature is non-positive or the radicand is non-positive. */
@@ -493,34 +309,24 @@ private:
     using Node = std::pair<FT, vertex_descriptor>;
     std::priority_queue<Node, std::vector<Node>, std::greater<Node>> pq;
 
-    const auto t0 = std::chrono::steady_clock::now();
-    std::size_t nSeed = 0;
     for (vertex_descriptor v : vertices(mesh))
     {
       const FT s = get(map_g_, v);
       if (s > FT(0))
       {
         pq.push(Node(s, v));
-        ++nSeed;
       }
     }
 
-    std::size_t nPop = 0;
-    std::size_t nStale = 0;
-    std::size_t nRelax = 0;
-    std::size_t maxHeap = pq.size();
-
     while (!pq.empty())
     {
-      maxHeap = (std::max)(maxHeap, pq.size());
       const Node top = pq.top();
       pq.pop();
-      ++nPop;
       const FT su = top.first;
       const vertex_descriptor u = top.second;
+      // Stale heap entry after a better (smaller) value was written.
       if (su > get(map_g_, u))
       {
-        ++nStale;
         continue;
       }
       for (halfedge_descriptor h : CGAL::halfedges_around_target(u, mesh))
@@ -536,18 +342,8 @@ private:
         {
           put(map_g_, v, cand);
           pq.push(Node(cand, v));
-          ++nRelax;
         }
       }
-    }
-
-    if (sizingProfileVerbose())
-    {
-      char buf[256];
-      std::snprintf(buf, sizeof(buf),
-        "  expand(Dijkstra) %.1fms seeds=%zu pops=%zu stale=%zu relax=%zu maxHeap=%zu",
-        msSince(t0), nSeed, nPop, nStale, nRelax, maxHeap);
-      sizingProfileLog(buf);
     }
   }
 
@@ -558,8 +354,6 @@ private:
    */
   void gradient_limit_vertex_sizes_gauss_seidel_(CGAL_Surface& mesh, FT R)
   {
-    const auto t0 = std::chrono::steady_clock::now();
-    int sweepsRun = 0;
     for (int sweep = 0; sweep < gradient_limit_sweeps_; ++sweep)
     {
       bool changed = false;
@@ -570,18 +364,10 @@ private:
         const vertex_descriptor vb = mesh.target(h);
         changed |= limit_two_vertex_targets_(map_g_, va, vb, R);
       }
-      ++sweepsRun;
       if (!changed)
       {
         break;
       }
-    }
-    if (sizingProfileVerbose())
-    {
-      char buf[128];
-      std::snprintf(buf, sizeof(buf), "  expand(GaussSeidel) %.1fms sweeps=%d", msSince(t0),
-        sweepsRun);
-      sizingProfileLog(buf);
     }
   }
 

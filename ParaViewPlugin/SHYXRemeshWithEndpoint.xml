@@ -111,13 +111,13 @@
                             label="Max edge length"
                             number_of_elements="1"
                             default_values="0">
-        <BoundsDomain mode="scaled_extent" name="bounds_max" scale_factor="0.05">
+        <BoundsDomain mode="scaled_extent" name="bounds_max" scale_factor="0.1">
           <RequiredProperties>
             <Property function="Input" name="Input"/>
           </RequiredProperties>
         </BoundsDomain>
         <Documentation>
-          Maximum edge length; must be &gt; Min edge length. BoundsDomain suggests 5% of bbox longest edge.
+          Maximum edge length; must be &gt; Min edge length. BoundsDomain suggests 10% of bbox longest edge.
         </Documentation>
       </DoubleVectorProperty>
 
@@ -136,7 +136,7 @@
                             name="AdaptiveSizingNeighborMaxRatio"
                             label="Expansion ratio"
                             number_of_elements="1"
-                            default_values="1.5">
+                            default_values="1.6">
         <DoubleRangeDomain name="range" min="0" max="1e6"/>
         <Documentation>
           **Expansion ratio** R caps ICC sizing jumps along edges; **鈮?1** disables. Set **0** to disable (same semantics as SHYX Adaptive Isotropic Remesher).
@@ -311,10 +311,31 @@
         </Hints>
       </IntVectorProperty>
 
+      <IntVectorProperty command="SetRemeshDoProject"
+                         name="RemeshDoProject"
+                         label="Project to surface"
+                         number_of_elements="1"
+                         default_values="1"
+                         animateable="0"
+                         panel_visibility="advanced">
+        <BooleanDomain name="bool"/>
+        <Documentation>
+          CGAL `do_project` (default ON). When ON, remeshed vertices are reprojected onto the input
+          surface after creation/displacement. Turn OFF to skip projection (wall and cap remesh).
+        </Documentation>
+        <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="enabled_state"
+                                   property="EnableWallRemesh"
+                                   value="1"/>
+        </Hints>
+      </IntVectorProperty>
+
       <PropertyGroup label="Remesh constraints (CGAL)">
         <Property name="RemeshProtectConstraints"/>
         <Property name="RemeshCollapseConstraints"/>
         <Property name="RemeshRelaxConstraints"/>
+        <Property name="RemeshDoProject"/>
       </PropertyGroup>
 
       <!-- ============================================================ -->
@@ -344,7 +365,7 @@
                             name="CapExpansionRatio"
                             label="Cap expansion ratio"
                             number_of_elements="1"
-                            default_values="1.5">
+                            default_values="1.6">
         <DoubleRangeDomain name="range" min="1.0"/>
         <Documentation>
           Size multiplier per BFS hop from the seam into the cap interior.

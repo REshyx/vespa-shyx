@@ -227,14 +227,14 @@
                             label="Max edge length"
                             number_of_elements="1"
                             default_values="0">
-        <BoundsDomain mode="scaled_extent" name="bounds_max" scale_factor="0.05">
+        <BoundsDomain mode="scaled_extent" name="bounds_max" scale_factor="0.1">
           <RequiredProperties>
             <Property function="Input" name="Input"/>
           </RequiredProperties>
         </BoundsDomain>
         <Documentation>
           Maximum edge length; must be &gt; Min edge length. ParaView BoundsDomain
-          (scaled_extent 0.05) suggests 5% of the input axis-aligned bounding box longest side;
+          (scaled_extent 0.1) suggests 10% of the input axis-aligned bounding box longest side;
           use Scale/Reset next to the property.
         </Documentation>
       </DoubleVectorProperty>
@@ -255,11 +255,11 @@
                             name="AdaptiveSizingNeighborMaxRatio"
                             label="Expansion ratio"
                             number_of_elements="1"
-                            default_values="1.5">
+                            default_values="1.6">
         <DoubleRangeDomain name="range" min="0" max="1e6"/>
         <Documentation>
           **Expansion ratio** R caps spatial jumps of the Vespa ICC sizing maps: **≤ 1** disables (raw per-vertex ICC targets).
-          Default **1.5** relaxes `v:vespa_size_global` and `v:vespa_size_feature` so along any mesh edge the
+          Default **1.6** relaxes `v:vespa_size_global` and `v:vespa_size_feature` so along any mesh edge the
           larger vertex target does not exceed R times the smaller (e.g. 1.3–2 to tame abrupt coarsening
           next to fine regions). Set **0** to disable.
         </Documentation>
@@ -609,10 +609,24 @@
         <Documentation>CGAL `isotropic_remeshing::do_flip`.</Documentation>
       </IntVectorProperty>
 
+      <IntVectorProperty command="SetRemeshDoProject"
+                         name="RemeshDoProject"
+                         label="Project to surface"
+                         number_of_elements="1"
+                         default_values="1"
+                         panel_visibility="advanced">
+        <BooleanDomain name="bool"/>
+        <Documentation>
+          CGAL `do_project` (default ON). When ON, vertices are reprojected onto the input surface
+          after creation or displacement. Turn OFF to skip projection.
+        </Documentation>
+      </IntVectorProperty>
+
       <PropertyGroup label="Remesh operations (CGAL)" panel_visibility="advanced">
         <Property name="RemeshDoSplit"/>
         <Property name="RemeshDoCollapse"/>
         <Property name="RemeshDoFlip"/>
+        <Property name="RemeshDoProject"/>
       </PropertyGroup>
 
       <!-- =================================================================

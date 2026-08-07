@@ -24,7 +24,7 @@
 | 参数名称 | 类型 | 默认值 | 效果和含义 |
 | :--- | :--- | :--- | :--- |
 | **`MinEdgeLength`** | `double` | `0`（自动） | **最小边长限制**。`<= 0` 时自动为轴对齐包围盒**最长边**的 **0.1%**（与 ParaView `BoundsDomain` scaled_extent 一致）。XML 上挂了该 Domain，属性旁有官方缩放/重置。 |
-| **`MaxEdgeLength`** | `double` | `0`（自动） | **最大边长限制**。`<= 0` 时自动为同一**最长边**的 **5%**。界面为宽范围数值框，便于设更大的粗网格上限。 |
+| **`MaxEdgeLength`** | `double` | `0`（自动） | **最大边长限制**。`<= 0` 时自动为同一**最长边**的 **10%**。界面为宽范围数值框，便于设更大的粗网格上限。 |
 | **`AdaptiveTolerance`** | `double` | `0.001` | **自适应容差**。控制网格精细度的核心参数，定义了离散曲率的误差容限。该值必须严格大于 0。**值越小，系统对曲率变化越敏感**，会在规定的边长范围内生成更密集的网格来拟合曲率。 |
 | **`ProtectAngle`** | `double` | `45.0` | **特征边保护角度阈值（度）**。当两个相邻面的法线夹角大于此阈值时，交接边将被判定为特征边。这些边在重网格化过程中会受到保护，确保模型几何特征不丢失。 |
 | **`NumberOfIterations`** | `int` | `3` | **迭代次数**。CGAL 执行各向同性重网格化的循环次数。次数越多，网格质量通常越高，三角形越接近等边三角形，但计算耗时也会增加。该值必须 `>= 1`。 |
@@ -44,7 +44,7 @@
 
 ### 排查结论（非 Expansion ratio / 非 sizing 过狠）
 
-Profiling（`%TEMP%/vespa_shyx_sizing_profile.log`）表明：
+Profiling（当时写入 `%TEMP%/vespa_shyx_sizing_profile.log`，现已移除）表明：
 
 1. Expansion / Dijkstra、ICC、recompute 本身都在百毫秒级，不是瓶颈。
 2. 卡住点是 **第 2 次** `PMP::isotropic_remeshing` 内部。
@@ -65,9 +65,8 @@ Profiling（`%TEMP%/vespa_shyx_sizing_profile.log`）表明：
 
 ### 代码约定
 
-- `vtkSHYXRemeshWithEndpoint`：每轮 remesh 前/后、recompute 前，若 `has_garbage()` 则 `collect_garbage()`。
+- `vtkSHYXRemeshWithEndpoint`：wall 与 **cap** 多轮 remesh 前/后、recompute 前，若 `has_garbage()` 则 `collect_garbage()`。
 - `vtkSHYXAdaptiveIsotropicRemesher`：同样在多轮 remesh 路径上清理 garbage（同一类 bug）。
-- 调参/诊断 profile：见源码中 `sizingProfileLog`（环境变量 `VESPA_SIZING_PROFILE_VERBOSE=1` 可打开 Dijkstra 细节）。
 
 ### 相关 CGAL 参考（背景，非本案根因）
 

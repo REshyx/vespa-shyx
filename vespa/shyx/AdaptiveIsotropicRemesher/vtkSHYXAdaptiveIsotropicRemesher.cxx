@@ -147,6 +147,7 @@ void vtkSHYXAdaptiveIsotropicRemesher::PrintSelf(ostream& os, vtkIndent indent)
   os << indent << "RemeshDoSplit: " << (this->RemeshDoSplit ? "on" : "off") << std::endl;
   os << indent << "RemeshDoCollapse: " << (this->RemeshDoCollapse ? "on" : "off") << std::endl;
   os << indent << "RemeshDoFlip: " << (this->RemeshDoFlip ? "on" : "off") << std::endl;
+  os << indent << "RemeshDoProject: " << (this->RemeshDoProject ? "on" : "off") << std::endl;
   os << indent << "DetectFeatureEdges: " << (this->DetectFeatureEdges ? "on" : "off") << std::endl;
   os << indent << "FeatureMaskEnabled: " << (this->FeatureMaskEnabled ? "on" : "off") << std::endl;
   os << indent << "FeatureMaskArrayName: "
@@ -397,6 +398,7 @@ int vtkSHYXAdaptiveIsotropicRemesher::RequestData(
         .do_split(this->RemeshDoSplit)
         .do_collapse(this->RemeshDoCollapse)
         .do_flip(this->RemeshDoFlip)
+        .do_project(this->RemeshDoProject)
         .edge_is_constrained_map(featureEdges);
     };
 

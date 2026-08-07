@@ -412,7 +412,7 @@ bool pqSHYXRemeshUncappedHistogramPanel::computePreviewFromInput()
   const bool scaleToRange =
     readIntUnchecked(filterProxy->GetProperty("ScaleToRange"), 0) != 0;
   const double neighborRatio =
-    readDoubleUnchecked(filterProxy->GetProperty("AdaptiveSizingNeighborMaxRatio"), 1.5);
+    readDoubleUnchecked(filterProxy->GetProperty("AdaptiveSizingNeighborMaxRatio"), 1.6);
 
   double b[6];
   inputPd->GetBounds(b);
@@ -424,7 +424,7 @@ bool pqSHYXRemeshUncappedHistogramPanel::computePreviewFromInput()
   if (L > 0.0)
   {
     fallbackMin = 0.001 * L;
-    fallbackMax = 0.05 * L;
+    fallbackMax = 0.1 * L;
     if (!(fallbackMax > fallbackMin))
     {
       fallbackMax = fallbackMin * 10.0;

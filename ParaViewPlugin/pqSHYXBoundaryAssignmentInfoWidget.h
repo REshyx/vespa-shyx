@@ -4,7 +4,9 @@
 #include "pqPropertyWidget.h"
 
 #include <QPointer>
+#include <QString>
 
+class QLineEdit;
 class QTextEdit;
 class pqPipelineSource;
 class vtkSMPropertyGroup;
@@ -31,15 +33,24 @@ private Q_SLOTS:
   void refreshTexts();
   void onExportClicked();
   void configureDebugPointLabels();
+  void syncExportNameDefaults();
 
 private:
   void setTextFromProperty(QTextEdit* edit, vtkSMStringVectorProperty* prop);
+  QString currentModeTag() const;
+  static QString defaultExoName(const QString& tag);
+  static QString defaultOptName(const QString& tag);
+  static QString defaultBcName(const QString& tag);
 
   QPointer<pqPipelineSource> PipelineSource;
   QTextEdit* AssignmentEdit = nullptr;
   QTextEdit* InletOptEdit = nullptr;
+  QLineEdit* ExoNameEdit = nullptr;
+  QLineEdit* OptNameEdit = nullptr;
+  QLineEdit* BcNameEdit = nullptr;
   vtkSMStringVectorProperty* AssignmentProp = nullptr;
   vtkSMStringVectorProperty* InletOptProp = nullptr;
+  QString LastAutoTag;
 };
 
 #endif

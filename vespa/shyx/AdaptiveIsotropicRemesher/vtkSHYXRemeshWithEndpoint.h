@@ -8,10 +8,15 @@
  * the negative side only; optionally only the **largest** triangle-connected patch is kept.
  * CGAL remeshes that surface in full (no patch-on-full-mesh bookkeeping), unless wall remesh is
  * disabled to export the ICC sizing field on vertices only.
- * Output is **only** the remeshed extracted patch (not the full vessel with caps). Same ICC sizing
+ * Output port 0 is the remeshed extracted patch (not the full vessel with caps). Same ICC sizing
  * stack as vtkSHYXAdaptiveIsotropicRemesher, without selection, feature detection, or mask logic.
  * CGAL split/collapse/flip follow CGAL defaults (all enabled); only protect/collapse/relax
  * constraint flags are exposed besides sizing and iteration controls.
+ *
+ * After remesh (or sizing-only when wall remesh is off), port 0 point data includes sizing vs
+ * realized edge length diagnostics: **VespaSizeGlobal** (target), **VespaMeanEdgeLength** /
+ * **VespaMinEdgeLength**, and absolute deltas (**VespaEdgeLengthDelta**, **VespaMinEdgeLengthDelta**,
+ * relative **VespaEdgeLengthRelDelta**). Cap interior vertices use \c v:vespa_cap_size when present.
  *
  * Multi-iteration note: wall remesh runs one CGAL \c isotropic_remeshing pass per iteration and may
  * call \c recompute_curvature between passes. After each remesh, CGAL \c Surface_mesh often retains
@@ -94,8 +99,8 @@ public:
     /**
      * When ON (default), run CGAL isotropic remesh on the extracted wall patch; optional cap remesh
      * follows when EnableCapRemesh is ON. When OFF, skip wall remesh and all cap/hole-fill stages;
-     * the ICC sizing field is still computed and written to output point data as **VespaSizeGlobal**
-     * (same as CGAL `v:vespa_size_global`) on the unchanged extracted geometry for inspection.
+     * the ICC sizing field is still computed and written with length-mismatch diagnostics
+     * (**VespaSizeGlobal**, **VespaEdgeLengthDelta**, …) on the output point data.
      */
     vtkGetMacro(EnableWallRemesh, bool);
     vtkSetMacro(EnableWallRemesh, bool);
@@ -114,6 +119,16 @@ public:
 
     //@{
     /**
+     * CGAL \c do_project for wall (and cap) isotropic remesh. When ON (default), vertices are
+     * reprojected onto the input surface after creation/displacement. Turn OFF to skip projection.
+     */
+    vtkGetMacro(RemeshDoProject, bool);
+    vtkSetMacro(RemeshDoProject, bool);
+    vtkBooleanMacro(RemeshDoProject, bool);
+    //@}
+
+    //@{
+    /**
      * When ON (default), after wall remesh the open boundary loops are filled with
      * triangulate_refine_and_fair_hole (FairingContinuity = 0, C0), then the filled
      * cap patch is isotropic-remeshed with a uniform target edge length.
@@ -124,9 +139,12 @@ public:
     //@}
 
     /**
-     * Expansion ratio per BFS hop from the seam for cap remesh sizing. At the seam the target
-     * size equals the adjacent wall edge length; each hop into the cap multiplies by this factor.
-     * Values > 1 produce a coarser mesh towards the cap centre; 1.0 gives uniform sizing.
+     * Expansion ratio per BFS hop from the seam for **cap** remesh sizing (not wall ICC
+     * Expansion ratio). At seam vertices the target equals the average adjacent wall edge length;
+     * each hop into the cap multiplies by this factor. **1.0** → uniform density like the wall;
+     * **> 1** → progressively coarser toward the cap centre. No curvature field.
+     *
+     * Cap multi-iteration remesh also \c collect_garbage()'s between passes (same hang risk as wall).
      */
     vtkGetMacro(CapExpansionRatio, double);
     vtkSetClampMacro(CapExpansionRatio, double, 1.0, 1.0e6);
@@ -184,7 +202,7 @@ protected:
     double MinEdgeLength = 0.0;
     double MaxEdgeLength = 0.0;
     double AdaptiveTolerance = 0.01;
-    double AdaptiveSizingNeighborMaxRatio = 1.5;
+    double AdaptiveSizingNeighborMaxRatio = 1.6;
     bool ScaleToRange = false;
     bool RemeshRecomputeCurvatureEachIteration = true;
     int NumberOfIterations = 3;
@@ -194,9 +212,10 @@ protected:
     bool RemeshProtectConstraints = false;
     bool RemeshCollapseConstraints = true;
     bool RemeshRelaxConstraints = false;
+    bool RemeshDoProject = true;
 
     bool EnableCapRemesh = true;
-    double CapExpansionRatio = 1.5;
+    double CapExpansionRatio = 1.6;
     int CapNumberOfIterations = 3;
     int CapNumberOfRelaxationSteps = 3;
     bool CapRemeshProtectConstraints = true;

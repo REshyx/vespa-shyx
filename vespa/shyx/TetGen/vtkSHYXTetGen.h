@@ -137,13 +137,14 @@ public:
      * When ON (and Probe input point data is ON), binarize the chosen input array in place
      * (values <= 0 -> 0, > 0 -> 1). Cell-centered arrays are converted to point data via
      * vtkCellDataToPointData before probing. Array slot 0 (ParaView picker). Default ON.
+     * Default array: cell-centered \c EndpointIndex.
      */
     vtkGetMacro(MaskArrayEnabled, bool);
     vtkSetMacro(MaskArrayEnabled, bool);
     vtkBooleanMacro(MaskArrayEnabled, bool);
     ///@}
 
-    /** Mask array name (input-array slot 0). Empty when unset. */
+    /** Mask array name (input-array slot 0). Default \c EndpointIndex on cell data. */
     const char* GetMaskArrayName();
 
 protected:

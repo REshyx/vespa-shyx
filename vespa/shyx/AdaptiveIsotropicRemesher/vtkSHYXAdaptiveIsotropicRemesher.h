@@ -116,7 +116,7 @@ public:
   //@{
   /**
    * Maximum allowed edge length after remeshing. Must be greater than MinEdgeLength.
-   * ParaView exposes BoundsDomain (scaled_extent 0.05) on this property for suggested values.
+   * ParaView exposes BoundsDomain (scaled_extent 0.1) on this property for suggested values.
    */
   vtkGetMacro(MaxEdgeLength, double);
   vtkSetMacro(MaxEdgeLength, double);
@@ -139,7 +139,7 @@ public:
    * when **> 1**, relax both `v:vespa_size_global` and `v:vespa_size_feature` so across any mesh edge
    * the ratio of larger to smaller endpoint target does not exceed this value (iterative symmetric
    * lowering of the larger target only). Typical values ~1.2–2 soften abrupt coarsening next to refined
-   * regions. **<= 1** disables — behavior matches the raw ICC sizing field only. Default **1.5**;
+   * regions. **<= 1** disables — behavior matches the raw ICC sizing field only. Default **1.6**;
    * set **0** to disable.
    */
   vtkGetMacro(AdaptiveSizingNeighborMaxRatio, double);
@@ -266,6 +266,16 @@ public:
 
   //@{
   /**
+   * CGAL do_project for isotropic_remeshing. When ON (default), vertices are reprojected onto the
+   * input surface after creation or displacement. Turn OFF to skip that step.
+   */
+  vtkGetMacro(RemeshDoProject, bool);
+  vtkSetMacro(RemeshDoProject, bool);
+  vtkBooleanMacro(RemeshDoProject, bool);
+  //@}
+
+  //@{
+  /**
    * Master switch for sharp-edge / feature-mask constraints.
    * When true (default), CGAL detect_sharp_edges (with ProtectAngle / SharpFeatureSideFilter)
    * and feature-mask region/boundary contributions are added to edge_is_constrained_map for
@@ -328,7 +338,7 @@ protected:
   double MinEdgeLength       = 0.0;
   double MaxEdgeLength       = 0.0;
   double AdaptiveTolerance   = 0.01;
-  double AdaptiveSizingNeighborMaxRatio = 1.5;
+  double AdaptiveSizingNeighborMaxRatio = 1.6;
   bool   ScaleToRange                          = false;
   bool   RemeshRecomputeCurvatureEachIteration = true;
   double ProtectAngle        = 70.0;
@@ -341,6 +351,7 @@ protected:
   bool   RemeshDoSplit              = true;
   bool   RemeshDoCollapse           = true;
   bool   RemeshDoFlip               = true;
+  bool   RemeshDoProject            = true;
 
   bool   DetectFeatureEdges    = true;
   bool   FeatureMaskEnabled    = false;

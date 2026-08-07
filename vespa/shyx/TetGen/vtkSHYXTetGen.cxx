@@ -29,7 +29,9 @@ vtkSHYXTetGen::vtkSHYXTetGen()
 {
     this->SetNumberOfInputPorts(1);
     this->SetNumberOfOutputPorts(1);
-    this->SetInputArrayToProcess(0, 0, 0, vtkDataObject::FIELD_ASSOCIATION_NONE, nullptr);
+    // Prefer cell-centered EndpointIndex (e.g. vtkCGALVesselEndClipper) as the mask array.
+    this->SetInputArrayToProcess(
+        0, 0, 0, vtkDataObject::FIELD_ASSOCIATION_CELLS, "EndpointIndex");
 }
 
 //------------------------------------------------------------------------------

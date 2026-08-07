@@ -21,7 +21,12 @@
 
 其中 `-inlet_*` / `-num_outlet` 由本 filter 填入；其余路径等保持模板默认，可导出后手工改。
 
-面板按钮 **Export port 0 (.exo) + assignment/options (.txt)**：写 Exodus、`_boundary_assignment.txt`、`_options.txt`。
+面板可改三个导出文件名（随 Flow Boundary Mode 默认 PV/HV）：
+- **Exodus**：`PV_0.exo` / `HV_0.exo`
+- **Options (.opt)**：`options_PV_0.opt` / `options_HV_0.opt`（完整 options 文本）
+- **Boundary assignment (.bc)**：`options_PV_0.bc` / `options_HV_0.bc`
+
+按钮 **Export port 0 (.exo) + options (.opt) + assignment (.bc)**：选目录后按上述名称写出三份文件。
 
 ## 典型管线
 
