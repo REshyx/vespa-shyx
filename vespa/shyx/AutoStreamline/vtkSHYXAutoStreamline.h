@@ -8,7 +8,7 @@
  *   3. Absolute distance of vortex-core points to that surface
  *      (vtkImplicitPolyDataDistance)
  *   4. Cull points with |SDF| < MinSurfaceDistance
- *   5. vtkMaskPoints: MaximumNumberOfPoints + Uniform Spatial (Bounds Based)
+ *   5. vtkMaskPoints: MaximumNumberOfPoints + selectable RandomModeType
  *   6. vtkStreamTracer with the remaining points as seeds
  *
  * Input port 0: volume flow field (vtkDataSet) with a 3-component vector array.
@@ -57,9 +57,19 @@ public:
   ///@}
 
   ///@{
-  /** Forwarded to vtkMaskPoints (Uniform Spatial Bounds sampling). */
+  /**
+   * Forwarded to vtkMaskPoints.
+   * RandomModeType matches vtkMaskPoints::DistributionType:
+   * 0 RANDOMIZED_ID_STRIDES, 1 RANDOM_SAMPLING, 2 SPATIALLY_STRATIFIED,
+   * 3 UNIFORM_SPATIAL_BOUNDS, 4 UNIFORM_SPATIAL_SURFACE, 5 UNIFORM_SPATIAL_VOLUME.
+   * Default 3 (UNIFORM_SPATIAL_BOUNDS). Modes 4/5 need surface/volume cells and
+   * are generally unsuitable for vortex-core point clouds.
+   */
   vtkSetClampMacro(MaximumNumberOfPoints, vtkIdType, 0, VTK_ID_MAX);
   vtkGetMacro(MaximumNumberOfPoints, vtkIdType);
+
+  vtkSetClampMacro(RandomModeType, int, 0, 5);
+  vtkGetMacro(RandomModeType, int);
 
   vtkSetMacro(RandomSeed, int);
   vtkGetMacro(RandomSeed, int);
@@ -106,6 +116,7 @@ protected:
   double MinSurfaceDistance = 0.0;
 
   vtkIdType MaximumNumberOfPoints = 1000;
+  int RandomModeType = 3; // UNIFORM_SPATIAL_BOUNDS
   int RandomSeed = 1;
 
   int IntegrationDirection = 2; // BOTH

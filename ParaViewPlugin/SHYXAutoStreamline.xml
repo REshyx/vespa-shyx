@@ -4,12 +4,12 @@
                  class="vtkSHYXAutoStreamline"
                  label="SHYX Auto Streamline">
       <Documentation
-        long_help="Single volume input: extract outer surface, vortex cores, cull seeds too close to that surface via absolute SDF, uniformly subsample with MaskPoints (bounds-based), then integrate streamlines (pure VTK)."
+        long_help="Single volume input: extract outer surface, vortex cores, cull seeds too close to that surface via absolute SDF, subsample with MaskPoints (selectable random mode), then integrate streamlines (pure VTK)."
         short_help="Volume → surface extract → vortex seeds → cull → sample → streamlines.">
         Pipeline (VTK only, one volume port): vtkDataSetSurfaceFilter → vtkVortexCore →
         absolute distance to extracted surface (vtkImplicitPolyDataDistance) →
         keep points with |SDF| ≥ MinSurfaceDistance →
-        vtkMaskPoints (MaximumNumberOfPoints, Uniform Spatial Bounds) → vtkStreamTracer.
+        vtkMaskPoints (MaximumNumberOfPoints, RandomModeType) → vtkStreamTracer.
         Output port 0: streamlines. Port 1: sampled seed points.
       </Documentation>
 
@@ -70,7 +70,7 @@
         </Documentation>
       </DoubleVectorProperty>
 
-      <!-- MaskPoints uniform spatial -->
+      <!-- MaskPoints sampling -->
       <IntVectorProperty command="SetMaximumNumberOfPoints"
                          name="MaximumNumberOfPoints"
                          label="Maximum Number of Points"
@@ -78,7 +78,29 @@
                          number_of_elements="1">
         <IntRangeDomain min="0" name="range"/>
         <Documentation>
-          Maximum seed count after Uniform Spatial Distribution (Bounds Based) MaskPoints.
+          Target / upper bound on seed count after MaskPoints. Whether this count is reached
+          depends on RandomModeType (e.g. Uniform Spatial Bounds often yields fewer points).
+        </Documentation>
+      </IntVectorProperty>
+
+      <IntVectorProperty command="SetRandomModeType"
+                         name="RandomModeType"
+                         label="Random Mode"
+                         default_values="3"
+                         number_of_elements="1">
+        <EnumerationDomain name="enum">
+          <Entry text="Randomized ID Strides" value="0"/>
+          <Entry text="Random Sampling" value="1"/>
+          <Entry text="Spatially Stratified" value="2"/>
+          <Entry text="Uniform Spatial (Bounds)" value="3"/>
+          <Entry text="Uniform Spatial (Surface)" value="4"/>
+          <Entry text="Uniform Spatial (Volume)" value="5"/>
+        </EnumerationDomain>
+        <Documentation>
+          vtkMaskPoints RandomModeType. Modes 0–2 sample from the vortex-core point set
+          (typically reach Maximum Number of Points). Mode 3 samples random locations in the
+          AABB and keeps nearby cores (often far fewer points). Modes 4–5 need surface/volume
+          cells and are usually unsuitable for vortex-core point clouds.
         </Documentation>
       </IntVectorProperty>
 
@@ -90,8 +112,8 @@
                          panel_visibility="advanced">
         <IntRangeDomain name="range"/>
         <Documentation>
-          Seed for the RNG used by MaskPoints uniform spatial (bounds) sampling.
-          Same seed → same subset of seed points (reproducible); change it to get a different subsample.
+          Seed for the RNG used by MaskPoints. Same seed → same subset of seed points
+          (reproducible); change it to get a different subsample.
         </Documentation>
       </IntVectorProperty>
 
@@ -191,6 +213,7 @@
 
       <PropertyGroup label="Seed Sampling (Mask Points)">
         <Property name="MaximumNumberOfPoints"/>
+        <Property name="RandomModeType"/>
         <Property name="RandomSeed"/>
       </PropertyGroup>
 

@@ -65,6 +65,7 @@ void vtkSHYXAutoStreamline::PrintSelf(ostream& os, vtkIndent indent)
   os << indent << "FasterApproximation: " << (this->FasterApproximation ? "On" : "Off") << "\n";
   os << indent << "MinSurfaceDistance: " << this->MinSurfaceDistance << "\n";
   os << indent << "MaximumNumberOfPoints: " << this->MaximumNumberOfPoints << "\n";
+  os << indent << "RandomModeType: " << this->RandomModeType << "\n";
   os << indent << "RandomSeed: " << this->RandomSeed << "\n";
   os << indent << "IntegrationDirection: " << this->IntegrationDirection << "\n";
   os << indent << "IntegratorType: " << this->IntegratorType << "\n";
@@ -243,7 +244,7 @@ int vtkSHYXAutoStreamline::RequestData(
   mask->SetInputData(culled);
   mask->SetMaximumNumberOfPoints(this->MaximumNumberOfPoints);
   mask->RandomModeOn();
-  mask->SetRandomModeType(vtkMaskPoints::UNIFORM_SPATIAL_BOUNDS);
+  mask->SetRandomModeType(this->RandomModeType);
   mask->SetRandomSeed(this->RandomSeed);
   mask->GenerateVerticesOn();
   mask->SetContainerAlgorithm(this);
