@@ -24,14 +24,17 @@
           command="SetFlowBoundaryMode" number_of_elements="1" default_values="0"
           animateable="0">
         <EnumerationDomain name="enum">
-          <Entry text="Single inlet (rest outlets)" value="0"/>
-          <Entry text="Single outlet (rest inlets)" value="1"/>
+          <Entry text="Single inlet (rest outlets) — PV" value="0"/>
+          <Entry text="Single outlet (rest inlets) — HV" value="1"/>
         </EnumerationDomain>
         <Documentation>
           Reorders side/node pairs by side-set area (descending) before classifying. Index 0 is
           always wall (largest). Index 1 is the single inlet (mode 0) or single outlet (mode 1);
           remaining openings take the other role. The options file fills inlet_* from classified
           inlets (always computed before any inlet merge).
+          The property panel auto-selects this from the top-level source filename when possible:
+          basename contains "plaque" → Single inlet; contains "aorta" → Single outlet
+          (re-applied only when that upstream file path changes).
         </Documentation>
       </IntVectorProperty>
 

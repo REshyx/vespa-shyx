@@ -21,10 +21,17 @@
 
 其中 `-inlet_*` / `-num_outlet` 由本 filter 填入；其余路径等保持模板默认，可导出后手工改。
 
-面板可改三个导出文件名（随 Flow Boundary Mode 默认 PV/HV）：
-- **Exodus**：`PV_0.exo` / `HV_0.exo`
-- **Options (.opt)**：`options_PV_0.opt` / `options_HV_0.opt`（完整 options 文本）
-- **Boundary assignment (.bc)**：`options_PV_0.bc` / `options_HV_0.bc`
+面板可改三个导出文件名。默认取管线最顶层 reader 的 `FileName`/`FileNames` 去扩展名后的 stem：
+- **Exodus**：`{stem}.exo`
+- **Options (.opt)**：`{stem}.opt`（完整 options 文本）
+- **Boundary assignment (.bc)**：`{stem}.bc`
+
+找不到上游文件时回退为 Flow Boundary Mode 的 `PV_0.*` / `HV_0.*`（及 `options_PV_0.*` / `options_HV_0.*`）。
+
+**Flow Boundary Mode 自动选择**（按上游文件 basename，大小写不敏感；仅在上游路径变化时重设，之后可手动改）：
+- 文件名含 `plaque` → **Single inlet**（PV）
+- 文件名含 `aorta` → **Single outlet**（HV）
+- 同时含两者或都不含 → 不改动
 
 按钮 **Export port 0 (.exo) + options (.opt) + assignment (.bc)**：选目录后按上述名称写出三份文件。
 

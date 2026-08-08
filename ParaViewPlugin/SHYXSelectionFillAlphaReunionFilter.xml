@@ -7,12 +7,13 @@
         Splits the surface into the selected and unselected regions, fills boundary holes (CGAL) on
         each part, runs Alpha Wrapping on the selected part (CGAL 5.5+), and merges the two
         closed-oriented surfaces with a CGAL PMP boolean union that tracks which faces came from
-        the Alpha-Wrapped mesh. Those faces are marked exactly (no distance heuristic). Cleanup
-        either dilates the full AW region or (checkbox) starts from the AW/original boolean seam,
-        then locally remeshes and post-smooths (smooth_shape MCF or fair with C0–C2 at the patch
-        boundary). When the unselected part is empty (entire surface selected), only the selected
-        path is output. Use Selection on port 1, or a cell data mask (SelectionCellArrayName) like
-        other SHYX selection tools.
+        the Alpha-Wrapped mesh. Accepts any vtkDataSet on Input; non-PolyData inputs are converted
+        to a surface with vtkGeometryFilter first. Those faces are marked exactly (no distance
+        heuristic). Cleanup either dilates the full AW region or (checkbox) starts from the
+        AW/original boolean seam, then locally remeshes and post-smooths (smooth_shape MCF or fair
+        with C0–C2 at the patch boundary). When the unselected part is empty (entire surface
+        selected), only the selected path is output. Use Selection on port 1, or a cell data mask
+        (SelectionCellArrayName) like other SHYX selection tools.
       </Documentation>
 
       <InputProperty name="Input" command="SetInputConnection">
@@ -21,7 +22,7 @@
           <Group name="filters"/>
         </ProxyGroupDomain>
         <DataTypeDomain name="input_type">
-          <DataType value="vtkPolyData"/>
+          <DataType value="vtkDataSet"/>
         </DataTypeDomain>
       </InputProperty>
 

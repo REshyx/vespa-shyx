@@ -173,19 +173,32 @@ QString ensureExtension(QString name, const QString& ext)
 } // namespace
 
 //-----------------------------------------------------------------------------
-QString pqSHYXBoundaryAssignmentInfoWidget::defaultExoName(const QString& tag)
+QString pqSHYXBoundaryAssignmentInfoWidget::defaultExoName(const QString& stem)
 {
-  return QStringLiteral("%1_0.exo").arg(tag);
+  // File-stem defaults: foo.exo. Legacy PV/HV fallback keeps the old *_0 suffix.
+  if (stem == QStringLiteral("PV") || stem == QStringLiteral("HV"))
+  {
+    return QStringLiteral("%1_0.exo").arg(stem);
+  }
+  return QStringLiteral("%1.exo").arg(stem);
 }
 
-QString pqSHYXBoundaryAssignmentInfoWidget::defaultOptName(const QString& tag)
+QString pqSHYXBoundaryAssignmentInfoWidget::defaultOptName(const QString& stem)
 {
-  return QStringLiteral("options_%1_0.opt").arg(tag);
+  if (stem == QStringLiteral("PV") || stem == QStringLiteral("HV"))
+  {
+    return QStringLiteral("options_%1_0.opt").arg(stem);
+  }
+  return QStringLiteral("%1.opt").arg(stem);
 }
 
-QString pqSHYXBoundaryAssignmentInfoWidget::defaultBcName(const QString& tag)
+QString pqSHYXBoundaryAssignmentInfoWidget::defaultBcName(const QString& stem)
 {
-  return QStringLiteral("options_%1_0.bc").arg(tag);
+  if (stem == QStringLiteral("PV") || stem == QStringLiteral("HV"))
+  {
+    return QStringLiteral("options_%1_0.bc").arg(stem);
+  }
+  return QStringLiteral("%1.bc").arg(stem);
 }
 
 QString pqSHYXBoundaryAssignmentInfoWidget::currentModeTag() const
@@ -198,6 +211,101 @@ QString pqSHYXBoundaryAssignmentInfoWidget::currentModeTag() const
   // 0 = Single inlet → PV; 1 = Single outlet → HV
   const int mode = vtkSMPropertyHelper(filter, "FlowBoundaryMode").GetAsInt();
   return mode == 0 ? QStringLiteral("PV") : QStringLiteral("HV");
+}
+
+vtkSMProxy* pqSHYXBoundaryAssignmentInfoWidget::topLevelProducer(vtkSMProxy* proxy)
+{
+  vtkSMProxy* cur = proxy;
+  // Bound the walk in case of unusual cycles / multi-input graphs.
+  for (int guard = 0; cur && guard < 64; ++guard)
+  {
+    vtkSMProperty* inputProp = cur->GetProperty("Input");
+    if (!inputProp)
+    {
+      break;
+    }
+    vtkSMProxy* upstream = vtkSMPropertyHelper(inputProp).GetAsProxy(0);
+    if (!upstream)
+    {
+      break;
+    }
+    cur = upstream;
+  }
+  return cur;
+}
+
+QString pqSHYXBoundaryAssignmentInfoWidget::filePathFromProxy(vtkSMProxy* proxy)
+{
+  if (!proxy)
+  {
+    return QString();
+  }
+
+  // Single-file readers (most common for Open File).
+  if (vtkSMProperty* fn = proxy->GetProperty("FileName"))
+  {
+    const char* path = vtkSMPropertyHelper(fn).GetAsString();
+    if (path && path[0] != '\0')
+    {
+      return QString::fromUtf8(path);
+    }
+  }
+
+  // Multi-file readers: use the first listed path.
+  if (vtkSMProperty* fns = proxy->GetProperty("FileNames"))
+  {
+    vtkSMPropertyHelper helper(fns);
+    if (helper.GetNumberOfElements() > 0)
+    {
+      const char* path = helper.GetAsString(0);
+      if (path && path[0] != '\0')
+      {
+        return QString::fromUtf8(path);
+      }
+    }
+  }
+
+  return QString();
+}
+
+QString pqSHYXBoundaryAssignmentInfoWidget::upstreamFilePath() const
+{
+  return filePathFromProxy(topLevelProducer(this->proxy()));
+}
+
+int pqSHYXBoundaryAssignmentInfoWidget::inferFlowModeFromFileName(const QString& filePath)
+{
+  if (filePath.isEmpty())
+  {
+    return -1;
+  }
+  // Match against the basename only (not the directory path).
+  const QString name = QFileInfo(filePath).fileName().toLower();
+  const bool aorta = name.contains(QStringLiteral("aorta"));
+  const bool plaque = name.contains(QStringLiteral("plaque"));
+  if (plaque && !aorta)
+  {
+    return 0; // Single inlet → PV
+  }
+  if (aorta && !plaque)
+  {
+    return 1; // Single outlet → HV
+  }
+  return -1; // none or ambiguous
+}
+
+QString pqSHYXBoundaryAssignmentInfoWidget::resolveExportStem() const
+{
+  const QString path = this->upstreamFilePath();
+  if (!path.isEmpty())
+  {
+    const QString stem = QFileInfo(path).completeBaseName().trimmed();
+    if (!stem.isEmpty())
+    {
+      return stem;
+    }
+  }
+  return this->currentModeTag();
 }
 
 //-----------------------------------------------------------------------------
@@ -221,30 +329,40 @@ pqSHYXBoundaryAssignmentInfoWidget::pqSHYXBoundaryAssignmentInfoWidget(
   this->ExoNameEdit = new QLineEdit(namesHost);
   this->OptNameEdit = new QLineEdit(namesHost);
   this->BcNameEdit = new QLineEdit(namesHost);
-  this->ExoNameEdit->setPlaceholderText(QStringLiteral("PV_0.exo / HV_0.exo"));
-  this->OptNameEdit->setPlaceholderText(QStringLiteral("options_PV_0.opt / options_HV_0.opt"));
-  this->BcNameEdit->setPlaceholderText(QStringLiteral("options_PV_0.bc / options_HV_0.bc"));
-  this->ExoNameEdit->setToolTip(
-    tr("Exodus output basename. Default PV_0.exo (Single inlet) or HV_0.exo (Single outlet)."));
+  this->ExoNameEdit->setPlaceholderText(QStringLiteral("filename.exo"));
+  this->OptNameEdit->setPlaceholderText(QStringLiteral("filename.opt"));
+  this->BcNameEdit->setPlaceholderText(QStringLiteral("filename.bc"));
+  this->ExoNameEdit->setToolTip(tr(
+    "Exodus output basename. Default is the top-level source file stem + .exo "
+    "(falls back to PV_0.exo / HV_0.exo when no FileName is found)."));
   this->OptNameEdit->setToolTip(tr(
-    "Options file (.opt) basename for the full solver options text. "
-    "Default options_PV_0.opt or options_HV_0.opt."));
+    "Options file (.opt) basename. Default is the top-level source file stem + .opt."));
   this->BcNameEdit->setToolTip(tr(
-    "Boundary assignment (.bc) basename. Default options_PV_0.bc or options_HV_0.bc."));
+    "Boundary assignment (.bc) basename. Default is the top-level source file stem + .bc."));
   namesForm->addRow(tr("Exodus (.exo)"), this->ExoNameEdit);
   namesForm->addRow(tr("Options (.opt)"), this->OptNameEdit);
   namesForm->addRow(tr("Boundary assignment (.bc)"), this->BcNameEdit);
   vbox->addWidget(namesHost);
 
-  this->LastAutoTag = this->currentModeTag();
-  this->ExoNameEdit->setText(defaultExoName(this->LastAutoTag));
-  this->OptNameEdit->setText(defaultOptName(this->LastAutoTag));
-  this->BcNameEdit->setText(defaultBcName(this->LastAutoTag));
+  // Filename hint before wiring mode Modified → avoids a redundant name sync mid-setup.
+  this->syncFlowModeFromUpstreamFile();
+  this->LastAutoStem = this->resolveExportStem();
+  this->ExoNameEdit->setText(defaultExoName(this->LastAutoStem));
+  this->OptNameEdit->setText(defaultOptName(this->LastAutoStem));
+  this->BcNameEdit->setText(defaultBcName(this->LastAutoStem));
 
   if (vtkSMProperty* modeProp = smproxy->GetProperty("FlowBoundaryMode"))
   {
     pqCoreUtilities::connect(
       modeProp, vtkCommand::ModifiedEvent, this, SLOT(syncExportNameDefaults()));
+  }
+  if (vtkSMProperty* inputProp = smproxy->GetProperty("Input"))
+  {
+    // Re-resolve mode + stem when the upstream connection changes.
+    pqCoreUtilities::connect(
+      inputProp, vtkCommand::ModifiedEvent, this, SLOT(syncFlowModeFromUpstreamFile()));
+    pqCoreUtilities::connect(
+      inputProp, vtkCommand::ModifiedEvent, this, SLOT(syncExportNameDefaults()));
   }
 
   auto* exportBtn =
@@ -289,20 +407,66 @@ pqSHYXBoundaryAssignmentInfoWidget::pqSHYXBoundaryAssignmentInfoWidget(
 pqSHYXBoundaryAssignmentInfoWidget::~pqSHYXBoundaryAssignmentInfoWidget() = default;
 
 //-----------------------------------------------------------------------------
-void pqSHYXBoundaryAssignmentInfoWidget::syncExportNameDefaults()
+void pqSHYXBoundaryAssignmentInfoWidget::syncFlowModeFromUpstreamFile()
 {
-  const QString tag = this->currentModeTag();
-  if (tag == this->LastAutoTag)
+  if (this->ApplyingAutoFlowMode)
   {
     return;
   }
 
-  const QString oldExo = defaultExoName(this->LastAutoTag);
-  const QString oldOpt = defaultOptName(this->LastAutoTag);
-  const QString oldBc = defaultBcName(this->LastAutoTag);
-  const QString newExo = defaultExoName(tag);
-  const QString newOpt = defaultOptName(tag);
-  const QString newBc = defaultBcName(tag);
+  const QString path = this->upstreamFilePath();
+  if (path == this->LastHintFilePath)
+  {
+    return;
+  }
+  this->LastHintFilePath = path;
+
+  const int inferred = inferFlowModeFromFileName(path);
+  if (inferred < 0)
+  {
+    return;
+  }
+
+  vtkSMProxy* filter = this->proxy();
+  vtkSMProperty* modeProp = filter ? filter->GetProperty("FlowBoundaryMode") : nullptr;
+  if (!modeProp)
+  {
+    return;
+  }
+
+  const int current = vtkSMPropertyHelper(modeProp).GetAsInt();
+  if (current == inferred)
+  {
+    return;
+  }
+
+  this->ApplyingAutoFlowMode = true;
+  vtkSMPropertyHelper(modeProp).Set(inferred);
+  filter->UpdateVTKObjects();
+  this->ApplyingAutoFlowMode = false;
+}
+
+//-----------------------------------------------------------------------------
+void pqSHYXBoundaryAssignmentInfoWidget::syncExportNameDefaults()
+{
+  if (this->ApplyingAutoFlowMode)
+  {
+    // Mode auto-set will be followed by an explicit name sync from Input / ctor.
+    return;
+  }
+
+  const QString stem = this->resolveExportStem();
+  if (stem == this->LastAutoStem)
+  {
+    return;
+  }
+
+  const QString oldExo = defaultExoName(this->LastAutoStem);
+  const QString oldOpt = defaultOptName(this->LastAutoStem);
+  const QString oldBc = defaultBcName(this->LastAutoStem);
+  const QString newExo = defaultExoName(stem);
+  const QString newOpt = defaultOptName(stem);
+  const QString newBc = defaultBcName(stem);
 
   // Preserve manual edits: only rewrite boxes that still hold the previous auto default.
   if (this->ExoNameEdit && this->ExoNameEdit->text().trimmed() == oldExo)
@@ -317,7 +481,7 @@ void pqSHYXBoundaryAssignmentInfoWidget::syncExportNameDefaults()
   {
     this->BcNameEdit->setText(newBc);
   }
-  this->LastAutoTag = tag;
+  this->LastAutoStem = stem;
 }
 
 //-----------------------------------------------------------------------------
@@ -346,6 +510,7 @@ void pqSHYXBoundaryAssignmentInfoWidget::refreshTexts()
     return;
   }
 
+  this->syncFlowModeFromUpstreamFile();
   this->syncExportNameDefaults();
 
   auto* source = vtkSMSourceProxy::SafeDownCast(filter);
@@ -443,7 +608,7 @@ void pqSHYXBoundaryAssignmentInfoWidget::onExportClicked()
     return;
   }
 
-  const QString tag = this->currentModeTag();
+  const QString stem = this->resolveExportStem();
   QString exoName = ensureExtension(
     this->ExoNameEdit ? this->ExoNameEdit->text() : QString(), QStringLiteral(".exo"));
   QString optName = ensureExtension(
@@ -452,15 +617,15 @@ void pqSHYXBoundaryAssignmentInfoWidget::onExportClicked()
     this->BcNameEdit ? this->BcNameEdit->text() : QString(), QStringLiteral(".bc"));
   if (exoName.isEmpty())
   {
-    exoName = defaultExoName(tag);
+    exoName = defaultExoName(stem);
   }
   if (optName.isEmpty())
   {
-    optName = defaultOptName(tag);
+    optName = defaultOptName(stem);
   }
   if (bcName.isEmpty())
   {
-    bcName = defaultBcName(tag);
+    bcName = defaultBcName(stem);
   }
 
   const QString exoPath = QFileDialog::getSaveFileName(pqCoreUtilities::mainWidget(),

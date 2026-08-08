@@ -11,6 +11,7 @@
 #include <vtkDataSet.h>
 #include <vtkExtractSelection.h>
 #include <vtkFloatArray.h>
+#include <vtkGeometryFilter.h>
 #include <vtkIdList.h>
 #include <vtkIdTypeArray.h>
 #include <vtkInformation.h>
@@ -21,6 +22,7 @@
 #include <vtkPoints.h>
 #include <vtkPolyData.h>
 #include <vtkSelection.h>
+#include <vtkSmartPointer.h>
 #include <vtkTriangleFilter.h>
 
 #include <CGAL/Polygon_mesh_processing/corefinement.h>
@@ -47,6 +49,32 @@ vtkStandardNewMacro(vtkSHYXSelectionFillAlphaReunionFilter);
 
 namespace
 {
+
+vtkSmartPointer<vtkPolyData> ForceDataSetToPolyData(vtkDataSet* ds)
+{
+  if (!ds)
+  {
+    return nullptr;
+  }
+  if (auto* pd = vtkPolyData::SafeDownCast(ds))
+  {
+    return pd;
+  }
+
+  vtkNew<vtkGeometryFilter> geometry;
+  geometry->SetInputData(ds);
+  geometry->Update();
+  vtkPolyData* out = geometry->GetOutput();
+  if (!out)
+  {
+    return nullptr;
+  }
+
+  vtkSmartPointer<vtkPolyData> copy = vtkSmartPointer<vtkPolyData>::New();
+  copy->ShallowCopy(out);
+  return copy;
+}
+
 void CollectCellsFromExtracted(vtkPolyData* mesh, vtkDataSet* extracted, std::set<vtkIdType>& selected)
 {
   if (!mesh || !extracted)
@@ -1010,7 +1038,7 @@ int vtkSHYXSelectionFillAlphaReunionFilter::FillInputPortInformation(int port, v
 {
   if (port == 0)
   {
-    info->Set(vtkAlgorithm::INPUT_REQUIRED_DATA_TYPE(), "vtkPolyData");
+    info->Set(vtkAlgorithm::INPUT_REQUIRED_DATA_TYPE(), "vtkDataSet");
     return 1;
   }
   if (port == 1)
@@ -1026,16 +1054,18 @@ int vtkSHYXSelectionFillAlphaReunionFilter::FillInputPortInformation(int port, v
 int vtkSHYXSelectionFillAlphaReunionFilter::RequestData(
   vtkInformation* vtkNotUsed(request), vtkInformationVector** inputVector, vtkInformationVector* outputVector)
 {
-  vtkPolyData* mesh = vtkPolyData::GetData(inputVector[0], 0);
+  vtkDataSet* input = vtkDataSet::GetData(inputVector[0], 0);
   vtkPolyData* output = vtkPolyData::GetData(outputVector, 0);
-  if (!mesh || !output)
+  if (!input || !output)
   {
     return 0;
   }
 
-  if (mesh->GetNumberOfCells() == 0)
+  vtkSmartPointer<vtkPolyData> meshSP = ForceDataSetToPolyData(input);
+  vtkPolyData* mesh = meshSP.GetPointer();
+  if (!mesh || mesh->GetNumberOfCells() == 0)
   {
-    vtkErrorMacro(<< "Empty input mesh.");
+    vtkErrorMacro(<< "Empty input mesh (or failed vtkDataSet → vtkPolyData conversion).");
     return 0;
   }
 

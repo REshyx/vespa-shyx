@@ -1,9 +1,11 @@
 /**
  * @class   vtkSHYXHoleFillFilter
- * @brief   Fill boundary holes on a triangle vtkPolyData using CGAL PMP (SHYX menu proxy).
+ * @brief   Fill boundary holes on a triangle surface using CGAL PMP (SHYX menu proxy).
  *
- * Delegates to vtkCGALPatchFilling: optional vtkSelection removes a patch first; otherwise every
- * boundary cycle is filled with CGAL::Polygon_mesh_processing::triangulate_refine_and_fair_hole().
+ * Accepts any vtkDataSet on port 0; non-PolyData inputs are converted to a surface mesh with
+ * vtkGeometryFilter before filling. Delegates to vtkCGALPatchFilling: optional vtkSelection
+ * removes a patch first; otherwise every boundary cycle is filled with
+ * CGAL::Polygon_mesh_processing::triangulate_refine_and_fair_hole().
  *
  * @sa vtkCGALPatchFilling
  */

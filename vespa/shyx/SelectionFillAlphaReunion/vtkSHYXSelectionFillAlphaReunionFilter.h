@@ -3,11 +3,13 @@
  * @brief   Split mesh by selection; hole-fill the rest; hole-fill + Alpha Wrapping the selection;
  *          then CGAL boolean union with face-origin tracking; optionally clean the AW/original bridge.
  *
- * After union, faces imported from the Alpha-Wrapped mesh are marked exactly via a corefinement
- * visitor (no distance heuristic). By default that AW region is dilated by a few face rings;
- * optionally the cleanup seed is only the AW/original boolean seam, then dilated the same way.
- * A local CGAL isotropic remesh (with relaxation) and a selectable post-process
- * (constrained smooth_shape / MCF, or fair with C0–C2 continuity) run on that patch.
+ * Port 0 accepts any vtkDataSet; non-PolyData inputs are converted to a surface mesh with
+ * vtkGeometryFilter before the pipeline runs. After union, faces imported from the Alpha-Wrapped
+ * mesh are marked exactly via a corefinement visitor (no distance heuristic). By default that AW
+ * region is dilated by a few face rings; optionally the cleanup seed is only the AW/original
+ * boolean seam, then dilated the same way. A local CGAL isotropic remesh (with relaxation) and a
+ * selectable post-process (constrained smooth_shape / MCF, or fair with C0–C2 continuity) run on
+ * that patch.
  *
  * @sa vtkSHYXHoleFillFilter, vtkCGALAlphaWrapping, vtkSHYXBooleanOperationFilter
  */

@@ -8,6 +8,7 @@ DEPENDS
   vtkCGALAlgorithm
   vtkCGALPMP
   VTK::FiltersCore
+  VTK::FiltersGeometry
 PRIVATE_DEPENDS
   VTK::CommonCore
   VTK::CommonDataModel
