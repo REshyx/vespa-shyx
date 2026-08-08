@@ -173,32 +173,46 @@ QString ensureExtension(QString name, const QString& ext)
 } // namespace
 
 //-----------------------------------------------------------------------------
-QString pqSHYXBoundaryAssignmentInfoWidget::defaultExoName(const QString& stem)
+QString pqSHYXBoundaryAssignmentInfoWidget::defaultExoName(
+  const QString& tag, const QString& caseId)
 {
-  // File-stem defaults: foo.exo. Legacy PV/HV fallback keeps the old *_0 suffix.
-  if (stem == QStringLiteral("PV") || stem == QStringLiteral("HV"))
-  {
-    return QStringLiteral("%1_0.exo").arg(stem);
-  }
-  return QStringLiteral("%1.exo").arg(stem);
+  return QStringLiteral("%1_%2.exo").arg(tag, caseId);
 }
 
-QString pqSHYXBoundaryAssignmentInfoWidget::defaultOptName(const QString& stem)
+QString pqSHYXBoundaryAssignmentInfoWidget::defaultOptName(
+  const QString& tag, const QString& caseId)
 {
-  if (stem == QStringLiteral("PV") || stem == QStringLiteral("HV"))
-  {
-    return QStringLiteral("options_%1_0.opt").arg(stem);
-  }
-  return QStringLiteral("%1.opt").arg(stem);
+  // No .opt suffix by design (solver expects extensionless options files).
+  return QStringLiteral("options_%1_%2").arg(tag, caseId);
 }
 
-QString pqSHYXBoundaryAssignmentInfoWidget::defaultBcName(const QString& stem)
+QString pqSHYXBoundaryAssignmentInfoWidget::defaultNodesetName(
+  const QString& tag, const QString& caseId)
 {
-  if (stem == QStringLiteral("PV") || stem == QStringLiteral("HV"))
+  // No .bc suffix by design.
+  return QStringLiteral("Nodeset_%1_%2").arg(tag, caseId);
+}
+
+void pqSHYXBoundaryAssignmentInfoWidget::splitExportKey(
+  const QString& key, QString& tag, QString& caseId)
+{
+  const int bar = key.indexOf(QLatin1Char('|'));
+  if (bar < 0)
   {
-    return QStringLiteral("options_%1_0.bc").arg(stem);
+    tag = QStringLiteral("PV");
+    caseId = key.isEmpty() ? QStringLiteral("0") : key;
+    return;
   }
-  return QStringLiteral("%1.bc").arg(stem);
+  tag = key.left(bar);
+  caseId = key.mid(bar + 1);
+  if (tag.isEmpty())
+  {
+    tag = QStringLiteral("PV");
+  }
+  if (caseId.isEmpty())
+  {
+    caseId = QStringLiteral("0");
+  }
 }
 
 QString pqSHYXBoundaryAssignmentInfoWidget::currentModeTag() const
@@ -273,6 +287,30 @@ QString pqSHYXBoundaryAssignmentInfoWidget::upstreamFilePath() const
   return filePathFromProxy(topLevelProducer(this->proxy()));
 }
 
+QString pqSHYXBoundaryAssignmentInfoWidget::caseIdFromFilePath(const QString& filePath)
+{
+  if (filePath.isEmpty())
+  {
+    return QString();
+  }
+  QString stem = QFileInfo(filePath).completeBaseName().trimmed();
+  if (stem.isEmpty())
+  {
+    return QString();
+  }
+  // K2-1_plaque / K2-1_aorta → K2-1
+  const QString lower = stem.toLower();
+  if (lower.endsWith(QStringLiteral("_plaque")))
+  {
+    stem.chop(7);
+  }
+  else if (lower.endsWith(QStringLiteral("_aorta")))
+  {
+    stem.chop(6);
+  }
+  return stem.trimmed();
+}
+
 int pqSHYXBoundaryAssignmentInfoWidget::inferFlowModeFromFileName(const QString& filePath)
 {
   if (filePath.isEmpty())
@@ -294,18 +332,15 @@ int pqSHYXBoundaryAssignmentInfoWidget::inferFlowModeFromFileName(const QString&
   return -1; // none or ambiguous
 }
 
-QString pqSHYXBoundaryAssignmentInfoWidget::resolveExportStem() const
+QString pqSHYXBoundaryAssignmentInfoWidget::resolveCaseId() const
 {
-  const QString path = this->upstreamFilePath();
-  if (!path.isEmpty())
-  {
-    const QString stem = QFileInfo(path).completeBaseName().trimmed();
-    if (!stem.isEmpty())
-    {
-      return stem;
-    }
-  }
-  return this->currentModeTag();
+  const QString id = caseIdFromFilePath(this->upstreamFilePath());
+  return id.isEmpty() ? QStringLiteral("0") : id;
+}
+
+QString pqSHYXBoundaryAssignmentInfoWidget::resolveExportKey() const
+{
+  return this->currentModeTag() + QLatin1Char('|') + this->resolveCaseId();
 }
 
 //-----------------------------------------------------------------------------
@@ -329,27 +364,33 @@ pqSHYXBoundaryAssignmentInfoWidget::pqSHYXBoundaryAssignmentInfoWidget(
   this->ExoNameEdit = new QLineEdit(namesHost);
   this->OptNameEdit = new QLineEdit(namesHost);
   this->BcNameEdit = new QLineEdit(namesHost);
-  this->ExoNameEdit->setPlaceholderText(QStringLiteral("filename.exo"));
-  this->OptNameEdit->setPlaceholderText(QStringLiteral("filename.opt"));
-  this->BcNameEdit->setPlaceholderText(QStringLiteral("filename.bc"));
+  this->ExoNameEdit->setPlaceholderText(QStringLiteral("PV_K2-1.exo / HV_K2-1.exo"));
+  this->OptNameEdit->setPlaceholderText(QStringLiteral("options_PV_K2-1 / options_HV_K2-1"));
+  this->BcNameEdit->setPlaceholderText(QStringLiteral("Nodeset_PV_K2-1 / Nodeset_HV_K2-1"));
   this->ExoNameEdit->setToolTip(tr(
-    "Exodus output basename. Default is the top-level source file stem + .exo "
-    "(falls back to PV_0.exo / HV_0.exo when no FileName is found)."));
+    "Exodus output basename. Default PV_<case>.exo or HV_<case>.exo from the top-level "
+    "source (e.g. K2-1_plaque.stl → PV_K2-1.exo). Falls back to PV_0.exo / HV_0.exo."));
   this->OptNameEdit->setToolTip(tr(
-    "Options file (.opt) basename. Default is the top-level source file stem + .opt."));
+    "Options file basename (no extension). Default options_PV_<case> / options_HV_<case>."));
   this->BcNameEdit->setToolTip(tr(
-    "Boundary assignment (.bc) basename. Default is the top-level source file stem + .bc."));
+    "Boundary assignment / nodeset basename (no extension). "
+    "Default Nodeset_PV_<case> / Nodeset_HV_<case>."));
   namesForm->addRow(tr("Exodus (.exo)"), this->ExoNameEdit);
-  namesForm->addRow(tr("Options (.opt)"), this->OptNameEdit);
-  namesForm->addRow(tr("Boundary assignment (.bc)"), this->BcNameEdit);
+  namesForm->addRow(tr("Options (no ext)"), this->OptNameEdit);
+  namesForm->addRow(tr("Nodeset (no ext)"), this->BcNameEdit);
   vbox->addWidget(namesHost);
 
   // Filename hint before wiring mode Modified → avoids a redundant name sync mid-setup.
   this->syncFlowModeFromUpstreamFile();
-  this->LastAutoStem = this->resolveExportStem();
-  this->ExoNameEdit->setText(defaultExoName(this->LastAutoStem));
-  this->OptNameEdit->setText(defaultOptName(this->LastAutoStem));
-  this->BcNameEdit->setText(defaultBcName(this->LastAutoStem));
+  {
+    QString tag;
+    QString caseId;
+    this->LastAutoKey = this->resolveExportKey();
+    splitExportKey(this->LastAutoKey, tag, caseId);
+    this->ExoNameEdit->setText(defaultExoName(tag, caseId));
+    this->OptNameEdit->setText(defaultOptName(tag, caseId));
+    this->BcNameEdit->setText(defaultNodesetName(tag, caseId));
+  }
 
   if (vtkSMProperty* modeProp = smproxy->GetProperty("FlowBoundaryMode"))
   {
@@ -358,7 +399,7 @@ pqSHYXBoundaryAssignmentInfoWidget::pqSHYXBoundaryAssignmentInfoWidget(
   }
   if (vtkSMProperty* inputProp = smproxy->GetProperty("Input"))
   {
-    // Re-resolve mode + stem when the upstream connection changes.
+    // Re-resolve mode + names when the upstream connection changes.
     pqCoreUtilities::connect(
       inputProp, vtkCommand::ModifiedEvent, this, SLOT(syncFlowModeFromUpstreamFile()));
     pqCoreUtilities::connect(
@@ -366,10 +407,10 @@ pqSHYXBoundaryAssignmentInfoWidget::pqSHYXBoundaryAssignmentInfoWidget(
   }
 
   auto* exportBtn =
-    new QPushButton(tr("Export port 0 (.exo) + options (.opt) + assignment (.bc)"), this);
+    new QPushButton(tr("Export port 0 (.exo) + options + Nodeset"), this);
   exportBtn->setToolTip(tr(
     "Choose a folder via the .exo save dialog (suggested name from the box above). "
-    "Writes the Exodus file plus the .opt and .bc files beside it using the names above."));
+    "Writes the Exodus file plus extensionless options and Nodeset files beside it."));
   vbox->addWidget(exportBtn);
   QObject::connect(exportBtn, &QPushButton::clicked, this,
     &pqSHYXBoundaryAssignmentInfoWidget::onExportClicked);
@@ -451,22 +492,29 @@ void pqSHYXBoundaryAssignmentInfoWidget::syncExportNameDefaults()
 {
   if (this->ApplyingAutoFlowMode)
   {
-    // Mode auto-set will be followed by an explicit name sync from Input / ctor.
+    // Mode auto-set will be followed by an explicit name sync from Input / ctor / refresh.
     return;
   }
 
-  const QString stem = this->resolveExportStem();
-  if (stem == this->LastAutoStem)
+  const QString key = this->resolveExportKey();
+  if (key == this->LastAutoKey)
   {
     return;
   }
 
-  const QString oldExo = defaultExoName(this->LastAutoStem);
-  const QString oldOpt = defaultOptName(this->LastAutoStem);
-  const QString oldBc = defaultBcName(this->LastAutoStem);
-  const QString newExo = defaultExoName(stem);
-  const QString newOpt = defaultOptName(stem);
-  const QString newBc = defaultBcName(stem);
+  QString oldTag;
+  QString oldCaseId;
+  QString newTag;
+  QString newCaseId;
+  splitExportKey(this->LastAutoKey, oldTag, oldCaseId);
+  splitExportKey(key, newTag, newCaseId);
+
+  const QString oldExo = defaultExoName(oldTag, oldCaseId);
+  const QString oldOpt = defaultOptName(oldTag, oldCaseId);
+  const QString oldBc = defaultNodesetName(oldTag, oldCaseId);
+  const QString newExo = defaultExoName(newTag, newCaseId);
+  const QString newOpt = defaultOptName(newTag, newCaseId);
+  const QString newBc = defaultNodesetName(newTag, newCaseId);
 
   // Preserve manual edits: only rewrite boxes that still hold the previous auto default.
   if (this->ExoNameEdit && this->ExoNameEdit->text().trimmed() == oldExo)
@@ -481,7 +529,7 @@ void pqSHYXBoundaryAssignmentInfoWidget::syncExportNameDefaults()
   {
     this->BcNameEdit->setText(newBc);
   }
-  this->LastAutoStem = stem;
+  this->LastAutoKey = key;
 }
 
 //-----------------------------------------------------------------------------
@@ -608,29 +656,30 @@ void pqSHYXBoundaryAssignmentInfoWidget::onExportClicked()
     return;
   }
 
-  const QString stem = this->resolveExportStem();
+  QString tag;
+  QString caseId;
+  splitExportKey(this->resolveExportKey(), tag, caseId);
+
   QString exoName = ensureExtension(
     this->ExoNameEdit ? this->ExoNameEdit->text() : QString(), QStringLiteral(".exo"));
-  QString optName = ensureExtension(
-    this->OptNameEdit ? this->OptNameEdit->text() : QString(), QStringLiteral(".opt"));
-  QString bcName = ensureExtension(
-    this->BcNameEdit ? this->BcNameEdit->text() : QString(), QStringLiteral(".bc"));
+  // Options / Nodeset intentionally have no extension.
+  QString optName = this->OptNameEdit ? this->OptNameEdit->text().trimmed() : QString();
+  QString bcName = this->BcNameEdit ? this->BcNameEdit->text().trimmed() : QString();
   if (exoName.isEmpty())
   {
-    exoName = defaultExoName(stem);
+    exoName = defaultExoName(tag, caseId);
   }
   if (optName.isEmpty())
   {
-    optName = defaultOptName(stem);
+    optName = defaultOptName(tag, caseId);
   }
   if (bcName.isEmpty())
   {
-    bcName = defaultBcName(stem);
+    bcName = defaultNodesetName(tag, caseId);
   }
 
   const QString exoPath = QFileDialog::getSaveFileName(pqCoreUtilities::mainWidget(),
-    tr("Export Exodus + options (.opt) + assignment (.bc)"), exoName,
-    tr("Exodus (*.exo);;All files (*)"));
+    tr("Export Exodus + options + Nodeset"), exoName, tr("Exodus (*.exo);;All files (*)"));
   if (exoPath.isEmpty())
   {
     return;
