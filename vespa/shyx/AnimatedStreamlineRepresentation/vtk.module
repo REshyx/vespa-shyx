@@ -6,8 +6,11 @@ GROUPS
   ParaView
 DEPENDS
   ParaView::RemotingViews
+  ParaView::RemotingServerManager
 PRIVATE_DEPENDS
+  ParaView::RemotingCore
   VTK::CommonCore
+  VTK::CommonDataModel
   VTK::CommonSystem
   VTK::RenderingCore
   VTK::RenderingOpenGL2

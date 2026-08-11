@@ -606,7 +606,7 @@
 
 **功能**：针对类流线网格，在 GPU 上用自定义 shader uniform 做**逐帧动画**（透明度脉冲等），**Animation coordinate** 数组驱动纹理坐标与混合。
 
-**常用参数（节选）**：**Animate**、**Integration Scale**、**Time Scale**、**Opacity Scale**、**Trunc**、**Pow**、**Animation coordinate X**、可选 **Animation coordinate Y**（作为 mix 公式中的除数或均匀 1）。
+**常用参数（节选）**：**Animate**、**Integration Scale**（Domain 建议 `100/(L_max×V_max)`，可 Scale/Reset）、**Time Scale**、**Opacity Scale**、**Trunc**、**Pow**、**Animation coordinate X**、可选 **Animation coordinate Y**（作为 mix 公式中的除数或均匀 1）。
 
 ---
 

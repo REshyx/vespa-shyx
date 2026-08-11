@@ -1,17 +1,20 @@
 /**
  * @class   vtkSHYXRemeshWithEndpoint
- * @brief   Extract cells with first array component &lt; 0 using vtkThreshold, then isotropic remesh
- *          that patch alone (Vespa ICC sizing).
+ * @brief   Optionally threshold EndpointIndex &lt; 0, then isotropic remesh that wall patch (Vespa ICC),
+ *          and optionally hole-fill + remesh caps.
  *
  * Intended for surfaces tagged by vtkCGALVesselEndClipper (cell \c EndpointIndex: cap triangles
- * &gt; 0, bulk typically -1). **vtkThreshold** + **vtkGeometryFilter** yield a standalone surface of
- * the negative side only; optionally only the **largest** triangle-connected patch is kept.
- * CGAL remeshes that surface in full (no patch-on-full-mesh bookkeeping), unless wall remesh is
- * disabled to export the ICC sizing field on vertices only.
- * Output port 0 is the remeshed extracted patch (not the full vessel with caps). Same ICC sizing
- * stack as vtkSHYXAdaptiveIsotropicRemesher, without selection, feature detection, or mask logic.
- * CGAL split/collapse/flip follow CGAL defaults (all enabled); only protect/collapse/relax
- * constraint flags are exposed besides sizing and iteration controls.
+ * &gt; 0, bulk typically -1). When **EnableEndpointCull** is ON and an endpoint array is set,
+ * **vtkThreshold** + **vtkGeometryFilter** yield a standalone surface of the negative side only;
+ * optionally only the **largest** triangle-connected patch is kept. When EnableEndpointCull is
+ * OFF, or the named array is missing, no cull is applied — the entire input surface is treated as
+ * wall. CGAL remeshes that surface in full (no patch-on-full-mesh bookkeeping), unless wall remesh
+ * is disabled to export the ICC sizing field on vertices only. With wall remesh ON, open boundary
+ * loops can still be filled and the filled patches remeshed (EnableCapRemesh).
+ * Output port 0 is the remeshed wall (+ optional caps), not a rejoin of a separate vessel+caps
+ * pipeline. Same ICC sizing stack as vtkSHYXAdaptiveIsotropicRemesher, without selection, feature
+ * detection, or mask logic. CGAL split/collapse/flip follow CGAL defaults (all enabled); only
+ * protect/collapse/relax constraint flags are exposed besides sizing and iteration controls.
  *
  * After remesh (or sizing-only when wall remesh is off), port 0 point data includes sizing vs
  * realized edge length diagnostics: **VespaSizeGlobal** (target), **VespaMeanEdgeLength** /
@@ -44,12 +47,23 @@ public:
     vtkTypeMacro(vtkSHYXRemeshWithEndpoint, vtkCGALPolyDataAlgorithm);
     void PrintSelf(ostream& os, vtkIndent indent) override;
 
+    //@{
     /**
-     * Endpoint / marker array (input-array slot 0). Default name \c EndpointIndex on cell data.
-     * Same name resolution as the adaptive remesher masks: cell array preferred when both exist.
+     * When ON (default), extract wall cells via EndpointIndexArrayName (first component &lt; 0)
+     * before remesh. If the named array is missing on the input, falls back to treating the whole
+     * surface as wall (no warning). When OFF, skip cull entirely.
      */
-    void SetEndpointIndexArrayName(const char* name);
-    const char* GetEndpointIndexArrayName();
+    vtkGetMacro(EnableEndpointCull, bool);
+    vtkSetMacro(EnableEndpointCull, bool);
+    vtkBooleanMacro(EnableEndpointCull, bool);
+    //@}
+
+    /**
+     * Endpoint / marker array name (cell preferred when resolving). Used when EnableEndpointCull
+     * is ON. Default \c EndpointIndex; if absent on the input, cull is skipped (full surface as wall).
+     */
+    vtkGetStringMacro(EndpointIndexArrayName);
+    vtkSetStringMacro(EndpointIndexArrayName);
 
     //@{
     /**
@@ -188,7 +202,7 @@ public:
 
 protected:
     vtkSHYXRemeshWithEndpoint();
-    ~vtkSHYXRemeshWithEndpoint() override = default;
+    ~vtkSHYXRemeshWithEndpoint() override;
 
     int RequestData(vtkInformation*, vtkInformationVector**, vtkInformationVector*) override;
     int FillInputPortInformation(int port, vtkInformation* info) override;
@@ -196,6 +210,8 @@ protected:
     void ClearUncappedSizeHistogram();
     void FillUncappedSizeHistogram(const std::vector<double>& uncappedSizes);
 
+    char* EndpointIndexArrayName = nullptr;
+    bool EnableEndpointCull = true;
     bool EndpointIndexAllScalars = false;
     bool LargestConnectedRegionOnly = true;
 

@@ -29,6 +29,8 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
+#include <cstring>
 #include <exception>
 #include <limits>
 #include <memory>
@@ -464,8 +466,13 @@ vtkSHYXRemeshWithEndpoint::vtkSHYXRemeshWithEndpoint()
 {
     this->SetNumberOfInputPorts(1);
     this->SetNumberOfOutputPorts(1);
-    this->SetInputArrayToProcess(
-        0, 0, 0, vtkDataObject::FIELD_ASSOCIATION_CELLS, "EndpointIndex");
+    this->SetEndpointIndexArrayName("EndpointIndex");
+}
+
+//------------------------------------------------------------------------------
+vtkSHYXRemeshWithEndpoint::~vtkSHYXRemeshWithEndpoint()
+{
+    this->SetEndpointIndexArrayName(nullptr);
 }
 
 //------------------------------------------------------------------------------
@@ -490,30 +497,6 @@ double* vtkSHYXRemeshWithEndpoint::GetUncappedSizeHistRange()
 int vtkSHYXRemeshWithEndpoint::GetUncappedSizeHistSampleCount()
 {
     return this->UncappedSizeHistSampleCount;
-}
-
-//------------------------------------------------------------------------------
-void vtkSHYXRemeshWithEndpoint::SetEndpointIndexArrayName(const char* name)
-{
-    const bool hasName = (name != nullptr && name[0] != '\0');
-    this->SetInputArrayToProcess(0, 0, 0,
-        hasName ? vtkDataObject::FIELD_ASSOCIATION_CELLS : vtkDataObject::FIELD_ASSOCIATION_NONE,
-        hasName ? name : nullptr);
-}
-
-//------------------------------------------------------------------------------
-const char* vtkSHYXRemeshWithEndpoint::GetEndpointIndexArrayName()
-{
-    vtkInformation* const ai = this->GetInputArrayInformation(0);
-    if (ai && ai->Has(vtkDataObject::FIELD_NAME()))
-    {
-        const char* const n = ai->Get(vtkDataObject::FIELD_NAME());
-        if (n && n[0] != '\0')
-        {
-            return n;
-        }
-    }
-    return nullptr;
 }
 
 //------------------------------------------------------------------------------
@@ -589,6 +572,7 @@ void vtkSHYXRemeshWithEndpoint::FillUncappedSizeHistogram(const std::vector<doub
 //------------------------------------------------------------------------------
 void vtkSHYXRemeshWithEndpoint::PrintSelf(ostream& os, vtkIndent indent)
 {
+    os << indent << "EnableEndpointCull: " << (this->EnableEndpointCull ? "on" : "off") << std::endl;
     os << indent << "EndpointIndexAllScalars: " << (this->EndpointIndexAllScalars ? "on" : "off")
        << std::endl;
     os << indent << "LargestConnectedRegionOnly: "
@@ -658,6 +642,8 @@ int vtkSHYXRemeshWithEndpoint::RequestData(
     }
 
     this->ClearUncappedSizeHistogram();
+    this->SetProgressText("Preparing wall surface");
+    this->UpdateProgress(0.01);
 
     if (this->AdaptiveTolerance <= 0.0)
     {
@@ -680,40 +666,52 @@ int vtkSHYXRemeshWithEndpoint::RequestData(
     }
 
     const char* epName = this->GetEndpointIndexArrayName();
-    int scalarAssoc = vtkDataObject::FIELD_ASSOCIATION_NONE;
-    if (!ResolveThresholdArray(input, epName, scalarAssoc))
-    {
-        vtkErrorMacro("Could not resolve endpoint/marker array (need a non-empty name and a "
-                      "matching point- or cell-centered array on the input).");
-        return 0;
-    }
+    const bool epNameEmpty = (epName == nullptr || epName[0] == '\0' ||
+        std::strcmp(epName, "(None)") == 0 || std::strcmp(epName, "None") == 0);
+    // Cull only when explicitly enabled; do not infer from array name alone (ArrayListDomain
+    // often replaces "(None)" with the first cell array such as STLSolidLabeling).
+    const bool useFullInputAsWall = (!this->EnableEndpointCull || epNameEmpty);
 
     vtkNew<vtkThreshold> threshold;
-    threshold->SetInputData(input);
-    threshold->SetInputArrayToProcess(0, 0, 0, scalarAssoc, epName);
-    threshold->SetThresholdFunction(vtkThreshold::THRESHOLD_BETWEEN);
-    threshold->SetLowerThreshold(-1.0e200);
-    threshold->SetUpperThreshold(-1.0e-9);
-    threshold->SetSelectedComponent(0);
-    threshold->SetComponentModeToUseSelected();
-    threshold->SetAllScalars(this->EndpointIndexAllScalars ? 1 : 0);
-    threshold->Update();
-    vtkDataSet* const thOut = vtkDataSet::SafeDownCast(threshold->GetOutputDataObject(0));
-    if (!thOut || thOut->GetNumberOfCells() == 0)
+    vtkNew<vtkGeometryFilter> geometry;
+    vtkNew<vtkTriangleFilter> triangle;
+    vtkPolyData* patchIn = nullptr;
+
+    if (!useFullInputAsWall)
     {
-        vtkWarningMacro("vtkThreshold produced no cells for first component in ("
-            << (-1.0e200) << ", " << (-1.0e-9) << ") on \"" << (epName ? epName : "")
-            << "\"; passing input through.");
-        output->ShallowCopy(input);
-        return 1;
+        int scalarAssoc = vtkDataObject::FIELD_ASSOCIATION_NONE;
+        // Missing array → same as cull off (full wall), no warning.
+        if (ResolveThresholdArray(input, epName, scalarAssoc))
+        {
+            threshold->SetInputData(input);
+            threshold->SetInputArrayToProcess(0, 0, 0, scalarAssoc, epName);
+            threshold->SetThresholdFunction(vtkThreshold::THRESHOLD_BETWEEN);
+            threshold->SetLowerThreshold(-1.0e200);
+            threshold->SetUpperThreshold(-1.0e-9);
+            threshold->SetSelectedComponent(0);
+            threshold->SetComponentModeToUseSelected();
+            threshold->SetAllScalars(this->EndpointIndexAllScalars ? 1 : 0);
+            threshold->Update();
+            vtkDataSet* const thOut = vtkDataSet::SafeDownCast(threshold->GetOutputDataObject(0));
+            if (thOut && thOut->GetNumberOfCells() > 0)
+            {
+                geometry->SetInputConnection(threshold->GetOutputPort());
+                triangle->SetInputConnection(geometry->GetOutputPort());
+                triangle->Update();
+                patchIn = vtkPolyData::SafeDownCast(triangle->GetOutputDataObject(0));
+            }
+            // Empty threshold (e.g. no negative tags) → fall back to full surface, no warning.
+        }
     }
 
-    vtkNew<vtkGeometryFilter> geometry;
-    geometry->SetInputConnection(threshold->GetOutputPort());
-    vtkNew<vtkTriangleFilter> triangle;
-    triangle->SetInputConnection(geometry->GetOutputPort());
-    triangle->Update();
-    vtkPolyData* patchIn = vtkPolyData::SafeDownCast(triangle->GetOutputDataObject(0));
+    if (!patchIn)
+    {
+        // EnableEndpointCull off, missing array, or empty threshold → full input as wall.
+        triangle->SetInputData(input);
+        triangle->Update();
+        patchIn = vtkPolyData::SafeDownCast(triangle->GetOutputDataObject(0));
+    }
+
     vtkNew<vtkPolyDataConnectivityFilter> largestRegionFilter;
     vtkNew<vtkCleanPolyData> largestRegionCleanUnused;
     if (this->LargestConnectedRegionOnly && patchIn && patchIn->GetNumberOfCells() > 0)
@@ -740,6 +738,13 @@ int vtkSHYXRemeshWithEndpoint::RequestData(
         output->ShallowCopy(input);
         return 1;
     }
+
+    if (this->CheckAbort())
+    {
+        return 0;
+    }
+    this->SetProgressText("Converting to CGAL");
+    this->UpdateProgress(0.08);
 
     double b[6];
     patchIn->GetBounds(b);
@@ -772,6 +777,12 @@ int vtkSHYXRemeshWithEndpoint::RequestData(
 
     try
     {
+        auto reportProgress = [this](double frac, const char* text) {
+            this->SetProgressText(text);
+            this->UpdateProgress(frac);
+        };
+
+        reportProgress(0.10, "Computing ICC sizing field");
         PrepareIccVertexNormalsForAdaptiveSizing(cgalMesh->surface, nullptr);
 
         std::vector<double> uncappedSizes;
@@ -782,6 +793,11 @@ int vtkSHYXRemeshWithEndpoint::RequestData(
             static_cast<double>(this->AdaptiveSizingNeighborMaxRatio), this->ScaleToRange,
             &uncappedSizes);
         this->FillUncappedSizeHistogram(uncappedSizes);
+
+        if (this->CheckAbort())
+        {
+            return 0;
+        }
 
         if (this->EnableWallRemesh)
         {
@@ -806,6 +822,10 @@ int vtkSHYXRemeshWithEndpoint::RequestData(
             };
 
             const unsigned int remeshIterations = static_cast<unsigned int>(this->NumberOfIterations);
+            const bool doCap = this->EnableCapRemesh;
+            // Wall remesh occupies [wallStart, wallEnd); cap/export take the rest.
+            const double wallStart = 0.15;
+            const double wallEnd = doCap ? 0.62 : 0.90;
 
             // After isotropic_remeshing, Surface_mesh keeps removed v/e/f as garbage. A second
             // remesh (especially after recompute_curvature) on that uncompacted mesh can hang for
@@ -818,39 +838,34 @@ int vtkSHYXRemeshWithEndpoint::RequestData(
                 }
             };
 
-            auto doRemeshSingleIteration = [&]() {
-                collectGarbageIfNeeded();
-                pmp::isotropic_remeshing(
-                    cgalMesh->surface.faces(), sizing, cgalMesh->surface, remeshNp(1));
-                collectGarbageIfNeeded();
-            };
+            for (unsigned int iter = 0; iter < remeshIterations; ++iter)
+            {
+                char msg[96];
+                std::snprintf(msg, sizeof(msg), "Wall remesh %u/%u", iter + 1u, remeshIterations);
+                const double frac = wallStart +
+                    (wallEnd - wallStart) * (static_cast<double>(iter) /
+                        static_cast<double>((std::max)(1u, remeshIterations)));
+                reportProgress(frac, msg);
 
-            if (remeshIterations <= 1u)
-            {
-                doRemeshSingleIteration();
-            }
-            else
-            {
-                const unsigned int preliminaryPasses = remeshIterations - 1u;
-                for (unsigned int pass = 0; pass < preliminaryPasses; ++pass)
-                {
-                    if (this->RemeshRecomputeCurvatureEachIteration && pass > 0)
-                    {
-                        collectGarbageIfNeeded();
-                        sizing.recompute_curvature(cgalMesh->surface);
-                    }
-                    doRemeshSingleIteration();
-                }
-                if (this->RemeshRecomputeCurvatureEachIteration)
+                if (this->RemeshRecomputeCurvatureEachIteration && iter > 0)
                 {
                     collectGarbageIfNeeded();
                     sizing.recompute_curvature(cgalMesh->surface);
                 }
-                doRemeshSingleIteration();
+                collectGarbageIfNeeded();
+                pmp::isotropic_remeshing(
+                    cgalMesh->surface.faces(), sizing, cgalMesh->surface, remeshNp(1));
+                collectGarbageIfNeeded();
+
+                if (this->CheckAbort())
+                {
+                    return 0;
+                }
             }
+            reportProgress(wallEnd, "Wall remesh done");
 
             // === Phase 2: Hole fill (FairingContinuity=0) + Cap remesh ===
-            if (this->EnableCapRemesh)
+            if (doCap)
             {
                 // Reset feature edges after wall remesh (new edges default to false already,
                 // but be explicit for safety).
@@ -883,17 +898,29 @@ int vtkSHYXRemeshWithEndpoint::RequestData(
                     std::vector<CGAL_Surface::Face_index> allCapFaces;
                     std::vector<CGAL_Surface::Vertex_index> allCapVertices;
 
-                    for (CGAL_Surface::Halfedge_index bh : holeStarters)
+                    const std::size_t nHoles = holeStarters.size();
+                    for (std::size_t hi = 0; hi < nHoles; ++hi)
                     {
+                        char msg[96];
+                        std::snprintf(msg, sizeof(msg), "Filling hole %zu/%zu", hi + 1, nHoles);
+                        reportProgress(
+                            0.62 + 0.08 * (static_cast<double>(hi) / static_cast<double>((std::max)(std::size_t{ 1 }, nHoles))),
+                            msg);
+
                         std::vector<CGAL_Surface::Face_index> hf;
                         std::vector<CGAL_Surface::Vertex_index> hv;
                         pmp::triangulate_refine_and_fair_hole(
-                            cgalMesh->surface, bh,
+                            cgalMesh->surface, holeStarters[hi],
                             std::back_inserter(hf),
                             std::back_inserter(hv),
                             pmp::parameters::fairing_continuity(0u));
                         allCapFaces.insert(allCapFaces.end(), hf.begin(), hf.end());
                         allCapVertices.insert(allCapVertices.end(), hv.begin(), hv.end());
+
+                        if (this->CheckAbort())
+                        {
+                            return 0;
+                        }
                     }
 
                     if (!allCapFaces.empty())
@@ -926,6 +953,8 @@ int vtkSHYXRemeshWithEndpoint::RequestData(
 
                         const unsigned int capIters =
                             static_cast<unsigned int>(this->CapNumberOfIterations);
+                        const double capStart = 0.72;
+                        const double capEnd = 0.94;
 
                         // Named-parameter builder (always single iteration, loops managed below).
                         const auto capNp = [&]() {
@@ -941,32 +970,48 @@ int vtkSHYXRemeshWithEndpoint::RequestData(
                         };
 
                         // Same Surface_mesh garbage issue as wall multi-iter remesh (README §3).
-                        auto collectGarbageIfNeeded = [&]() {
+                        auto collectGarbageIfNeededCap = [&]() {
                             if (cgalMesh->surface.has_garbage())
                             {
                                 cgalMesh->surface.collect_garbage();
                             }
                         };
 
-                        // First iteration always uses the original allCapFaces range.
-                        collectGarbageIfNeeded();
-                        pmp::isotropic_remeshing(allCapFaces, capSizing, cgalMesh->surface, capNp());
-                        collectGarbageIfNeeded();
-
-                        // Remaining iterations: optionally recompute BFS before each pass.
-                        // Face range is re-collected after remesh/garbage (indices may change).
-                        for (unsigned int pass = 1; pass < capIters; ++pass)
+                        for (unsigned int pass = 0; pass < capIters; ++pass)
                         {
-                            collectGarbageIfNeeded();
-                            if (this->CapRefineSizingField)
+                            char msg[96];
+                            std::snprintf(
+                                msg, sizeof(msg), "Cap remesh %u/%u", pass + 1u, capIters);
+                            const double frac = capStart +
+                                (capEnd - capStart) * (static_cast<double>(pass) /
+                                    static_cast<double>((std::max)(1u, capIters)));
+                            reportProgress(frac, msg);
+
+                            collectGarbageIfNeededCap();
+                            if (pass == 0)
                             {
-                                capSizing.recompute(cgalMesh->surface);
+                                pmp::isotropic_remeshing(
+                                    allCapFaces, capSizing, cgalMesh->surface, capNp());
                             }
-                            auto currentCapFaces = capSizing.collectCapFaces(cgalMesh->surface);
-                            pmp::isotropic_remeshing(
-                                currentCapFaces, capSizing, cgalMesh->surface, capNp());
-                            collectGarbageIfNeeded();
+                            else
+                            {
+                                if (this->CapRefineSizingField)
+                                {
+                                    capSizing.recompute(cgalMesh->surface);
+                                }
+                                auto currentCapFaces = capSizing.collectCapFaces(cgalMesh->surface);
+                                pmp::isotropic_remeshing(
+                                    currentCapFaces, capSizing, cgalMesh->surface, capNp());
+                            }
+                            collectGarbageIfNeededCap();
+
+                            if (this->CheckAbort())
+                            {
+                                return 0;
+                            }
                         }
+
+                        reportProgress(0.95, "Tagging cap regions");
 
                         // Tag each disconnected cap patch with ids 1..n (multiple holes),
                         // ordered by total cap area descending (largest patch → 1).
@@ -1092,27 +1137,46 @@ int vtkSHYXRemeshWithEndpoint::RequestData(
         return 0;
     }
 
+    this->SetProgressText("Writing output");
+    this->UpdateProgress(0.97);
+
     vtkCGALHelper::toVTK(cgalMesh.get(), output);
     this->interpolateAttributes(patchIn, output);
 
     // --- Fix up EndpointIndex for cap cells/vertices ----------------------------
-    // interpolateAttributes probes from patchIn (wall-only, all EndpointIndex < 0),
+    // interpolateAttributes probes from patchIn (wall-only, all EndpointIndex < 0 when present),
     // so cap cells receive the wrong negative value.  Correct to positive ids 1..n
     // (one id per disconnected cap patch; ids ordered by cap area largest→smallest)
-    // using f:vespa_cap_idx before toVTK.
+    // using f:vespa_cap_idx. When the endpoint array was cleared (full-input-as-wall), still
+    // write a default "EndpointIndex" so filled caps are tagged for downstream use.
     // toVTK iterates faces() / vertices() in the same order as here.
-    if (const char* const epName = this->GetEndpointIndexArrayName())
     {
+        const char* epOutName = this->GetEndpointIndexArrayName();
         const auto capFaceTagOpt =
             cgalMesh->surface.property_map<CGAL_Surface::Face_index, int>("f:vespa_cap_idx");
         const auto capIntPtOpt = cgalMesh->surface.property_map<CGAL_Surface::Vertex_index, bool>(
             "v:vespa_cap_is_interior");
-
-        // --- Cell data ---
-        if (capFaceTagOpt.has_value())
+        const bool epOutEmpty = (epOutName == nullptr || epOutName[0] == '\0' ||
+            std::strcmp(epOutName, "(None)") == 0 || std::strcmp(epOutName, "None") == 0);
+        if (epOutEmpty && capFaceTagOpt.has_value())
         {
-            vtkDataArray* const cellArr = output->GetCellData()->GetArray(epName);
-            if (cellArr)
+            epOutName = "EndpointIndex";
+        }
+
+        if (epOutName && epOutName[0] != '\0' && capFaceTagOpt.has_value())
+        {
+            // --- Cell data ---
+            vtkDataArray* cellArr = output->GetCellData()->GetArray(epOutName);
+            if (!cellArr)
+            {
+                vtkNew<vtkDoubleArray> created;
+                created->SetName(epOutName);
+                created->SetNumberOfComponents(1);
+                created->SetNumberOfTuples(output->GetNumberOfCells());
+                created->FillComponent(0, -1.0);
+                output->GetCellData()->AddArray(created);
+                cellArr = created;
+            }
             {
                 vtkIdType cid = 0;
                 for (CGAL_Surface::Face_index f : cgalMesh->surface.faces())
@@ -1129,14 +1193,21 @@ int vtkSHYXRemeshWithEndpoint::RequestData(
                     ++cid;
                 }
             }
-        }
 
-        // --- Point data (interior cap only; seam stays probed wall value) ---
-        if (capFaceTagOpt.has_value() && capIntPtOpt.has_value())
-        {
-            vtkDataArray* const ptArr = output->GetPointData()->GetArray(epName);
-            if (ptArr)
+            // --- Point data (interior cap only; seam stays probed / wall value) ---
+            if (capIntPtOpt.has_value())
             {
+                vtkDataArray* ptArr = output->GetPointData()->GetArray(epOutName);
+                if (!ptArr)
+                {
+                    vtkNew<vtkDoubleArray> created;
+                    created->SetName(epOutName);
+                    created->SetNumberOfComponents(1);
+                    created->SetNumberOfTuples(output->GetNumberOfPoints());
+                    created->FillComponent(0, -1.0);
+                    output->GetPointData()->AddArray(created);
+                    ptArr = created;
+                }
                 vtkIdType pid = 0;
                 for (CGAL_Surface::Vertex_index v : cgalMesh->surface.vertices())
                 {
@@ -1176,5 +1247,7 @@ int vtkSHYXRemeshWithEndpoint::RequestData(
     // Target size vs realized incident edge lengths on remeshed vertices (point data).
     ExportSizingLengthMismatchDebug(cgalMesh->surface, output);
 
+    this->SetProgressText("Done");
+    this->UpdateProgress(1.0);
     return 1;
 }

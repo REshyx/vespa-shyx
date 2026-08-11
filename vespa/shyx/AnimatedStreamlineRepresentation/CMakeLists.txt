@@ -1,6 +1,7 @@
 set(classes
   vtkAnimatedStreamlineCompositePolyDataMapper
-  vtkAnimatedStreamlineRepresentation)
+  vtkAnimatedStreamlineRepresentation
+  vtkSMAnimatedStreamlineIntegrationScaleDomain)
 vtk_module_add_module(vtkAnimatedStreamlineRepresentation
   FORCE_STATIC
   CLASSES ${classes}

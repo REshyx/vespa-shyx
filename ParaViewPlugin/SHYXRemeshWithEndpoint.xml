@@ -4,15 +4,11 @@
     <SourceProxy class="vtkSHYXRemeshWithEndpoint"
                  label="SHYX Remesh With Endpoint"
                  name="SHYXRemeshWithEndpoint">
-      <Documentation short_help="Threshold EndpointIndex &lt; 0, then Vespa ICC remesh that patch only.">
-        Uses **vtkThreshold** (interval on the first component) plus **vtkGeometryFilter** to extract
-        the surface cells whose **first tuple component is strictly below zero** (default **EndpointIndex**
-        from vtkCGALVesselEndClipper: caps positive, bulk **-1**). CGAL then remeshes **only that
-        extracted patch** with the same Vespa ICC sizing as SHYX Adaptive Isotropic Remesher. The
-        filter output is **the remeshed patch alone**, not the full vessel; rejoin caps in ParaView if
-        needed. No vtkSelection, no feature-angle detection, no feature mask. CGAL split/collapse/flip
-        use defaults (all on); only protect / collapse / relax **constraints** are exposed besides
-        sizing and iteration controls.
+      <Documentation short_help="Optional EndpointIndex &lt; 0 cull, then Vespa ICC remesh; optional hole fill + cap remesh.">
+        Optionally cull by an endpoint marker array (first component &lt; 0), then remesh the wall with
+        Vespa ICC sizing. **Enable endpoint cull** is ON by default with array **EndpointIndex**; if
+        that array is missing, cull is skipped and the whole surface is treated as wall. With wall
+        remesh ON, open boundary loops can be filled and the filled patches remeshed (Enable cap remesh).
       </Documentation>
 
       <OutputPort name="Remeshed surface" index="0" id="port0"/>
@@ -27,15 +23,28 @@
           <DataType value="vtkPolyData"/>
         </DataTypeDomain>
         <InputArrayDomain name="endpoint_arrays" attribute_type="cell" optional="1"/>
-        <Documentation>Vessel lumen surface with cell-centered scalars for endpoint tagging (picker lists cell arrays only so the default EndpointIndex resolves to cell data when a point array of the same name also exists).</Documentation>
+        <Documentation>Vessel lumen surface with cell-centered scalars for endpoint tagging (picker lists cell arrays only so EndpointIndex resolves to cell data when a point array of the same name also exists).</Documentation>
       </InputProperty>
+
+      <IntVectorProperty command="SetEnableEndpointCull"
+                         name="EnableEndpointCull"
+                         label="Enable endpoint cull"
+                         number_of_elements="1"
+                         default_values="1"
+                         animateable="0">
+        <BooleanDomain name="bool"/>
+        <Documentation>
+          When ON (default), keep cells whose endpoint-array first component is strictly negative
+          before remesh. If the chosen array is missing on the input, cull is skipped (whole surface
+          as wall). When OFF, always treat the entire input as wall.
+        </Documentation>
+      </IntVectorProperty>
 
       <StringVectorProperty name="EndpointIndexArrayName"
                             label="Endpoint array"
-                            command="SetInputArrayToProcess"
-                            number_of_elements="5"
-                            element_types="0 0 0 0 2"
-                            default_values="0 0 0 1 EndpointIndex"
+                            command="SetEndpointIndexArrayName"
+                            number_of_elements="1"
+                            default_values="EndpointIndex"
                             animateable="0">
         <ArrayListDomain name="endpoint_array_list"
                          input_domain_name="endpoint_arrays">
@@ -44,14 +53,16 @@
           </RequiredProperties>
         </ArrayListDomain>
         <Documentation>
-          Cell-centered array on the input (same VTK input-array slot as other SHYX filters).
-          Default: **EndpointIndex** on **Cell Data** (e.g. vtkCGALVesselEndClipper caps). The array
-          list is restricted to cell arrays so ParaView does not pick a same-named point array by
-          default when both exist. **vtkThreshold** keeps cells whose **first component** lies in
-          (-1e200, -1e-9), i.e. strictly negative for typical integer tags (e.g. bulk **-1**).
+          Cell-centered array used when **Enable endpoint cull** is ON (default **EndpointIndex**).
+          **vtkThreshold** keeps cells whose **first component** lies in (-1e200, -1e-9). If the
+          array is not on the input, cull falls back to the full surface (no error).
         </Documentation>
         <Hints>
-          <ArraySelectionWidget/>
+          <ArraySelectionWidget icon_type="cell"/>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="enabled_state"
+                                   property="EnableEndpointCull"
+                                   value="1"/>
         </Hints>
       </StringVectorProperty>
 
@@ -65,8 +76,15 @@
         <BooleanDomain name="bool"/>
         <Documentation>
           When the array is point-centered: if ON, **vtkThreshold** requires every corner to satisfy
-          the interval; if OFF, one corner is enough. Ignored for cell-centered arrays.
+          the interval; if OFF, one corner is enough. Ignored for cell-centered arrays and when
+          endpoint cull is OFF.
         </Documentation>
+        <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="enabled_state"
+                                   property="EnableEndpointCull"
+                                   value="1"/>
+        </Hints>
       </IntVectorProperty>
 
       <IntVectorProperty command="SetLargestConnectedRegionOnly"
@@ -77,15 +95,14 @@
                          animateable="0">
         <BooleanDomain name="bool"/>
         <Documentation>
-          When ON (default), after extracting cells with **EndpointIndex** &lt; 0, keep only the **largest**
-          triangle-connected surface patch (**vtkPolyDataConnectivityFilter**, largest region), then
-          **vtkCleanPolyData** with **point merging off** removes vertices not used by any output triangle
-          (no merging of geometrically coincident points); point lists then match the kept region only.
-          Use when the thresholded side contains several disjoint pieces and you want the main bulk.
+          When ON (default), after building the wall surface (optional endpoint cull, or the full
+          input), keep only the **largest** triangle-connected surface patch, then clean unused
+          vertices (point merging off).
         </Documentation>
       </IntVectorProperty>
 
       <PropertyGroup label="Endpoint region">
+        <Property name="EnableEndpointCull"/>
         <Property name="EndpointIndexArrayName"/>
         <Property name="EndpointIndexAllScalars"/>
         <Property name="LargestConnectedRegionOnly"/>
@@ -503,7 +520,6 @@
 
       <Hints>
         <ShowInMenu category="SHYX" icon=":/VESPA/SHYX_Adaptive_Isotropic_Remesher.png"/>
-        <ShowInMenu category="Vascular" icon=":/VESPA/SHYX_Adaptive_Isotropic_Remesher.png"/>
         <RepresentationType view="RenderView" type="Surface With Edges" port="0"/>
       </Hints>
     </SourceProxy>

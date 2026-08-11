@@ -76,7 +76,6 @@
 
       <Hints>
         <ShowInMenu category="SHYX"/>
-        <ShowInMenu category="Vascular"/>
       </Hints>
     </SourceProxy>
   </ProxyGroup>

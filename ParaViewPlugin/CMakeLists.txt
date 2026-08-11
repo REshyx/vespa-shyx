@@ -172,6 +172,36 @@ if (PARAVIEW_USE_QT)
     SphereSelection/pqSHYXSphereSelectionViewFrameActions.h
     SphereSelection/pqSHYXSphereSelectionController.cxx
     SphereSelection/pqSHYXSphereSelectionController.h)
+
+  paraview_plugin_add_auto_start(
+    CLASS_NAME "pqSHYXGrowSelectionWithSimilarAutoStart"
+    STARTUP onStartup
+    SHUTDOWN onShutdown
+    INTERFACES grow_selection_similar_autostart_interfaces
+    SOURCES grow_selection_similar_autostart_sources)
+
+  list(APPEND vespa_plugin_qt_auto_interfaces ${grow_selection_similar_autostart_interfaces})
+  list(APPEND vespa_plugin_qt_auto_sources
+    ${grow_selection_similar_autostart_sources}
+    GrowSelectionWithSimilar/pqSHYXGrowSelectionWithSimilarAutoStart.cxx
+    GrowSelectionWithSimilar/pqSHYXGrowSelectionWithSimilarAutoStart.h
+    GrowSelectionWithSimilar/pqSHYXGrowSelectionWithSimilarViewFrameActions.cxx
+    GrowSelectionWithSimilar/pqSHYXGrowSelectionWithSimilarViewFrameActions.h
+    GrowSelectionWithSimilar/pqSHYXGrowSelectionWithSimilarController.cxx
+    GrowSelectionWithSimilar/pqSHYXGrowSelectionWithSimilarController.h)
+
+  paraview_plugin_add_auto_start(
+    CLASS_NAME "pqVESPAVascularCategoryAutoStart"
+    STARTUP onStartup
+    SHUTDOWN onShutdown
+    INTERFACES vascular_category_autostart_interfaces
+    SOURCES vascular_category_autostart_sources)
+
+  list(APPEND vespa_plugin_qt_auto_interfaces ${vascular_category_autostart_interfaces})
+  list(APPEND vespa_plugin_qt_auto_sources
+    ${vascular_category_autostart_sources}
+    pqVESPAVascularCategoryAutoStart.cxx
+    pqVESPAVascularCategoryAutoStart.h)
 endif ()
 
 paraview_add_plugin(VESPAPlugin
@@ -185,6 +215,7 @@ paraview_add_plugin(VESPAPlugin
   EXTRA_INCLUDES "vespa_qrc_init.h"
   SERVER_MANAGER_XML
     "VESPAFilters.xml"
+    "VESPAVascularCategory.xml"
     "SHYXSurfaceTipExtractor.xml"
     "SHYXSurfaceToVolumeMesh.xml"
     "SHYXTetGen.xml"
@@ -269,7 +300,8 @@ if (PARAVIEW_USE_QT)
     AUTOUIC_SEARCH_PATHS "${CMAKE_CURRENT_SOURCE_DIR}/Resources/UI")
   target_include_directories(VESPAPlugin PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/TransferCurve"
-    "${CMAKE_CURRENT_SOURCE_DIR}/SphereSelection")
+    "${CMAKE_CURRENT_SOURCE_DIR}/SphereSelection"
+    "${CMAKE_CURRENT_SOURCE_DIR}/GrowSelectionWithSimilar")
 endif ()
 
 target_link_libraries(VESPAPlugin

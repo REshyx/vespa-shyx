@@ -74,7 +74,7 @@ vtkAnimatedStreamlineRepresentation::vtkAnimatedStreamlineRepresentation()
   this->Animate = true;
   this->OpacityScale = 0.8;
   this->TimeScale = 0.4;
-  this->IntegrationScale = 50.0;
+  this->IntegrationScale = 100.0;
   this->Trunc = 2.0;
   this->Pow = 1.0;
   this->StartTime = vtkTimerLog::GetUniversalTime();

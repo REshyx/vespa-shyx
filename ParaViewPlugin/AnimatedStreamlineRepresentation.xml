@@ -18,9 +18,21 @@
 
       <DoubleVectorProperty name="IntegrationScale"
                             command="SetIntegrationScale"
-                            default_values="50"
+                            default_values="100"
                             number_of_elements="1">
-        <DoubleRangeDomain name="range" min="-10" max="100" />
+        <Documentation>
+          Spatial pulse density. Suggested default is num_pulses / (bbox longest edge *
+          max velocity magnitude), targeting about 100 pulses along an approximated
+          animCoordx range. Use the property Scale/Reset control to refresh the
+          suggestion when the input changes.
+        </Documentation>
+        <AnimatedStreamlineIntegrationScaleDomain name="range"
+                                                  num_pulses="100"
+                                                  default_mode="max">
+          <RequiredProperties>
+            <Property function="Input" name="Input" />
+          </RequiredProperties>
+        </AnimatedStreamlineIntegrationScaleDomain>
       </DoubleVectorProperty>
 
       <DoubleVectorProperty name="TimeScale"

@@ -6,10 +6,13 @@
 #include "pqPipelineSource.h"
 #include "pqRepresentation.h"
 #include "pqServerManagerModel.h"
+#include "pqUndoStack.h"
 #include "pqView.h"
 
 #include "vtkAlgorithm.h"
+#include "vtkCommand.h"
 #include "vtkDataArray.h"
+#include "vtkEventQtSlotConnect.h"
 #include "vtkFieldData.h"
 #include "vtkMath.h"
 #include "vtkMatrix4x4.h"
@@ -21,6 +24,10 @@
 #include "vtkSMSourceProxy.h"
 #include "vtkSMUncheckedPropertyHelper.h"
 #include "vtkTransform.h"
+
+#include <QPushButton>
+#include <QTimer>
+#include <QVBoxLayout>
 
 #include <cmath>
 #include <cstdint>
@@ -119,6 +126,22 @@ void SetUncheckedInt(vtkSMProxy* proxy, const char* name, int v)
     }
 }
 
+void SetCheckedDoubles(vtkSMProxy* proxy, const char* name, const double* v, int n)
+{
+    if (vtkSMProperty* prop = proxy->GetProperty(name))
+    {
+        vtkSMPropertyHelper(prop).Set(v, n);
+    }
+}
+
+void SetCheckedInt(vtkSMProxy* proxy, const char* name, int v)
+{
+    if (vtkSMProperty* prop = proxy->GetProperty(name))
+    {
+        vtkSMPropertyHelper(prop).Set(0, v);
+    }
+}
+
 void SetWidgetDoubles(vtkSMProxy* wdg, const char* name, const double* v, int n)
 {
     if (wdg->GetProperty(name))
@@ -133,6 +156,29 @@ void SetWidgetInt(vtkSMProxy* wdg, const char* name, int v)
     {
         vtkSMPropertyHelper(wdg, name, /*quiet=*/true).Set(0, v);
     }
+}
+
+/** Push fitted-box PRS onto filter (checked + unchecked) and the 3D widget representation. */
+void PushPrs(vtkSMProxy* src, vtkSMProxy* wdg, const double* pos, const double* rotDeg, const double* scale,
+    const double* refBounds, int nBounds)
+{
+    SetCheckedInt(src, "UseReferenceBounds", 1);
+    SetCheckedDoubles(src, "ReferenceBounds", refBounds, nBounds);
+    SetCheckedDoubles(src, "Position", pos, 3);
+    SetCheckedDoubles(src, "Rotation", rotDeg, 3);
+    SetCheckedDoubles(src, "Scale", scale, 3);
+
+    SetUncheckedInt(src, "UseReferenceBounds", 1);
+    SetUncheckedDoubles(src, "ReferenceBounds", refBounds, nBounds);
+    SetUncheckedDoubles(src, "Position", pos, 3);
+    SetUncheckedDoubles(src, "Rotation", rotDeg, 3);
+    SetUncheckedDoubles(src, "Scale", scale, 3);
+
+    SetWidgetInt(wdg, "UseReferenceBounds", 1);
+    SetWidgetDoubles(wdg, "ReferenceBounds", refBounds, nBounds);
+    SetWidgetDoubles(wdg, "Position", pos, 3);
+    SetWidgetDoubles(wdg, "Rotation", rotDeg, 3);
+    SetWidgetDoubles(wdg, "Scale", scale, 3);
 }
 
 void SetWidgetPlaceFactorOne(vtkSMProxy* wdg)
@@ -152,12 +198,52 @@ pqVESPAOBBInteractiveBoxWidget::pqVESPAOBBInteractiveBoxWidget(
     vtkSMProxy* proxy, vtkSMPropertyGroup* smgroup, QWidget* parent)
     : pqBoxPropertyWidget(proxy, smgroup, parent, true)
 {
+    if (auto* vbox = qobject_cast<QVBoxLayout*>(this->layout()))
+    {
+        auto* resetBtn = new QPushButton(tr("Reset to Fitted Box"), this);
+        resetBtn->setToolTip(
+            tr("Restore Translate / Rotate / Scale to the fitted OBB or AABB (before interactive adjustments)."));
+        vbox->addWidget(resetBtn);
+        QObject::connect(resetBtn, &QPushButton::clicked, this, &pqVESPAOBBInteractiveBoxWidget::resetToFittedBox);
+    }
+
+    // Minimum OBB: when BoxType changes, force re-place PRS to the new fitted box and push
+    // properties (avoids one-Apply lag from stale Position/Rotation/Scale). Defer so we run
+    // after the BoxType property value has fully settled on the proxy.
+    if (vtkSMProperty* boxType = proxy->GetProperty("BoxType"))
+    {
+        this->BoxTypeConnect = vtkEventQtSlotConnect::New();
+        this->BoxTypeConnect->Connect(boxType, vtkCommand::ModifiedEvent, this, SLOT(onBoxTypeChanged()));
+    }
 }
 
 //-----------------------------------------------------------------------------
 pqVESPAOBBInteractiveBoxWidget::~pqVESPAOBBInteractiveBoxWidget()
 {
     this->disconnectViewVisibilityLinks();
+    if (this->BoxTypeConnect)
+    {
+        this->BoxTypeConnect->Delete();
+        this->BoxTypeConnect = nullptr;
+    }
+}
+
+//-----------------------------------------------------------------------------
+void pqVESPAOBBInteractiveBoxWidget::resetToFittedBox()
+{
+    BEGIN_UNDO_SET(tr("Reset OBB Interactive Box"));
+    this->LastObbFieldFingerprint = 0ULL;
+    this->placeWidget();
+    Q_EMIT this->changeAvailable();
+    Q_EMIT this->changeFinished();
+    END_UNDO_SET();
+}
+
+//-----------------------------------------------------------------------------
+void pqVESPAOBBInteractiveBoxWidget::onBoxTypeChanged()
+{
+    // Run after the current event so BoxType on the proxy is the value the user just chose.
+    QTimer::singleShot(0, this, [this]() { this->resetToFittedBox(); });
 }
 
 //-----------------------------------------------------------------------------
@@ -171,7 +257,19 @@ void pqVESPAOBBInteractiveBoxWidget::disconnectViewVisibilityLinks()
 }
 
 //-----------------------------------------------------------------------------
-bool pqVESPAOBBInteractiveBoxWidget::isObbPort1VisibleInView(pqView* view) const
+int pqVESPAOBBInteractiveBoxWidget::obbOutputPort() const
+{
+    auto* src = vtkSMSourceProxy::SafeDownCast(this->proxy());
+    if (!src)
+    {
+        return 0;
+    }
+    // Selection OBB Subtract: difference on 0, OBB box on 1. Minimum OBB: single port 0.
+    return src->GetNumberOfOutputPorts() > 1 ? 1 : 0;
+}
+
+//-----------------------------------------------------------------------------
+bool pqVESPAOBBInteractiveBoxWidget::isObbOutputVisibleInView(pqView* view) const
 {
     if (!view)
     {
@@ -183,7 +281,8 @@ bool pqVESPAOBBInteractiveBoxWidget::isObbPort1VisibleInView(pqView* view) const
     {
         return true;
     }
-    bool foundPort1Repr = false;
+    const int port = this->obbOutputPort();
+    bool foundObbRepr = false;
     for (pqRepresentation* repr : view->getRepresentations())
     {
         auto* dr = qobject_cast<pqDataRepresentation*>(repr);
@@ -192,17 +291,17 @@ bool pqVESPAOBBInteractiveBoxWidget::isObbPort1VisibleInView(pqView* view) const
             continue;
         }
         pqOutputPort* op = dr->getOutputPortFromInput();
-        if (!op || op->getPortNumber() != 1)
+        if (!op || op->getPortNumber() != port)
         {
             continue;
         }
-        foundPort1Repr = true;
+        foundObbRepr = true;
         if (dr->isVisible())
         {
             return true;
         }
     }
-    if (!foundPort1Repr)
+    if (!foundObbRepr)
     {
         return true;
     }
@@ -226,7 +325,7 @@ void pqVESPAOBBInteractiveBoxWidget::setView(pqView* view)
 void pqVESPAOBBInteractiveBoxWidget::updateWidgetVisibility()
 {
     bool visible = this->isSelected() && this->isWidgetVisible() && this->view();
-    if (visible && !this->isObbPort1VisibleInView(this->view()))
+    if (visible && !this->isObbOutputVisibleInView(this->view()))
     {
         visible = false;
     }
@@ -256,14 +355,15 @@ void pqVESPAOBBInteractiveBoxWidget::placeWidget()
     src->UpdatePipelineInformation();
 
     constexpr double ub[6] = { 0, 1, 0, 1, 0, 1 };
+    const int port = this->obbOutputPort();
 
     vtkPolyData* pd = nullptr;
     if (vtkAlgorithm* alg = vtkAlgorithm::SafeDownCast(src->GetClientSideObject()))
     {
-        pd = vtkPolyData::SafeDownCast(alg->GetOutputDataObject(1));
+        pd = vtkPolyData::SafeDownCast(alg->GetOutputDataObject(port));
     }
 
-    vtkPVDataInformation* di = src->GetDataInformation(1);
+    vtkPVDataInformation* di = src->GetDataInformation(port);
     if (!di || di->GetNumberOfPoints() < 1)
     {
         this->LastObbFieldFingerprint = 0ULL;
@@ -279,7 +379,12 @@ void pqVESPAOBBInteractiveBoxWidget::placeWidget()
     const bool haveObbField = pd ? ReadObbField(pd, C, h, u0, u1, u2) : false;
     if (haveObbField)
     {
-        const std::uint64_t fp = HashObbField(C, h, u0, u1, u2);
+        std::uint64_t fp = HashObbField(C, h, u0, u1, u2);
+        if (src->GetProperty("BoxType"))
+        {
+            const int boxType = vtkSMPropertyHelper(src, "BoxType").GetAsInt();
+            fp ^= (static_cast<std::uint64_t>(boxType) + 1ULL) * 0x9e3779b97f4a7c15ULL;
+        }
         if (fp != this->LastObbFieldFingerprint)
         {
             this->LastObbFieldFingerprint = fp;
@@ -304,18 +409,7 @@ void pqVESPAOBBInteractiveBoxWidget::placeWidget()
                 C[1] - h[0] * u0[1] - h[1] * u1[1] - h[2] * u2[1],
                 C[2] - h[0] * u0[2] - h[1] * u1[2] - h[2] * u2[2] };
 
-            SetUncheckedInt(src, "UseReferenceBounds", 1);
-            SetUncheckedDoubles(src, "ReferenceBounds", ub, 6);
-            SetUncheckedDoubles(src, "Position", pos, 3);
-            SetUncheckedDoubles(src, "Rotation", rotDeg, 3);
-            SetUncheckedDoubles(src, "Scale", scale, 3);
-
-            // Representation proxy uses checked values (pqBoxPropertyWidget reset path).
-            SetWidgetInt(wdg, "UseReferenceBounds", 1);
-            SetWidgetDoubles(wdg, "ReferenceBounds", ub, 6);
-            SetWidgetDoubles(wdg, "Position", pos, 3);
-            SetWidgetDoubles(wdg, "Rotation", rotDeg, 3);
-            SetWidgetDoubles(wdg, "Scale", scale, 3);
+            PushPrs(src, wdg, pos, rotDeg, scale, ub, 6);
         }
     }
     else
@@ -335,17 +429,7 @@ void pqVESPAOBBInteractiveBoxWidget::placeWidget()
             this->LastObbFieldFingerprint = fp;
             const double zero[3] = { 0, 0, 0 };
             const double one[3] = { 1, 1, 1 };
-            SetUncheckedInt(src, "UseReferenceBounds", 1);
-            SetUncheckedDoubles(src, "ReferenceBounds", b, 6);
-            SetUncheckedDoubles(src, "Position", zero, 3);
-            SetUncheckedDoubles(src, "Rotation", zero, 3);
-            SetUncheckedDoubles(src, "Scale", one, 3);
-
-            SetWidgetInt(wdg, "UseReferenceBounds", 1);
-            SetWidgetDoubles(wdg, "ReferenceBounds", b, 6);
-            SetWidgetDoubles(wdg, "Position", zero, 3);
-            SetWidgetDoubles(wdg, "Rotation", zero, 3);
-            SetWidgetDoubles(wdg, "Scale", one, 3);
+            PushPrs(src, wdg, zero, zero, one, b, 6);
         }
     }
 

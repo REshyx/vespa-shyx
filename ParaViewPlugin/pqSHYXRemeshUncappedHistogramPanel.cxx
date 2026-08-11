@@ -269,7 +269,8 @@ pqSHYXRemeshUncappedHistogramPanel::pqSHYXRemeshUncappedHistogramPanel(
     }
   }
   for (const char* name :
-    { "Input", "EndpointIndexArrayName", "LargestConnectedRegionOnly", "EndpointIndexAllScalars" })
+    { "Input", "EnableEndpointCull", "EndpointIndexArrayName", "LargestConnectedRegionOnly",
+      "EndpointIndexAllScalars" })
   {
     if (vtkSMProperty* p = smproxy->GetProperty(name))
     {
@@ -407,6 +408,8 @@ bool pqSHYXRemeshUncappedHistogramPanel::computePreviewFromInput()
 
   const bool largestOnly =
     readIntUnchecked(filterProxy->GetProperty("LargestConnectedRegionOnly"), 1) != 0;
+  const bool enableEndpointCull =
+    readIntUnchecked(filterProxy->GetProperty("EnableEndpointCull"), 1) != 0;
   const bool allScalars =
     readIntUnchecked(filterProxy->GetProperty("EndpointIndexAllScalars"), 0) != 0;
   const bool scaleToRange =
@@ -446,6 +449,7 @@ bool pqSHYXRemeshUncappedHistogramPanel::computePreviewFromInput()
   preview->SetMaxEdgeLength(maxLen);
   preview->SetAdaptiveSizingNeighborMaxRatio(neighborRatio);
   preview->SetLargestConnectedRegionOnly(largestOnly);
+  preview->SetEnableEndpointCull(enableEndpointCull);
   preview->SetEndpointIndexAllScalars(allScalars);
   preview->SetScaleToRange(scaleToRange);
   preview->EnableWallRemeshOff();
@@ -454,17 +458,10 @@ bool pqSHYXRemeshUncappedHistogramPanel::computePreviewFromInput()
   if (auto* arrProp =
         vtkSMStringVectorProperty::SafeDownCast(filterProxy->GetProperty("EndpointIndexArrayName")))
   {
-    if (arrProp->GetNumberOfElements() >= 5)
+    if (arrProp->GetNumberOfElements() >= 1)
     {
-      const char* assocStr = arrProp->GetElement(3);
-      const char* name = arrProp->GetElement(4);
-      const int assoc = (assocStr && assocStr[0] != '\0')
-        ? std::atoi(assocStr)
-        : vtkDataObject::FIELD_ASSOCIATION_CELLS;
-      if (name && name[0] != '\0')
-      {
-        preview->SetInputArrayToProcess(0, 0, 0, assoc, name);
-      }
+      const char* name = arrProp->GetElement(0);
+      preview->SetEndpointIndexArrayName(name);
     }
   }
 
