@@ -10,10 +10,10 @@ class pqView;
 class vtkEventQtSlotConnect;
 
 /**
- * Interactive box for SHYX filters that expose Position / Rotation / Scale with OBB field data:
- * SHYX Selection OBB Boolean Subtract (OBB on port 1) and SHYX Minimum OBB (OBB on port 0).
- * Uses a unit PlaceWidget bounds and keeps ReferenceBounds in sync with the filter (fitted OBB
- * orientation from field data), instead of driving the widget from the world-axis-aligned AABB.
+ * Interactive box for SHYX Minimum OBB (output port 0) exposing Position / Rotation / Scale
+ * with OBB field data. Uses a unit PlaceWidget bounds and keeps ReferenceBounds in sync with
+ * the filter (fitted OBB orientation from field data), instead of driving the widget from the
+ * world-axis-aligned AABB.
  *
  * When the OBB output has a display in the active view, the 3D box widget stays in sync with that
  * representation's Visibility (eye icon). Switching BoxType (min-volume / PCA / AABB) on
@@ -43,7 +43,7 @@ protected Q_SLOTS:
 
 private:
     void disconnectViewVisibilityLinks();
-    /** Output port that carries the OBB mesh / field data (1 if multi-port, else 0). */
+    /** Output port that carries the OBB mesh / field data (Minimum OBB is port 0). */
     int obbOutputPort() const;
     /** OBB output is shown in \a view; true if there is no OBB display in that view yet. */
     bool isObbOutputVisibleInView(pqView* view) const;

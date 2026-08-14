@@ -259,13 +259,7 @@ void pqVESPAOBBInteractiveBoxWidget::disconnectViewVisibilityLinks()
 //-----------------------------------------------------------------------------
 int pqVESPAOBBInteractiveBoxWidget::obbOutputPort() const
 {
-    auto* src = vtkSMSourceProxy::SafeDownCast(this->proxy());
-    if (!src)
-    {
-        return 0;
-    }
-    // Selection OBB Subtract: difference on 0, OBB box on 1. Minimum OBB: single port 0.
-    return src->GetNumberOfOutputPorts() > 1 ? 1 : 0;
+    return 0;
 }
 
 //-----------------------------------------------------------------------------

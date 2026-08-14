@@ -27,7 +27,7 @@ class vtkSMNewWidgetRepresentationProxy;
  * InteractiveCutPacked always drives clipping on the server when it parses.
  *
  * Visibility matches the port-1 representation eye icon in the active view (same idea as
- * pqVESPAOBBInteractiveBoxWidget and the boolean subtract preview).
+ * pqVESPAOBBInteractiveBoxWidget).
  */
 class pqVESPAEndClipperPlaneHandlesWidget : public pqPropertyGroupWidget
 {
