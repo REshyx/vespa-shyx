@@ -67,7 +67,6 @@
 | SHYX Radius Neighbor Count |
 | SHYX FTLE Filter |
 | SHYX Vortex Criteria |
-| SHYX Vortex Core (Test) |
 | SHYX Vector Field Topology |
 | SHYX Clebsch Map Filter |
 | SHYX Array Curve Mapper |
@@ -474,20 +473,6 @@
 
 ---
 
-### 25. SHYX Vortex Core (Test)
-
-**功能**：使用**平行矢量（parallel vectors）**方法提取涡核线，算法与 VTK 自带的 **Vortex Cores** 一致；本滤镜为 VESPA 插件内的独立副本，便于实验与版本固定。默认用速度与加速度作为两个矢量场；可选**高阶模式**以**急动度（jerk）**替代加速度。可对输出做 Q、delta、lambda_2、lambda_ci 等预筛选，相关量写在输出折线上。
-
-| 参数 | 类型 | 默认值 | 说明 |
-|------|------|--------|------|
-| **Vector Field** | string | — | 作为第一矢量场（通常为速度）的点数据数组。 |
-| **UseHigherOrderMethod** | bool | false | 开：第二矢量场用 jerk；关：用加速度。 |
-| **FasterApproximation** | bool | false | 使用更快的近似梯度（减少导数计算次数）。 |
-
-**输入**：`vtkDataSet`，须含所选 3 分量矢量数组；输出为涡核 `vtkPolyData`（折线）。
-
----
-
 ### 26. SHYX Vector Field Topology
 
 **功能**：对**定常矢量场**做矢量场拓扑分析，基于 VTK **`vtkVectorFieldTopology`**。支持 `vtkImageData`、`vtkUnstructuredGrid` 及含均匀网格的复合/AMR 数据。提取临界点、一维分界线、可选的三维中的二维分界曲面，以及可选的边界开关（boundary switch）结构。积分步长单位与 `vtkStreamTracer` 一致（长度或单元长度）。
@@ -619,7 +604,7 @@
 - 从点云重建时，一般顺序：点云 → **VESPA PCA Estimate Normals** → **VESPA Poisson** 或 **Advancing Front**；若点云较乱可考虑先 **Alpha Wrapping** 再后续处理。
 - **SHYX TetGen** 与 **SHYX Surface to Volume Mesh** 均可从表面生成体积网格：TetGen 基于 TetGen 库，参数更直观；后者基于 CGAL Mesh_3，可精细控制表面与体积质量。
 - **SHYX Bidirectional Streamline Merge** 适用于 **Stream Tracer** 等产生的双向折线，需正确设置 **SeedIds** 数组（单元或点数据）。
-- **SHYX Vector Field Topology**、**SHYX Vortex Core (Test)**、**SHYX Vortex Criteria**、**SHYX FTLE**、**SHYX Clebsch Map** 等流场工具对数据类型与数组名要求不同，请以各节说明与 ParaView 属性面板为准。
+- **SHYX Vector Field Topology**、**SHYX Vortex Criteria**、**SHYX FTLE**、**SHYX Clebsch Map** 等流场工具对数据类型与数组名要求不同，请以各节说明与 ParaView 属性面板为准。
 - **SHYX Disconnected Region Fuse** 用于将多个不连通表面（如断裂的网格）通过近距离顶点融合合并为一个整体；需根据模型尺度调整 Fuse Threshold。
 - **SHYX Point Cloud Surface SDF** 在**点云**上写 **SDF**；若要在**规则体素网格**上对**封闭**三角网格求有符号距离场（`vtkImageData`），应使用 CGAL 管线中的 **`vtkCGALSignedDistanceFunction`**（见 CGAL / PMP 模块文档或源码），二者勿混淆。
 - **SHYX Radius Neighbor Count** 用于点云或网格顶点上的**局部密度/邻域规模**分析；半径需与点间距尺度匹配。并行行为由 VTK SMP 后端决定（如与 ParaView 一同构建的 TBB 等）。

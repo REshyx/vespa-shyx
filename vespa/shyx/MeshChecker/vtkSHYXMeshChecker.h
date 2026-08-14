@@ -4,9 +4,8 @@
  *          and optionally output a repaired surface.
  *
  * - Output port 0: geometry after combinatorial soup repair (orient + repair_polygon_soup) and, when
- *   applicable, CGAL self-intersection repair on triangle meshes using the same PMP entry points as
- *   vtkSHYXAutorefineSelfIntersectionFilter (CGAL 6+: autorefine; CGAL 5: experimental
- *   autorefine_and_remove_self_intersections with optional preserve_genus).
+ *   applicable, CGAL self-intersection repair on triangle meshes (CGAL 6+: autorefine; CGAL 5:
+ *   experimental autorefine_and_remove_self_intersections with optional preserve_genus).
  * - Output port 1: diagnostic vtkPolyData mixing VTK_LINE, VTK_POLY_LINE, and VTK_TRIANGLE cells. Each
  *   cell has cell data array SHYX_CheckReason: 1 = soup edge with >2 incident faces, 2 = boundary
  *   (hole) cycle, 3 = triangle participating in a self-intersection (CGAL PMP::self_intersections).
@@ -61,8 +60,8 @@ public:
   //@{
   /**
    * If on, and the mesh is a pure triangle surface built from the soup, run CGAL autorefine for
-   * self-intersections when OnlyIfSelfIntersecting is off or when CGAL reports intersections (see
-   * vtkSHYXAutorefineSelfIntersectionFilter). Default: off.
+   * self-intersections when OnlyIfSelfIntersecting is off or when CGAL reports intersections.
+   * Default: off.
    */
   vtkGetMacro(AttemptRepairSelfIntersections, bool);
   vtkSetMacro(AttemptRepairSelfIntersections, bool);

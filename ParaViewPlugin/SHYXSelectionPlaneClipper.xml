@@ -195,7 +195,7 @@
       </PropertyGroup>
 
       <Hints>
-        <ShowInMenu category="SHYX" icon=":/VESPA/SHYX_Vessel_End_Clipper.png"/>
+        <ShowInMenu category="SHYX" icon=":/VESPA/SHYX_Selection_Plane_Clipper.png"/>
       </Hints>
     </SourceProxy>
   </ProxyGroup>

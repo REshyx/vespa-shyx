@@ -98,11 +98,6 @@ Panel 1: Overview of the goal: optimizing a 3D mesh by allocating tiny triangles
 Panel 1: Overview of the goal: generating a smooth, singularity-free texture mapping (Clebsch Map) to visualize fluid vortex topologies. Panel 2: Initializing random complex wave functions on a 4D sphere (S3) for each mesh vertex. Panel 3: Iteratively optimizing a massive sparse Hermitian linear system to align gradients with the velocity field. Panel 4: Final output displaying elegant, intertwined level-set ribbons that highlight the fluid's topological structure.
 ```
 
-### 15. VortexCoreTest (涡核提取)
-```text
-Panel 1: Overview of the goal: extracting precise 1D centerline polylines representing the exact center of fluid tornadoes (vortex cores). Panel 2: Computing the velocity field, acceleration field, and higher-order jerk tensor. Panel 3: Searching for spatial regions where the velocity vector and acceleration vector are strictly parallel. Panel 4: Final output showing clear, continuous 1D polyline skeletons tracing the core of the vortices.
-```
-
 ### 16. ArrayCurveMapper (数组曲线映射器)
 ```text
 Panel 1: Overview of the goal: smoothly remapping a raw dataset array into a new range using a customizable non-linear transfer curve. Panel 2: Clamping extreme outliers to ensure all input values fall within a safe bounding range. Panel 3: Translating the clamped values through an editable piecewise linear curve graph. Panel 4: Final output showing the remapped data values creating a visually distinct, high-contrast color distribution on the model.

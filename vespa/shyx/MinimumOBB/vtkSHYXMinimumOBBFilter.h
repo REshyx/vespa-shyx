@@ -19,7 +19,7 @@
  * pushes real parameters.
  *
  * @sa
- * vtkOBBTree, CGAL::oriented_bounding_box, vtkSHYXSelectionOBBSubtractFilter
+ * vtkOBBTree, CGAL::oriented_bounding_box
  */
 
 #ifndef vtkSHYXMinimumOBBFilter_h

@@ -359,8 +359,7 @@ void append_self_intersection_triangles(const CGAL_Surface& mesh, const Graph_Co
   }
 }
 
-/** Same gate as vtkSHYXAutorefineSelfIntersectionFilter, plus self_intersections when does_self_intersect
- *  is false but intersecting face pairs exist. */
+/** Autorefine when does_self_intersect is true, or when intersecting face pairs exist. */
 bool triangle_mesh_should_autorefine(const CGAL_Surface& mesh)
 {
   if (!CGAL::is_triangle_mesh(mesh))
@@ -630,11 +629,10 @@ int vtkSHYXMeshChecker::RequestData(
           if (this->LogSteps)
           {
 #if CGAL_VERSION_NR >= 1060000000
-            vtkWarningMacro(<< "[SHYXMeshChecker] port 0: PMP::autorefine (same entry point as "
-                               "vtkSHYXAutorefineSelfIntersectionFilter, CGAL 6+) ...");
+            vtkWarningMacro(<< "[SHYXMeshChecker] port 0: PMP::autorefine (CGAL 6+) ...");
 #else
             vtkWarningMacro(<< "[SHYXMeshChecker] port 0: PMP::experimental::autorefine_and_remove_self_intersections "
-                               "(same as vtkSHYXAutorefineSelfIntersectionFilter, CGAL 5) ...");
+                               "(CGAL 5) ...");
 #endif
           }
           try

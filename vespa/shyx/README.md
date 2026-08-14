@@ -19,7 +19,6 @@ SHYX 模块是 VESPA 插件中的重要组成部分，主要专注于**血管与
 ### 💧 流场与涡结构分析
 
 * [**Vortex Criteria (涡识别准则)**](./VortexCriteria/README.md) - 计算流场的涡量、Q-Criterion、Lambda2、Liutex 等多种主流涡识别准则。
-* [**Vortex Core Test (涡核线提取)**](./VortexCoreTest/README.md) - 使用平行矢量法（速度与加速度/急动度）提取流场中的涡核中心线。
 * [**FTLE Filter (有限时间李雅普诺夫指数)**](./FTLEFilter/README.md) - 计算流场的 FTLE，用于识别和提取拉格朗日相干结构 (LCS)。
 * [**Clebsch Map Filter (Clebsch 映射)**](./ClebschMapFilter/README.md) - 将速度场映射为波函数以用于涡管等流场结构的高级可视化。
 

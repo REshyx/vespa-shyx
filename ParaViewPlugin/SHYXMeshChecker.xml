@@ -5,9 +5,8 @@
                  label="SHYX Mesh Checker">
       <Documentation short_help="SHYX Mesh Checker: Repaired mesh (0) and diagnostic illegal primitives (1).">
         Port 0: vtkPolyData after combinatorial soup repair (orient + repair_polygon_soup) and, when
-        &quot;Attempt self-intersection repair&quot; is on, CGAL PMP autorefine (same entry points as
-        SHYX Autorefine Self-Intersections: CGAL 6+ autorefine, CGAL 5 experimental
-        autorefine_and_remove_self_intersections). Port 1: diagnostic geometry — VTK_LINE for polygon-soup
+        &quot;Attempt self-intersection repair&quot; is on, CGAL PMP autorefine (CGAL 6+ autorefine, CGAL 5
+        experimental autorefine_and_remove_self_intersections). Port 1: diagnostic geometry — VTK_LINE for polygon-soup
         edges with more than two incident faces (SHYX_CheckReason=1), VTK_POLY_LINE for boundary / hole
         cycles (2), VTK_TRIANGLE for self-intersection pairs (3). Boundary and self-intersection checks need
         a valid CGAL polygon mesh; self-intersection enumeration needs a pure triangle mesh.
@@ -81,8 +80,8 @@
                          panel_visibility="advanced">
         <BooleanDomain name="bool"/>
         <Documentation>
-          When on, runs CGAL PMP autorefine on the triangle mesh built for port 0 (same as
-          vtkSHYXAutorefineSelfIntersectionFilter). Can change mesh topology; default off.
+          When on, runs CGAL PMP autorefine on the triangle mesh built for port 0.
+          Can change mesh topology; default off.
         </Documentation>
       </IntVectorProperty>
 

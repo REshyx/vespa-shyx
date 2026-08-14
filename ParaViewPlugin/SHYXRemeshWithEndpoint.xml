@@ -519,7 +519,7 @@
       </PropertyGroup>
 
       <Hints>
-        <ShowInMenu category="SHYX" icon=":/VESPA/SHYX_Adaptive_Isotropic_Remesher.png"/>
+        <ShowInMenu category="SHYX" icon=":/VESPA/SHYX_Remesh_With_Endpoint.png"/>
         <RepresentationType view="RenderView" type="Surface With Edges" port="0"/>
       </Hints>
     </SourceProxy>

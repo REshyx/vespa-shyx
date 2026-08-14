@@ -261,14 +261,6 @@
 
 ---
 
-### SHYX Vortex Core (Test)
-
-**English prompt:** A vortex tube showing a dark spiral core line extracted from vector field, test-tube or lab accent subtle, surrounding streamlines helical; conveys experimental vortex core line extraction.
-
-**中文备选：** 涡管中抽出深色螺旋核心线，周围螺旋流线，轻微试管/实验感，表达涡核线检测（测试性质）。
-
----
-
 ### SHYX Vector Field Topology
 
 **English prompt:** Critical points as colored dots (saddle, spiral, node) on a plane, separatrix curves connecting them, small vector field arrows in background; conveys topological skeleton of vector field.
