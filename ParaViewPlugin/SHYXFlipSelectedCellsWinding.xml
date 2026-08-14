@@ -5,7 +5,7 @@
                  label="SHYX Flip Selected Cells Winding">
       <Documentation
           long_help="Reverses the vertex order of each cell included in the active selection (vtkSelection on the Selection port), which flips triangle/quad/polygon winding and thus the geometric normal. Uses vtkPolyData::ReverseCell per selected id; same selection resolution as SHYX Selection Extrude (vtkExtractSelection with vtkOriginalCellIds, or vtkOriginalPointIds with all incident cells). Optional Selection Cell Array Name marks cells when the selection port is unused or yields no cells (float &gt; 0.5 or integral non-zero). When nothing is selected and no array marks any cell, all cells are flipped."
-          short_help="Flip winding of selected cells; if nothing is selected, flip all cells."/>
+          short_help="SHYX Flip Selected Cells Winding: Flip winding of selected cells; if nothing is selected, flip all cells."/>
 
       <InputProperty name="Input" command="SetInputConnection">
         <ProxyGroupDomain name="groups">

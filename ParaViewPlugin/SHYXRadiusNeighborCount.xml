@@ -3,7 +3,7 @@
     <SourceProxy name="SHYXRadiusNeighborCount"
                  class="vtkSHYXRadiusNeighborCount"
                  label="SHYX Radius Neighbor Count">
-      <Documentation short_help="Count points within a fixed radius of each point (parallel, VTK-only).">
+      <Documentation short_help="SHYX Radius Neighbor Count: Count points within a fixed radius of each point (parallel, VTK-only).">
         For every point, counts how many input points lie within the given search radius (Euclidean distance).
         The result is stored in point data as NeighborsInRadius (vtkIdTypeArray). The query point is included
         in its own count. Uses vtkStaticPointLocator and vtkSMPTools for parallel queries.

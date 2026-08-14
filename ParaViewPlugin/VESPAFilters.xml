@@ -2,7 +2,7 @@
 
   <ProxyGroup name="sources">
     <SourceProxy name="CGALXYZReader" class="vtkCGALXYZReader" label="CGAL Point Cloud Reader">
-      <Documentation long_help="Reads CGAL point cloud data." short_help="Reads CGAL point cloud files.">
+      <Documentation long_help="Reads CGAL point cloud data." short_help="CGAL Point Cloud Reader: Reads CGAL point cloud files.">
       </Documentation>
 
       <StringVectorProperty animateable="0" command="SetFileName" name="FileName" number_of_elements="1" panel_visibility="never">
@@ -21,7 +21,7 @@
     <SourceProxy class="vtkCGALDelaunay2"
                  label="VESPA Delaunay 2D"
                  name="VESPADelaunay2D">
-      <Documentation short_help="Create a 2D Delaunay triangulation from points.">
+      <Documentation short_help="VESPA Delaunay 2D: Create a 2D Delaunay triangulation from points.">
         This filter creates planar Delaunay meshes from a set of planar points.
         Edge and polygon constraints can be specified as vtkPolyData lines and polygons.
         The input mesh needs to be planar along the x, y or z axis.
@@ -48,7 +48,7 @@
     <SourceProxy class="vtkCGALBooleanOperation"
                  label="VESPA Boolean Operation"
                  name="VESPABooleanOperation">
-      <Documentation short_help="Applies boolean operations on two vtkPolyData.">
+      <Documentation short_help="VESPA Boolean Operation: Applies boolean operations on two vtkPolyData.">
         This filter performs boolean operations between two closed polygonal meshes. These
         operations include union, intersection, and difference. The resulting mesh is closed.
       </Documentation>
@@ -116,7 +116,7 @@
     <SourceProxy class="vtkCGALPointCloudSurfaceSignedDistance"
                  label="SHYX Point Cloud Surface SDF"
                  name="SHYXPointCloudSurfaceSDF">
-      <Documentation short_help="Signed distance from point cloud to a surface (VTK ImplicitPolyDataDistance).">
+      <Documentation short_help="SHYX Point Cloud Surface SDF: Signed distance from point cloud to a surface (VTK ImplicitPolyDataDistance).">
         For each point in the first input (point cloud vtkDataSet), evaluates signed distance to the
         second input using vtkImplicitPolyDataDistance (internal clean + triangulation, vtkCellLocator,
         angle-weighted pseudonormals). Non-polydata reference surfaces are extracted with
@@ -176,7 +176,7 @@
     <SourceProxy class="vtkCGALDensityBasedSampler"
                  label="SHYX Density-Based Volume Sampler"
                  name="SHYXDensityBasedVolumeSampler">
-      <Documentation short_help="Samples random points inside a closed mesh with density controlled by a scalar field.">
+      <Documentation short_help="SHYX Density-Based Volume Sampler: Samples random points inside a closed mesh with density controlled by a scalar field.">
         This filter generates random sample points within the enclosed volume of
         a mesh. It accepts either a volume mesh (vtkUnstructuredGrid, e.g. .vtu)
         or a closed surface mesh (vtkPolyData). For volume meshes the outer
@@ -254,7 +254,7 @@
     <SourceProxy class="vtkSHYXArrayProbabilityPointCull"
                  label="SHYX Array Probability Point Cull"
                  name="SHYXArrayProbabilityPointCull">
-      <Documentation short_help="Subsample point cloud: keep each point with probability = clamp(scalar, 0, 1).">
+      <Documentation short_help="SHYX Array Probability Point Cull: Subsample point cloud: keep each point with probability = clamp(scalar, 0, 1).">
         Each point-data scalar is interpreted as the keep probability for that point. Values outside
         [0, 1] are clamped; there is no rescaling by the array's min/max (e.g. data in [0.1, 0.5] gives
         10%–50% keep rates). No volumetric interpolation. Input may be any vtkDataSet; coordinates use
@@ -317,7 +317,7 @@
     <SourceProxy class="vtkSHYXBidirectionalStreamlineMerge"
                  label="SHYX Bidirectional Streamline Merge"
                  name="SHYXBidirectionalStreamlineMerge">
-      <Documentation short_help="Merge bidirectional streamlines per SeedIds; optional ids, integral, delta, random offset.">
+      <Documentation short_help="SHYX Bidirectional Streamline Merge: Merge bidirectional streamlines per SeedIds; optional ids, integral, delta, random offset.">
         Groups VTK_LINE / VTK_POLY_LINE cells by SeedIds. For each seed with two segments (typical bidirectional
         trace), the first polyline in input order is kept, the second is reversed and concatenated; the shared
         seed vertex is merged to one point when point ids match or when the two junction points have identical
@@ -513,7 +513,7 @@
     <SourceProxy class="vtkCGALIsotropicRemesher"
                  label="VESPA Isotropic Remesher"
                  name="VESPAIsotropicRemesher">
-      <Documentation short_help="Remesh a triangulated vtkPolyData.">
+      <Documentation short_help="VESPA Isotropic Remesher: Remesh a triangulated vtkPolyData.">
         This filter remeshes a triangulated vtkPolyData using the CGAL
         isotropic_remesh method. Feature edges are protected.
       </Documentation>
@@ -585,7 +585,7 @@
     <SourceProxy class="vtkCGALMeshChecker"
                  label="VESPA Mesh Checker"
                  name="VESPAMeshChecker">
-      <Documentation short_help="Check a mesh for various unconformities">
+      <Documentation short_help="VESPA Mesh Checker: Check a mesh for various unconformities">
         This filter checks its input mesh is conforming to several paramters:
         - Watertight: the mesh is closed and bounds a volume
         - Intersect: the mesh does not self intersect
@@ -645,7 +645,7 @@
     <SourceProxy class="vtkCGALMeshDeformation"
                  label="VESPA Mesh Deformation"
                  name="VESPAMeshDeformation">
-      <Documentation short_help="Deforms a triangulated vtkPolyData by moving points.">
+      <Documentation short_help="VESPA Mesh Deformation: Deforms a triangulated vtkPolyData by moving points.">
         This filter deforms a surface mesh by moving control points to target positions.
         Neighboring points contained in a Region of Interest (ROI) may be moved to obtain
         a smooth deformation.
@@ -783,7 +783,7 @@
     <SourceProxy class="vtkCGALMeshSubdivision"
                  label="VESPA Mesh Subdivision"
                  name="VESPAMeshSubdivision">
-      <Documentation short_help="Refines a triangulated vtkPolyData through subdivision.">
+      <Documentation short_help="VESPA Mesh Subdivision: Refines a triangulated vtkPolyData through subdivision.">
         This filter performs a surface mesh subdivision by creating new points to
         refine and smoothen a polygonal mesh. Several subdivision methods are available:
           - Catmull-Clark based on the PQQ pattern
@@ -852,7 +852,7 @@
     <SourceProxy class="vtkCGALPatchFilling"
                  label="VESPA Hole Filling"
                  name="VESPAHoleFilling">
-      <Documentation short_help="Fills a selected hole in a triangulated vtkPolyData.">
+      <Documentation short_help="VESPA Hole Filling: Fills a selected hole in a triangulated vtkPolyData.">
         This filter fills a selected hole (or patch) in a triangulated vtkPolyData using meshing,
         refining and fairing. Note that if a patch is selected (even without an existing hole), the
         the selected triangles will be removed first.
@@ -908,7 +908,7 @@
     <SourceProxy class="vtkCGALRegionFairing"
                  label="VESPA Region Fairing"
                  name="VESPARegionFairing">
-      <Documentation short_help="Fairs a region of a triangulated vtkPolyData.">
+      <Documentation short_help="VESPA Region Fairing: Fairs a region of a triangulated vtkPolyData.">
         This filter fairs (smoothes) a selected region of a triangulated vtkPolyData
         by moving vertices.
       </Documentation>
@@ -963,7 +963,7 @@
     <SourceProxy class="vtkCGALShapeSmoothing"
                  label="VESPA Shape Smoothing"
                  name="VESPAShapeSmoothing">
-      <Documentation short_help="Smoothes the shape of a triangulated vtkPolyData.">
+      <Documentation short_help="VESPA Shape Smoothing: Smoothes the shape of a triangulated vtkPolyData.">
         This filter smoothes the overall shape of a triangulated vtkPolyData
         using the mean curvature. The degree of smoothing can be controlled using
         the number of iterations as well as the time step.
@@ -1027,7 +1027,7 @@
   <SourceProxy class="vtkCGALPoissonSurfaceReconstructionDelaunay"
                  label="VESPA Poisson Surface Reconstruction Delaunay"
                  name="VESPAPoissonSurfaceReconstructionDelaunay">
-      <Documentation short_help="Surface reconstruction of point sets with oriented normals.">
+      <Documentation short_help="VESPA Poisson Surface Reconstruction Delaunay: Surface reconstruction of point sets with oriented normals.">
         This CGAL component implements a surface reconstruction method which takes as input
         point sets with oriented normals and computes an implicit function. The input points
         are assumed to contain no outliers and little noise. The output surface mesh is
@@ -1098,7 +1098,7 @@
       <SourceProxy class="vtkCGALAdvancingFrontSurfaceReconstruction"
                  label="VESPA Advancing Front Surface Reconstruction"
                  name="CGALAdvancingFrontSurfaceReconstruction">
-      <Documentation short_help="Greedy algorithm for surface reconstruction from an unorganized point set.">
+      <Documentation short_help="VESPA Advancing Front Surface Reconstruction: Greedy algorithm for surface reconstruction from an unorganized point set.">
         This filter implements a surface-based Delaunay surface reconstruction algorithm
         that sequentially selects the triangles, that is it uses previously selected triangles to
         select a new triangle for advancing the front. At each advancing step the most plausible
@@ -1146,7 +1146,7 @@
     <SourceProxy class="vtkCGALPCAEstimateNormals"
                  label="VESPA PCA Estimate Normals"
                  name="VESPAPCAEstimateNormals">
-      <Documentation short_help="Estimates normals for point clouds with PCA.">
+      <Documentation short_help="VESPA PCA Estimate Normals: Estimates normals for point clouds with PCA.">
         This filter estimates the normals of a point set through PCA (either over a fixed
         number of neighbors or using a spherical neighborhood radius of a factor times
         the average spacing) and orients the normals.
@@ -1209,7 +1209,7 @@
     <SourceProxy class="vtkCGALSkeletonExtraction"
                  label="SHYX Skeleton Extraction"
                  name="SHYXSkeletonExtraction">
-      <Documentation short_help="Extracts a curve skeleton from a closed triangle mesh.">
+      <Documentation short_help="SHYX Skeleton Extraction: Extracts a curve skeleton from a closed triangle mesh.">
         This filter extracts a 1D curve skeleton from a closed triangulated surface mesh
         using the CGAL Mean Curvature Flow Skeletonization algorithm.
         The input mesh must be watertight. The output is a set of polylines
@@ -1335,7 +1335,7 @@
     <SourceProxy class="vtkCGALVesselEndClipper"
                  label="SHYX Vessel End Clipper"
                  name="SHYXVesselEndClipper">
-      <Documentation short_help="Clips vessel tips flat at skeleton endpoints for CFD.">
+      <Documentation short_help="SHYX Vessel End Clipper: Clips vessel tips flat at skeleton endpoints for CFD.">
         This filter clips the tips of a vascular surface mesh at the leaf
         endpoints of its centerline skeleton. A cutting plane perpendicular
         to the local centerline tangent is placed at each degree-1 vertex,

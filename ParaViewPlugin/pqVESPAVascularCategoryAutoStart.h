@@ -4,16 +4,14 @@
 #include <QObject>
 
 /**
- * Ensures Filters → Vascular uses the plugin's preserve_order + proxy list.
+ * On every plugin load (and delayed retries):
+ * 1. Drop any residual Filters → Vascular (settings / prior session) and reload
+ *    the curated proxy list from the plugin definition (preserve_order)
+ * 2. Force show_in_toolbar (Configure Categories "Use as toolbar")
+ * 3. Persist the cleaned category to settings and make filters.Vascular visible
  *
- * ParaView stores customized filter categories in settings. When that key is
- * present, the UI uses SettingsCategory and ignores ApplicationCategory's
- * preserve_order for an already-existing "Vascular" entry (addCategory early-
- * returns without updating the flag). Result: toolbar/menu stay alphabetical.
- *
- * On startup, replace menu Vascular with a deep copy from ApplicationCategory
- * (the ParaViewFilters definition in VESPAVascularCategory.xml) and write
- * settings so the toolbar keeps the curated order.
+ * Needed because ParaView merges category XML/settings (does not replace), so
+ * stale proxies survive reload unless we remove + rewrite on each load.
  */
 class pqVESPAVascularCategoryAutoStart : public QObject
 {

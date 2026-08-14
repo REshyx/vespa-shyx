@@ -5,7 +5,7 @@
                  label="SHYX Array Curve Mapper">
       <Documentation
           long_help="Map an array (scalar or vector) through an adjustable piecewise-linear curve to a new scalar range. For vector arrays the magnitude is used. Select a point- or cell-data input array, specify input and output ranges, edit the transfer curve, and the result is a new scalar array on the same attribute type as the input."
-          short_help="Map array values through an editable curve to a target scalar range."/>
+          short_help="SHYX Array Curve Mapper: Map array values through an editable curve to a target scalar range."/>
 
       <InputProperty name="Input" command="SetInputConnection">
         <ProxyGroupDomain name="groups">

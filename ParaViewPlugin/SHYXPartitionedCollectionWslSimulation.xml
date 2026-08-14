@@ -4,7 +4,7 @@
                  class="vtkSHYXPartitionedCollectionWslSimulation"
                  label="SHYX Partitioned Collection WSL Simulation">
       <Documentation
-          short_help="Export partitioned collection to WSL Exodus, run run.sh, load result.exo."
+          short_help="SHYX Partitioned Collection WSL Simulation: Export partitioned collection to WSL Exodus, run run.sh, load result.exo."
           long_help="Accepts vtkPartitionedDataSetCollection (e.g. from SHYX DataSet To Partitioned Collection). Writes Input Exodus File Name under Work Directory (default UNC \\\\wsl.localhost\\Ubuntu-24.04\\home\\shyx\\Test), optionally runs Run Script Wsl Path via WSL (default /home/shyx/Test/run.sh in the same directory), then reads Result Exodus File Name (default result.exo) from the work directory into the output."/>
 
       <OutputPort name="Simulation result" index="0" id="port0"/>

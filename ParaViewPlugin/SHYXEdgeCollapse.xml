@@ -4,7 +4,7 @@
     <SourceProxy class="vtkSHYXEdgeCollapse"
                  label="SHYX Edge Collapse (CGAL)"
                  name="SHYXEdgeCollapse">
-      <Documentation short_help="Surface mesh simplification with CGAL edge_collapse.">
+      <Documentation short_help="SHYX Edge Collapse (CGAL): Surface mesh simplification with CGAL edge_collapse.">
         Triangulated surface mesh simplification using
         CGAL::Surface_mesh_simplification::edge_collapse and
         Edge_count_ratio_stop_predicate. Simplification stops when the ratio of

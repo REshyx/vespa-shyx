@@ -3,7 +3,7 @@
     <SourceProxy name="SHYXBooleanOperationFilter"
                  class="vtkSHYXBooleanOperationFilter"
                  label="SHYX Boolean (CGAL, relaxed)">
-      <Documentation short_help="CGAL union / intersection / difference without requiring closed meshes.">
+      <Documentation short_help="SHYX Boolean (CGAL, relaxed): CGAL union / intersection / difference without requiring closed meshes.">
         Wraps CGAL Polygon_mesh_processing corefinement booleans like the VESPA boolean filter, but
         does not abort when meshes are open: it logs a warning and still calls CGAL. By default CGAL
         is not asked to throw on self-intersection (unlike the strict VESPA filter). For badly

@@ -4,7 +4,7 @@
                  class="vtkSHYXMinimumOBBFilter"
                  label="SHYX Minimum OBB">
       <Documentation
-          short_help="Min-volume OBB, PCA OBB, or AABB of a vtkDataSet as a closed vtkPolyData box."
+          short_help="SHYX Minimum OBB: Min-volume OBB, PCA OBB, or AABB of a vtkDataSet as a closed vtkPolyData box."
           long_help="Collects all points of the input vtkDataSet and builds either a CGAL approximate minimum-volume oriented bounding box (default), a PCA-style OBB (vtkOBBTree::ComputeOBB), or a world-axis AABB. Output is a closed triangle mesh. Field data includes OBB.Center, OBB.HalfLengths, OBB.Axis0..2, OBB.Volume, and OBB.IsAxisAlignedFallback. An Interactive Box (Position / Rotation / Scale) initializes to the fitted box so you can expand, move, or rotate it; switching Box Type re-fits and re-places the widget. Copy Input Points: when on (default), points are copied to a contiguous buffer (safe for all dataset types); when off, vtkPointSet inputs use their internal vtkPoints without copying."/>
 
       <InputProperty name="Input" command="SetInputConnection">

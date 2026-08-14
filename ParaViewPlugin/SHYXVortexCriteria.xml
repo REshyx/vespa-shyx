@@ -3,7 +3,7 @@
     <SourceProxy name="SHYXVortexCriteria" class="vtkVortexCriteriaFilter" label="SHYX Vortex Criteria">
       <Documentation
           long_help="Compute flow quantities and vortex identification criteria from velocity: vorticity, velocity gradient, strain/rotation tensors, Q-criterion, Lambda2, swirling strength, Liutex, Omega method, helicity. All outputs are optional."
-          short_help="Compute vortex identification criteria and flow quantities from velocity."/>
+          short_help="SHYX Vortex Criteria: Compute vortex identification criteria and flow quantities from velocity."/>
 
       <InputProperty name="Input" command="SetInputConnection">
         <ProxyGroupDomain name="groups">

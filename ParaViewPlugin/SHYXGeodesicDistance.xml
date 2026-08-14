@@ -5,7 +5,7 @@
                  label="SHYX Geodesic Distance">
       <Documentation
           long_help="Compute the shortest surface (geodesic) distance from every vertex to a user-specified source vertex using Dijkstra's algorithm. The result is stored as a point data array named 'GeodesicDistance'."
-          short_help="Compute geodesic distance from all vertices to a source vertex."/>
+          short_help="SHYX Geodesic Distance: Compute geodesic distance from all vertices to a source vertex."/>
 
       <InputProperty name="Input" command="SetInputConnection">
         <ProxyGroupDomain name="groups">

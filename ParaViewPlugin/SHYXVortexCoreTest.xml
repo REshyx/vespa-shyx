@@ -4,7 +4,7 @@
                  class="vtkVortexCoreTest"
                  label="SHYX Vortex Core (Test)">
       <Documentation long_help="Same algorithm as VTK Vortex Cores (parallel vectors); provided as a VESPA plugin copy for experiments."
-                     short_help="Vortex core lines (vtkVortexCoreTest plugin).">
+                     short_help="SHYX Vortex Core (Test): Vortex core lines (vtkVortexCoreTest plugin).">
         Compute vortex core lines using the parallel vectors method (identical logic to vtkVortexCore).
         Optional higher-order mode uses velocity and jerk; default uses velocity and acceleration.
         Q, delta, lambda_2, and lambda_ci criteria prefilter and are stored on output polylines.

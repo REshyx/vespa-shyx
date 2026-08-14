@@ -3,7 +3,7 @@
     <SourceProxy name="SHYXSelectionPlaneClipper"
                  class="vtkSHYXSelectionPlaneClipper"
                  label="SHYX Selection Plane Clipper">
-      <Documentation short_help="Clip mesh with a plane from selection centroid and average normal.">
+      <Documentation short_help="SHYX Selection Plane Clipper: Clip mesh with a plane from selection centroid and average normal.">
         Port 0 input is the full triangulated surface; port 0 output is the clipped mesh. Port 1 is a vtkSelection (same convention as SHYX Selection
         Extrude and VESPA Region Fairing): use Copy Active Selection in the Properties panel—no separate
         Extract Selection filter is required. The filter runs vtkExtractSelection internally, computes an

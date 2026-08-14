@@ -5,7 +5,7 @@
                  label="SHYX Point Extrude">
       <Documentation
           long_help="Moves every point of the input vtkPolyData along an extrusion direction by a distance. By default directions are computed point normals (vtkPolyDataNormals). Optionally use any 3-component point vector array as direction (normalized per point). Distance is ExtrusionDistance times an optional per-point scalar multiplier array. Topology and data arrays are preserved (coordinates only change)."
-          short_help="Per-point extrusion along normals or a vector array; optional scalar distance multiplier."/>
+          short_help="SHYX Point Extrude: Per-point extrusion along normals or a vector array; optional scalar distance multiplier."/>
 
       <InputProperty name="Input" command="SetInputConnection">
         <ProxyGroupDomain name="groups">

@@ -4,7 +4,7 @@
     <SourceProxy class="vtkSHYXAdaptiveIsotropicRemesher"
                  label="SHYX Adaptive Isotropic Remesher"
                  name="SHYXAdaptiveIsotropicRemesher">
-      <Documentation short_help="Curvature-aware CGAL isotropic remesh (Vespa ICC sizing).">
+      <Documentation short_help="SHYX Adaptive Isotropic Remesher: Curvature-aware CGAL isotropic remesh (Vespa ICC sizing).">
         Adaptive isotropic remeshing using **Vespa FeatureAwareAdaptiveSizingField** (CGAL
         `isotropic_remeshing` plus custom interpolated corrected curvatures — not CGAL stock
         Adaptive_sizing_field).

@@ -3,7 +3,7 @@
     <SourceProxy name="SHYXRepairDegeneracies"
                  class="vtkSHYXRepairDegeneracies"
                  label="SHYX Repair Degeneracies (CGAL)">
-      <Documentation short_help="Remove degenerate and almost-degenerate triangles (CGAL PMP).">
+      <Documentation short_help="SHYX Repair Degeneracies (CGAL): Remove degenerate and almost-degenerate triangles (CGAL PMP).">
         CGAL Polygon_mesh_processing from repair_degeneracies.h: remove_degenerate_faces (zero-length
         edges, collinear triangles) and optionally remove_almost_degenerate_faces (caps and needles).
         Triangle vtkPolyData only. Named-parameter defaults match CGAL (cap ~160°, needle ratio 4).

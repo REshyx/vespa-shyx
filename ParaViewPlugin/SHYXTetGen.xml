@@ -4,7 +4,7 @@
                  label="SHYX TetGen"
                  name="SHYXTetGen">
       <Documentation
-          short_help="Generate tetrahedral volume mesh from a closed surface using TetGen."
+          short_help="SHYX TetGen: Generate tetrahedral volume mesh from a closed surface using TetGen."
           long_help="This filter takes a closed triangulated surface mesh (vtkPolyData) and generates a tetrahedral volume mesh (vtkUnstructuredGrid) that fills the interior. It uses the TetGen library for constrained Delaunay tetrahedralization. The input surface must be closed (watertight), manifold, and composed of triangles only."/>
 
       <InputProperty name="Input"

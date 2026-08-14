@@ -5,7 +5,7 @@
   <SourceProxy class="vtkCGALAlphaWrapping"
                   label="VESPA Alpha Wrapping"
                   name="VESPAAlphaWrapping">
-       <Documentation short_help="Remesh a triangulated vtkPolyData.">
+       <Documentation short_help="VESPA Alpha Wrapping: Remesh a triangulated vtkPolyData.">
          This filter remeshes a triangulated vtkPolyData using the CGAL
          alpha wrapping method.
        </Documentation>

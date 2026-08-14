@@ -5,7 +5,7 @@
                  label="SHYX Disconnected Region Fuse">
       <Documentation
           long_help="Fuse multiple vtkPolyData inputs (each connection on port 0 is one region). Vertices from different inputs within the distance threshold are merged; vertices from the same input are never merged, even if that mesh has several disconnected pieces. A single input is passed through unchanged."
-          short_help="Fuse nearby vertices across multiple input meshes (one region per input)."/>
+          short_help="SHYX Disconnected Region Fuse: Fuse nearby vertices across multiple input meshes (one region per input)."/>
 
       <!-- Same VTK input port (0), multiple connections: must use AddInputConnection (Set replaces). -->
       <InputProperty name="Input" command="AddInputConnection" multiple_input="1" repeatable="1">

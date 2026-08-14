@@ -4,7 +4,7 @@
     <SourceProxy class="vtkSHYXRemeshWithEndpoint"
                  label="SHYX Remesh With Endpoint"
                  name="SHYXRemeshWithEndpoint">
-      <Documentation short_help="Optional EndpointIndex &lt; 0 cull, then Vespa ICC remesh; optional hole fill + cap remesh.">
+      <Documentation short_help="SHYX Remesh With Endpoint: Optional EndpointIndex &lt; 0 cull, then Vespa ICC remesh; optional hole fill + cap remesh.">
         Optionally cull by an endpoint marker array (first component &lt; 0), then remesh the wall with
         Vespa ICC sizing. **Enable endpoint cull** is ON by default with array **EndpointIndex**; if
         that array is missing, cull is skipped and the whole surface is treated as wall. With wall

@@ -4,7 +4,7 @@
                  label="SHYX TetGen Mesh Optimize"
                  name="SHYXTetGenMeshOptimize">
       <Documentation
-          short_help="Optimize an existing tetrahedral mesh with TetGen (no new vertices)."
+          short_help="SHYX TetGen Mesh Optimize: Optimize an existing tetrahedral mesh with TetGen (no new vertices)."
           long_help="Takes a vtkUnstructuredGrid containing tetrahedra (VTK_TETRA). Non-tetrahedral cells are ignored. TetGen reconstructs the mesh and runs mesh improvement. Refinement is capped with -S0 and boundary splits with -Y so Delaunay refinement does not add Steiner points. Target Max Aspect Ratio defaults to 20 (TetGen -o//): TetGen's internal default is 1000, which rarely marks any tet as bad, so the mesh looked unchanged—lower values make flip-based improvement actually run. Set it to 1000 to restore TetGen's loose default. Default Extra Improve Iterations is 0 (flip-only); raising it enables TetGen's smoother/Steiner-capable loop and may insert vertices. Preserve Unused Vertices (-J) avoids dropping input nodes not used by any tet."/>
 
       <InputProperty name="Input"

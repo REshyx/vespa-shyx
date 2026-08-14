@@ -7,7 +7,7 @@
     <SourceProxy class="vtkCGALMeshSmoothing"
                  label="VESPA Mesh Smoothing"
                  name="VESPAMeshSmoothing">
-      <Documentation short_help="Smoothes the shape of a triangulated vtkPolyData.">
+      <Documentation short_help="VESPA Mesh Smoothing: Smoothes the shape of a triangulated vtkPolyData.">
         This filter moves vertices to optimize geometry around each vertex: it can try to (1) equalize
         the angles between incident edges, or (and) move vertices so that areas of adjacent triangles
         tend to equalize (angle and area smoothing), or (2) moves vertices following an area-based

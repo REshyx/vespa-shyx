@@ -5,7 +5,7 @@
                  label="SHYX Enhanced Ruler">
       <Documentation
           long_help="Interactive 3D ruler on a vtkDataSet. Drag the two endpoint handles; on release each endpoint is snapped with a screen-ray pick to the nearest visible mesh point (ParaView Select Points / ConvertDisplayToPointOnSurface). Computes the shortest path along triangle mesh edges or, for line-only inputs, along VTK_LINE / VTK_POLY_LINE segments (Dijkstra), and outputs the path polyline."
-          short_help="Ruler with screen-ray vertex snap and surface or polyline path distance."/>
+          short_help="SHYX Enhanced Ruler: Ruler with screen-ray vertex snap and surface or polyline path distance."/>
 
       <InputProperty name="Input" command="SetInputConnection">
         <ProxyGroupDomain name="groups">

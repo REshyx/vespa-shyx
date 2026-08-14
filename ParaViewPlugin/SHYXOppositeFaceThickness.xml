@@ -3,7 +3,7 @@
     <SourceProxy name="SHYXOppositeFaceThickness"
                  class="vtkSHYXOppositeFaceThickness"
                  label="SHYX Opposite Face Thickness">
-      <Documentation short_help="Per-point thickness along -normal; optional thin-shell recast after +normal push.">
+      <Documentation short_help="SHYX Opposite Face Thickness: Per-point thickness along -normal; optional thin-shell recast after +normal push.">
         For each point, casts a ray along the direction opposite the point normal (inward for an
         outward-oriented surface), finds the first intersected triangle that does not use the query
         vertex, and stores the Euclidean distance from the query point to the hit in point data

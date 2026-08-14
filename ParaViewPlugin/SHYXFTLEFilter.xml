@@ -3,7 +3,7 @@
     <SourceProxy name="SHYXFTLEFilter" class="vtkFTLEFilter" label="SHYX FTLE Filter">
       <Documentation
           long_help="Compute Finite-Time Lyapunov Exponent (FTLE) field from a velocity field. FTLE is used to identify Lagrangian coherent structures in flow fields."
-          short_help="Compute FTLE field from velocity field."/>
+          short_help="SHYX FTLE Filter: Compute FTLE field from velocity field."/>
 
       <InputProperty name="Input" command="SetInputConnection">
         <ProxyGroupDomain name="groups">

@@ -4,7 +4,7 @@
                  label="SHYX Surface to Volume Mesh"
                  name="SHYXSurfaceToVolumeMesh">
       <Documentation
-          short_help="Generate tetrahedral volume mesh from a closed surface using CGAL Mesh_3."
+          short_help="SHYX Surface to Volume Mesh: Generate tetrahedral volume mesh from a closed surface using CGAL Mesh_3."
           long_help="This filter takes a closed triangulated surface mesh (vtkPolyData) and generates a tetrahedral volume mesh (vtkUnstructuredGrid) that fills the interior. It uses CGAL's Mesh_3 package with Polyhedral_mesh_domain_3 and Delaunay refinement. The input surface must be closed (watertight), manifold, composed of triangles only, and free of self-intersections."/>
 
       <InputProperty name="Input"

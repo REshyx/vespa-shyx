@@ -4,7 +4,7 @@
                  class="vtkSHYXPartitionedCollectionBoundaryFields"
                  label="SHYX Partitioned Collection Boundary Fields">
       <Documentation
-          short_help="Modify boundary radial/normal/variable fields and block names on an existing partitioned collection."
+          short_help="SHYX Partitioned Collection Boundary Fields: Modify boundary radial/normal/variable fields and block names on an existing partitioned collection."
           long_help="Accepts vtkPartitionedDataSetCollection (e.g. from SHYX DataSet To Partitioned Collection). For each side set: optionally computes BoundaryRadialValue = 1 - x^a, writes BoundaryRadialValueNormal and BoundaryVariable* point/cell arrays (overwriting same-named arrays), mirrors point data onto paired node sets, and optionally accumulates normals / variables onto the tetrahedra element block. Block names and vtkDataAssembly labels can be edited in the Partitioned block names panel."/>
 
       <OutputPort name="Partitioned collection" index="0" id="port0"/>

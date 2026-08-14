@@ -5,7 +5,7 @@
                  label="SHYX Clebsch Map Filter">
       <Documentation
           long_help="Inside Fluids: Clebsch Maps for visualization (SIGGRAPH 2017). Maps velocity field to S3 wave function for vortex tube visualization. Requires tetrahedral mesh with PointData vector array (e.g. Velocity)."
-          short_help="Map velocity to Clebsch S3 wave function for vortex visualization."/>
+          short_help="SHYX Clebsch Map Filter: Map velocity to Clebsch S3 wave function for vortex visualization."/>
 
       <InputProperty name="Input" command="SetInputConnection">
         <ProxyGroupDomain name="groups">

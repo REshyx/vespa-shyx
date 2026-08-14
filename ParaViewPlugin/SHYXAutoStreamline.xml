@@ -5,7 +5,7 @@
                  label="SHYX Auto Streamline">
       <Documentation
         long_help="Single volume input: extract outer surface, vortex cores, cull seeds too close to that surface via absolute SDF, subsample with MaskPoints (selectable random mode), then integrate streamlines (pure VTK)."
-        short_help="Volume → surface extract → vortex seeds → cull → sample → streamlines.">
+        short_help="SHYX Auto Streamline: Volume → surface extract → vortex seeds → cull → sample → streamlines.">
         Pipeline (VTK only, one volume port): vtkDataSetSurfaceFilter → vtkVortexCore →
         absolute distance to extracted surface (vtkImplicitPolyDataDistance) →
         keep points with |SDF| ≥ MinSurfaceDistance →

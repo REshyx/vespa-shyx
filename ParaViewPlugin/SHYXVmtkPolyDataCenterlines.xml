@@ -3,7 +3,7 @@
     <SourceProxy name="SHYXVmtkPolyDataCenterlines"
                  class="vtkSHYXVmtkPolyDataCenterlines"
                  label="SHYX VMTK Centerlines">
-      <Documentation short_help="Centerlines from a tubular surface using VMTK vtkvmtkPolyDataCenterlines.">
+      <Documentation short_help="SHYX VMTK Centerlines: Centerlines from a tubular surface using VMTK vtkvmtkPolyDataCenterlines.">
         Port 0 is the vessel lumen surface. Ports 1 and 2 are source/target seed vtkDataSet (only
         points and point GlobalIds are read; topology is ignored). Each point must carry GlobalIds
         (point GlobalIds attribute, or a point array named GlobalIds or GlobalId). The same GlobalIds

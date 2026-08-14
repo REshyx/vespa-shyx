@@ -3,7 +3,7 @@
     <SourceProxy name="SHYXMeshChecker"
                  class="vtkSHYXMeshChecker"
                  label="SHYX Mesh Checker">
-      <Documentation short_help="Repaired mesh (0) and diagnostic illegal primitives (1).">
+      <Documentation short_help="SHYX Mesh Checker: Repaired mesh (0) and diagnostic illegal primitives (1).">
         Port 0: vtkPolyData after combinatorial soup repair (orient + repair_polygon_soup) and, when
         &quot;Attempt self-intersection repair&quot; is on, CGAL PMP autorefine (same entry points as
         SHYX Autorefine Self-Intersections: CGAL 6+ autorefine, CGAL 5 experimental

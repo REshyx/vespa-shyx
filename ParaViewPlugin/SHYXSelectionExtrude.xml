@@ -5,7 +5,7 @@
                  label="SHYX Selection Extrude">
       <Documentation
           long_help="Extrudes selected triangles of a triangulated surface. With Average Normals on, uses one area-weighted average normal for the whole patch; with it off, each cap vertex moves along its own point normal (from selected incident triangles). The triangles in the original location are removed; the output keeps unselected geometry, adds an offset copy of the selection (top cap), and side quads along the selection boundary (open shell). Selection follows VESPA Region Fairing (vtkSelection / SelectionInput). vtkExtractSelection is used internally (vtkOriginalCellIds on cells, or vtkOriginalPointIds with all incident triangles). Without a selection, you may set Selection Cell Array Name on the input surface. Unselected non-triangle cells are omitted. Animate Extrusion Distance for interactive-style feedback."
-          short_help="Extrude selected surface patch (average or per-vertex normals; selection input)."/>
+          short_help="SHYX Selection Extrude: Extrude selected surface patch (average or per-vertex normals; selection input)."/>
 
       <InputProperty name="Input" command="SetInputConnection">
         <ProxyGroupDomain name="groups">

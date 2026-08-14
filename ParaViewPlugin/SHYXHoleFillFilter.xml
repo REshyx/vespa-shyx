@@ -3,7 +3,7 @@
     <SourceProxy name="SHYXHoleFillFilter"
                  class="vtkSHYXHoleFillFilter"
                  label="SHYX Hole Fill (CGAL)">
-      <Documentation short_help="Fill holes (or a selected patch) on a surface using CGAL PMP.">
+      <Documentation short_help="SHYX Hole Fill (CGAL): Fill holes (or a selected patch) on a surface using CGAL PMP.">
         Fills mesh boundary cycles with CGAL triangulate_refine_and_fair_hole (same pipeline as
         vtkCGALPatchFilling). Accepts any vtkDataSet; non-PolyData inputs are converted to a surface
         with vtkGeometryFilter first. Optional Selection removes triangles or points first (e.g. to

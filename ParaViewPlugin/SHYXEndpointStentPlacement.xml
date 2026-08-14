@@ -5,7 +5,7 @@
                  label="SHYX Endpoint Stent Placement">
       <Documentation
           long_help="Stent-like deformation along a centerline segment between two interactive endpoints. Port 0: vessel vtkPolyData; port 1: centerline polyline. Drag the two handles to snap endpoints on the centerline; StentLength is the shortest path distance along the centerline graph; StentDiameter may be taken from CenterlineRadiusArrayName at the path midpoint (2 × inscribed sphere radius). Deformation matches SHYX Vascular Stent Placement (strict flat-capped slab, optional geodesic band smooth, same output arrays)."
-          short_help="Stent placement with two centerline-snapped endpoints."/>
+          short_help="SHYX Endpoint Stent Placement: Stent placement with two centerline-snapped endpoints."/>
 
       <InputProperty name="Input" command="SetInputConnection">
         <ProxyGroupDomain name="groups">

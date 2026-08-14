@@ -6,7 +6,7 @@
                  label="SHYX Surface Tip Extractor">
       <Documentation
           long_help="Identify tip / sharp points on a polygonal surface by computing, for each vertex, the distance between the vertex and the centroid of its geodesically-connected neighbourhood within a search radius. The result is stored as a point data array called TipScore."
-          short_help="Compute surface sharpness (TipScore) via centroid-offset within a local neighbourhood.">
+          short_help="SHYX Surface Tip Extractor: Compute surface sharpness (TipScore) via centroid-offset within a local neighbourhood.">
         Input: vtkPolyData. Output: copy of input with an additional TipScore point data array.
       </Documentation>
 

@@ -4,7 +4,7 @@
     <SourceProxy name="SHYXVmtkOpeningCenterlines"
                  class="vtkSHYXVmtkOpeningCenterlines"
                  label="SHYX VMTK Opening Centerlines">
-      <Documentation short_help="Threshold openings, pick inlets/outlets, optional VMTK centerlines.">
+      <Documentation short_help="SHYX VMTK Opening Centerlines: Threshold openings, pick inlets/outlets, optional VMTK centerlines.">
         Single surface input. Cells whose chosen scalar magnitude is **greater than 0** are extracted
         (fixed threshold rule; only the array may be chosen). Each connected component defines one opening.
         The representative point is the mesh vertex closest to that patch centroid (for disk-like inlets/outlets).

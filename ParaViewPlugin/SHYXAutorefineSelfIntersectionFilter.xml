@@ -3,7 +3,7 @@
     <SourceProxy name="SHYXAutorefineSelfIntersectionFilter"
                  class="vtkSHYXAutorefineSelfIntersectionFilter"
                  label="SHYX Autorefine Self-Intersections">
-      <Documentation short_help="CGAL PMP autorefine to remove mesh self-intersections.">
+      <Documentation short_help="SHYX Autorefine Self-Intersections: CGAL PMP autorefine to remove mesh self-intersections.">
         CGAL 6+: CGAL::Polygon_mesh_processing::autorefine(); older CGAL: experimental
         autorefine_and_remove_self_intersections. Triangle vtkPolyData as CGAL Surface_mesh (use
         vtkTriangleFilter if needed). Optional: run only when CGAL reports self-intersections.

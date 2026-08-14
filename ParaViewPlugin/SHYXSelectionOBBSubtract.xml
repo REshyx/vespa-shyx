@@ -4,7 +4,7 @@
                  class="vtkSHYXSelectionOBBSubtractFilter"
                  label="SHYX Selection OBB Boolean Subtract">
       <Documentation
-          short_help="Subtract a (transformable) OBB from a closed surface; transformed OBB on port 1."
+          short_help="SHYX Selection OBB Boolean Subtract: Subtract a (transformable) OBB from a closed surface; transformed OBB on port 1."
           long_help="Computes a PCA-style oriented bounding box from the selected region, applies Position / Rotation / Scale consistent with the ParaView Interactive Box (unit reference bounds and scale as world edge lengths along the box axes), then runs CGAL boolean difference (input minus box). Port 0 is the result; port 1 is the transformed OBB mesh. The custom box widget reads OBB field arrays from the client-side output when available and pushes Position / Rotation / Scale onto the filter proxy so the 3D widget is initialized to the fitted OBB (not only the mesh AABB). Input must be a closed triangulated surface suitable for vtkCGALBooleanOperation."/>
 
       <OutputPort name="Difference" index="0" id="port0" />

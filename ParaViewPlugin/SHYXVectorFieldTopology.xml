@@ -4,7 +4,7 @@
                  class="vtkVectorFieldTopology"
                  label="SHYX Vector Field Topology">
       <Documentation long_help="Extract critical points, separatrix lines and optional surfaces, and boundary-switch structures using VTK vtkVectorFieldTopology (steady vector fields on vtkImageData, vtkUnstructuredGrid, or vtkUniformGridAMR)."
-                     short_help="Vector field topology (critical points and separatrices).">
+                     short_help="SHYX Vector Field Topology: Vector field topology (critical points and separatrices).">
         Computes the topological skeleton of a vector field: critical points, 1D separatrices, optional 2D separatrices in 3D, and boundary-switch seeds when enabled. Integration options follow vtkStreamTracer units (length or cell length).
       </Documentation>
 

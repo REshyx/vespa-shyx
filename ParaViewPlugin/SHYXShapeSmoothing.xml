@@ -4,7 +4,7 @@
     <SourceProxy class="vtkSHYXShapeSmoothing"
                  label="SHYX Shape Smoothing"
                  name="SHYXShapeSmoothing">
-      <Documentation short_help="Switchable triangle-mesh smoothing using CGAL PMP (smooth_shape / angle_and_area_smoothing / fair).">
+      <Documentation short_help="SHYX Shape Smoothing: Switchable triangle-mesh smoothing using CGAL PMP (smooth_shape / angle_and_area_smoothing / fair).">
         Smooths a triangulated vtkPolyData with one of three CGAL algorithms:
         - Shape MCF (smooth_shape, mean curvature flow) with optional rescaling (do_scale) for
           approximate volume preservation;

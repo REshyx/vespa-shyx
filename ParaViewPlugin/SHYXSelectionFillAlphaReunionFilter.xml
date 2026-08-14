@@ -3,7 +3,7 @@
     <SourceProxy name="SHYXSelectionFillAlphaReunionFilter"
                  class="vtkSHYXSelectionFillAlphaReunionFilter"
                  label="SHYX Selection: Fill, Alpha Wrap, Union">
-      <Documentation short_help="Split by selection, hole-fill both, Alpha wrap selection, CGAL union with face origin, then local bridge remesh/smooth or fair.">
+      <Documentation short_help="SHYX Selection: Fill, Alpha Wrap, Union: Split by selection, hole-fill both, Alpha wrap selection, CGAL union with face origin, then local bridge remesh/smooth or fair.">
         Splits the surface into the selected and unselected regions, fills boundary holes (CGAL) on
         each part, runs Alpha Wrapping on the selected part (CGAL 5.5+), and merges the two
         closed-oriented surfaces with a CGAL PMP boolean union that tracks which faces came from

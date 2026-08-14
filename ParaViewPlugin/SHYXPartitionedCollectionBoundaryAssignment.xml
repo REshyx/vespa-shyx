@@ -4,7 +4,7 @@
                  class="vtkSHYXPartitionedCollectionBoundaryAssignment"
                  label="SHYX Partitioned Collection Boundary Assignment">
       <Documentation
-          short_help="Classify wall/inlet/outlet; port 0 = input passthrough, port 1 = inlet OPT debug geometry."
+          short_help="SHYX Partitioned Collection Boundary Assignment: Classify wall/inlet/outlet; port 0 = input passthrough, port 1 = inlet OPT debug geometry."
           long_help="Accepts vtkPartitionedDataSetCollection (e.g. from SHYX DataSet To Partitioned Collection). Sorts side/node pairs by side-set area (descending) for classification, emits Boundary assignment + a full options file (PV template for Single inlet, HV template for Single outlet; inlet_* filled pre-merge). Optional Merge inlets (default on, Single outlet): after per-inlet OPT stats, merges inlet side/node sets into one pair on port 0 — assignment text is post-merge. Port 0 is the (possibly merged) collection with FieldData stamps. Port 1 is drawn from those two texts: Point Label for every sideset id; AABB/normals for inlets only (OPT values, bounds restored by 1/BoundsScale). Does not write BoundaryRadialValue / BoundaryVariable arrays — use SHYX Partitioned Collection Boundary Fields for that."/>
 
       <OutputPort name="Partitioned collection" index="0" id="port0"/>
