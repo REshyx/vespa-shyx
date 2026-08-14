@@ -1,0 +1,233 @@
+#include "vtkVESPAAttributeTransfer.h"
+
+#include <vtkCellData.h>
+#include <vtkGenericCell.h>
+#include <vtkNew.h>
+#include <vtkObjectFactory.h>
+#include <vtkPointData.h>
+#include <vtkPolyData.h>
+#include <vtkProbeFilter.h>
+#include <vtkSMPThreadLocalObject.h>
+#include <vtkSMPTools.h>
+#include <vtkStaticCellLocator.h>
+
+#include <atomic>
+#include <chrono>
+#include <cctype>
+#include <cstdlib>
+#include <fstream>
+#include <string>
+#include <vector>
+
+vtkStandardNewMacro(vtkVESPAAttributeTransfer);
+
+namespace
+{
+
+std::string AttributeTransferCellAttrLogPath()
+{
+#ifdef _WIN32
+  const char* tmp = std::getenv("TEMP");
+  return tmp ? (std::string(tmp) + "\\vtkVESPAAttributeTransfer_cell_attr_log.txt")
+             : "vtkVESPAAttributeTransfer_cell_attr_log.txt";
+#else
+  const char* tmp = std::getenv("TMPDIR");
+  return (tmp ? std::string(tmp) : std::string("/tmp")) + "/vtkVESPAAttributeTransfer_cell_attr_log.txt";
+#endif
+}
+
+void AttributeTransferCellAttrLog(const std::string& msg)
+{
+  std::ofstream f(AttributeTransferCellAttrLogPath(), std::ios::app);
+  if (f)
+  {
+    f << msg << '\n';
+    f.flush();
+  }
+}
+
+bool SMPProbeDisabledByEnv()
+{
+  const char* flag = std::getenv("VESPA_VTKCGAL_SMP_PROBE");
+  if (flag == nullptr || flag[0] == '\0')
+  {
+    flag = std::getenv("VESPA_ATTRIBUTE_SMP_PROBE");
+  }
+  if (flag == nullptr || flag[0] == '\0')
+  {
+    return false;
+  }
+  if (flag[0] == '0' && flag[1] == '\0')
+  {
+    return true;
+  }
+  std::string s(flag);
+  for (char& c : s)
+  {
+    c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+  }
+  return s == "off" || s == "false" || s == "no";
+}
+
+void RunSMPSelfTestIfRequested()
+{
+  if (SMPProbeDisabledByEnv())
+  {
+    AttributeTransferCellAttrLog("[smp-probe] skipped (VESPA_VTKCGAL_SMP_PROBE / VESPA_ATTRIBUTE_SMP_PROBE disables probe)");
+    return;
+  }
+  constexpr vtkIdType n = 1024;
+  std::atomic<vtkIdType> sum{ 0 };
+  vtkSMPTools::For(0, n, [&](vtkIdType begin, vtkIdType end) {
+    vtkIdType chunk = 0;
+    for (vtkIdType i = begin; i < end; ++i)
+    {
+      chunk += i;
+    }
+    sum.fetch_add(chunk, std::memory_order_relaxed);
+  });
+  const vtkIdType expected = (n - 1) * n / 2;
+  const vtkIdType got = sum.load();
+  AttributeTransferCellAttrLog(std::string("[smp-probe] vtkSMPTools::For sum(0..") + std::to_string(n - 1) +
+    ")=" + std::to_string(static_cast<long long>(got)) + " expected=" +
+    std::to_string(static_cast<long long>(expected)) + (got == expected ? " OK" : " MISMATCH"));
+}
+
+void ComputeCellCentroid(vtkPolyData* pd, vtkIdType cellId, vtkGenericCell* genCell, double* centroid)
+{
+  pd->GetCell(cellId, genCell);
+  const int numPts = genCell->GetNumberOfPoints();
+  centroid[0]      = 0.0;
+  centroid[1]      = 0.0;
+  centroid[2]      = 0.0;
+  if (numPts <= 0)
+  {
+    return;
+  }
+  double x[3];
+  for (int i = 0; i < numPts; ++i)
+  {
+    pd->GetPoint(genCell->GetPointId(i), x);
+    centroid[0] += x[0];
+    centroid[1] += x[1];
+    centroid[2] += x[2];
+  }
+  const double inv = 1.0 / static_cast<double>(numPts);
+  centroid[0] *= inv;
+  centroid[1] *= inv;
+  centroid[2] *= inv;
+}
+
+} // namespace
+
+//------------------------------------------------------------------------------
+bool vtkVESPAAttributeTransfer::Interpolate(vtkPolyData* input, vtkPolyData* output)
+{
+  if (!input || !output)
+  {
+    return false;
+  }
+
+  vtkPointData* const inPD = input->GetPointData();
+  if (inPD && inPD->GetNumberOfArrays() > 0)
+  {
+    vtkNew<vtkPolyData> probeSource;
+    probeSource->CopyStructure(input);
+    probeSource->GetPointData()->ShallowCopy(inPD);
+    probeSource->GetCellData()->Initialize();
+
+    vtkNew<vtkProbeFilter> probe;
+    probe->SetInputData(output);
+    probe->SetSourceData(probeSource);
+    probe->SpatialMatchOn();
+    probe->PassCellArraysOff();
+    probe->Update();
+
+    output->ShallowCopy(probe->GetOutput());
+  }
+
+  vtkCellData* inCD  = input->GetCellData();
+  vtkCellData* outCD = output->GetCellData();
+  const vtkIdType nCells = output->GetNumberOfCells();
+  if (inCD->GetNumberOfArrays() > 0 && nCells > 0)
+  {
+    input->BuildCells();
+    output->BuildCells();
+
+    vtkNew<vtkStaticCellLocator> locator;
+    locator->SetDataSet(input);
+    locator->BuildLocator();
+
+    outCD->CopyAllocate(inCD, nCells);
+
+    vtkPolyData* mesh            = output;
+    vtkStaticCellLocator* locPtr = locator;
+
+    std::ofstream(AttributeTransferCellAttrLogPath()).close();
+    AttributeTransferCellAttrLog(
+      "[1] vtkVESPAAttributeTransfer::Interpolate (cell data via nearest cell): "
+      "outCells=" +
+      std::to_string(nCells) + " outPts=" + std::to_string(output->GetNumberOfPoints()) +
+      " inCells=" + std::to_string(input->GetNumberOfCells()) +
+      " inPts=" + std::to_string(input->GetNumberOfPoints()) +
+      " inCellArrays=" + std::to_string(inCD->GetNumberOfArrays()));
+
+    RunSMPSelfTestIfRequested();
+
+    const auto cellAttrT0 = std::chrono::steady_clock::now();
+
+    std::vector<vtkIdType> srcCellIds(static_cast<size_t>(nCells), -1);
+    vtkSMPThreadLocalObject<vtkGenericCell> cellTLS;
+    vtkSMPTools::For(0, nCells, [&](vtkIdType begin, vtkIdType end) {
+      vtkGenericCell* genCell = cellTLS.Local();
+      double          centroid[3];
+      double          closestPt[3];
+      for (vtkIdType outCellId = begin; outCellId < end; ++outCellId)
+      {
+        ComputeCellCentroid(mesh, outCellId, genCell, centroid);
+        vtkIdType srcCellId = -1;
+        int       subId     = -1;
+        double    dist2     = 0.0;
+        locPtr->FindClosestPoint(centroid, closestPt, genCell, srcCellId, subId, dist2);
+        srcCellIds[static_cast<size_t>(outCellId)] = srcCellId;
+      }
+    });
+
+    const auto afterSmpPass = std::chrono::steady_clock::now();
+    const auto smpPassMs =
+      std::chrono::duration_cast<std::chrono::milliseconds>(afterSmpPass - cellAttrT0).count();
+    AttributeTransferCellAttrLog("[2] centroid + nearest-cell (SMP) done: elapsed_ms=" +
+      std::to_string(smpPassMs));
+
+    const auto copyT0 = std::chrono::steady_clock::now();
+    for (vtkIdType outCellId = 0; outCellId < nCells; ++outCellId)
+    {
+      const vtkIdType srcCellId = srcCellIds[static_cast<size_t>(outCellId)];
+      if (srcCellId >= 0)
+      {
+        outCD->CopyData(inCD, srcCellId, outCellId);
+      }
+    }
+    const auto copyT1 = std::chrono::steady_clock::now();
+    const auto copyMs =
+      std::chrono::duration_cast<std::chrono::milliseconds>(copyT1 - copyT0).count();
+    AttributeTransferCellAttrLog("[3] CopyData serial done: elapsed_ms=" + std::to_string(copyMs));
+
+    const auto totalMs =
+      std::chrono::duration_cast<std::chrono::milliseconds>(copyT1 - cellAttrT0).count();
+    AttributeTransferCellAttrLog("[4] cell attr map total: elapsed_ms=" + std::to_string(totalMs));
+  }
+  return true;
+}
+
+//------------------------------------------------------------------------------
+bool vtkVESPAAttributeTransfer::Copy(vtkPolyData* input, vtkPolyData* output)
+{
+  if (!input || !output)
+  {
+    return false;
+  }
+  output->GetPointData()->ShallowCopy(input->GetPointData());
+  output->GetCellData()->ShallowCopy(input->GetCellData());
+  return true;
+}

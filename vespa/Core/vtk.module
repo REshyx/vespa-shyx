@@ -1,0 +1,13 @@
+NAME
+  vtkVESPACore
+DESCRIPTION
+  "Shared VTK-only utilities (attribute transfer after remesh/deform). No CGAL."
+GROUPS
+  Meshing
+DEPENDS
+  VTK::CommonCore
+  VTK::CommonDataModel
+  VTK::CommonExecutionModel
+  VTK::FiltersCore
+PRIVATE_DEPENDS
+  VTK::CommonMath

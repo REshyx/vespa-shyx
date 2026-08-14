@@ -20,11 +20,23 @@
 
 # Brief
 
-This project contains VTK filters that use CGAL for mesh processing.
-The filters can be used either as part of a VTK module or ParaView plugin.
+This repository is a **VTK / ParaView plugin umbrella**. It started as Kitware
+[VESPA](https://gitlab.kitware.com/vtk-cgal/vespa) (VTK filters on top of CGAL).
+It now also ships independent modules that use **TetGen, VMTK, MKL, or VTK only**.
+CGAL is one backend, not the project identity.
 
-This project is distributed under a BSD-3 License, but as it is linked to
-CGAL, any binary generated with it retains the GPLv3 license.
+VTK modules live under [`vespa/`](./vespa/README.md), grouped by **author / origin**:
+
+| Path | Origin |
+|------|--------|
+| `vespa/Algorithm/` | Shared VTK↔CGAL helpers (outside author folders) |
+| `vespa/vespa/` | Original Kitware VESPA (`vtkCGAL*`) |
+| `vespa/shyx/` | SHYX vascular / volume / flow / viz filters |
+
+`ParaViewPlugin/` is a thin aggregator (`VESPAPlugin`) of whichever modules were built.
+Third-party sources that are not VTK modules (e.g. TetGen) stay at the repository root.
+
+License: BSD-3 for this tree; binaries that link CGAL retain GPLv3.
 
 # How to install
 
@@ -32,7 +44,9 @@ The VESPA project requires the following software:
 
 * the [CMake](https://cmake.org/) build system,
 * the [VTK library](https://vtk.org/) for the module or [ParaView software](https://www.paraview.org/) for the plugin,
-* the [CGAL library](https://www.cgal.org/).
+* the [CGAL library](https://www.cgal.org/) for original VESPA filters and SHYX filters that `DEPENDS` CGAL.
+
+Optional backends (see CMake options): TetGen (vendored), VMTK, Intel MKL.
 
 ### VTK
 
@@ -48,7 +62,7 @@ be compiled from sources manually using these
 
 ### CGAL
 
-VESPA needs CGAL >= 5.3. It can be installed:
+CGAL-backed modules need CGAL >= 5.3. It can be installed:
 * using the package manager of your system (including brew on OSX, or vcpkg on Windows),
 * manually using [CMake instructions](https://doc.cgal.org/latest/Manual/installation.html#installation_configwithcmake).
 
@@ -66,6 +80,7 @@ depending on whether only the VTK module or the full ParaView plugin should
 be built.
 
 If you want to build the ParaView plugin, set the CMake variable `VESPA_BUILD_PV_PLUGIN` to `ON`.
+CGAL-backed modules (original VESPA and SHYX filters that declare CGAL in `vtk.module`) require `VESPA_USE_CGAL=ON` (the default); that is the only path that calls `find_package(CGAL)`.
    - If you have installed a library in a custom folder, you can find it in CMake
      by giving the folder: **install_dir**/lib/cmake/**project-version**. For example,
      for VTK: **install_dir**/lib/cmake/vtk-9.1.
@@ -77,8 +92,9 @@ If you want to build the ParaView plugin, set the CMake variable `VESPA_BUILD_PV
 
 # How to use
 
-Except when stated otherwise, filters provided by VESPA require triangulated
+Except when stated otherwise, CGAL surface filters require triangulated
 surfaces (`vtkPolyData` meshes). These should be watertight and 2-manifold.
+Other modules (volume meshing, flow, representations) have their own input types.
 
 ### VTK Module
 
@@ -94,8 +110,8 @@ to ensure watertight, 2-manifold mesh then.
 The testing of the project may be used to get simple examples on how to use each
 provided filters. For instance,
 for the [Isotropic remeshing](https://doc.cgal.org/latest/Polygon_mesh_processing/group__PMP__meshing__grp.html#gaa5cc92275df27f0baab2472ecbc4ea3f)
-you get a [C++ example](./vespa/PolygonMeshProcessing/Testing/TestPMPIsotropicExecution.cxx)
-and a [Python example](./vespa/PolygonMeshProcessing/Testing/execute_IsotropicRemesher.py).
+you get a [C++ example](./vespa/vespa/PolygonMeshProcessing/Testing/TestPMPIsotropicExecution.cxx)
+and a [Python example](./vespa/vespa/PolygonMeshProcessing/Testing/execute_IsotropicRemesher.py).
 
 Set the CMake variable `BUILD_TESTING` to `ON`, and pull the data files using `git lfs`.
 
@@ -107,6 +123,10 @@ to ensure watertight, 2-manifold mesh then.
 
 # How to contribute
 
-If you want to contribute to this repository, simply open a Merge request
-on the [gitlab instance](https://gitlab.kitware.com/vtk-cgal/vespa), we will
-gladly review and help you merge your code.
+Add a new first-level folder under `vespa/<your-id>/` with a standard VTK
+`vtk.module` (see [`vespa/README.md`](./vespa/README.md)). Do not drop unrelated
+filters into `vespa/shyx/` or `vespa/vespa/`. Register ParaView proxies in
+`ParaViewPlugin/`.
+
+Upstream Kitware VESPA changes can still go to the
+[gitlab instance](https://gitlab.kitware.com/vtk-cgal/vespa).

@@ -14,6 +14,7 @@
 #include <vtkDoubleArray.h>
 #include <vtkExtractCells.h>
 #include <vtkGeometryFilter.h>
+#include <vtkHexahedron.h>
 #include <vtkIdList.h>
 #include <vtkIdTypeArray.h>
 #include <vtkInformation.h>
@@ -204,18 +205,58 @@ int FindTetFaceIndexForTriangle(vtkUnstructuredGrid* tet, vtkIdType tetCellId, v
   return -1;
 }
 
-/** Side-set cell array element_side: (volume cell GlobalId, Exodus tet face 1..4). PassThrough ids. */
-void PrepareTetBoundarySurfaceForIoss(vtkUnstructuredGrid* tetVol, vtkPolyData* surf)
+bool IsVolumeCellType(int t)
 {
-  if (!tetVol || !surf || surf->GetNumberOfCells() == 0)
+  return t == VTK_TETRA || t == VTK_HEXAHEDRON || t == VTK_VOXEL || t == VTK_WEDGE ||
+    t == VTK_PYRAMID || t == VTK_POLYHEDRON || t == VTK_PENTAGONAL_PRISM ||
+    t == VTK_HEXAGONAL_PRISM;
+}
+
+int FindHexFaceIndexForQuad(vtkUnstructuredGrid* vol, vtkIdType cellId, vtkIdType q0, vtkIdType q1,
+  vtkIdType q2, vtkIdType q3)
+{
+  if (vol->GetCellType(cellId) != VTK_HEXAHEDRON)
+  {
+    return -1;
+  }
+  vtkNew<vtkIdList> cpts;
+  vol->GetCellPoints(cellId, cpts);
+  if (cpts->GetNumberOfIds() != 8)
+  {
+    return -1;
+  }
+  const vtkIdType* p = cpts->GetPointer(0);
+  auto quadMatch = [](vtkIdType a0, vtkIdType a1, vtkIdType a2, vtkIdType a3, vtkIdType b0,
+                     vtkIdType b1, vtkIdType b2, vtkIdType b3) {
+    std::array<vtkIdType, 4> A = { a0, a1, a2, a3 };
+    std::array<vtkIdType, 4> B = { b0, b1, b2, b3 };
+    std::sort(A.begin(), A.end());
+    std::sort(B.begin(), B.end());
+    return A == B;
+  };
+  for (int face = 0; face < 6; ++face)
+  {
+    const vtkIdType* fl = vtkHexahedron::GetFaceArray(face);
+    if (quadMatch(q0, q1, q2, q3, p[fl[0]], p[fl[1]], p[fl[2]], p[fl[3]]))
+    {
+      return face;
+    }
+  }
+  return -1;
+}
+
+/** Side-set cell array element_side: (volume cell GlobalId, Exodus face 1..N). PassThrough ids. */
+void PrepareVolumeBoundarySurfaceForIoss(vtkUnstructuredGrid* vol, vtkPolyData* surf)
+{
+  if (!vol || !surf || surf->GetNumberOfCells() == 0)
   {
     return;
   }
 
   auto* origCell = vtkIdTypeArray::SafeDownCast(surf->GetCellData()->GetArray("vtkOriginalCellIds"));
   auto* origPt = vtkIdTypeArray::SafeDownCast(surf->GetPointData()->GetArray("vtkOriginalPointIds"));
-  auto* volCellG = vtkIdTypeArray::SafeDownCast(tetVol->GetCellData()->GetGlobalIds());
-  auto* volPtG = vtkIdTypeArray::SafeDownCast(tetVol->GetPointData()->GetGlobalIds());
+  auto* volCellG = vtkIdTypeArray::SafeDownCast(vol->GetCellData()->GetGlobalIds());
+  auto* volPtG = vtkIdTypeArray::SafeDownCast(vol->GetPointData()->GetGlobalIds());
   if (!origCell || !origPt || !volCellG || !volPtG)
   {
     return;
@@ -239,7 +280,19 @@ void PrepareTetBoundarySurfaceForIoss(vtkUnstructuredGrid* tetVol, vtkPolyData* 
       const vtkIdType s0 = origPt->GetValue(cpts->GetId(0));
       const vtkIdType s1 = origPt->GetValue(cpts->GetId(1));
       const vtkIdType s2 = origPt->GetValue(cpts->GetId(2));
-      const int found = FindTetFaceIndexForTriangle(tetVol, ocid, s0, s1, s2);
+      const int found = FindTetFaceIndexForTriangle(vol, ocid, s0, s1, s2);
+      if (found >= 0)
+      {
+        exodusFace = found + 1;
+      }
+    }
+    else if (cpts->GetNumberOfIds() == 4)
+    {
+      const vtkIdType s0 = origPt->GetValue(cpts->GetId(0));
+      const vtkIdType s1 = origPt->GetValue(cpts->GetId(1));
+      const vtkIdType s2 = origPt->GetValue(cpts->GetId(2));
+      const vtkIdType s3 = origPt->GetValue(cpts->GetId(3));
+      const int found = FindHexFaceIndexForQuad(vol, ocid, s0, s1, s2, s3);
       if (found >= 0)
       {
         exodusFace = found + 1;
@@ -1821,39 +1874,64 @@ int vtkSHYXDataSetToPartitionedCollection::RequestData(vtkInformation* vtkNotUse
   if (ug)
   {
     const vtkIdType nCells = ug->GetNumberOfCells();
-    vtkNew<vtkIdList> tetIds;
-    tetIds->Allocate(nCells);
+    vtkNew<vtkIdList> volIds;
+    volIds->Allocate(nCells);
+    bool anyTet = false;
+    bool anyHex = false;
+    bool anyOtherVol = false;
     for (vtkIdType c = 0; c < nCells; ++c)
     {
-      if (ug->GetCellType(c) == VTK_TETRA)
+      const int t = ug->GetCellType(c);
+      if (!IsVolumeCellType(t))
       {
-        tetIds->InsertNextId(c);
+        continue;
+      }
+      volIds->InsertNextId(c);
+      if (t == VTK_TETRA)
+      {
+        anyTet = true;
+      }
+      else if (t == VTK_HEXAHEDRON || t == VTK_VOXEL)
+      {
+        anyHex = true;
+      }
+      else
+      {
+        anyOtherVol = true;
       }
     }
 
-    if (tetIds->GetNumberOfIds() > 0)
+    if (volIds->GetNumberOfIds() > 0)
     {
-      vtkNew<vtkExtractCells> exTet;
-      exTet->SetInputData(ug);
-      exTet->SetCellList(tetIds);
-      exTet->Update();
-      vtkUnstructuredGrid* tetOut = exTet->GetOutput();
-      if (tetOut && tetOut->GetNumberOfCells() > 0)
+      vtkNew<vtkExtractCells> exVol;
+      exVol->SetInputData(ug);
+      exVol->SetCellList(volIds);
+      exVol->Update();
+      vtkUnstructuredGrid* volOut = exVol->GetOutput();
+      if (volOut && volOut->GetNumberOfCells() > 0)
       {
         volumeGridForIoss = vtkSmartPointer<vtkUnstructuredGrid>::New();
-        volumeGridForIoss->DeepCopy(tetOut);
+        volumeGridForIoss->DeepCopy(volOut);
         SetContiguousGlobalIds(volumeGridForIoss);
 
-        // Boundary of tet-only mesh; pass-through ids for vtkIOSSWriter (GlobalIds + element_side).
         vtkNew<vtkDataSetSurfaceFilter> surf;
         surf->SetInputData(volumeGridForIoss);
         surf->PassThroughCellIdsOn();
         surf->PassThroughPointIdsOn();
         surf->Update();
         surfaceWork->DeepCopy(surf->GetOutput());
-        PrepareTetBoundarySurfaceForIoss(volumeGridForIoss, surfaceWork.GetPointer());
+        PrepareVolumeBoundarySurfaceForIoss(volumeGridForIoss, surfaceWork.GetPointer());
 
-        const std::string volumeName = ResolveBlockName(customBlockNames, blockIndex, "tetrahedra");
+        const char* defaultVolName = "volume";
+        if (anyTet && !anyHex && !anyOtherVol)
+        {
+          defaultVolName = "tetrahedra";
+        }
+        else if (anyHex && !anyTet && !anyOtherVol)
+        {
+          defaultVolName = "hexahedra";
+        }
+        const std::string volumeName = ResolveBlockName(customBlockNames, blockIndex, defaultVolName);
         AppendPdcBlock(result, blockIndex, volumeGridForIoss, volumeName.c_str(), nextEntityId++);
       }
     }

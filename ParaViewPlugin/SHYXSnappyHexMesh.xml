@@ -1,0 +1,144 @@
+<ServerManagerConfiguration>
+  <ProxyGroup name="filters">
+    <SourceProxy class="vtkSHYXSnappyHexMesh"
+                 label="SHYX SnappyHexMesh"
+                 name="SHYXSnappyHexMesh">
+      <Documentation
+          short_help="SHYX SnappyHexMesh: Hex-dominant volume mesh from a closed surface."
+          long_help="Takes a closed triangulated surface (vtkPolyData) and generates a hex-dominant volume mesh (vtkUnstructuredGrid) with snappyHexMesh: castellated split-hex, snap to surface, optional prism layers. After snap/layers the mesh includes polyhedra, not only VTK_HEXAHEDRON."/>
+
+      <InputProperty name="Input" command="SetInputConnection">
+        <ProxyGroupDomain name="groups">
+          <Group name="sources"/>
+          <Group name="filters"/>
+        </ProxyGroupDomain>
+        <DataTypeDomain name="input_type">
+          <DataType value="vtkPolyData"/>
+        </DataTypeDomain>
+        <Documentation>Closed surface mesh (triangulated, watertight).</Documentation>
+      </InputProperty>
+
+      <IntVectorProperty command="SetCastellatedMesh" name="CastellatedMesh"
+                         label="Castellated mesh" number_of_elements="1" default_values="1">
+        <BooleanDomain name="bool"/>
+      </IntVectorProperty>
+      <IntVectorProperty command="SetSnap" name="Snap"
+                         label="Snap" number_of_elements="1" default_values="1">
+        <BooleanDomain name="bool"/>
+      </IntVectorProperty>
+      <IntVectorProperty command="SetAddLayers" name="AddLayers"
+                         label="Add layers" number_of_elements="1" default_values="1">
+        <BooleanDomain name="bool"/>
+      </IntVectorProperty>
+
+      <DoubleVectorProperty command="SetBackgroundCellSize" name="BackgroundCellSize"
+                            label="Background cell size" number_of_elements="1" default_values="0">
+        <BoundsDomain mode="scaled_extent" name="bounds_cell" scale_factor="0.05">
+          <RequiredProperties>
+            <Property function="Input" name="Input"/>
+          </RequiredProperties>
+        </BoundsDomain>
+        <Documentation>Cartesian background hex size. 0 = 1/16 of the longest AABB edge.</Documentation>
+      </DoubleVectorProperty>
+      <DoubleVectorProperty command="SetBoundsMargin" name="BoundsMargin"
+                            label="Bounds margin" number_of_elements="1" default_values="0.05">
+        <DoubleRangeDomain name="range" min="0" max="2"/>
+      </DoubleVectorProperty>
+
+      <IntVectorProperty command="SetMaxGlobalCells" name="MaxGlobalCells"
+                         label="Max global cells" number_of_elements="1" default_values="2000000">
+        <IntRangeDomain name="range" min="1000" max="200000000"/>
+      </IntVectorProperty>
+      <IntVectorProperty command="SetNCellsBetweenLevels" name="NCellsBetweenLevels"
+                         label="Cells between levels" number_of_elements="1" default_values="3">
+        <IntRangeDomain name="range" min="1" max="10"/>
+      </IntVectorProperty>
+      <IntVectorProperty command="SetRefinementMin" name="RefinementMin"
+                         label="Surface refinement min" number_of_elements="1" default_values="0">
+        <IntRangeDomain name="range" min="0" max="10"/>
+      </IntVectorProperty>
+      <IntVectorProperty command="SetRefinementMax" name="RefinementMax"
+                         label="Surface refinement max" number_of_elements="1" default_values="2">
+        <IntRangeDomain name="range" min="0" max="10"/>
+      </IntVectorProperty>
+
+      <IntVectorProperty command="SetNSmoothPatch" name="NSmoothPatch"
+                         label="Snap nSmoothPatch" number_of_elements="1" default_values="3"
+                         panel_visibility="advanced">
+        <IntRangeDomain name="range" min="0" max="100"/>
+      </IntVectorProperty>
+      <DoubleVectorProperty command="SetSnapTolerance" name="SnapTolerance"
+                            label="Snap tolerance" number_of_elements="1" default_values="2"
+                            panel_visibility="advanced">
+        <DoubleRangeDomain name="range" min="0" max="20"/>
+      </DoubleVectorProperty>
+      <IntVectorProperty command="SetNSolveIter" name="NSolveIter"
+                         label="Snap nSolveIter" number_of_elements="1" default_values="30"
+                         panel_visibility="advanced">
+        <IntRangeDomain name="range" min="0" max="1000"/>
+      </IntVectorProperty>
+      <IntVectorProperty command="SetNRelaxIter" name="NRelaxIter"
+                         label="Snap nRelaxIter" number_of_elements="1" default_values="5"
+                         panel_visibility="advanced">
+        <IntRangeDomain name="range" min="0" max="100"/>
+      </IntVectorProperty>
+
+      <IntVectorProperty command="SetNSurfaceLayers" name="NSurfaceLayers"
+                         label="Surface layers" number_of_elements="1" default_values="3">
+        <IntRangeDomain name="range" min="0" max="50"/>
+        <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator" mode="enabled_state"
+                                   property="AddLayers" value="1"/>
+        </Hints>
+      </IntVectorProperty>
+      <DoubleVectorProperty command="SetExpansionRatio" name="ExpansionRatio"
+                            label="Layer expansion ratio" number_of_elements="1" default_values="1.2">
+        <DoubleRangeDomain name="range" min="1" max="4"/>
+      </DoubleVectorProperty>
+      <DoubleVectorProperty command="SetFinalLayerThickness" name="FinalLayerThickness"
+                            label="Final layer thickness" number_of_elements="1" default_values="0.3"
+                            panel_visibility="advanced">
+        <DoubleRangeDomain name="range" min="0.001" max="2"/>
+      </DoubleVectorProperty>
+      <DoubleVectorProperty command="SetMinThickness" name="MinThickness"
+                            label="Min layer thickness" number_of_elements="1" default_values="0.1"
+                            panel_visibility="advanced">
+        <DoubleRangeDomain name="range" min="0.001" max="2"/>
+      </DoubleVectorProperty>
+      <DoubleVectorProperty command="SetFeatureAngle" name="FeatureAngle"
+                            label="Feature angle" number_of_elements="1" default_values="30">
+        <DoubleRangeDomain name="range" min="0" max="180"/>
+      </DoubleVectorProperty>
+      <IntVectorProperty command="SetImplicitFeatureSnap" name="ImplicitFeatureSnap"
+                         label="Implicit feature snap" number_of_elements="1" default_values="1">
+        <BooleanDomain name="bool"/>
+      </IntVectorProperty>
+
+      <PropertyGroup label="Stages">
+        <Property name="CastellatedMesh"/>
+        <Property name="Snap"/>
+        <Property name="AddLayers"/>
+      </PropertyGroup>
+      <PropertyGroup label="Background mesh">
+        <Property name="BackgroundCellSize"/>
+        <Property name="BoundsMargin"/>
+      </PropertyGroup>
+      <PropertyGroup label="Castellated">
+        <Property name="MaxGlobalCells"/>
+        <Property name="NCellsBetweenLevels"/>
+        <Property name="RefinementMin"/>
+        <Property name="RefinementMax"/>
+      </PropertyGroup>
+      <PropertyGroup label="Layers">
+        <Property name="NSurfaceLayers"/>
+        <Property name="ExpansionRatio"/>
+        <Property name="FeatureAngle"/>
+        <Property name="ImplicitFeatureSnap"/>
+      </PropertyGroup>
+
+      <Hints>
+        <ShowInMenu category="SHYX"/>
+      </Hints>
+    </SourceProxy>
+  </ProxyGroup>
+</ServerManagerConfiguration>

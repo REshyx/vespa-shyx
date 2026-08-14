@@ -2,7 +2,7 @@
  * @class   vtkSHYXDataSetToPartitionedCollection
  * @brief   Build a vtkPartitionedDataSetCollection from vtkDataSet: tet block + surface partitions.
  *
- * Pipeline: (1) extract VTK_TETRA cells into one vtkUnstructuredGrid partition with contiguous
+ * Pipeline: (1) extract volume cells (VTK_TETRA, VTK_HEXAHEDRON, wedges, pyramids,
  * point/cell GlobalIds (1..N) for vtkIOSSWriter; (2) vtkDataSetSurfaceFilter on
  * the tet-only mesh with PassThroughCellIds/PointIds; (3) boundary cell data element_side (volume
  * global cell id, Exodus tet face 1..4); (4) split the boundary surface into side-set patches

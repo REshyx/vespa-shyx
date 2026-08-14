@@ -14,17 +14,20 @@ else()
   endif()
 endif()
 
-set(VESPA_CGAL_DIR "@CGAL_DIR@")
-if(NOT CGAL_FOUND)
-  find_dependency(CGAL PATHS "${VESPA_CGAL_DIR}")
-else()
-  get_filename_component(tmp1 "${VESPA_CGAL_DIR}" REALPATH)
-  get_filename_component(tmp2 "${CGAL_DIR}" REALPATH)
-  if(NOT "${tmp1}" STREQUAL "${tmp2}")
-    message(WARNING
-      "Mismatch for CGAL between vespa and current project: "
-      "CGAL_VESPA_DIR=${VESPA_CGAL_DIR} "
-      "CGAL_DIR=${CGAL_DIR}")
+set(VESPA_BUILT_WITH_CGAL "@VESPA_BUILT_WITH_CGAL@")
+if(VESPA_BUILT_WITH_CGAL)
+  set(VESPA_CGAL_DIR "@CGAL_DIR@")
+  if(NOT CGAL_FOUND)
+    find_dependency(CGAL PATHS "${VESPA_CGAL_DIR}")
+  else()
+    get_filename_component(tmp1 "${VESPA_CGAL_DIR}" REALPATH)
+    get_filename_component(tmp2 "${CGAL_DIR}" REALPATH)
+    if(NOT "${tmp1}" STREQUAL "${tmp2}")
+      message(WARNING
+        "Mismatch for CGAL between vespa and current project: "
+        "CGAL_VESPA_DIR=${VESPA_CGAL_DIR} "
+        "CGAL_DIR=${CGAL_DIR}")
+    endif()
   endif()
 endif()
 

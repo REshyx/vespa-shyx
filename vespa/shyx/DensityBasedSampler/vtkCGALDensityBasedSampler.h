@@ -9,21 +9,22 @@
  * input, automatically linearly mapped from its value range to 0-100%.
  *
  * The output is a vtkPolyData containing only vertices (the sampled point cloud).
+ * Historical class name still has CGAL in it; the implementation is VTK-only.
  */
 
 #ifndef vtkCGALDensityBasedSampler_h
 #define vtkCGALDensityBasedSampler_h
 
-#include "vtkCGALPolyDataAlgorithm.h"
+#include "vtkPolyDataAlgorithm.h"
 
 #include "vtkSHYXDensityBasedSamplerModule.h" // For export macro
 #include <string>
 
-class VTKSHYXDENSITYBASEDSAMPLER_EXPORT vtkCGALDensityBasedSampler : public vtkCGALPolyDataAlgorithm
+class VTKSHYXDENSITYBASEDSAMPLER_EXPORT vtkCGALDensityBasedSampler : public vtkPolyDataAlgorithm
 {
 public:
     static vtkCGALDensityBasedSampler* New();
-    vtkTypeMacro(vtkCGALDensityBasedSampler, vtkCGALPolyDataAlgorithm);
+    vtkTypeMacro(vtkCGALDensityBasedSampler, vtkPolyDataAlgorithm);
     void PrintSelf(ostream& os, vtkIndent indent) override;
 
     ///@{

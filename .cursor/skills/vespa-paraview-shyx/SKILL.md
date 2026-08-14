@@ -13,11 +13,15 @@ description: >-
 
 ## 1. 架构总览（必读）
 
-- **顶层**：根目录 `CMakeLists.txt` 用 `vtk_module_find_modules(... "${CMAKE_CURRENT_SOURCE_DIR}/vespa")` 发现所有 `vtk.module`，再 `vtk_module_scan` / `vtk_module_build` 把模块编进 VESPA 的 CMake export（`vespa`）。
+- **顶层**：根目录 `CMakeLists.txt` 用 `vtk_module_find_modules(... "${CMAKE_CURRENT_SOURCE_DIR}/vespa")` 递归发现所有 `vtk.module`，再 `vtk_module_scan` / `vtk_module_build` 编进 export（`vespa`）。`vespa/` 按**作者/来源**分第一层目录，不是按 CGAL 堆模块：
+  - `vespa/Algorithm/`：公用 VTK↔CGAL 辅助（`vtkCGALPolyDataAlgorithm`），谁用谁 `DEPENDS`。
+  - `vespa/Core/`：公用纯 VTK 工具（`vtkVESPAAttributeTransfer` 形变后点/胞数据映射），不拉 CGAL。
+  - `vespa/vespa/`：Kitware 原版 VESPA（`vtkCGAL*`）。
+  - `vespa/shyx/`：SHYX；新作者应新建 `vespa/<id>/`，不要往 shyx 或 vespa/vespa 里塞。
 - **SHYX 实现**：每个功能在 `vespa/shyx/<FeatureName>/` 下；至少包含 `vtk.module` 与 `CMakeLists.txt`（`vtk_module_add_module`，`shyx` 里通常带 `FORCE_STATIC`）。
-- **ParaView 插件包**：`ParaViewPlugin/CMakeLists.txt` 中 `paraview_add_plugin(VESPAPlugin ...)` 的 `SERVER_MANAGER_XML` 列表注册每个 `SHYX*.xml`；**一个 DLL（VESPAPlugin）** 里打包多个 proxy，而不是每个 shyx 算子一个独立插件目标。
+- **ParaView 插件包**：`ParaViewPlugin/CMakeLists.txt` 中 `paraview_add_plugin(VESPAPlugin ...)` 的 `SERVER_MANAGER_XML` 列表注册每个 `SHYX*.xml`；**一个 DLL（VESPAPlugin）** 聚合已构建模块，而不是每个算子一个插件目标。
 - **注册入口**：`ParaViewPlugin/paraview.plugin` 只描述插件名；`paraview_plugin_build` 与主工程里的 `VESPA_BUILD_PV_PLUGIN` 一起驱动构建。
-- **与 CGAL 的边界**：很多算子基于 `vespa/` 里 vtkCGAL* 或 `vtkCGALPolyDataAlgorithm` 等；纯 VTK 算子只依赖 `VTK::Filters*`。依赖写在对应目录的 `vtk.module` 的 `DEPENDS` / `PRIVATE_DEPENDS`。
+- **与 CGAL 的边界**：只有真正调用 CGAL 的算子才依赖 `vtkCGALAlgorithm` / `vtkCGALPolyDataAlgorithm`；纯 VTK / TetGen / VMTK 算子只写自己的 `DEPENDS`。根 `CMakeLists.txt` 在扫完 `vtk.module` 后，仅当仍有模块声明 `vtkCGALAlgorithm` 或 `CGAL::CGAL` 且 `VESPA_USE_CGAL=ON` 时才 `find_package(CGAL)`。
 
 **构建注意**：`VESPA_BUILD_PV_PLUGIN=ON` 时，工程会 **关闭** 共享库以便 vespa 模块以静态方式链进 `VESPAPlugin.dll`；根 `CMakeLists.txt` 中有说明。新增模块后不需要单独为 shyx 配置 PATH 安装 DLL，除非改动了插件/VTK 的加载方式。
 
@@ -27,8 +31,10 @@ description: >-
 
 | 目的 | 看哪里 |
 |------|--------|
-| 全仓库有哪些 SHYX/vespa 模块 | `vtk_module_find_modules` 会扫整个 `vespa/` 下 `vtk.module`；直接 `ls vespa/shyx/` 最快 |
-| 新模块是否进构建、是否被条件排除 | 根 `CMakeLists.txt` 里对 `vtkcgal_module_files` 的 `list(FILTER ... EXCLUDE ...)`：VMTK、CGAL 版本、非 ParaView 下排除 `Representation` 等 |
+| 全仓库有哪些 VTK 模块 | `vtk_module_find_modules` 扫整个 `vespa/`；作者目录见 `vespa/README.md` |
+| 新模块是否进构建、是否被条件排除 | 根 `CMakeLists.txt` 里对 `vespa_module_files` 的 `list(FILTER ... EXCLUDE ...)`：VMTK、CGAL 版本、非 ParaView 下排除 `Representation` 等 |
+| SHYX 实现根 | `vespa/shyx/*/` |
+| 上游 VESPA（CGAL） | `vespa/vespa/*/` |
 | 单模块 CMake 与类列表 | `vespa/shyx/<Name>/CMakeLists.txt`（`set(classes ...)` + `vtk_module_add_module`） |
 | 模块对外 VTK 依赖 | 同目录 `vtk.module` 的 `NAME` / `DEPENDS` / `PRIVATE_DEPENDS` / `GROUPS` |
 | ParaView UI/proxy 定义 | `ParaViewPlugin/SHYX<Name>.xml`（`SourceProxy` 的 `class="vtkSHYX..."` 与属性） |
@@ -81,9 +87,12 @@ description: >-
 
 ## 7. 附：仓库内关键路径
 
-- 根构建与模块扫描：`CMakeLists.txt`（`vtk_module_find_modules` / `vtk_module_build` / `paraview_plugin_build` 段）
+- 根构建与模块扫描：`CMakeLists.txt`（`vtk_module_find_modules` / `vtk_module_build` / `paraview_plugin_build` 段）；变量名为 `vespa_module_files` / `vespa_provided_modules`
+- 作者目录约定：`vespa/README.md`
 - 插件与 XML 列表：`ParaViewPlugin/CMakeLists.txt`
 - SHYX 实现根：`vespa/shyx/*/`
+- 上游 VESPA（CGAL）：`vespa/vespa/*/`
+- 公用 CGAL 辅助：`vespa/Algorithm/`
 - **ParaView 上游源码（本地参考）**：`C:\SoftWare\ParaView` — 可对照 Proxy、Server Manager XML、插件 CMake、`paraview_add_plugin` 等与版本一致的实现；本路径为开发机约定，若不存在则以实际安装的 ParaView 源码目录为准。
 
 更细的 **Domain / Decorator** 与常见 Hints 见 **§8**。其余 ParaView SM 细节以**已有 `SHYX*.xml`** 为模板，对照本地 `ParaView` 源码（如 `Remoting/ServerManager`、`Qt/ApplicationComponents`）与官方文档。

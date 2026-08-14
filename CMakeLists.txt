@@ -43,7 +43,11 @@ else()
 endif()
 option(VESPA_USE_SMP "Use VTK SMP in DensityBasedSampler (disable if plugin crashes with official ParaView)" ${VESPA_USE_SMP_DEFAULT})
 
+option(VESPA_USE_CGAL "Build CGAL-backed modules (vespa/vespa, Algorithm helpers, SHYX filters that DEPENDS CGAL)" ON)
 option(VESPA_USE_VMTK "Build SHYX VMTK centerline filter (VMTK must match ParaView VTK)" ON)
+option(VESPA_USE_SNAPPYHEXMESH "Build SHYX SnappyHexMesh filter (needs SHYXSnappyHex_DIR)" OFF)
+set(SHYXSnappyHex_DIR "" CACHE PATH
+  "SHYXSnappyHex install prefix (lib/cmake/SHYXSnappyHex)")
 set(VMTK_DIR "C:/SoftWare/vmtk-install" CACHE PATH
   "VMTK install prefix: include/vmtk and lib (e.g. vtkvmtk*.lib) live beneath this directory")
 
@@ -87,18 +91,6 @@ if (VESPA_USE_MKL)
     message(WARNING "VESPA_USE_MKL is ON but MKL not found. Set MKL_DIR (e.g. ${MKL_DIR})")
     set(VESPA_USE_MKL OFF)
   endif()
-endif()
-
-find_package(CGAL 5.3.0 REQUIRED)
-message(STATUS "Found CGAL ${CGAL_VERSION}")
-include(CGAL_Eigen3_support)
-# CGAL TBB parallel support (for pca_estimate_normals etc.)
-find_package(TBB QUIET)
-include(CGAL_TBB_support)
-if(TARGET CGAL::TBB_support)
-  message(STATUS "CGAL TBB parallel support: ENABLED")
-else()
-  message(STATUS "CGAL TBB parallel support: disabled (TBB not found)")
 endif()
 
 # TetGen library for tetrahedral meshing (SHYX TetGen filter)
@@ -166,29 +158,72 @@ if(BUILD_PYTHON_WRAPPERS)
 endif()
 
 ## Module build
-vtk_module_find_modules(vtkcgal_module_files "${CMAKE_CURRENT_SOURCE_DIR}/vespa")
+# Recursively discover vtk.module under vespa/: Algorithm (shared), vespa/vespa (upstream CGAL),
+# vespa/shyx, and any future author folder. CGAL is one backend, not the project identity.
+vtk_module_find_modules(vespa_module_files "${CMAKE_CURRENT_SOURCE_DIR}/vespa")
 if(NOT VESPA_USE_VMTK)
-  list(FILTER vtkcgal_module_files EXCLUDE REGEX "VmtkPolyDataCenterlines")
-  list(FILTER vtkcgal_module_files EXCLUDE REGEX "VmtkOpeningCenterlines")
+  list(FILTER vespa_module_files EXCLUDE REGEX "VmtkPolyDataCenterlines")
+  list(FILTER vespa_module_files EXCLUDE REGEX "VmtkOpeningCenterlines")
+endif()
+if(VESPA_USE_SNAPPYHEXMESH)
+  find_package(SHYXSnappyHex REQUIRED CONFIG)
+  message(STATUS "VESPA: SnappyHexMesh enabled (SHYXSnappyHex_DIR=${SHYXSnappyHex_DIR})")
+else()
+  list(FILTER vespa_module_files EXCLUDE REGEX "SnappyHexMesh")
 endif()
 if(VESPA_USE_VMTK)
   message(STATUS "VESPA: VMTK centerlines enabled (VMTK_DIR=${VMTK_DIR})")
 endif()
-# CGAL 6.0+ required for Adaptive Isotropic Remesher; exclude its module on older CGAL
-if (NOT CGAL_VERSION VERSION_GREATER_EQUAL 6.0)
-  list(FILTER vtkcgal_module_files EXCLUDE REGEX "AdaptiveIsotropicRemesher")
-  set(VESPA_ADAPTIVE_REMESHING OFF CACHE INTERNAL "vtkSHYXAdaptiveIsotropicRemesher state" FORCE)
-else()
-  set(VESPA_ADAPTIVE_REMESHING ON CACHE INTERNAL "vtkSHYXAdaptiveIsotropicRemesher state" FORCE)
-endif()
-# CGAL 5.5+ required: vtkCGALAlphaWrapping and SHYX Selection / Fill / Alpha / Union pipeline
-if (NOT CGAL_VERSION VERSION_GREATER_EQUAL 5.5)
-  list(FILTER vtkcgal_module_files EXCLUDE REGEX "SelectionFillAlphaReunion")
-endif()
 # ParaView-only: Representation modules depend on ParaView::RemotingViews (skip when building VTK-only)
 if (NOT VESPA_BUILD_PV_PLUGIN)
-  list(FILTER vtkcgal_module_files EXCLUDE REGEX "Representation")
+  list(FILTER vespa_module_files EXCLUDE REGEX "Representation")
 endif ()
+
+# CGAL is optional: only find_package when remaining modules actually DEPENDS vtkCGALAlgorithm / CGAL::CGAL.
+set(_vespa_cgal_module_files)
+foreach(_vespa_mf IN LISTS vespa_module_files)
+  file(READ "${_vespa_mf}" _vespa_mf_content)
+  if(_vespa_mf_content MATCHES "vtkCGALAlgorithm" OR _vespa_mf_content MATCHES "CGAL::CGAL")
+    list(APPEND _vespa_cgal_module_files "${_vespa_mf}")
+  endif()
+  unset(_vespa_mf_content)
+endforeach()
+unset(_vespa_mf)
+
+set(VESPA_ADAPTIVE_REMESHING OFF CACHE INTERNAL "vtkSHYXAdaptiveIsotropicRemesher state" FORCE)
+set(VESPA_ALPHA_WRAPPING OFF CACHE INTERNAL "vtkCGALAlphaWrapping state" FORCE)
+set(VESPA_MESH_SMOOTHING OFF CACHE INTERNAL "vtkCGALMeshSmoothing state" FORCE)
+set(VESPA_BUILT_WITH_CGAL OFF CACHE INTERNAL "Whether this build found CGAL and kept CGAL modules" FORCE)
+
+if(VESPA_USE_CGAL AND _vespa_cgal_module_files)
+  find_package(CGAL 5.3.0 REQUIRED)
+  message(STATUS "Found CGAL ${CGAL_VERSION}")
+  include(CGAL_Eigen3_support)
+  find_package(TBB QUIET)
+  include(CGAL_TBB_support)
+  if(TARGET CGAL::TBB_support)
+    message(STATUS "CGAL TBB parallel support: ENABLED")
+  else()
+    message(STATUS "CGAL TBB parallel support: disabled (TBB not found)")
+  endif()
+  set(VESPA_BUILT_WITH_CGAL ON CACHE INTERNAL "Whether this build found CGAL and kept CGAL modules" FORCE)
+  if (NOT CGAL_VERSION VERSION_GREATER_EQUAL 6.0)
+    list(FILTER vespa_module_files EXCLUDE REGEX "AdaptiveIsotropicRemesher")
+  else()
+    set(VESPA_ADAPTIVE_REMESHING ON CACHE INTERNAL "vtkSHYXAdaptiveIsotropicRemesher state" FORCE)
+  endif()
+  if (NOT CGAL_VERSION VERSION_GREATER_EQUAL 5.5)
+    list(FILTER vespa_module_files EXCLUDE REGEX "SelectionFillAlphaReunion")
+  endif()
+elseif(NOT VESPA_USE_CGAL AND _vespa_cgal_module_files)
+  list(REMOVE_ITEM vespa_module_files ${_vespa_cgal_module_files})
+  list(LENGTH _vespa_cgal_module_files _vespa_cgal_skipped)
+  message(STATUS "VESPA_USE_CGAL=OFF: skipped ${_vespa_cgal_skipped} CGAL-backed module(s); find_package(CGAL) not run")
+  unset(_vespa_cgal_skipped)
+else()
+  message(STATUS "No CGAL-backed modules in the enabled set; skip find_package(CGAL)")
+endif()
+unset(_vespa_cgal_module_files)
 
 if(BUILD_TESTING)
   set(_vespa_enable_tests "ON")
@@ -197,20 +232,20 @@ else()
 endif()
 
 vtk_module_scan(
-  MODULE_FILES     ${vtkcgal_module_files}
-  PROVIDES_MODULES vtkcgal_provided_modules
+  MODULE_FILES     ${vespa_module_files}
+  PROVIDES_MODULES vespa_provided_modules
   WANT_BY_DEFAULT  ON
   ENABLE_TESTS     ${_vespa_enable_tests})
 
 vtk_module_build(
-  MODULES         ${vtkcgal_provided_modules}
+  MODULES         ${vespa_provided_modules}
   INSTALL_EXPORT  vespa
   INSTALL_HEADERS ON
   CMAKE_DESTINATION   "${CMAKE_INSTALL_LIBDIR}/cmake/vespa"
   HEADERS_DESTINATION "include")
 
 ## Install
-set(vespaExport ${vtkcgal_provided_modules})
+set(vespaExport ${vespa_provided_modules})
 
 include(CMakePackageConfigHelpers)
 
@@ -277,8 +312,8 @@ endif()
 
 if(BUILD_PYTHON_WRAPPERS)
   vtk_module_wrap_python(
-    MODULES         ${vtkcgal_provided_modules}
-    WRAPPED_MODULES vtkcgal_wrapped_modules
+    MODULES         ${vespa_provided_modules}
+    WRAPPED_MODULES vespa_wrapped_modules
     TARGET          VESPA::Python
     INSTALL_EXPORT  vespaPython
     PYTHON_PACKAGE  "vespa"
@@ -290,7 +325,7 @@ if(BUILD_PYTHON_WRAPPERS)
 
   # Generate __init__.py
   set(python_modules)
-  foreach(module ${vtkcgal_wrapped_modules})
+  foreach(module ${vespa_wrapped_modules})
     list(APPEND python_modules "'${module}'")
   endforeach()
 

@@ -1,6 +1,8 @@
 # VESPA 插件功能说明
 
-本文档说明在 ParaView 中通过 **VESPAPlugin** 暴露的数据源、滤镜与表示（Representation）。功能上可分为 **VESPA**（通用网格处理、点云与表面重建）与 **SHYX**（血管与体积网格、流场与可视化辅助等）。在 CMake 中需开启 **`VESPA_BUILD_PV_PLUGIN=ON`** 才会生成 ParaView 插件；部分滤镜依赖可选开关（见下文「构建与可选组件」）。
+本文档说明在 ParaView 中通过 **VESPAPlugin** 暴露的数据源、滤镜与表示（Representation）。
+
+仓库定位是 **VTK / ParaView 插件聚合**：Kitware 原版 VESPA（CGAL 网格）只是其中一块，SHYX 以及其他作者目录各自带 `vtk.module` 与依赖（CGAL / TetGen / VMTK / 纯 VTK 等）。目录约定见 [`vespa/README.md`](vespa/README.md)。ParaView 菜单上仍分为 **VESPA**（上游 CGAL 滤镜）与 **SHYX**（以及 Vascular 精选管线）。开启 **`VESPA_BUILD_PV_PLUGIN=ON`** 才会生成插件；部分滤镜依赖可选开关（见下文「构建与可选组件」）。
 
 ---
 
@@ -9,11 +11,12 @@
 | CMake 选项 | 作用 |
 |------------|------|
 | **`VESPA_BUILD_PV_PLUGIN`** | 必须为 ON 才会构建 ParaView 插件。 |
-| **`VESPA_ALPHA_WRAPPING`** | 为 ON 时额外注册 **VESPA Alpha Wrapping** 滤镜。 |
+| **`VESPA_USE_CGAL`** | 为 ON（默认）时才编译依赖 CGAL 的模块，并 `find_package(CGAL)`。OFF 时跳过原版 VESPA 与所有 `DEPENDS vtkCGALAlgorithm` / `CGAL::CGAL` 的 SHYX 滤镜。 |
+| **`VESPA_ALPHA_WRAPPING`** | 为 ON 时额外注册 **VESPA Alpha Wrapping** 滤镜（需 CGAL ≥ 5.5）。 |
 | **`VESPA_MESH_SMOOTHING`** | 为 ON 时额外注册 **VESPA Mesh Smoothing** 滤镜。 |
 | **`VESPA_USE_MKL`** | 构建含 MKL 时，**SHYX Clebsch Map Filter** 中可选用 MKL 直接法求解器。 |
-| **`VESPA_USE_SMP`** | 影响部分 CGAL 相关滤镜内部并行（如数组概率点剔除等）；**SHYX Radius Neighbor Count** 使用 VTK 自带的 **vtkSMPTools**，不依赖此开关。 |
-| **（CGAL 版本）** | **CGAL ≥ 6.0** 时构建系统会包含 **SHYX Adaptive Isotropic Remesher**（`vtkSHYXAdaptiveIsotropicRemesher`）；低于 6.0 时不编译该类，ParaView 插件中亦无对应滤镜。 |
+| **`VESPA_USE_SMP`** | 部分滤镜内部并行（如密度采样、数组概率点剔除）；**SHYX Radius Neighbor Count** 使用 VTK 自带的 **vtkSMPTools**，不依赖此开关。 |
+| **（CGAL 版本）** | **CGAL ≥ 6.0** 时构建系统会包含 **SHYX Adaptive Isotropic Remesher**（`vtkSHYXAdaptiveIsotropicRemesher`）；低于 6.0 或 `VESPA_USE_CGAL=OFF` 时不编译该类。 |
 
 客户端若使用 Qt 版 ParaView，插件还可注册 **Pulse Glyph** / **Animated Streamline** 相关的自动启动管理器与自定义面板（如数组曲线映射面板）；表示类型仍可在显示面板中选择。
 

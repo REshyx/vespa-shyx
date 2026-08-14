@@ -1,10 +1,11 @@
 NAME
   vtkCGALAlgorithm
 DESCRIPTION
-  "This module contains helper namespace and class to translate between VTK and CGAL."
+  "Shared VTK↔CGAL helpers (vtkCGALPolyDataAlgorithm, vtkCGALHelper). Not an author namespace."
 GROUPS
   Meshing
 DEPENDS
+  vtkVESPACore
   VTK::CommonCore
   VTK::CommonDataModel
   VTK::CommonExecutionModel

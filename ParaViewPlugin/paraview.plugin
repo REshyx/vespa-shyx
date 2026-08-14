@@ -1,4 +1,4 @@
 NAME
   VESPAPlugin
 DESCRIPTION
-  ParaView plugin based on the VESPA VTK module
+  ParaView plugin aggregating VESPA VTK modules (upstream CGAL, SHYX, and other author folders)

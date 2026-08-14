@@ -22,6 +22,11 @@ if(VESPA_USE_VMTK)
     "SHYXVmtkOpeningCenterlines.xml")
 endif()
 
+set(SNAPPYHEXMESH_SERVER_MANAGER_XML "")
+if(VESPA_USE_SNAPPYHEXMESH)
+  set(SNAPPYHEXMESH_SERVER_MANAGER_XML "SHYXSnappyHexMesh.xml")
+endif()
+
 option(VESPA_SHOW_CGAL_LICENSE_ON_LOAD "Show CGAL License when loading plugin" OFF)
 mark_as_advanced(VESPA_SHOW_CGAL_LICENSE_ON_LOAD)
 if (${VESPA_SHOW_CGAL_LICENSE_ON_LOAD})
@@ -209,7 +214,7 @@ paraview_add_plugin(VESPAPlugin
   EULA ${VESPA_CGAL_LICENSE}
   REQUIRED_ON_CLIENT
   REQUIRED_ON_SERVER
-  MODULES ${vtkcgal_provided_modules}
+  MODULES ${vespa_provided_modules}
   UI_RESOURCES VESPAIcons.qrc
   INITIALIZERS vespa_qrc_init
   EXTRA_INCLUDES "vespa_qrc_init.h"
@@ -260,6 +265,7 @@ paraview_add_plugin(VESPAPlugin
      ${MESH_SMOOTHING_SERVER_MANAGER_XML}
      ${ADAPTIVE_REMESHING_SERVER_MANAGER_XML}
      ${VMTK_CENTERLINES_SERVER_MANAGER_XML}
+     ${SNAPPYHEXMESH_SERVER_MANAGER_XML}
   UI_INTERFACES ${acm_interfaces} ${vespa_obb_box_interfaces} ${vespa_endclipper_plane_interfaces} ${vespa_selection_plane_clipper_interfaces} ${vespa_stent_cylinder_interfaces} ${vespa_enhanced_ruler_interfaces} ${vespa_endpoint_stent_interfaces} ${shyx_partitioned_block_names_interfaces} ${shyx_boundary_assignment_info_interfaces} ${shyx_remesh_uncapped_histogram_interfaces} ${shyx_openings_table_interfaces} ${vespa_plugin_qt_auto_interfaces}
   SOURCES ${acm_sources} ${vespa_obb_box_sources} ${vespa_endclipper_plane_sources} ${vespa_selection_plane_clipper_sources} ${vespa_stent_cylinder_sources} ${vespa_enhanced_ruler_sources} ${vespa_endpoint_stent_sources} ${shyx_partitioned_block_names_sources} ${shyx_boundary_assignment_info_sources} ${shyx_remesh_uncapped_histogram_sources} ${shyx_openings_table_sources}
     TransferCurve/pqArrayCurveMapperPanel.cxx

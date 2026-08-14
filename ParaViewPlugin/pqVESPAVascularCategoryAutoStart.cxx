@@ -31,6 +31,7 @@ constexpr const char* kVascularFiltersXml = R"xml(
              icon=":/VESPA/SHYX_Remesh_With_Endpoint.png"/>
       <Proxy group="filters" name="SHYXTetGen"
              icon=":/VESPA/SHYX_TetGen.png"/>
+      <Proxy group="filters" name="SHYXSnappyHexMesh"/>
       <Proxy group="filters" name="SHYXDataSetToPartitionedCollection"
              icon=":/VESPA/SHYX_DataSet_To_Partitioned_Collection.png"/>
       <Proxy group="filters" name="SHYXPartitionedCollectionBoundaryAssignment"

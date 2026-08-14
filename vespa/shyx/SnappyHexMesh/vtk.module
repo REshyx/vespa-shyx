@@ -1,7 +1,7 @@
 NAME
-  vtkSHYXDensityBasedSampler
+  vtkSHYXSnappyHexMesh
 DESCRIPTION
-  "Density-based random sampling inside a closed mesh volume."
+  "Hex-dominant volume mesh from a closed surface using snappyHexMesh."
 GROUPS
   Meshing
 DEPENDS
@@ -10,5 +10,4 @@ PRIVATE_DEPENDS
   VTK::CommonCore
   VTK::CommonDataModel
   VTK::CommonExecutionModel
-  VTK::FiltersExtraction
-  VTK::FiltersGeometry
+  VTK::IOGeometry
