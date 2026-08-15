@@ -270,6 +270,32 @@ QString pqSHYXAIChatView::plainText() const
   return out;
 }
 
+QList<pqSHYXAIChatView::TranscriptTurn> pqSHYXAIChatView::lastTurns(int maxCount) const
+{
+  QList<TranscriptTurn> out;
+  if (maxCount <= 0)
+  {
+    return out;
+  }
+  for (int i = this->Messages.size() - 1; i >= 0 && out.size() < maxCount; --i)
+  {
+    if (this->Streaming && i == this->Messages.size() - 1)
+    {
+      continue;
+    }
+    const QString text = this->Messages[i].text.trimmed();
+    if (text.isEmpty() || text == QLatin1String("…"))
+    {
+      continue;
+    }
+    TranscriptTurn turn;
+    turn.user = this->Messages[i].user;
+    turn.text = text;
+    out.prepend(turn);
+  }
+  return out;
+}
+
 void pqSHYXAIChatView::setPlainText(const QString& text)
 {
   if (text == this->plainText())
@@ -314,10 +340,15 @@ void pqSHYXAIChatView::beginAssistantStream()
   this->Streaming = true;
   this->StreamText.clear();
   this->StreamThinking.clear();
+  this->StreamTools.clear();
+  this->StreamSegmentStart = 0;
+  this->StreamFg.clear();
   this->StreamLabel.clear();
   this->StreamThinkingLabel.clear();
   this->StreamThinkingFold.clear();
   this->StreamThinkingToggle.clear();
+  this->StreamBubbleFrame.clear();
+  this->StreamBubbleLayout.clear();
   Message msg;
   msg.user = false;
   msg.text = QStringLiteral("…");
@@ -348,13 +379,15 @@ void pqSHYXAIChatView::appendAssistantDelta(const QString& chunk)
   {
     this->StreamThinkingToggle->setChecked(false);
   }
+  this->ensureStreamTextLabel();
   if (this->StreamLabel)
   {
     this->StreamLabel->setTextFormat(Qt::PlainText);
     this->StreamLabel->setTextInteractionFlags(Qt::TextSelectableByMouse);
     this->StreamLabel->setFocusPolicy(Qt::ClickFocus);
     this->StreamLabel->setWordWrap(true);
-    this->StreamLabel->setText(this->StreamText);
+    this->StreamLabel->setVisible(true);
+    this->StreamLabel->setText(this->StreamText.mid(this->StreamSegmentStart));
   }
   this->scrollToBottom();
 }
@@ -393,6 +426,69 @@ void pqSHYXAIChatView::appendAssistantThinkingDelta(const QString& chunk)
   this->scrollToBottom();
 }
 
+void pqSHYXAIChatView::appendAssistantToolCall(const QString& name, const QString& result)
+{
+  if (name.trimmed().isEmpty())
+  {
+    return;
+  }
+  if (!this->Streaming)
+  {
+    this->beginAssistantStream();
+  }
+  ToolCall call;
+  call.name = name.trimmed();
+  call.result = result;
+  call.atChar = this->StreamText.size();
+  this->StreamTools.append(call);
+  if (!this->Messages.isEmpty() && !this->Messages.last().user)
+  {
+    this->Messages.last().toolCalls = this->StreamTools;
+  }
+  if (this->StreamLabel && this->StreamText.trimmed().isEmpty())
+  {
+    this->StreamLabel->hide();
+  }
+  this->StreamLabel.clear();
+  this->StreamSegmentStart = this->StreamText.size();
+  if (this->StreamBubbleFrame && this->StreamBubbleLayout)
+  {
+    this->addToolFold(this->StreamBubbleFrame, this->StreamBubbleLayout, call.name, call.result,
+      this->StreamFg);
+  }
+  this->scrollToBottom();
+}
+
+void pqSHYXAIChatView::ensureStreamTextLabel()
+{
+  if (this->StreamLabel || !this->StreamBubbleFrame || !this->StreamBubbleLayout)
+  {
+    return;
+  }
+  auto* lab = makeBodyLabel(this->StreamBubbleFrame, QString(), this->StreamFg, false, false);
+  lab->setTextFormat(Qt::PlainText);
+  lab->setTextInteractionFlags(Qt::TextSelectableByMouse);
+  lab->setFocusPolicy(Qt::ClickFocus);
+  this->StreamLabel = lab;
+  this->StreamBubbleLayout->addWidget(lab);
+}
+
+void pqSHYXAIChatView::addToolFold(
+  QWidget* frame, QVBoxLayout* layout, const QString& name, const QString& result, const QString& fg)
+{
+  if (!frame || !layout)
+  {
+    return;
+  }
+  auto* body = new QWidget(frame);
+  auto* bodyLay = new QVBoxLayout(body);
+  bodyLay->setContentsMargins(8, 0, 0, 4);
+  bodyLay->setSpacing(2);
+  const QString bodyText = result.trimmed().isEmpty() ? QStringLiteral("(empty)") : result;
+  bodyLay->addWidget(makeBodyLabel(body, bodyText, fg, true, false));
+  layout->addWidget(makeFoldSection(name, body, frame, fg));
+}
+
 void pqSHYXAIChatView::finishAssistantStream(
   const QList<QImage>& images, const QList<Attachment>& attachments)
 {
@@ -404,13 +500,15 @@ void pqSHYXAIChatView::finishAssistantStream(
     msg.thinking = this->StreamThinking.trimmed();
     msg.images = images;
     msg.attachments = attachments;
+    msg.toolCalls = this->StreamTools;
     if (!msg.text.trimmed().isEmpty() || !msg.thinking.isEmpty() || !images.isEmpty() ||
-      !attachments.isEmpty())
+      !attachments.isEmpty() || !msg.toolCalls.isEmpty())
     {
       this->appendMessage(msg, true);
     }
     this->StreamText.clear();
     this->StreamThinking.clear();
+    this->StreamTools.clear();
     return;
   }
   Message msg;
@@ -423,13 +521,17 @@ void pqSHYXAIChatView::finishAssistantStream(
   msg.thinking = this->StreamThinking.trimmed();
   msg.images = images;
   msg.attachments = attachments;
+  msg.toolCalls = this->StreamTools;
   this->Streaming = false;
   this->StreamLabel.clear();
   this->StreamThinkingLabel.clear();
   this->StreamThinkingFold.clear();
   this->StreamThinkingToggle.clear();
+  this->StreamBubbleFrame.clear();
+  this->StreamBubbleLayout.clear();
   this->removeLastMessage();
-  if (!msg.text.isEmpty() || !msg.thinking.isEmpty() || !images.isEmpty() || !attachments.isEmpty())
+  if (!msg.text.isEmpty() || !msg.thinking.isEmpty() || !images.isEmpty() || !attachments.isEmpty() ||
+    !msg.toolCalls.isEmpty())
   {
     this->appendMessage(msg, true);
   }
@@ -440,6 +542,8 @@ void pqSHYXAIChatView::finishAssistantStream(
   }
   this->StreamText.clear();
   this->StreamThinking.clear();
+  this->StreamTools.clear();
+  this->StreamSegmentStart = 0;
 }
 
 void pqSHYXAIChatView::removeLastMessage()
@@ -471,10 +575,14 @@ void pqSHYXAIChatView::clear()
   this->Streaming = false;
   this->StreamText.clear();
   this->StreamThinking.clear();
+  this->StreamTools.clear();
+  this->StreamSegmentStart = 0;
   this->StreamLabel.clear();
   this->StreamThinkingLabel.clear();
   this->StreamThinkingFold.clear();
   this->StreamThinkingToggle.clear();
+  this->StreamBubbleFrame.clear();
+  this->StreamBubbleLayout.clear();
   if (this->Messages.isEmpty())
   {
     return;
@@ -630,14 +738,46 @@ void pqSHYXAIChatView::addBubbleWidget(const Message& msg)
     bubbleLay->addWidget(thinkFold);
   }
 
-  if (!msg.text.trimmed().isEmpty())
+  if (this->Streaming && !msg.user)
   {
-    auto* lab = makeBodyLabel(frame, msg.text, fg, false, true);
-    if (this->Streaming && !msg.user && this->StreamLabel.isNull())
+    this->StreamBubbleFrame = frame;
+    this->StreamBubbleLayout = bubbleLay;
+    this->StreamFg = fg;
+  }
+
+  const QString bodyText =
+    (msg.text == QStringLiteral("…") && !msg.toolCalls.isEmpty()) ? QString() : msg.text;
+  if (msg.toolCalls.isEmpty())
+  {
+    if (!bodyText.trimmed().isEmpty())
     {
-      this->StreamLabel = lab;
+      auto* lab = makeBodyLabel(frame, bodyText, fg, false, !this->Streaming);
+      if (this->Streaming && !msg.user && this->StreamLabel.isNull())
+      {
+        this->StreamLabel = lab;
+      }
+      bubbleLay->addWidget(lab);
     }
-    bubbleLay->addWidget(lab);
+  }
+  else
+  {
+    int prev = 0;
+    for (const ToolCall& tc : msg.toolCalls)
+    {
+      const int at = qBound(0, tc.atChar, bodyText.size());
+      const QString slice = bodyText.mid(prev, at - prev);
+      if (!slice.trimmed().isEmpty())
+      {
+        bubbleLay->addWidget(makeBodyLabel(frame, slice, fg, false, true));
+      }
+      this->addToolFold(frame, bubbleLay, tc.name, tc.result, fg);
+      prev = at;
+    }
+    const QString tail = bodyText.mid(prev);
+    if (!tail.trimmed().isEmpty())
+    {
+      bubbleLay->addWidget(makeBodyLabel(frame, tail, fg, false, true));
+    }
   }
 
   for (const Attachment& att : msg.attachments)

@@ -3,8 +3,8 @@
 
 #include <QObject>
 
-/** Starts vtkOutputWindow capture so "Attach Output Window errors" can include
- *  messages from before the AI Assistant panel is opened. */
+/** Starts vtkOutputWindow capture so get_output_window can include messages
+ *  from before the AI Assistant panel is opened. */
 class pqSHYXAIAssistantAutoStart : public QObject
 {
   Q_OBJECT

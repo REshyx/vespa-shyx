@@ -116,12 +116,7 @@ paraview_plugin_add_property_widget(
   CLASS_NAME pqSHYXRemeshUncappedHistogramPanel
   INTERFACES shyx_remesh_uncapped_histogram_interfaces
   SOURCES shyx_remesh_uncapped_histogram_sources)
-paraview_plugin_add_property_widget(
-  KIND GROUP_WIDGET
-  TYPE "shyx_ai_assistant"
-  CLASS_NAME pqSHYXAIAssistantPanel
-  INTERFACES shyx_ai_assistant_interfaces
-  SOURCES shyx_ai_assistant_sources)
+
 list(APPEND vespa_stent_cylinder_sources
   pqSHYXVascularStentCylinderWidget.cxx
   pqSHYXVascularStentCylinderWidget.h)
@@ -182,6 +177,8 @@ endif()
 
 set(vespa_plugin_qt_auto_interfaces)
 set(vespa_plugin_qt_auto_sources)
+set(shyx_ai_assistant_interfaces)
+set(shyx_ai_assistant_sources)
 if (PARAVIEW_USE_QT)
   paraview_plugin_add_auto_start(
     CLASS_NAME "pqPulseGlyphAnimationManager"
@@ -268,6 +265,12 @@ if (PARAVIEW_USE_QT)
     ${shyx_ai_autostart_sources}
     pqSHYXAIAssistantAutoStart.cxx
     pqSHYXAIAssistantAutoStart.h)
+
+  paraview_plugin_add_dock_window(
+    CLASS_NAME pqSHYXAIAssistantPanel
+    DOCK_AREA Right
+    INTERFACES shyx_ai_assistant_interfaces
+    SOURCES shyx_ai_assistant_sources)
 endif ()
 
 paraview_add_plugin(VESPAPlugin
@@ -314,7 +317,6 @@ paraview_add_plugin(VESPAPlugin
     "SHYXVectorFieldTopology.xml"
     "SHYXArrayCurveMapper.xml"
     "SHYXAutoStreamline.xml"
-    "SHYXAIAssistant.xml"
     "PulseGlyphRepresentation.xml"
     "AnimatedStreamlineRepresentation.xml"
     "PointLabelRepresentation.xml"

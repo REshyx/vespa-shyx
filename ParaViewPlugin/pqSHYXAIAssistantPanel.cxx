@@ -7,22 +7,11 @@
 #include "pqSHYXPythonSyntaxHighlighter.h"
 
 #include "pqActiveObjects.h"
-#include "pqApplicationCore.h"
-#include "pqOutputPort.h"
+#include "pqPopOutWidget.h"
 #include "pqPVApplicationCore.h"
-#include "pqPipelineFilter.h"
-#include "pqPipelineSource.h"
-#include "pqServerManagerModel.h"
 #include "pqView.h"
 
 #include "vtkImageData.h"
-#include "vtkPVArrayInformation.h"
-#include "vtkPVDataInformation.h"
-#include "vtkPVDataSetAttributesInformation.h"
-#include "vtkSMProperty.h"
-#include "vtkSMPropertyGroup.h"
-#include "vtkSMProxy.h"
-#include "vtkSMSourceProxy.h"
 #include "vtkSMViewProxy.h"
 #include "vtkSmartPointer.h"
 
@@ -31,6 +20,8 @@
 #include <QCheckBox>
 #include <QCoreApplication>
 #include <QDir>
+#include <QDockWidget>
+#include <QEvent>
 #include <QFileInfo>
 #include <QFont>
 #include <QFormLayout>
@@ -38,9 +29,11 @@
 #include <QGroupBox>
 #include <QHBoxLayout>
 #include <QImage>
+#include <QInputMethodEvent>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QKeyEvent>
 #include <QLabel>
 #include <QLayoutItem>
 #include <QLibraryInfo>
@@ -60,8 +53,10 @@
 #include <QRegularExpression>
 #include <QSettings>
 #include <QSizePolicy>
+#include <QSlider>
 #include <QSslSocket>
 #include <QStringList>
+#include <QStyle>
 #include <QTextCursor>
 #include <QToolButton>
 #include <QVBoxLayout>
@@ -81,10 +76,12 @@
 
 namespace
 {
-constexpr int kDialogKeepChars = 12000;
+constexpr int kHistoryMaxMessages = 10;
+constexpr int kHistoryKeepChars = 2000;
 constexpr int kJpegMaxEdge = 1280;
 constexpr auto kSettingsGroup = "VESPA/SHYXAIAssistant";
-constexpr auto kDefaultCode = "# ParaView Python. Apply runs this script.\nfrom paraview.simple import *\n";
+constexpr auto kDefaultCode =
+  "# ParaView Python. Use Run script to execute.\nfrom paraview.simple import *\n";
 
 QString thisPluginDir()
 {
@@ -217,12 +214,19 @@ Rules:
 - If the user is only asking a question, reply in the dialog. Do not emit a fenced code block.
 - If the user asks you to write or edit a script and you do NOT have run_code_script, put the complete script in one ```python fenced block. The plugin copies that block into the code box. Keep a short explanation outside the fence.
 - When a current code box is provided, treat it as the file to edit. Return the full updated script, not a partial patch, unless the user asks for a snippet.
-- Apply / Run script in the UI runs the code box; Send to AI does not, unless you call run_code_script.
+- The Run script button (and run_code_script) execute the code box. Send to AI does not, unless you call run_code_script.
 - Prefer existing pipeline objects (FindSource, GetActiveSource) over recreating readers.
-- Do not recreate the SHYX AI Assistant node itself.
-- A screenshot and Output Window errors may be attached. Use them when relevant.
-- If tools are provided, call them when you lack live ParaView context (pipeline names, selection, array ranges, display, camera, Output Window, screenshot, current script). Do not guess FindSource names.
-- When set_code_script and run_code_script are available: write the full script with set_code_script, then run_code_script. Read the Output Window and screenshot from the tool result. If there is a traceback, ERROR, empty/wrong data, or a bad view, fix the script and run again. Repeat until it works or you are stuck, then explain in the dialog. Do not wait for the user to click Apply.
+- Never create a second Clip/Slice/Threshold/Calculator/etc. on the same input. On retries, FindSource the existing filter (use get_pipeline_tree for names) and set its properties (ClipType.Origin, ClipType.Normal, ...). If you must replace it, Delete(FindSource('Clip1')) first. Pass registrationName= when creating so later turns can find it.
+- The assistant is a View-menu dock, not a pipeline filter. Do not create a SHYXAIAssistant source.
+- Screenshots are expensive; only call capture_screenshot when the user enabled render-view screenshots and you truly need pixels.
+- Output Window errors are not attached automatically. If you need them, call get_output_window.
+- If tools are provided, call them when you lack live ParaView context. Do not guess FindSource names or SHYX XML/python names.
+- Use get_source_data(name, port) for non-active nodes and extra output ports. get_source_properties includes nested proxies (ClipType).
+- Use list_filters / describe_proxy / lookup_shyx_docs before creating SHYX or VESPA filters. lookup_shyx_docs knows the Vascular pipeline order.
+- Use get_selection_ids before selection-based SHYX filters; get_blocks before ExtractBlock / PDC tools.
+- Use get_color_map for LUT range/log; get_time for timesteps.
+- pick_world_point: prefer a single pick. Multiple calls are allowed when you need several distinct locations (several brush marks, clip origin plus a second point) or one miss needs a single corrected click. Pass image_width/height from capture_screenshot (origin=top_left). Do not grid-sample the screenshot, and do not retry the same click with origin/normalized/pixel variants.
+- When set_code_script and run_code_script are available: write the full script with set_code_script, then run_code_script. Read the Output Window and data from the tool result. Use a screenshot only if one was actually attached. If there is a traceback, ERROR, empty/wrong data, or a bad view, fix the script and run again. Repeat until it works or you are stuck, then explain in the dialog.
 - Reply in the same language the user uses.)SYS";
 
 QPlainTextEdit* makeEditor(QWidget* parent, bool mono, int minHeight)
@@ -288,67 +292,6 @@ QString truncateTail(const QString& text, int maxChars)
     return text;
   }
   return text.right(maxChars);
-}
-
-QString summarizeDataInformation(vtkSMSourceProxy* src, int port)
-{
-  if (!src)
-  {
-    return QStringLiteral("(none)");
-  }
-  vtkPVDataInformation* di = src->GetDataInformation(port);
-  if (!di)
-  {
-    return QStringLiteral("%1 (no data info)").arg(QString::fromUtf8(src->GetXMLName()));
-  }
-  QString out;
-  const char* label = src->GetXMLLabel();
-  out += QString::fromUtf8(label && label[0] ? label : src->GetXMLName());
-  const char* cls = di->GetDataClassName();
-  out += QStringLiteral("  type=%1  points=%2  cells=%3\n")
-           .arg(QString::fromUtf8(cls ? cls : "?"))
-           .arg(di->GetNumberOfPoints())
-           .arg(di->GetNumberOfCells());
-  double b[6] = { 0, 0, 0, 0, 0, 0 };
-  di->GetBounds(b);
-  out += QStringLiteral("  bounds=[%1, %2] [%3, %4] [%5, %6]\n")
-           .arg(b[0])
-           .arg(b[1])
-           .arg(b[2])
-           .arg(b[3])
-           .arg(b[4])
-           .arg(b[5]);
-
-  auto appendArrays = [&out](const char* attr, vtkPVDataSetAttributesInformation* info) {
-    if (!info)
-    {
-      return;
-    }
-    const int n = info->GetNumberOfArrays();
-    if (n <= 0)
-    {
-      return;
-    }
-    out += QStringLiteral("  %1 arrays:").arg(QString::fromUtf8(attr));
-    const int shown = n < 12 ? n : 12;
-    for (int i = 0; i < shown; ++i)
-    {
-      vtkPVArrayInformation* ai = info->GetArrayInformation(i);
-      if (!ai || !ai->GetName())
-      {
-        continue;
-      }
-      out += QStringLiteral(" %1").arg(QString::fromUtf8(ai->GetName()));
-    }
-    if (n > shown)
-    {
-      out += QStringLiteral(" ...");
-    }
-    out += QLatin1Char('\n');
-  };
-  appendArrays("point", di->GetPointDataInformation());
-  appendArrays("cell", di->GetCellDataInformation());
-  return out;
 }
 
 QImage imageFromVtk(vtkImageData* img)
@@ -713,44 +656,61 @@ void applyToolRequestFields(QJsonObject& root)
 }
 }
 
-pqSHYXAIAssistantPanel::pqSHYXAIAssistantPanel(
-  vtkSMProxy* proxy, vtkSMPropertyGroup* smgroup, QWidget* parent)
-  : Superclass(proxy, smgroup, parent)
+pqSHYXAIAssistantPanel::pqSHYXAIAssistantPanel(const QString& title, QWidget* parent)
+  : Superclass(title, parent)
+{
+  this->constructor();
+}
+
+pqSHYXAIAssistantPanel::pqSHYXAIAssistantPanel(QWidget* parent)
+  : Superclass(parent)
+{
+  this->constructor();
+}
+
+void pqSHYXAIAssistantPanel::constructor()
 {
   pqSHYXAIOutputLog::instance()->start();
-  this->setChangeAvailableAsChangeFinished(false);
-  this->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Minimum);
+  this->setWindowTitle(tr("SHYX AI Assistant"));
+  this->setObjectName(QStringLiteral("pqSHYXAIAssistantPanel"));
+  this->setAllowedAreas(Qt::AllDockWidgetAreas);
+  this->setMinimumWidth(320);
 
-  auto* layout = new QVBoxLayout(this);
-  layout->setContentsMargins(0, 0, 0, 0);
+  auto* root = new QWidget(this);
+  this->setWidget(root);
+
+  auto* layout = new QVBoxLayout(root);
+  layout->setContentsMargins(6, 6, 6, 6);
   layout->setSpacing(4);
 
-  auto* hint = new QLabel(this);
+  auto* hint = new QLabel(root);
   hint->setWordWrap(true);
   if (hostPythonManager())
   {
     hint->setText(tr(
-      "Apply (or Run script) executes the code box in this ParaView's Python. Send to AI does not run it."));
+      "Run script executes the code box in this ParaView's Python. Send to AI does not run it."));
   }
   else
   {
     hint->setText(tr(
-      "This ParaView process has no Python interpreter. Apply will not run the code box. "
+      "This ParaView process has no Python interpreter. Run script will not execute the code box. "
       "Load this plugin in a ParaView build with Python (official installer is fine)."));
   }
   layout->addWidget(hint);
 
-  layout->addWidget(new QLabel(tr("Question"), this));
-  auto* questionBox = new QFrame(this);
+  layout->addWidget(new QLabel(tr("Question"), root));
+  auto* questionBox = new QFrame(root);
   questionBox->setFrameShape(QFrame::StyledPanel);
   auto* questionLay = new QVBoxLayout(questionBox);
   questionLay->setContentsMargins(4, 4, 4, 4);
   questionLay->setSpacing(4);
-  this->QuestionEdit = makeEditor(questionBox, false, 28);
-  this->QuestionEdit->setMaximumHeight(36);
+  this->QuestionEdit = makeEditor(questionBox, false, 56);
+  this->QuestionEdit->setMaximumHeight(72);
   this->QuestionEdit->setFrameStyle(QFrame::NoFrame);
   this->QuestionEdit->setPlaceholderText(
-    tr("Ask a question, or tell the assistant to write/edit the script..."));
+    tr("Ask a question, or tell the assistant to write/edit the script... "
+       "(Enter to send, Ctrl+Enter for a new line)"));
+  this->QuestionEdit->installEventFilter(this);
   questionLay->addWidget(this->QuestionEdit);
 
   auto* shotRow = new QHBoxLayout();
@@ -762,45 +722,93 @@ pqSHYXAIAssistantPanel::pqSHYXAIAssistantPanel(
   layout->addWidget(questionBox);
 
   auto* sendRow = new QHBoxLayout();
-  auto* captureBtn = new QPushButton(tr("Capture screenshot"), this);
+  auto* captureBtn = new QPushButton(tr("Capture screenshot"), root);
   sendRow->addWidget(captureBtn);
-  this->SendButton = new QPushButton(tr("Send to AI"), this);
+  this->SendButton = new QPushButton(tr("Send to AI"), root);
   this->SendButton->setDefault(false);
   sendRow->addWidget(this->SendButton);
-  auto* runBtn = new QPushButton(tr("Run script"), this);
+  auto* runBtn = new QPushButton(tr("Run script"), root);
   sendRow->addWidget(runBtn);
-  auto* clearBtn = new QPushButton(tr("Clear dialog"), this);
-  sendRow->addWidget(clearBtn);
   sendRow->addStretch(1);
   layout->addLayout(sendRow);
 
-  this->OutputLogCheck = new QCheckBox(tr("Attach Output Window errors"), this);
-  this->PipelineCheck = new QCheckBox(tr("Attach pipeline summary"), this);
+  this->RenderViewCheck = new QCheckBox(tr("Access Auto Render Review"), root);
+  this->RenderViewCheck->setToolTip(tr(
+    "When on, the agent may capture and send RenderView JPEGs (costly). "
+    "When off, use Capture screenshot on the question box to attach images yourself."));
   this->AgentModeCheck = new QCheckBox(
-    tr("Agent mode (look up context, run script, and fix errors)"), this);
-  this->OutputLogCheck->setChecked(true);
-  this->PipelineCheck->setChecked(true);
-  this->AgentModeCheck->setChecked(false);
-  layout->addWidget(this->OutputLogCheck);
-  layout->addWidget(this->PipelineCheck);
+    tr("Agent mode (look up context, run script, and fix errors)"), root);
+  this->RenderViewCheck->setChecked(false);
+  this->AgentModeCheck->setChecked(true);
+  layout->addWidget(this->RenderViewCheck);
   layout->addWidget(this->AgentModeCheck);
 
-  layout->addWidget(new QLabel(tr("Code (ParaView Python)"), this));
-  this->CodeEdit = makeEditor(this, true, 120);
+  layout->addWidget(new QLabel(tr("Code (ParaView Python)"), root));
+  this->CodeEdit = makeEditor(root, true, 120);
   new pqSHYXPythonSyntaxHighlighter(this->CodeEdit);
   layout->addWidget(this->CodeEdit);
 
-  layout->addWidget(new QLabel(tr("Dialog"), this));
-  this->ChatView = new pqSHYXAIChatView(this);
-  layout->addWidget(this->ChatView);
+  auto* dialogHeader = new QWidget(root);
+  auto* dialogHeaderLay = new QHBoxLayout(dialogHeader);
+  dialogHeaderLay->setContentsMargins(0, 0, 0, 0);
+  dialogHeaderLay->setSpacing(4);
+  dialogHeaderLay->setAlignment(Qt::AlignVCenter);
+  auto* dialogLabel = new QLabel(tr("Dialog"), dialogHeader);
+  dialogHeaderLay->addWidget(dialogLabel, 0, Qt::AlignVCenter);
+  dialogHeaderLay->addSpacing(8);
+  auto* historyLabel = new QLabel(tr("History"), dialogHeader);
+  historyLabel->setToolTip(tr(
+    "Previous Dialog messages sent as context. 0 = no memory; 10 = last 10 bubbles."));
+  dialogHeaderLay->addWidget(historyLabel, 0, Qt::AlignVCenter);
+  this->HistorySlider = new QSlider(Qt::Horizontal, dialogHeader);
+  this->HistorySlider->setRange(0, kHistoryMaxMessages);
+  this->HistorySlider->setValue(0);
+  this->HistorySlider->setSingleStep(1);
+  this->HistorySlider->setPageStep(1);
+  this->HistorySlider->setMinimumWidth(100);
+  this->HistorySlider->setMaximumWidth(140);
+  {
+    int sliderH = this->HistorySlider->style()->pixelMetric(
+      QStyle::PM_SliderThickness, nullptr, this->HistorySlider);
+    sliderH = qMax(sliderH, dialogLabel->sizeHint().height());
+    this->HistorySlider->setFixedHeight(sliderH);
+  }
+  this->HistorySlider->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Fixed);
+  this->HistorySlider->setToolTip(historyLabel->toolTip());
+  this->HistoryCountLabel = new QLabel(QStringLiteral("0"), dialogHeader);
+  this->HistoryCountLabel->setMinimumWidth(16);
+  this->HistoryCountLabel->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+  this->HistoryCountLabel->setToolTip(historyLabel->toolTip());
+  dialogHeaderLay->addWidget(this->HistorySlider, 0, Qt::AlignVCenter);
+  dialogHeaderLay->addWidget(this->HistoryCountLabel, 0, Qt::AlignVCenter);
+  dialogHeaderLay->addStretch(1);
+  auto* dialogClearBtn = new QPushButton(tr("Clear"), dialogHeader);
+  dialogClearBtn->setToolTip(tr("Clear the conversation"));
+  auto* dialogPopBtn = new QPushButton(dialogHeader);
+  dialogPopBtn->setIcon(this->style()->standardIcon(QStyle::SP_TitleBarMaxButton));
+  dialogPopBtn->setToolTip(tr("Open Dialog in a separate window"));
+  dialogPopBtn->setFlat(true);
+  dialogPopBtn->setFixedSize(dialogPopBtn->sizeHint().height(), dialogPopBtn->sizeHint().height());
+  dialogHeaderLay->addWidget(dialogClearBtn, 0, Qt::AlignVCenter);
+  dialogHeaderLay->addWidget(dialogPopBtn, 0, Qt::AlignVCenter);
+  layout->addWidget(dialogHeader);
 
-  auto* apiBox = new QGroupBox(tr("OpenAI-compatible API"), this);
+  this->ChatView = new pqSHYXAIChatView(root);
+  auto* dialogPopOut =
+    new pqPopOutWidget(this->ChatView, tr("SHYX AI Assistant — Dialog"), root);
+  dialogPopOut->setPopOutButton(dialogPopBtn);
+  dialogPopOut->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::MinimumExpanding);
+  layout->addWidget(dialogPopOut, 1);
+
+  auto* apiBox = new QGroupBox(tr("OpenAI-compatible API"), root);
   auto* apiForm = new QFormLayout(apiBox);
   apiForm->setContentsMargins(4, 4, 4, 4);
   this->EndpointEdit = new QLineEdit(apiBox);
   this->EndpointEdit->setPlaceholderText(QStringLiteral("https://api.openai.com/v1"));
+  this->EndpointEdit->setText(QStringLiteral("https://api.openai.com/v1"));
   this->ModelEdit = new QLineEdit(apiBox);
   this->ModelEdit->setPlaceholderText(QStringLiteral("gpt-4o-mini"));
+  this->ModelEdit->setText(QStringLiteral("gpt-4o-mini"));
   this->ApiKeyEdit = new QLineEdit(apiBox);
   this->ApiKeyEdit->setEchoMode(QLineEdit::Password);
   this->ApiKeyEdit->setPlaceholderText(tr("API key (saved locally, not in state files)"));
@@ -809,20 +817,19 @@ pqSHYXAIAssistantPanel::pqSHYXAIAssistantPanel(
   apiForm->addRow(tr("API key"), this->ApiKeyEdit);
   layout->addWidget(apiBox);
 
-  this->StatusLabel = new QLabel(this);
+  this->StatusLabel = new QLabel(root);
   this->StatusLabel->setWordWrap(true);
   layout->addWidget(this->StatusLabel);
 
-  this->linkStringProperty(
-    this->QuestionEdit, "plainText", SIGNAL(textChanged()), "UserQuestion");
-  this->linkStringProperty(this->CodeEdit, "plainText", SIGNAL(textChanged()), "CodeScript");
-  this->linkStringProperty(
-    this->ChatView, "plainText", SIGNAL(textChanged()), "DialogHistory");
-  this->addPropertyLink(this->EndpointEdit, "EndpointUrl");
-  this->addPropertyLink(this->ModelEdit, "ModelName");
-
   this->Network = new QNetworkAccessManager(this);
   ensureHttpsTls();
+  connect(this->HistorySlider, &QSlider::valueChanged, this, [this](int v) {
+    if (this->HistoryCountLabel)
+    {
+      this->HistoryCountLabel->setText(QString::number(v));
+    }
+    this->saveClientSettings();
+  });
   this->loadClientSettings();
   if (this->CodeEdit->toPlainText().trimmed().isEmpty())
   {
@@ -832,11 +839,11 @@ pqSHYXAIAssistantPanel::pqSHYXAIAssistantPanel(
   connect(this->SendButton, &QPushButton::clicked, this, &pqSHYXAIAssistantPanel::onSendClicked);
   connect(captureBtn, &QPushButton::clicked, this, &pqSHYXAIAssistantPanel::onCaptureScreenshot);
   connect(runBtn, &QPushButton::clicked, this, &pqSHYXAIAssistantPanel::runCodeScript);
-  connect(clearBtn, &QPushButton::clicked, this, &pqSHYXAIAssistantPanel::onClearDialogClicked);
+  connect(dialogClearBtn, &QPushButton::clicked, this, &pqSHYXAIAssistantPanel::onClearDialogClicked);
   connect(this->Network, &QNetworkAccessManager::finished, this, &pqSHYXAIAssistantPanel::onReplyFinished);
   connect(this->ApiKeyEdit, &QLineEdit::editingFinished, this, [this]() { this->saveClientSettings(); });
   connect(this->EndpointEdit, &QLineEdit::editingFinished, this, [this]() { this->saveClientSettings(); });
-  connect(this->AgentModeCheck, &QCheckBox::toggled, this, [this]() { this->saveClientSettings(); });
+  connect(this->ModelEdit, &QLineEdit::editingFinished, this, [this]() { this->saveClientSettings(); });
 }
 
 pqSHYXAIAssistantPanel::~pqSHYXAIAssistantPanel()
@@ -848,21 +855,40 @@ pqSHYXAIAssistantPanel::~pqSHYXAIAssistantPanel()
   }
 }
 
-void pqSHYXAIAssistantPanel::apply()
+bool pqSHYXAIAssistantPanel::eventFilter(QObject* watched, QEvent* event)
 {
-  this->Superclass::apply();
-  this->runCodeScript();
-}
-
-void pqSHYXAIAssistantPanel::linkStringProperty(
-  QWidget* widget, const char* qproperty, const char* signal, const char* smName)
-{
-  vtkSMProperty* prop = this->proxy() ? this->proxy()->GetProperty(smName) : nullptr;
-  if (!widget || !prop)
+  if (watched == this->QuestionEdit && event)
   {
-    return;
+    if (event->type() == QEvent::InputMethod)
+    {
+      auto* ime = static_cast<QInputMethodEvent*>(event);
+      this->ImePreedit = ime->preeditString();
+      return Superclass::eventFilter(watched, event);
+    }
+    if (event->type() == QEvent::KeyPress)
+    {
+      auto* ke = static_cast<QKeyEvent*>(event);
+      if ((ke->key() == Qt::Key_Return || ke->key() == Qt::Key_Enter) && !ke->isAutoRepeat())
+      {
+        if (ke->modifiers() & Qt::ControlModifier)
+        {
+          this->QuestionEdit->insertPlainText(QStringLiteral("\n"));
+          return true;
+        }
+        if (ke->modifiers() & (Qt::ShiftModifier | Qt::AltModifier | Qt::MetaModifier))
+        {
+          return Superclass::eventFilter(watched, event);
+        }
+        if (!this->ImePreedit.isEmpty())
+        {
+          return Superclass::eventFilter(watched, event);
+        }
+        this->onSendClicked();
+        return true;
+      }
+    }
   }
-  this->addPropertyLink(widget, qproperty, signal, prop);
+  return Superclass::eventFilter(watched, event);
 }
 
 void pqSHYXAIAssistantPanel::onClearDialogClicked()
@@ -872,13 +898,49 @@ void pqSHYXAIAssistantPanel::onClearDialogClicked()
 
 void pqSHYXAIAssistantPanel::onSendClicked()
 {
-  if (this->ActiveReply)
+  if (this->SendBusy)
   {
-    this->ActiveReply->abort();
-    this->ActiveReply.clear();
+    this->stopChatRequest();
+    return;
   }
   this->saveClientSettings();
   this->sendChatRequest();
+}
+
+void pqSHYXAIAssistantPanel::stopChatRequest()
+{
+  this->UserStopped = true;
+  if (this->ActiveReply)
+  {
+    this->ActiveReply->abort();
+    return;
+  }
+  this->AgentMessages = QJsonArray();
+  this->AgentRound = 0;
+  this->AgentFollowupJpegs.clear();
+  if (this->ChatView->isStreaming())
+  {
+    const QString soFar = this->ChatView->streamingText().trimmed();
+    if ((soFar.isEmpty() || soFar == QLatin1String("…")) &&
+      this->ChatView->streamingThinking().trimmed().isEmpty())
+    {
+      this->ChatView->appendAssistantDelta(tr("Stopped."));
+    }
+    this->ChatView->finishAssistantStream();
+  }
+  this->setStatus(tr("Stopped."));
+  this->setSendBusy(false);
+}
+
+void pqSHYXAIAssistantPanel::setSendBusy(bool busy)
+{
+  this->SendBusy = busy;
+  if (!this->SendButton)
+  {
+    return;
+  }
+  this->SendButton->setEnabled(true);
+  this->SendButton->setText(busy ? tr("Stop") : tr("Send to AI"));
 }
 
 void pqSHYXAIAssistantPanel::setStatus(const QString& text)
@@ -897,7 +959,6 @@ void pqSHYXAIAssistantPanel::loadClientSettings()
     if (!endpoint.isEmpty())
     {
       this->EndpointEdit->setText(endpoint);
-      Q_EMIT this->EndpointEdit->editingFinished();
     }
   }
   if (settings.contains(QStringLiteral("modelName")))
@@ -906,12 +967,13 @@ void pqSHYXAIAssistantPanel::loadClientSettings()
     if (!model.isEmpty())
     {
       this->ModelEdit->setText(model);
-      Q_EMIT this->ModelEdit->editingFinished();
     }
   }
-  this->OutputLogCheck->setChecked(settings.value(QStringLiteral("includeOutputLog"), true).toBool());
-  this->PipelineCheck->setChecked(settings.value(QStringLiteral("includePipeline"), true).toBool());
-  this->AgentModeCheck->setChecked(settings.value(QStringLiteral("agentMode"), false).toBool());
+  if (this->HistorySlider)
+  {
+    this->HistorySlider->setValue(
+      qBound(0, settings.value(QStringLiteral("historyCount"), 0).toInt(), kHistoryMaxMessages));
+  }
 }
 
 void pqSHYXAIAssistantPanel::saveClientSettings() const
@@ -921,9 +983,10 @@ void pqSHYXAIAssistantPanel::saveClientSettings() const
   settings.setValue(QStringLiteral("apiKey"), this->ApiKeyEdit->text());
   settings.setValue(QStringLiteral("endpointUrl"), this->EndpointEdit->text().trimmed());
   settings.setValue(QStringLiteral("modelName"), this->ModelEdit->text().trimmed());
-  settings.setValue(QStringLiteral("includeOutputLog"), this->OutputLogCheck->isChecked());
-  settings.setValue(QStringLiteral("includePipeline"), this->PipelineCheck->isChecked());
-  settings.setValue(QStringLiteral("agentMode"), this->AgentModeCheck->isChecked());
+  if (this->HistorySlider)
+  {
+    settings.setValue(QStringLiteral("historyCount"), this->HistorySlider->value());
+  }
 }
 
 void pqSHYXAIAssistantPanel::runCodeScript()
@@ -956,41 +1019,6 @@ void pqSHYXAIAssistantPanel::runCodeScript()
   QMessageBox::warning(this, tr("SHYX AI Assistant"), msg);
 }
 
-QString pqSHYXAIAssistantPanel::pipelineSummary() const
-{
-  QString text;
-  auto* sm = pqApplicationCore::instance() ? pqApplicationCore::instance()->getServerManagerModel()
-                                           : nullptr;
-  auto* selfSrc = sm ? sm->findItem<pqPipelineSource*>(this->proxy()) : nullptr;
-  if (selfSrc)
-  {
-    text += QStringLiteral("This AI node: %1\n").arg(selfSrc->getSMName());
-    auto* selfFilter = qobject_cast<pqPipelineFilter*>(selfSrc);
-    if (selfFilter && selfFilter->getInputCount() > 0)
-    {
-      QList<pqOutputPort*> ins = selfFilter->getInputs();
-      if (!ins.isEmpty() && ins[0] && ins[0]->getSource())
-      {
-        text += QStringLiteral("Connected input:\n");
-        text += summarizeDataInformation(
-          ins[0]->getSource()->getSourceProxy(), ins[0]->getPortNumber());
-      }
-    }
-    else
-    {
-      text += QStringLiteral("Connected input: (none, used as source)\n");
-    }
-  }
-
-  pqPipelineSource* active = pqActiveObjects::instance().activeSource();
-  if (active && active->getSourceProxy())
-  {
-    text += QStringLiteral("Active source: %1\n").arg(active->getSMName());
-    text += summarizeDataInformation(active->getSourceProxy(), 0);
-  }
-  return text;
-}
-
 QImage pqSHYXAIAssistantPanel::captureActiveViewImage() const
 {
   pqView* view = pqActiveObjects::instance().activeView();
@@ -1010,6 +1038,11 @@ QImage pqSHYXAIAssistantPanel::captureActiveViewImage() const
     qimg = qimg.scaled(kJpegMaxEdge, kJpegMaxEdge, Qt::KeepAspectRatio, Qt::SmoothTransformation);
   }
   return qimg;
+}
+
+bool pqSHYXAIAssistantPanel::attachRenderView() const
+{
+  return this->RenderViewCheck && this->RenderViewCheck->isChecked();
 }
 
 void pqSHYXAIAssistantPanel::rebuildQuestionThumbs()
@@ -1098,30 +1131,39 @@ QString pqSHYXAIAssistantPanel::buildUserText(const QString& question) const
   user += QStringLiteral("## User question\n%1\n\n").arg(question);
   user += QStringLiteral("## Current code box\n```python\n%1\n```\n\n")
             .arg(this->CodeEdit->toPlainText());
-  const QString dialog = truncateTail(this->ChatView->plainText(), kDialogKeepChars);
-  if (!dialog.trimmed().isEmpty())
-  {
-    user += QStringLiteral("## Dialog history\n%1\n\n").arg(dialog);
-  }
-  if (this->PipelineCheck->isChecked())
-  {
-    user += QStringLiteral("## Pipeline summary\n%1\n").arg(this->pipelineSummary());
-  }
-  if (this->OutputLogCheck->isChecked())
-  {
-    const QString errors = pqSHYXAIOutputLog::instance()->recentErrors();
-    user += QStringLiteral("## Output Window errors/warnings\n%1\n")
-              .arg(errors.isEmpty() ? QStringLiteral("(none)") : errors);
-  }
   return user;
 }
 
 QByteArray pqSHYXAIAssistantPanel::buildRequestJson(
   const QString& question, const QList<QByteArray>& jpegs) const
 {
+  QString sys = QString::fromUtf8(kSystemPrompt);
+  sys += this->attachRenderView()
+    ? QStringLiteral("\n- Render-view screenshots: ENABLED for this request.")
+    : QStringLiteral(
+        "\n- Render-view screenshots: DISABLED for this request (user chose this to save cost). "
+        "Do not call capture_screenshot. Do not set capture=true on run_code_script. "
+        "Use get_display, get_color_map, get_camera, or get_source_data instead.");
   QJsonArray messages;
   messages.append(QJsonObject{ { QStringLiteral("role"), QStringLiteral("system") },
-    { QStringLiteral("content"), QString::fromUtf8(kSystemPrompt) } });
+    { QStringLiteral("content"), sys } });
+
+  const int historyN = this->HistorySlider ? this->HistorySlider->value() : 0;
+  if (this->ChatView && historyN > 0)
+  {
+    for (const pqSHYXAIChatView::TranscriptTurn& turn : this->ChatView->lastTurns(historyN))
+    {
+      const QString text = truncateTail(turn.text, kHistoryKeepChars).trimmed();
+      if (text.isEmpty())
+      {
+        continue;
+      }
+      messages.append(QJsonObject{
+        { QStringLiteral("role"),
+          turn.user ? QStringLiteral("user") : QStringLiteral("assistant") },
+        { QStringLiteral("content"), text } });
+    }
+  }
 
   QJsonObject userMsg;
   userMsg.insert(QStringLiteral("role"), QStringLiteral("user"));
@@ -1236,11 +1278,11 @@ void pqSHYXAIAssistantPanel::sendChatRequest()
   }
 
   this->AgentMessages = QJsonArray();
-  this->AgentToolLog.clear();
   this->AgentFollowupJpegs.clear();
   this->AgentRound = 0;
+  this->UserStopped = false;
 
-  this->SendButton->setEnabled(false);
+  this->setSendBusy(true);
   if (jpegs.isEmpty())
   {
     this->setStatus(this->AgentModeCheck->isChecked() ? tr("Agent: sending...")
@@ -1267,28 +1309,6 @@ void pqSHYXAIAssistantPanel::sendChatRequest()
       : tr("Screenshot %1").arg(i + 1);
     shot.image = this->QuestionImages[i];
     atts.append(shot);
-  }
-  if (this->PipelineCheck->isChecked())
-  {
-    const QString summary = this->pipelineSummary().trimmed();
-    if (!summary.isEmpty() && summary != QLatin1String("(none)"))
-    {
-      pqSHYXAIChatView::Attachment pipe;
-      pipe.title = tr("Pipeline summary");
-      pipe.body = summary;
-      atts.append(pipe);
-    }
-  }
-  if (this->OutputLogCheck->isChecked())
-  {
-    const QString errors = pqSHYXAIOutputLog::instance()->recentErrors().trimmed();
-    if (!errors.isEmpty() && errors != QLatin1String("(none)"))
-    {
-      pqSHYXAIChatView::Attachment log;
-      log.title = tr("Output Window errors");
-      log.body = errors;
-      atts.append(log);
-    }
   }
   this->ChatView->appendUser(question, atts);
   this->ChatView->beginAssistantStream();
@@ -1525,7 +1545,7 @@ void pqSHYXAIAssistantPanel::failRequest(const QString& err)
   {
     this->ChatView->appendAssistant(line);
   }
-  this->SendButton->setEnabled(true);
+  this->setSendBusy(false);
 }
 
 void pqSHYXAIAssistantPanel::completeStreamReply()
@@ -1597,6 +1617,28 @@ void pqSHYXAIAssistantPanel::onReplyFinished(QNetworkReply* reply)
 
   if (reply->error() != QNetworkReply::NoError)
   {
+    const bool stopped = this->UserStopped ||
+      reply->error() == QNetworkReply::OperationCanceledError;
+    this->UserStopped = false;
+    if (stopped)
+    {
+      this->AgentMessages = QJsonArray();
+      this->AgentRound = 0;
+      this->AgentFollowupJpegs.clear();
+      if (this->ChatView->isStreaming())
+      {
+        const QString soFar = this->ChatView->streamingText().trimmed();
+        const bool empty = soFar.isEmpty() || soFar == QLatin1String("…");
+        if (empty && this->ChatView->streamingThinking().trimmed().isEmpty())
+        {
+          this->ChatView->appendAssistantDelta(tr("Stopped."));
+        }
+        this->ChatView->finishAssistantStream();
+      }
+      this->setStatus(tr("Stopped."));
+      this->setSendBusy(false);
+      return;
+    }
     const int http = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
     const bool httpFailed = http >= 400;
     const bool gotUsefulStream = this->StreamIsSse && this->StreamError.isEmpty() && !httpFailed &&
@@ -1675,17 +1717,8 @@ void pqSHYXAIAssistantPanel::onReplyFinished(QNetworkReply* reply)
 
 void pqSHYXAIAssistantPanel::applyAssistantReply(const QString& content, const QList<QImage>& images)
 {
-  QList<pqSHYXAIChatView::Attachment> atts;
-  if (!this->AgentToolLog.trimmed().isEmpty())
-  {
-    pqSHYXAIChatView::Attachment tools;
-    tools.title = tr("Agent tools");
-    tools.body = this->AgentToolLog.trimmed();
-    atts.append(tools);
-  }
-  this->ChatView->finishAssistantStream(images, atts);
-  this->SendButton->setEnabled(true);
-  this->AgentToolLog.clear();
+  this->ChatView->finishAssistantStream(images, {});
+  this->setSendBusy(false);
   this->AgentMessages = QJsonArray();
   this->AgentRound = 0;
   this->QuestionEdit->clear();
@@ -1694,12 +1727,11 @@ void pqSHYXAIAssistantPanel::applyAssistantReply(const QString& content, const Q
   if (extractPythonFence(content, code) && !code.isEmpty())
   {
     this->CodeEdit->setPlainText(code);
-    Q_EMIT this->changeAvailable();
-    this->setStatus(tr("AI updated the code box. Click Apply to run it."));
+    this->setStatus(tr("AI updated the code box. Click Run script to execute it."));
   }
   else
   {
-    this->setStatus(tr("AI replied in the dialog. Click Apply only if you want to run the current code."));
+    this->setStatus(tr("AI replied in the dialog. Click Run script only if you want to execute the current code."));
   }
 }
 
@@ -1727,15 +1759,14 @@ QString pqSHYXAIAssistantPanel::runAgentTool(const QString& name, const QJsonObj
       code = fenced;
     }
     this->CodeEdit->setPlainText(code);
-    Q_EMIT this->changeAvailable();
     return QStringLiteral("Code box updated (%1 chars, %2 lines). Call run_code_script to execute.")
       .arg(code.size())
       .arg(code.count(QLatin1Char('\n')) + 1);
   }
   if (name == QLatin1String("run_code_script"))
   {
-    bool capture = true;
-    if (args.contains(QLatin1String("capture")))
+    bool capture = this->attachRenderView();
+    if (capture && args.contains(QLatin1String("capture")))
     {
       capture = args.value(QLatin1String("capture")).toBool(true);
     }
@@ -1743,6 +1774,13 @@ QString pqSHYXAIAssistantPanel::runAgentTool(const QString& name, const QJsonObj
   }
   if (name == QLatin1String("capture_screenshot"))
   {
+    if (!this->attachRenderView())
+    {
+      return QStringLiteral(
+        "Render-view screenshots are disabled. Enable 'Access Auto Render Review' "
+        "in the panel if you need pixels. Use get_display, get_color_map, get_camera, "
+        "or get_source_data instead.");
+    }
     const QImage img = this->captureActiveViewImage();
     if (img.isNull())
     {
@@ -1754,11 +1792,15 @@ QString pqSHYXAIAssistantPanel::runAgentTool(const QString& name, const QJsonObj
       return QStringLiteral("Could not encode screenshot JPEG.");
     }
     this->AgentFollowupJpegs.append(jpeg);
-    return QStringLiteral("Captured %1x%2 JPEG; image attached as image_url on this turn.")
+    return QStringLiteral(
+             "Captured %1x%2 JPEG; image attached as image_url on this turn. "
+             "For pick_world_point use image_width=%3 image_height=%4 (origin=top_left).")
+      .arg(img.width())
+      .arg(img.height())
       .arg(img.width())
       .arg(img.height());
   }
-  return pqSHYXAIAgentTools::run(name, args, this->proxy());
+  return pqSHYXAIAgentTools::run(name, args);
 }
 
 QString pqSHYXAIAssistantPanel::executeCodeBoxForAgent(bool captureScreenshot)
@@ -1804,7 +1846,9 @@ QString pqSHYXAIAssistantPanel::executeCodeBoxForAgent(bool captureScreenshot)
     out += QStringLiteral("Output Window since this run:\n%1\n").arg(fresh);
   }
   out += QStringLiteral("\nActive data after run:\n");
-  out += pqSHYXAIAgentTools::run(QStringLiteral("get_active_data"), QJsonObject(), this->proxy());
+  out += pqSHYXAIAgentTools::run(QStringLiteral("get_active_data"), QJsonObject());
+  out += QStringLiteral("\n\nPipeline after run (reuse these names; do not create duplicates):\n");
+  out += pqSHYXAIAgentTools::run(QStringLiteral("get_pipeline_tree"), QJsonObject());
 
   if (captureScreenshot)
   {
@@ -1849,6 +1893,10 @@ bool pqSHYXAIAssistantPanel::continueAgentIfNeeded(const QJsonObject& message)
     this->AgentMessages.last().toObject().value(QLatin1String("tool_calls")).toArray();
   for (const QJsonValue& v : sanitizedCalls)
   {
+    if (this->UserStopped)
+    {
+      break;
+    }
     const QJsonObject call = v.toObject();
     const QString id = call.value(QLatin1String("id")).toString();
     const QJsonObject fn = call.value(QLatin1String("function")).toObject();
@@ -1862,9 +1910,7 @@ bool pqSHYXAIAssistantPanel::continueAgentIfNeeded(const QJsonObject& message)
     }
     const QString result = this->runAgentTool(name, args);
     names << name;
-    this->AgentToolLog += QStringLiteral("%1\n%2\n\n").arg(name, truncateTail(result, 4000));
-    this->ChatView->appendAssistantDelta(
-      QStringLiteral("> Calling `%1`…\n\n").arg(name));
+    this->ChatView->appendAssistantToolCall(name, truncateTail(result, 4000));
     QJsonObject toolMsg;
     toolMsg.insert(QStringLiteral("role"), QStringLiteral("tool"));
     toolMsg.insert(QStringLiteral("tool_call_id"), id);
@@ -1876,7 +1922,12 @@ bool pqSHYXAIAssistantPanel::continueAgentIfNeeded(const QJsonObject& message)
     this->AgentMessages.append(toolMsg);
   }
 
-  if (!this->AgentFollowupJpegs.isEmpty())
+  if (this->UserStopped)
+  {
+    return true;
+  }
+
+  if (this->attachRenderView() && !this->AgentFollowupJpegs.isEmpty())
   {
     QJsonArray parts;
     parts.append(QJsonObject{ { QStringLiteral("type"), QStringLiteral("text") },
@@ -1891,8 +1942,8 @@ bool pqSHYXAIAssistantPanel::continueAgentIfNeeded(const QJsonObject& message)
     this->AgentMessages.append(
       QJsonObject{ { QStringLiteral("role"), QStringLiteral("user") },
         { QStringLiteral("content"), parts } });
-    this->AgentFollowupJpegs.clear();
   }
+  this->AgentFollowupJpegs.clear();
 
   ++this->AgentRound;
   this->setStatus(tr("Agent: %1 (round %2/%3)").arg(names.join(QStringLiteral(", "))).arg(this->AgentRound).arg(kMaxRounds));

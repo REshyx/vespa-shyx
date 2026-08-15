@@ -89,7 +89,6 @@
 | SHYX Point Cloud Surface SDF | 纯 VTK；勿与 PMP 体素 SDF 混淆 |
 | SHYX Geodesic Distance / Surface Tip Extractor | |
 | SHYX Array Curve Mapper | |
-| SHYX AI Assistant | OpenAI 兼容；Apply 跑代码框；可选输入 pass-through |
 | SHYX Vortex Criteria / FTLE / Clebsch Map | Clebsch 可选 MKL |
 | SHYX Vector Field Topology | 包装上游 VTK |
 | SHYX Auto Streamline / Bidirectional Streamline Merge | |
@@ -108,7 +107,7 @@
 | **Animated Streamline**（`AnimatedStreamlineRepresentation`） | 基于 `SurfaceRepresentation` 的流线类网格 GPU 动画表示。 |
 | **Point Label**（`PointLabelRepresentation`） | 表面表示上叠加点数据文本标签。 |
 
-视图工具：球选（Sphere Selection）、按属性扩张选区（Grow Selection With Similar）为客户端 Qt，无独立 VTK 模块。
+视图工具：球选（Sphere Selection）、按属性扩张选区（Grow Selection With Similar）为客户端 Qt，无独立 VTK 模块。**SHYX AI Assistant** 在 **View** 菜单中作为可勾选停靠窗口（OpenAI 兼容；**Run script** 执行代码框）。
 
 ---
 
