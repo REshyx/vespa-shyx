@@ -8,7 +8,7 @@
 cmake --install <shyx-snappyhex>/build-msvc --prefix <shyx-snappyhex>/install
 ```
 
-vespa 配置加 `-DVESPA_USE_SNAPPYHEXMESH=ON`，`SHYXSnappyHex_DIR` 指向 `install/lib/cmake/SHYXSnappyHex`。MSVC 下 `VESPAPlugin.dll` 必须 `/WHOLEARCHIVE` 该 `.lib`（插件 CMake 已接）。不要用 WSL/MinGW 的 `.a`。
+vespa 配置加 `-DVESPA_USE_SNAPPYHEXMESH=ON`，`SHYXSnappyHex_DIR` 指向 `install/lib/cmake/SHYXSnappyHex`。MSVC 下 `VESPAPlugin.dll` 必须 `/WHOLEARCHIVE` 该 `.lib`（插件 CMake 已接）。不要用 WSL/MinGW 的 `.a`。滤镜在进程内调用静态库，不需要旁边再放 `snappy_cli.exe`。
 
 运行时仍读取编译期写入的 `WM_PROJECT_DIR`（OpenFOAM `etc/`，在 shyx-snappyhex 的 `third_party/openfoam-v2412`）。源树不要挪走。
 

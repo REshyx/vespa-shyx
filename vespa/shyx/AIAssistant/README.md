@@ -15,6 +15,6 @@ ParaView **View → SHYX AI Assistant**：可勾选的停靠窗口（默认停�
 
 **Run script** 使用**当前正在运行的 ParaView** 里的 Python（`pqPythonManager::executeCode`），不要求编译插件时的 SDK 打开 `PARAVIEW_USE_PYTHON`。官方安装版 `C:\Program Files\ParaView 6.0.1\bin\paraview.exe` 即可。若进程里没有 Python manager，会提示无法执行。
 
-HTTPS 走 Qt 的 TLS **插件**（Windows 上是 `qschannelbackend.dll` 去调系统 Schannel），不是把 Schannel 静态链进本插件。`PATH` 找不到这类插件；可用 `QT_PLUGIN_PATH` 指向带 `tls/` 子目录的 Qt `plugins` 根，或让本插件加载时去搜编译所用的 Qt `plugins`。构建仍会把 `qschannelbackend.dll` 放到 `VESPAPlugin.dll` 旁的 `tls/`，方便没有完整 Qt 目录的机器。
+HTTPS 走静态链进 `VESPAPlugin.dll` 的 **libcurl**（Windows 上 TLS 为系统 Schannel）。不依赖 Qt Network，也不需要旁边的 `qschannelbackend.dll`。
 
-实现都在 `ParaViewPlugin/pqSHYXAI*`（dock + agent tools）。本目录没有 VTK 算子。
+实现都在 `ParaViewPlugin/pqSHYXAI*` 与 `pqSHYXCurlRequest`（dock + agent tools + HTTP）。本目录没有 VTK 算子。

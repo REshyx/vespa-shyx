@@ -9,14 +9,14 @@
 #include <QMap>
 #include <QPointer>
 
+#include "pqSHYXCurlRequest.h"
+
 class QCheckBox;
 class QComboBox;
 class QEvent;
 class QHBoxLayout;
 class QLabel;
 class QLineEdit;
-class QNetworkAccessManager;
-class QNetworkReply;
 class QPlainTextEdit;
 class QPushButton;
 class QSlider;
@@ -45,8 +45,9 @@ protected:
 private Q_SLOTS:
   void onSendClicked();
   void onResetAllClicked();
-  void onReplyFinished(QNetworkReply* reply);
-  void onStreamReadyRead();
+  void onChatFinished();
+  void onModelsFinished();
+  void onStreamReadyRead(const QByteArray& bytes);
   void onCaptureScreenshot();
   void onRefreshModelsClicked();
   void onAddModelClicked();
@@ -83,7 +84,7 @@ private:
   void setSendBusy(bool busy);
   QString currentModel() const;
   void ensureModelItem(const QString& name, bool makeCurrent);
-  void applyModelsReply(QNetworkReply* reply);
+  void applyModelsReply(pqSHYXCurlRequest* reply);
 
   QPlainTextEdit* QuestionEdit = nullptr;
   QHBoxLayout* QuestionThumbsLayout = nullptr;
@@ -100,9 +101,8 @@ private:
   QPushButton* SendButton = nullptr;
   QToolButton* RefreshModelsButton = nullptr;
   QLabel* StatusLabel = nullptr;
-  QNetworkAccessManager* Network = nullptr;
-  QPointer<QNetworkReply> ActiveReply;
-  QPointer<QNetworkReply> ModelsReply;
+  QPointer<pqSHYXCurlRequest> ActiveReply;
+  QPointer<pqSHYXCurlRequest> ModelsReply;
   QJsonArray AgentMessages;
   QList<QByteArray> AgentFollowupJpegs;
   int AgentRound = 0;

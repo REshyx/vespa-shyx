@@ -15,16 +15,13 @@
 #include "vtkSMViewProxy.h"
 #include "vtkSmartPointer.h"
 
-#include <QAbstractSocket>
 #include <QBuffer>
 #include <QByteArray>
 #include <QCheckBox>
 #include <QComboBox>
 #include <QCoreApplication>
-#include <QDir>
 #include <QDockWidget>
 #include <QEvent>
-#include <QFileInfo>
 #include <QFont>
 #include <QFormLayout>
 #include <QFrame>
@@ -39,41 +36,27 @@
 #include <QKeyEvent>
 #include <QLabel>
 #include <QLayoutItem>
-#include <QLibraryInfo>
 #include <QList>
 #include <QLineEdit>
 #include <QMap>
 #include <QMessageBox>
 #include <QMetaObject>
 #include <QMouseEvent>
-#include <QNetworkAccessManager>
-#include <QNetworkReply>
-#include <QNetworkRequest>
 #include <QPlainTextEdit>
-#include <QPluginLoader>
 #include <QPushButton>
 #include <QPixmap>
 #include <QRegularExpression>
 #include <QSettings>
 #include <QSizePolicy>
 #include <QSlider>
-#include <QSslSocket>
 #include <QStringList>
 #include <QStyle>
 #include <QTextCursor>
 #include <QToolButton>
 #include <QUrl>
 #include <QVBoxLayout>
-#include <QVariant>
 #include <QVector>
 #include <QWidget>
-
-#ifdef _WIN32
-#ifndef NOMINMAX
-#define NOMINMAX
-#endif
-#include <windows.h>
-#endif
 
 #include <cstring>
 #include <functional>
@@ -86,104 +69,6 @@ constexpr int kJpegMaxEdge = 1280;
 constexpr auto kSettingsGroup = "VESPA/SHYXAIAssistant";
 constexpr auto kDefaultCode =
   "# ParaView Python. Use Run script to execute.\nfrom paraview.simple import *\n";
-
-QString thisPluginDir()
-{
-#ifdef _WIN32
-  HMODULE module = nullptr;
-  if (GetModuleHandleExW(
-        GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
-        reinterpret_cast<LPCWSTR>(&thisPluginDir), &module) &&
-    module)
-  {
-    wchar_t buf[MAX_PATH];
-    const DWORD n = GetModuleFileNameW(module, buf, MAX_PATH);
-    if (n > 0 && n < MAX_PATH)
-    {
-      return QFileInfo(QString::fromWCharArray(buf, static_cast<int>(n))).absolutePath();
-    }
-  }
-#endif
-  return QCoreApplication::applicationDirPath();
-}
-
-void tryLoadTlsPluginFile(const QString& dllPath)
-{
-  if (dllPath.isEmpty() || !QFileInfo::exists(dllPath))
-  {
-    return;
-  }
-  QPluginLoader loader(dllPath);
-  loader.load();
-}
-
-void ensureHttpsTls()
-{
-  static bool attempted = false;
-  if (attempted)
-  {
-    return;
-  }
-  attempted = true;
-
-  QStringList roots;
-#ifdef SHYX_QT_PLUGINS_DIR
-  roots << QString::fromUtf8(SHYX_QT_PLUGINS_DIR);
-#endif
-  const QByteArray envPath = qgetenv("QT_PLUGIN_PATH");
-  if (!envPath.isEmpty())
-  {
-    roots << QString::fromLocal8Bit(envPath).split(QDir::listSeparator(), Qt::SkipEmptyParts);
-  }
-  roots << thisPluginDir();
-  const QString appDir = QCoreApplication::applicationDirPath();
-  if (!appDir.isEmpty())
-  {
-    roots << appDir << (appDir + QStringLiteral("/plugins"));
-  }
-  const QString qtPlugins = QLibraryInfo::path(QLibraryInfo::PluginsPath);
-  if (!qtPlugins.isEmpty())
-  {
-    roots << qtPlugins;
-  }
-
-  roots.removeDuplicates();
-  for (const QString& root : roots)
-  {
-    if (root.isEmpty())
-    {
-      continue;
-    }
-    QCoreApplication::addLibraryPath(root);
-#ifdef Q_OS_WIN
-    tryLoadTlsPluginFile(QDir(root).filePath(QStringLiteral("tls/qschannelbackend.dll")));
-#else
-    tryLoadTlsPluginFile(QDir(root).filePath(QStringLiteral("tls/qopensslbackend.dll")));
-#endif
-  }
-
-  const QStringList backends = QSslSocket::availableBackends();
-#ifdef Q_OS_WIN
-  if (backends.contains(QStringLiteral("schannel")))
-  {
-    QSslSocket::setActiveBackend(QStringLiteral("schannel"));
-  }
-  else
-#endif
-    if (backends.contains(QStringLiteral("openssl")))
-  {
-    QSslSocket::setActiveBackend(QStringLiteral("openssl"));
-  }
-}
-
-QString tlsDiagnostic()
-{
-  const QStringList backends = QSslSocket::availableBackends();
-  return QStringLiteral("supportsSsl=%1; backends=[%2]; active=%3")
-    .arg(QSslSocket::supportsSsl() ? QStringLiteral("true") : QStringLiteral("false"))
-    .arg(backends.join(QLatin1Char(',')))
-    .arg(QSslSocket::activeBackend());
-}
 
 /** Host ParaView's Python manager (nullptr if this process was built without pqPython). */
 QObject* hostPythonManager()
@@ -345,7 +230,7 @@ QImage imageFromVtk(vtkImageData* img)
   return qimg;
 }
 
-QUrl completionsUrl(QString endpoint)
+QString completionsUrl(QString endpoint)
 {
   endpoint = endpoint.trimmed();
   while (endpoint.endsWith(QLatin1Char('/')))
@@ -354,12 +239,12 @@ QUrl completionsUrl(QString endpoint)
   }
   if (endpoint.contains(QLatin1String("/chat/completions"), Qt::CaseInsensitive))
   {
-    return QUrl(endpoint);
+    return QString::fromUtf8(QUrl(endpoint).toEncoded());
   }
-  return QUrl(endpoint + QStringLiteral("/chat/completions"));
+  return QString::fromUtf8(QUrl(endpoint + QStringLiteral("/chat/completions")).toEncoded());
 }
 
-QUrl modelsUrl(QString endpoint)
+QString modelsUrl(QString endpoint)
 {
   endpoint = endpoint.trimmed();
   while (endpoint.endsWith(QLatin1Char('/')))
@@ -369,13 +254,13 @@ QUrl modelsUrl(QString endpoint)
   const int chat = endpoint.indexOf(QLatin1String("/chat/completions"), 0, Qt::CaseInsensitive);
   if (chat >= 0)
   {
-    return QUrl(endpoint.left(chat) + QStringLiteral("/models"));
+    return QString::fromUtf8(QUrl(endpoint.left(chat) + QStringLiteral("/models")).toEncoded());
   }
   if (endpoint.endsWith(QLatin1String("/models"), Qt::CaseInsensitive))
   {
-    return QUrl(endpoint);
+    return QString::fromUtf8(QUrl(endpoint).toEncoded());
   }
-  return QUrl(endpoint + QStringLiteral("/models"));
+  return QString::fromUtf8(QUrl(endpoint + QStringLiteral("/models")).toEncoded());
 }
 
 QToolButton* makeIconToolButton(QWidget* parent, const QString& iconPath, const QString& tip)
@@ -683,11 +568,14 @@ QJsonObject sanitizeAssistantToolMessage(QJsonObject msg)
   return msg;
 }
 
-QString replyErrorDetail(QNetworkReply* reply, const QByteArray& body)
+QString replyErrorDetail(pqSHYXCurlRequest* reply, const QByteArray& body)
 {
   QString err = reply ? reply->errorString() : QStringLiteral("network error");
-  const int http =
-    reply ? reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt() : 0;
+  if (err.isEmpty())
+  {
+    err = QStringLiteral("network error");
+  }
+  const int http = reply ? reply->httpStatus() : 0;
   QString extra;
   if (http > 0)
   {
@@ -970,8 +858,7 @@ void pqSHYXAIAssistantPanel::constructor()
   apiFooterLay->addWidget(this->StatusLabel);
   layout->addWidget(apiFooter, 0);
 
-  this->Network = new QNetworkAccessManager(this);
-  ensureHttpsTls();
+  pqSHYXCurlRequest::globalInit();
   connect(this->HistorySlider, &QSlider::valueChanged, this, [this](int v) {
     if (this->HistoryCountLabel)
     {
@@ -991,7 +878,6 @@ void pqSHYXAIAssistantPanel::constructor()
   connect(this->RefreshModelsButton, &QToolButton::clicked, this,
     &pqSHYXAIAssistantPanel::onRefreshModelsClicked);
   connect(addModelBtn, &QToolButton::clicked, this, &pqSHYXAIAssistantPanel::onAddModelClicked);
-  connect(this->Network, &QNetworkAccessManager::finished, this, &pqSHYXAIAssistantPanel::onReplyFinished);
   connect(this->ApiKeyEdit, &QLineEdit::editingFinished, this, [this]() { this->saveClientSettings(); });
   connect(this->EndpointEdit, &QLineEdit::editingFinished, this, [this]() { this->saveClientSettings(); });
   if (this->ModelCombo->lineEdit())
@@ -1008,6 +894,7 @@ pqSHYXAIAssistantPanel::~pqSHYXAIAssistantPanel()
   this->saveClientSettings();
   if (this->ModelsReply)
   {
+    QObject::disconnect(this->ModelsReply, nullptr, this, nullptr);
     this->ModelsReply->abort();
     this->ModelsReply.clear();
   }
@@ -1058,16 +945,14 @@ void pqSHYXAIAssistantPanel::onResetAllClicked()
 void pqSHYXAIAssistantPanel::resetAllSessionState()
 {
   this->UserStopped = true;
-  QObject::disconnect(this->Network, &QNetworkAccessManager::finished, this,
-    &pqSHYXAIAssistantPanel::onReplyFinished);
-  if (this->ActiveReply)
+  this->dropActiveReply();
+  if (this->ModelsReply)
   {
-    this->ActiveReply->abort();
-    this->ActiveReply->deleteLater();
-    this->ActiveReply.clear();
+    QObject::disconnect(this->ModelsReply, nullptr, this, nullptr);
+    this->ModelsReply->abort();
+    this->ModelsReply->deleteLater();
+    this->ModelsReply.clear();
   }
-  QObject::connect(this->Network, &QNetworkAccessManager::finished, this,
-    &pqSHYXAIAssistantPanel::onReplyFinished);
 
   this->resetStreamState();
   this->AgentMessages = QJsonArray();
@@ -1114,19 +999,15 @@ void pqSHYXAIAssistantPanel::onSendClicked()
 
 void pqSHYXAIAssistantPanel::dropActiveReply()
 {
-  QNetworkReply* reply = this->ActiveReply;
+  pqSHYXCurlRequest* reply = this->ActiveReply;
   if (!reply)
   {
     return;
   }
   this->ActiveReply.clear();
-  QObject::disconnect(reply, &QNetworkReply::readyRead, this, &pqSHYXAIAssistantPanel::onStreamReadyRead);
-  const auto socks = reply->findChildren<QAbstractSocket*>();
-  for (QAbstractSocket* sock : socks)
-  {
-    sock->abort();
-  }
+  QObject::disconnect(reply, nullptr, this, nullptr);
   reply->abort();
+  reply->deleteLater();
 }
 
 void pqSHYXAIAssistantPanel::finishStoppedUi()
@@ -1296,46 +1177,41 @@ void pqSHYXAIAssistantPanel::onRefreshModelsClicked()
   }
   if (this->ModelsReply)
   {
+    QObject::disconnect(this->ModelsReply, nullptr, this, nullptr);
     this->ModelsReply->abort();
+    this->ModelsReply->deleteLater();
     this->ModelsReply.clear();
   }
 
-  QNetworkRequest req(::modelsUrl(endpoint));
-  if (req.url().scheme().compare(QLatin1String("https"), Qt::CaseInsensitive) == 0)
-  {
-    ensureHttpsTls();
-    if (!QSslSocket::supportsSsl())
-    {
-      this->setStatus(tr("HTTPS is unavailable in this ParaView/Qt (%1).")
-                        .arg(tlsDiagnostic()));
-      return;
-    }
-  }
-  req.setRawHeader("Accept", "application/json");
+  const QString url = ::modelsUrl(endpoint);
+  auto* reply = new pqSHYXCurlRequest(this);
+  reply->setUrl(url);
+  reply->setMethod(pqSHYXCurlRequest::Method::Get);
+  reply->addHeader(QByteArray("Accept: application/json"));
   const QString key = this->ApiKeyEdit ? this->ApiKeyEdit->text().trimmed() : QString();
   if (!key.isEmpty())
   {
-    req.setRawHeader("Authorization", QByteArray("Bearer ") + key.toUtf8());
+    reply->addHeader(QByteArray("Authorization: Bearer ") + key.toUtf8());
   }
-  req.setTransferTimeout(15000);
-  QNetworkReply* reply = this->Network->get(req);
-  reply->setProperty("shyxModels", true);
+  reply->setTimeoutMs(15000);
   this->ModelsReply = reply;
+  connect(reply, &pqSHYXCurlRequest::finished, this, &pqSHYXAIAssistantPanel::onModelsFinished);
   if (this->RefreshModelsButton)
   {
     this->RefreshModelsButton->setEnabled(false);
   }
   this->setStatus(tr("Fetching model list..."));
+  reply->start();
 }
 
-void pqSHYXAIAssistantPanel::applyModelsReply(QNetworkReply* reply)
+void pqSHYXAIAssistantPanel::applyModelsReply(pqSHYXCurlRequest* reply)
 {
   if (!reply)
   {
     return;
   }
-  const QByteArray body = reply->readAll();
-  if (reply->error() != QNetworkReply::NoError)
+  const QByteArray body = reply->body();
+  if (!reply->succeeded())
   {
     this->setStatus(tr("Could not fetch models: %1").arg(replyErrorDetail(reply, body)));
     return;
@@ -1605,31 +1481,24 @@ QByteArray pqSHYXAIAssistantPanel::buildAgentRequestJson() const
 void pqSHYXAIAssistantPanel::postJson(const QByteArray& payload)
 {
   const QString endpoint = this->EndpointEdit->text().trimmed();
-  QNetworkRequest req(::completionsUrl(endpoint));
-  if (req.url().scheme().compare(QLatin1String("https"), Qt::CaseInsensitive) == 0)
-  {
-    ensureHttpsTls();
-    if (!QSslSocket::supportsSsl())
-    {
-      this->failRequest(tr("HTTPS is unavailable in this ParaView/Qt (%1). "
-                           "Need plugins/tls (qschannelbackend.dll on Windows) next to VESPAPlugin.")
-                          .arg(tlsDiagnostic()));
-      return;
-    }
-  }
-  req.setHeader(QNetworkRequest::ContentTypeHeader, QStringLiteral("application/json"));
-  req.setRawHeader("Accept", "text/event-stream, application/json");
-  req.setRawHeader("Connection", "close");
+  const QString url = ::completionsUrl(endpoint);
+  auto* reply = new pqSHYXCurlRequest(this);
+  reply->setUrl(url);
+  reply->setMethod(pqSHYXCurlRequest::Method::Post);
+  reply->setBody(payload);
+  reply->addHeader(QByteArray("Content-Type: application/json"));
+  reply->addHeader(QByteArray("Accept: text/event-stream, application/json"));
   const QString key = this->ApiKeyEdit->text().trimmed();
   if (!key.isEmpty())
   {
-    req.setRawHeader("Authorization", QByteArray("Bearer ") + key.toUtf8());
+    reply->addHeader(QByteArray("Authorization: Bearer ") + key.toUtf8());
   }
-  req.setTransferTimeout(120000);
+  reply->setTimeoutMs(120000);
   this->resetStreamState();
-  QNetworkReply* reply = this->Network->post(req, payload);
   this->ActiveReply = reply;
-  connect(reply, &QNetworkReply::readyRead, this, &pqSHYXAIAssistantPanel::onStreamReadyRead);
+  connect(reply, &pqSHYXCurlRequest::readyRead, this, &pqSHYXAIAssistantPanel::onStreamReadyRead);
+  connect(reply, &pqSHYXCurlRequest::finished, this, &pqSHYXAIAssistantPanel::onChatFinished);
+  reply->start();
 }
 
 void pqSHYXAIAssistantPanel::sendChatRequest()
@@ -1711,18 +1580,13 @@ void pqSHYXAIAssistantPanel::resetStreamState()
   this->StreamIsSse = false;
 }
 
-void pqSHYXAIAssistantPanel::onStreamReadyRead()
+void pqSHYXAIAssistantPanel::onStreamReadyRead(const QByteArray& bytes)
 {
   if (this->UserStopped)
   {
     return;
   }
-  auto* reply = qobject_cast<QNetworkReply*>(this->sender());
-  if (!reply || reply != this->ActiveReply)
-  {
-    return;
-  }
-  this->ingestStreamBytes(reply->readAll());
+  this->ingestStreamBytes(bytes);
 }
 
 void pqSHYXAIAssistantPanel::ingestStreamBytes(const QByteArray& bytes)
@@ -1913,7 +1777,7 @@ void pqSHYXAIAssistantPanel::failRequest(const QString& err)
   if (shown.contains(QLatin1String("TLS"), Qt::CaseInsensitive) ||
     shown.contains(QLatin1String("SSL"), Qt::CaseInsensitive))
   {
-    shown = tr("%1 (%2)").arg(err, tlsDiagnostic());
+    shown = tr("%1 (%2)").arg(err, pqSHYXCurlRequest::diagnostic());
   }
   this->setStatus(tr("AI request failed: %1").arg(shown));
   const QString line = tr("[request failed] %1").arg(shown);
@@ -1969,31 +1833,37 @@ void pqSHYXAIAssistantPanel::completeStreamReply()
   this->applyAssistantReply(content, images);
 }
 
-void pqSHYXAIAssistantPanel::onReplyFinished(QNetworkReply* reply)
+void pqSHYXAIAssistantPanel::onModelsFinished()
 {
+  auto* reply = qobject_cast<pqSHYXCurlRequest*>(this->sender());
   if (!reply)
   {
     return;
   }
   reply->deleteLater();
-  if (reply->property("shyxModels").toBool())
+  if (this->ModelsReply == reply)
   {
-    if (this->ModelsReply == reply)
-    {
-      this->ModelsReply.clear();
-    }
-    if (this->RefreshModelsButton)
-    {
-      this->RefreshModelsButton->setEnabled(true);
-    }
-    if (reply->error() != QNetworkReply::OperationCanceledError)
-    {
-      this->applyModelsReply(reply);
-    }
+    this->ModelsReply.clear();
+  }
+  if (this->RefreshModelsButton)
+  {
+    this->RefreshModelsButton->setEnabled(true);
+  }
+  if (!reply->canceled())
+  {
+    this->applyModelsReply(reply);
+  }
+}
+
+void pqSHYXAIAssistantPanel::onChatFinished()
+{
+  auto* reply = qobject_cast<pqSHYXCurlRequest*>(this->sender());
+  if (!reply)
+  {
     return;
   }
-  const bool stopped = this->UserStopped ||
-    reply->error() == QNetworkReply::OperationCanceledError;
+  reply->deleteLater();
+  const bool stopped = this->UserStopped || reply->canceled();
   if (this->ActiveReply == reply)
   {
     this->ActiveReply.clear();
@@ -2010,7 +1880,6 @@ void pqSHYXAIAssistantPanel::onReplyFinished(QNetworkReply* reply)
     return;
   }
 
-  this->ingestStreamBytes(reply->readAll());
   const QByteArray errorBody = this->StreamBuf;
   if (this->StreamIsSse)
   {
@@ -2034,16 +1903,13 @@ void pqSHYXAIAssistantPanel::onReplyFinished(QNetworkReply* reply)
     }
   }
 
-  if (reply->error() != QNetworkReply::NoError)
+  if (!reply->succeeded())
   {
-    const int http = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+    const int http = reply->httpStatus();
     const bool httpFailed = http >= 400;
     const bool gotUsefulStream = this->StreamIsSse && this->StreamError.isEmpty() && !httpFailed &&
       (!this->StreamContent.isEmpty() || !this->StreamToolCalls.isEmpty());
-    const bool closedAfterStream =
-      reply->error() == QNetworkReply::RemoteHostClosedError ||
-      reply->error() == QNetworkReply::UnknownNetworkError;
-    if (gotUsefulStream && closedAfterStream)
+    if (gotUsefulStream && reply->remoteClosed())
     {
       this->completeStreamReply();
       return;

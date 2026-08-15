@@ -351,6 +351,8 @@ paraview_add_plugin(VESPAPlugin
     pqSHYXSelectionPlaneClipperWidget.h
     pqSHYXAIAssistantPanel.cxx
     pqSHYXAIAssistantPanel.h
+    pqSHYXCurlRequest.cxx
+    pqSHYXCurlRequest.h
     pqSHYXAIChatView.cxx
     pqSHYXAIChatView.h
     pqSHYXAIImageAnnotator.cxx
@@ -391,12 +393,60 @@ if (VESPA_BUILT_WITH_CGAL)
 endif()
 
 if (PARAVIEW_USE_QT)
-  find_package(Qt6 COMPONENTS Network REQUIRED)
+  include(FetchContent)
+  # paraview_plugin_build sets BUILD_SHARED_LIBS ON for VESPAPlugin.dll. Curl
+  # would then build a DLL; force a static libcurl and restore the caller's value.
+  set(_vespa_saved_shared_libs "${BUILD_SHARED_LIBS}")
+  set(_vespa_saved_testing "${BUILD_TESTING}")
+  set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
+  set(BUILD_TESTING OFF CACHE BOOL "" FORCE)
+  set(BUILD_CURL_EXE OFF CACHE BOOL "" FORCE)
+  set(BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+  set(BUILD_LIBCURL_DOCS OFF CACHE BOOL "" FORCE)
+  set(BUILD_MISC_DOCS OFF CACHE BOOL "" FORCE)
+  set(ENABLE_CURL_MANUAL OFF CACHE BOOL "" FORCE)
+  set(CURL_DISABLE_INSTALL ON CACHE BOOL "" FORCE)
+  set(CURL_ENABLE_EXPORT_TARGET OFF CACHE BOOL "" FORCE)
+  set(CURL_ENABLE_SSL ON CACHE BOOL "" FORCE)
+  set(HTTP_ONLY ON CACHE BOOL "" FORCE)
+  set(BUILD_STATIC_LIBS ON CACHE BOOL "" FORCE)
+  set(PICKY_COMPILER OFF CACHE BOOL "" FORCE)
+  set(CURL_USE_LIBPSL OFF CACHE BOOL "" FORCE)
+  set(CURL_USE_LIBSSH2 OFF CACHE BOOL "" FORCE)
+  set(CURL_USE_LIBSSH OFF CACHE BOOL "" FORCE)
+  set(USE_LIBIDN2 OFF CACHE BOOL "" FORCE)
+  set(CURL_ZLIB OFF CACHE BOOL "" FORCE)
+  set(CURL_BROTLI OFF CACHE BOOL "" FORCE)
+  set(CURL_ZSTD OFF CACHE BOOL "" FORCE)
+  set(USE_NGHTTP2 OFF CACHE BOOL "" FORCE)
+  if (WIN32)
+    set(CURL_USE_SCHANNEL ON CACHE BOOL "" FORCE)
+    set(CURL_WINDOWS_SSPI ON CACHE BOOL "" FORCE)
+    set(CURL_USE_OPENSSL OFF CACHE BOOL "" FORCE)
+  endif ()
+  FetchContent_Declare(vespa_curl
+    GIT_REPOSITORY https://github.com/curl/curl.git
+    GIT_TAG curl-8_21_0
+    GIT_SHALLOW TRUE)
+  FetchContent_MakeAvailable(vespa_curl)
+  set(BUILD_SHARED_LIBS OFF CACHE BOOL "Build shared library" FORCE)
+  set(BUILD_SHARED_LIBS "${_vespa_saved_shared_libs}")
+  if (_vespa_saved_testing)
+    set(BUILD_TESTING ON CACHE BOOL "Build Testing" FORCE)
+  else ()
+    set(BUILD_TESTING OFF CACHE BOOL "Build Testing" FORCE)
+  endif ()
+  unset(_vespa_saved_shared_libs)
+  unset(_vespa_saved_testing)
+  if (NOT TARGET CURL::libcurl AND TARGET libcurl_static)
+    add_library(CURL::libcurl ALIAS libcurl_static)
+  endif ()
+
   target_link_libraries(VESPAPlugin
     PRIVATE
       ParaView::RemotingViews
       ParaView::pqApplicationComponents
-      Qt6::Network
+      CURL::libcurl
       VTK::ChartsCore
       VTK::InteractionWidgets
       VTK::IOIOSS
@@ -404,30 +454,15 @@ if (PARAVIEW_USE_QT)
       vtkSHYXVascularStentPlacement
       vtkSHYXEndpointStentPlacement
       vtkSHYXEnhancedRuler)
+  if (WIN32)
+    target_link_libraries(VESPAPlugin PRIVATE
+      ws2_32 crypt32 secur32 advapi32 bcrypt normaliz iphlpapi)
+  endif ()
   if (TARGET ParaView::pqPython)
     target_link_libraries(VESPAPlugin PRIVATE ParaView::pqPython)
   endif ()
   if (VESPA_ADAPTIVE_REMESHING)
     target_link_libraries(VESPAPlugin PRIVATE vtkSHYXAdaptiveIsotropicRemesher)
-  endif ()
-
-  # Qt TLS backends are MODULE plugins, not static libs. Point at the Qt used to
-  # build (QT_PLUGIN_PATH layout: <root>/tls/*.dll). PATH is not searched.
-  get_filename_component(_qt6_prefix "${Qt6_DIR}/../../.." ABSOLUTE)
-  set(_qt6_plugins "${_qt6_prefix}/plugins")
-  if (IS_DIRECTORY "${_qt6_plugins}")
-    target_compile_definitions(VESPAPlugin PRIVATE "SHYX_QT_PLUGINS_DIR=\"${_qt6_plugins}\"")
-  endif ()
-  if (WIN32)
-    set(_qt6_schannel "${_qt6_plugins}/tls/qschannelbackend.dll")
-    if (EXISTS "${_qt6_schannel}")
-      add_custom_command(TARGET VESPAPlugin POST_BUILD
-        COMMAND "${CMAKE_COMMAND}" -E make_directory "$<TARGET_FILE_DIR:VESPAPlugin>/tls"
-        COMMAND "${CMAKE_COMMAND}" -E copy_if_different
-          "${_qt6_schannel}"
-          "$<TARGET_FILE_DIR:VESPAPlugin>/tls/qschannelbackend.dll"
-        COMMENT "Copy Qt Schannel TLS plugin next to VESPAPlugin")
-    endif ()
   endif ()
 endif ()
 
@@ -439,19 +474,6 @@ if (VESPA_USE_SNAPPYHEXMESH)
     target_link_options(VESPAPlugin PRIVATE
       "/WHOLEARCHIVE:$<TARGET_FILE:SHYXSnappyHex::SHYXSnappyHex>"
       "/OPT:NOICF")
-  endif ()
-  if (DEFINED SHYXSnappyHex_DIR)
-    get_filename_component(_shyx_cli_prefix "${SHYXSnappyHex_DIR}/../../.." ABSOLUTE)
-    if (NOT DEFINED SHYXSnappyHex_CLI OR NOT EXISTS "${SHYXSnappyHex_CLI}")
-      set(SHYXSnappyHex_CLI "${_shyx_cli_prefix}/bin/snappy_cli.exe")
-    endif ()
-  endif ()
-  if (EXISTS "${SHYXSnappyHex_CLI}")
-    add_custom_command(TARGET VESPAPlugin POST_BUILD
-      COMMAND "${CMAKE_COMMAND}" -E copy_if_different
-        "${SHYXSnappyHex_CLI}"
-        "$<TARGET_FILE_DIR:VESPAPlugin>/snappy_cli.exe"
-      COMMENT "Copy snappy_cli.exe next to VESPAPlugin")
   endif ()
 endif ()
 
