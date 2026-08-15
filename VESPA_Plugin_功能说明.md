@@ -89,6 +89,7 @@
 | SHYX Point Cloud Surface SDF | 纯 VTK；勿与 PMP 体素 SDF 混淆 |
 | SHYX Geodesic Distance / Surface Tip Extractor | |
 | SHYX Array Curve Mapper | |
+| SHYX AI Assistant | OpenAI 兼容；Apply 跑代码框；可选输入 pass-through |
 | SHYX Vortex Criteria / FTLE / Clebsch Map | Clebsch 可选 MKL |
 | SHYX Vector Field Topology | 包装上游 VTK |
 | SHYX Auto Streamline / Bidirectional Streamline Merge | |

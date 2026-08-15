@@ -55,6 +55,10 @@ Vascular 工具条顺序：骨架 → 切端 → 平面裁 → 端点重网格 �
 * [**Surface Tip Extractor**](./SurfaceTipExtractor/README.md)
 * [**Array Curve Mapper**](./ArrayCurveMapper/README.md)
 
+## 工具
+
+* [**AI Assistant**](./AIAssistant/README.md) — 可选输入 pass-through；Send to AI / Apply 跑 ParaView Python（需 ParaView 开启 Python）
+
 ## 表示
 
 * [**Pulse Glyph Representation**](./PulseGlyphRepresentation/README.md) — 动画管理器在 `ParaViewPlugin/pqPulseGlyphAnimationManager`

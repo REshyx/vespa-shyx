@@ -1,0 +1,11 @@
+NAME
+  vtkSHYXAIAssistant
+DESCRIPTION
+  "Optional-input pass-through holding AI question, ParaView Python, and dialog text."
+GROUPS
+  Core
+DEPENDS
+  VTK::CommonExecutionModel
+PRIVATE_DEPENDS
+  VTK::CommonCore
+  VTK::CommonDataModel

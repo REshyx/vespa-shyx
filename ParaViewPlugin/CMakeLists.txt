@@ -116,6 +116,12 @@ paraview_plugin_add_property_widget(
   CLASS_NAME pqSHYXRemeshUncappedHistogramPanel
   INTERFACES shyx_remesh_uncapped_histogram_interfaces
   SOURCES shyx_remesh_uncapped_histogram_sources)
+paraview_plugin_add_property_widget(
+  KIND GROUP_WIDGET
+  TYPE "shyx_ai_assistant"
+  CLASS_NAME pqSHYXAIAssistantPanel
+  INTERFACES shyx_ai_assistant_interfaces
+  SOURCES shyx_ai_assistant_sources)
 list(APPEND vespa_stent_cylinder_sources
   pqSHYXVascularStentCylinderWidget.cxx
   pqSHYXVascularStentCylinderWidget.h)
@@ -147,6 +153,31 @@ if (VESPA_USE_VMTK)
   list(APPEND shyx_openings_table_sources
     pqSHYXOpeningTable.cxx
     pqSHYXOpeningTable.h)
+endif()
+
+set(shyx_snappy_inside_points_interfaces)
+set(shyx_snappy_inside_points_sources)
+set(shyx_snappy_case_folder_interfaces)
+set(shyx_snappy_case_folder_sources)
+if (VESPA_USE_SNAPPYHEXMESH)
+  paraview_plugin_add_property_widget(
+    KIND GROUP_WIDGET
+    TYPE "shyx_snappy_inside_points"
+    CLASS_NAME pqSHYXSnappyInsidePointsWidget
+    INTERFACES shyx_snappy_inside_points_interfaces
+    SOURCES shyx_snappy_inside_points_sources)
+  list(APPEND shyx_snappy_inside_points_sources
+    pqSHYXSnappyInsidePointsWidget.cxx
+    pqSHYXSnappyInsidePointsWidget.h)
+  paraview_plugin_add_property_widget(
+    KIND GROUP_WIDGET
+    TYPE "shyx_snappy_case_folder"
+    CLASS_NAME pqSHYXSnappyCaseFolderWidget
+    INTERFACES shyx_snappy_case_folder_interfaces
+    SOURCES shyx_snappy_case_folder_sources)
+  list(APPEND shyx_snappy_case_folder_sources
+    pqSHYXSnappyCaseFolderWidget.cxx
+    pqSHYXSnappyCaseFolderWidget.h)
 endif()
 
 set(vespa_plugin_qt_auto_interfaces)
@@ -224,6 +255,19 @@ if (PARAVIEW_USE_QT)
     ${vascular_category_autostart_sources}
     pqSHYXVascularCategoryAutoStart.cxx
     pqSHYXVascularCategoryAutoStart.h)
+
+  paraview_plugin_add_auto_start(
+    CLASS_NAME "pqSHYXAIAssistantAutoStart"
+    STARTUP onStartup
+    SHUTDOWN onShutdown
+    INTERFACES shyx_ai_autostart_interfaces
+    SOURCES shyx_ai_autostart_sources)
+
+  list(APPEND vespa_plugin_qt_auto_interfaces ${shyx_ai_autostart_interfaces})
+  list(APPEND vespa_plugin_qt_auto_sources
+    ${shyx_ai_autostart_sources}
+    pqSHYXAIAssistantAutoStart.cxx
+    pqSHYXAIAssistantAutoStart.h)
 endif ()
 
 paraview_add_plugin(VESPAPlugin
@@ -270,6 +314,7 @@ paraview_add_plugin(VESPAPlugin
     "SHYXVectorFieldTopology.xml"
     "SHYXArrayCurveMapper.xml"
     "SHYXAutoStreamline.xml"
+    "SHYXAIAssistant.xml"
     "PulseGlyphRepresentation.xml"
     "AnimatedStreamlineRepresentation.xml"
     "PointLabelRepresentation.xml"
@@ -280,8 +325,8 @@ paraview_add_plugin(VESPAPlugin
      ${ADAPTIVE_REMESHING_SERVER_MANAGER_XML}
      ${VMTK_CENTERLINES_SERVER_MANAGER_XML}
      ${SNAPPYHEXMESH_SERVER_MANAGER_XML}
-  UI_INTERFACES ${acm_interfaces} ${vespa_obb_box_interfaces} ${vespa_endclipper_plane_interfaces} ${shyx_selection_plane_clipper_interfaces} ${vespa_stent_cylinder_interfaces} ${vespa_enhanced_ruler_interfaces} ${vespa_endpoint_stent_interfaces} ${shyx_partitioned_block_names_interfaces} ${shyx_boundary_assignment_info_interfaces} ${shyx_remesh_uncapped_histogram_interfaces} ${shyx_openings_table_interfaces} ${vespa_plugin_qt_auto_interfaces}
-  SOURCES ${acm_sources} ${vespa_obb_box_sources} ${vespa_endclipper_plane_sources} ${shyx_selection_plane_clipper_sources} ${vespa_stent_cylinder_sources} ${vespa_enhanced_ruler_sources} ${vespa_endpoint_stent_sources} ${shyx_partitioned_block_names_sources} ${shyx_boundary_assignment_info_sources} ${shyx_remesh_uncapped_histogram_sources} ${shyx_openings_table_sources}
+  UI_INTERFACES ${acm_interfaces} ${vespa_obb_box_interfaces} ${vespa_endclipper_plane_interfaces} ${shyx_selection_plane_clipper_interfaces} ${vespa_stent_cylinder_interfaces} ${vespa_enhanced_ruler_interfaces} ${vespa_endpoint_stent_interfaces} ${shyx_partitioned_block_names_interfaces} ${shyx_boundary_assignment_info_interfaces} ${shyx_remesh_uncapped_histogram_interfaces} ${shyx_openings_table_interfaces} ${shyx_snappy_inside_points_interfaces} ${shyx_snappy_case_folder_interfaces} ${shyx_ai_assistant_interfaces} ${vespa_plugin_qt_auto_interfaces}
+  SOURCES ${acm_sources} ${vespa_obb_box_sources} ${vespa_endclipper_plane_sources} ${shyx_selection_plane_clipper_sources} ${vespa_stent_cylinder_sources} ${vespa_enhanced_ruler_sources} ${vespa_endpoint_stent_sources} ${shyx_partitioned_block_names_sources} ${shyx_boundary_assignment_info_sources} ${shyx_remesh_uncapped_histogram_sources} ${shyx_openings_table_sources} ${shyx_snappy_inside_points_sources} ${shyx_snappy_case_folder_sources} ${shyx_ai_assistant_sources}
     TransferCurve/pqArrayCurveMapperPanel.cxx
     TransferCurve/pqArrayCurveMapperPanel.h
     TransferCurve/pqSHYXTransferCurveWidget.cxx
@@ -302,6 +347,18 @@ paraview_add_plugin(VESPAPlugin
     pqSHYXEndClipperPlaneHandlesWidget.h
     pqSHYXSelectionPlaneClipperWidget.cxx
     pqSHYXSelectionPlaneClipperWidget.h
+    pqSHYXAIAssistantPanel.cxx
+    pqSHYXAIAssistantPanel.h
+    pqSHYXAIChatView.cxx
+    pqSHYXAIChatView.h
+    pqSHYXAIImageAnnotator.cxx
+    pqSHYXAIImageAnnotator.h
+    pqSHYXAIAgentTools.cxx
+    pqSHYXAIAgentTools.h
+    pqSHYXPythonSyntaxHighlighter.cxx
+    pqSHYXPythonSyntaxHighlighter.h
+    pqSHYXAIOutputLog.cxx
+    pqSHYXAIOutputLog.h
     Resources/UI/pqCylinderPropertyWidget.ui
     vespa_qrc_init.cxx
     vespa_qrc_init.h
@@ -332,10 +389,12 @@ if (VESPA_BUILT_WITH_CGAL)
 endif()
 
 if (PARAVIEW_USE_QT)
+  find_package(Qt6 COMPONENTS Network REQUIRED)
   target_link_libraries(VESPAPlugin
     PRIVATE
       ParaView::RemotingViews
       ParaView::pqApplicationComponents
+      Qt6::Network
       VTK::ChartsCore
       VTK::InteractionWidgets
       VTK::IOIOSS
@@ -343,8 +402,30 @@ if (PARAVIEW_USE_QT)
       vtkSHYXVascularStentPlacement
       vtkSHYXEndpointStentPlacement
       vtkSHYXEnhancedRuler)
+  if (TARGET ParaView::pqPython)
+    target_link_libraries(VESPAPlugin PRIVATE ParaView::pqPython)
+  endif ()
   if (VESPA_ADAPTIVE_REMESHING)
     target_link_libraries(VESPAPlugin PRIVATE vtkSHYXAdaptiveIsotropicRemesher)
+  endif ()
+
+  # Qt TLS backends are MODULE plugins, not static libs. Point at the Qt used to
+  # build (QT_PLUGIN_PATH layout: <root>/tls/*.dll). PATH is not searched.
+  get_filename_component(_qt6_prefix "${Qt6_DIR}/../../.." ABSOLUTE)
+  set(_qt6_plugins "${_qt6_prefix}/plugins")
+  if (IS_DIRECTORY "${_qt6_plugins}")
+    target_compile_definitions(VESPAPlugin PRIVATE "SHYX_QT_PLUGINS_DIR=\"${_qt6_plugins}\"")
+  endif ()
+  if (WIN32)
+    set(_qt6_schannel "${_qt6_plugins}/tls/qschannelbackend.dll")
+    if (EXISTS "${_qt6_schannel}")
+      add_custom_command(TARGET VESPAPlugin POST_BUILD
+        COMMAND "${CMAKE_COMMAND}" -E make_directory "$<TARGET_FILE_DIR:VESPAPlugin>/tls"
+        COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+          "${_qt6_schannel}"
+          "$<TARGET_FILE_DIR:VESPAPlugin>/tls/qschannelbackend.dll"
+        COMMENT "Copy Qt Schannel TLS plugin next to VESPAPlugin")
+    endif ()
   endif ()
 endif ()
 

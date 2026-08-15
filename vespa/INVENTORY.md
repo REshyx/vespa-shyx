@@ -122,6 +122,12 @@ Vascular 顺序（[`VESPAVascularCategory.xml`](../ParaViewPlugin/VESPAVascularC
 | SHYX Surface Tip Extractor | `vtkSurfaceTipExtractor` | SurfaceTipExtractor | SHYXSurfaceTipExtractor.xml | 自有 | [有](shyx/SurfaceTipExtractor/README.md) | VTK |
 | SHYX Array Curve Mapper | `vtkArrayCurveMapper` | ArrayCurveMapper | SHYXArrayCurveMapper.xml | 自有 | [有](shyx/ArrayCurveMapper/README.md) | VTK |
 
+### 工具
+
+| 界面标签 | 类 | 目录 | XML | 图标 | README | 后端 |
+|----------|----|------|-----|------|--------|------|
+| SHYX AI Assistant | `vtkSHYXAIAssistant` | AIAssistant | SHYXAIAssistant.xml | — | [有](shyx/AIAssistant/README.md) | VTK + 客户端 Qt（OpenAI 兼容 HTTP） |
+
 ---
 
 ## 表示（Display 面板，非 Filters 菜单）

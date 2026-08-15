@@ -16,4 +16,9 @@ vespa 配置加 `-DVESPA_USE_SNAPPYHEXMESH=ON`，`SHYXSnappyHex_DIR` 指向 `ins
 
 每次跑完（成功或失败）都保留 Foam case，并在 case 根目录写空的 `case.foam`。滤镜输出用 ParaView 自带的 `vtkOpenFOAMReader` 读 `internalMesh`，不再自己解析 `faces`/`owner`。**File → Open** 选 `case.foam` 可读整棵 case（含 patch 分块）。固定入口：`%TEMP%\shyx-snappy-last\case.foam`；当次目录路径写在同目录 `last-case-path.txt`。
 
-参数见 `ParaViewPlugin/SHYXSnappyHexMesh.xml`。
+参数见 `ParaViewPlugin/SHYXSnappyHexMesh.xml`。**Inside points** 列表可 Add insidePoint：选中一行后视图里出现可拖动手柄。空列表仍用 AABB 中心；多个点写成 OpenFOAM `locationsInMesh`（zone `none`）。点必须落在要保留的单元格内，不要贴在面上。
+
+示例 dict：
+
+- `example/snappyHexMeshDict`：与当前滤镜默认接近的可跑配置。
+- `example/snappyHexMeshDict.official.zh`：OpenFOAM-v2412 官方 `etc/caseDicts/annotated/snappyHexMeshDict` 的中文注释译本（关键字仍是英文）。

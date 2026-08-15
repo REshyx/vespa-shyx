@@ -1,0 +1,743 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  v2412                                 |
+|   \\  /    A nd           | Website:  www.openfoam.com                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    object      snappyHexMeshDict;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+// 中文注释译本。关键字保持英文，否则 OpenFOAM 无法识别。
+// 原文: third_party/openfoam-v2412/etc/caseDicts/annotated/snappyHexMeshDict
+// 这是注释范例，不是可直接跑通的最小 case。
+
+// 网格生成类型:
+//  - castellated (默认，切块细化)
+//  - castellatedBufferLayer (切块后再加缓冲层)
+//type            castellatedBufferLayer;
+
+
+// 要跑的三个阶段
+castellatedMesh true;   // 切块细化
+snap            true;   // 吸附到表面
+addLayers       false;  // 近壁棱柱层
+
+
+// 可选: 单区域表面的 patch 名只用表面名；多区域表面用 表面_区域。默认 true
+// singleRegionName false;
+
+// 可选: 禁止合并 patch 面，便于后续再细化/去细化
+// mergePatchFaces    false; // 默认 true
+
+// 可选: 即使属于不同 patch 也允许合并面。可避免边界面被切开，有利于铺层覆盖。
+// (仅当 mergePatchFaces 为 true 时有效)
+// mergeAcrossPatches   true;   // 默认 false
+
+// 可选: 保留所有生成的 patch。默认会删掉面数为 0 的空 patch。
+// keepPatches true;
+
+
+// 几何。所有表面都是 searchableSurface。
+// 用途:
+// - 与表面相交的单元要细化
+// - 表面内部/外部/附近的单元要细化
+// - 把网格边界吸附到该表面
+geometry
+{
+    box1x1x1
+    {
+        type box;
+        min  (1.5 1 -0.5);
+        max  (3.5 2 0.5);
+    }
+
+    // 用于定向细化的盒子外壳
+    wakeBox
+    {
+        type box;
+        min  (1.5 1 -0.5);
+        max  (3.5 2 0.5);
+    }
+
+    sphere.stl
+    {
+        type triSurfaceMesh;
+
+        //tolerance   1E-5;   // 可选: 求交容差，非默认值
+        //maxTreeDepth 10;    // 可选: 八叉树深度。仅在内存不够时减小
+
+        // 按 STL 区域(solid)指定 patch 名。不写则为 <表面>_<区域>。
+        // 注意: 这个 name 不能用来在本字典其它地方引用该区域；
+        // 它只是 表面+区域 组合的名字，仅在创建 patch 时使用。
+        regions
+        {
+            secondSolid
+            {
+                name mySecondPatch;
+            }
+        }
+    }
+
+    sphere2
+    {
+        type    sphere;
+        centre  (1.5 1.5 1.5);
+        radius  1.03;
+    }
+};
+
+
+// 切块细化设置
+castellatedMeshControls
+{
+
+    // 细化参数
+    // ~~~~~~~~~~~~~~~~~~~~~
+
+    // 任一处理器上本地单元数 >= maxLocalCells 时，
+    // 算法从「先细化再(加权)平衡」改成「先(加权)平衡再细化」。
+    maxLocalCells 100000;
+
+    // 全局单元数上限(约值)。一到此数立刻停止，某一级细化可能不跑完。
+    // 这是按 keepPoint 裁掉不可见部分之前的单元数。最终网格往往会少很多。
+    maxGlobalCells 2000000;
+
+    // 表面细化循环可能很多轮只细化很少单元。若本轮选中细化的单元
+    // <= minRefinementCells 则停止。注意至少会做一轮，除非:
+    //  a: 要细化的单元数为 0
+    //  b: minRefinementCells = -1，表示完全不细化
+    minRefinementCells 0;
+
+    // 细化过程允许的负载不均衡程度(平衡很贵)。
+    // 相对完美均衡(总单元数/进程数)的比例。0=总是平衡。
+    // 也可用 maxCellUnbalance 触发。
+    maxLoadUnbalance 0.10;
+
+    // 可选: 绝对不均衡量触发阈值。用于跳过前几轮平衡(核数多时平衡很贵)。
+    // 触发条件有两条:
+    // a: 任一处理器本轮新增单元数 <= maxCellUnbalance 则跳过平衡
+    // b: 任一处理器 (新单元数 - 理想单元数) <= maxCellUnbalance 则跳过
+    // 设为 -1 关闭
+    //maxCellUnbalance 200000;
+
+    // 可选: 全部细化结束后强制再平衡一次
+    //balanceAtEnd     false;
+
+    // 不同细化等级之间的缓冲层数。
+    // 1 为通常的 2:1 限制，越大细化过渡越慢。
+    nCellsBetweenLevels 1;
+
+
+    // 显式特征边细化
+    // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+    // 被显式特征边穿过的单元细化到指定等级。
+    // 目前从 constant/triSurface 读 featureEdgeMesh (.eMesh)。
+    // levels 写法与下面 refinementRegions 的 distance 模式相同。
+    // 旧写法
+    //      level   2;
+    // 等价于
+    //      levels  ((0 2));
+
+    features
+    (
+        //{
+        //    file "someLine.eMesh";
+        //    //level 2;        // 被特征边穿过的单元都到 2 级
+        //    levels ((0.1 2)); // 距特征边 0.1 以内的单元到 2 级
+        //}
+    );
+
+
+    // 基于表面的细化
+    // ~~~~~~~~~~~~~~~~~~~~~~~~
+
+    // 每个表面两个等级。第一项是最小级: 与表面相交的单元至少细化到该级。
+    // 第二项是最大级: 若同一单元「看到」多处交线，且交线夹角
+    // > resolveFeatureAngle，则细化到最大级。
+
+    refinementSurfaces
+    {
+        sphere.stl
+        {
+            // 该表面整体的最小/最大细化级
+            level (2 2);
+
+            // 可选: 按 STL 区域单独指定等级
+            regions
+            {
+                secondSolid
+                {
+                    level (3 3);
+                }
+            }
+
+            // 可选: patch 类型(默认 wall)。不允许 cyclic、symmetry 等约束类型。
+            patchInfo
+            {
+                type patch;
+                inGroups (meshedPatches);
+            }
+
+
+            //- 可选: 窄缝处在最大级之上再加几级
+            //gapLevelIncrement 2;
+
+            //- 可选: 检测垂直于表面的「小单元对大单元」情形。
+            //  是面相对局部表面法向的夹角。只适合较平的面。
+            //  否则省略或设为负数。
+            //perpendicularAngle 10;
+
+            //- 可选: faceZone，以及(封闭表面) cellZone，并指定
+            //  如何选出属于 cellZone 的单元
+            //  (inside / outside / specified insidePoint)
+            //  faceZone 朝向:
+            //  - 若在 cellZone 上: 指向(编号最小的) cellZone 外侧
+            //  - 若独立: 按表面朝向
+
+            //faceZone sphere;
+            //cellZone sphere;
+            //cellZoneInside inside;    // outside / insidePoint
+            //insidePoint    (1 1 1);   // 当 cellZoneInside == insidePoint
+            //   或多个内部点:
+            //insidePoints   ((1 1 1));
+
+            //- 可选: 如何处理 faceZone 上的面:
+            //      internal : 保持为内部面(默认)
+            //      baffle   : 做成挡板，网格运动更自由
+            //      boundary : 做成独立边界面(挡板但不共享点)
+            //faceType baffle;
+
+            //- 可选: 自动窄缝细化。见 refinementRegions 的 gapLevel、gapMode
+
+            //- 可选: 删除薄缝中的单元。
+            //  堵住任何缝(相对表面或表面断开区域):
+            //  - 缝宽小于 2*blockcellsize，blockcellsize 是 blockLevel 下的单元尺寸
+            //  注意: 与被删单元自身的细化等级无关。
+            //blockLevel 10;
+
+            //- 可选: 尽早检测 inside 与 outside 位置是否连通。
+            //  默认是全部细化完成后再检测。
+            //leakLevel 10;
+
+            // 高曲率区域额外细化。写法有点像 gapLevel:
+            // - 每个曲率半径要几个单元(通常 1 就够)
+            // - 起始单元等级? 目前未用
+            // - 最大单元等级。可比表面 max level 大或小
+            // - 忽略的最小曲率半径(用单元等级表示)。用来避开细小尖锐特征。
+            //   设 -1 表示不忽略。
+            //   (有时希望曲率细化比尖锐特征更密，尖锐边交给特征吸附，
+            //    表面可以写成 level (0 0))
+            //curvatureLevel (10 0 10 -1);
+
+            // 可选: 若 type = castellatedBufferLayer，可关掉该表面的缓冲层
+            addBufferLayers false;
+        }
+    }
+
+    // 特征角:
+    // - 同一表面 min/max 细化级不同时使用
+    // - 特征吸附时使用(见下面 snapControls)
+    resolveFeatureAngle 30;
+
+    //- 可选: 窄缝处在最大级之上再加几级
+    //gapLevelIncrement 2;
+
+
+    // 平面角:
+    // - 判断表面法向大致相同还是相反。用于
+    //      - 邻近细化
+    //      - 决定何时合并独立挡板
+    //        (例如 surfaceSimplify 模式可设 180 以合并全部挡板)
+    //      - 吸附时避免吸到薄缝「错误」一侧的最近点
+    //
+    // 不写则与 resolveFeatureAngle 相同
+    planarAngle 30;
+
+
+    // 按区域细化
+    // ~~~~~~~~~~~~~~~~~~~~~~
+
+    // 相对某表面指定单元细化等级。三种模式之一:
+    // - distance: levels 按到表面的距离给出目标等级，距离须递增。
+    // - inside: levels 只需一项，只用其中的等级。封闭表面内部全部细化到该级。
+    // - outside: 同理，细化表面外部。
+
+    refinementRegions
+    {
+        box1x1x1
+        {
+            mode inside;
+            levels ((1.0 4));
+        }
+        //sphere.stl
+        //{
+        //    mode inside;
+        //    levels ((1.0 4));
+        //    // 可选: 覆盖均匀细化，使窄缝里单元更多。
+        //    // 三项:
+        //    //  - numGapCells : 缝里最少单元数(通常 >3；更少可能分不清)
+        //    //  - minLevel    : 开始启用的最小细化级
+        //    //  - maxLevel    : 上限，避免在无关特征上一直细化
+        //    // 三者都可在 refinementSurfaces 里按表面覆盖。
+        //    gapLevel (<numGapCells> <minLevel> <maxlevel>);
+        //    // 可选: 做 gapLevel 细化时按相对缝的朝向直接删单元。
+        //    // 可在 locationInMesh 选域之前减少单元。默认 mixed，
+        //    // 即做窄缝细化时先留着单元。
+        //    //gapMode inside;  // inside/outside/mixed
+        //    //gapSelf false;   // 忽略同一表面自身形成的缝
+        //}
+
+        //wakeBox
+        //{
+        //    mode        inside;
+        //    // 占位基准等级
+        //    levels      ((10000 0));
+        //
+        //    // 可选: 其它细化完成后再做定向细化
+        //    // 按 mode (inside 或 outside；不支持 distance)
+        //    // 在某等级范围内，例如:
+        //    //  - 等级 2-5 的单元
+        //    //  - 只在 x 方向再劈一刀
+        //    levelIncrement  (2 5 (1 0 0));
+        //
+        //    // 注意
+        //    // - 忽略 levels 和 gap* 设置
+        //    // - cellLevel/pointLevel 文件会与网格不再一致，
+        //    //   不能再用于动态细化/去细化
+        //    // - cellLevel 会计入定向细化(取三个方向的最大值)
+        //}
+
+        //wakeBox
+        //{
+        //    mode        inside;
+        //    levels      ((10000 0));
+        //
+        //    levelIncrement  (2 5 (1 0 0));
+        //
+        //    // 可选: 全部细化后再沿某方向平滑膨胀比，减轻边长/单元尺寸跳跃
+        //    smoothDirection     (1 0 0);
+        //    nSmoothExpansion    100;  // 平滑膨胀比
+        //    nSmoothPosition     100;  // 平滑点位置
+        //}
+    }
+
+
+
+    // 可选: 在几何区域内限制细化。限制该区域内来自 features、
+    // refinementSurfaces、refinementRegions 的全部细化。
+    // 语法与 refinementRegions 相同；此时 cell level 表示上限。
+    // (特殊值 -1 表示删除区域内所有单元)。
+    // 不会覆盖 nCellsBetweenLevels 的约束。
+    limitRegions
+    {
+    }
+
+
+    // 网格选取
+    // ~~~~~~~~~~~~~~
+
+    // 细化后为所有 refinementSurfaces 添加 patch，与表面相交的单元进入这些 patch。
+    // 从 location(s)InMesh 能走到的连通块保留。
+    // 注意: 该点绝不能在面上，必须在单元内部，细化之后也如此。
+    //
+    // 指定保留区域有两种写法:
+    // 1. 单个 locationInMesh。这是网格中未分区(unzoned)的部分。
+    //    带 zone 的表面在 refinementSurfaces 里用 faceZone、cellZone 标明。
+    //    locationInMesh 不能落在已指定 cellZone 的表面内部。
+    //
+    // 或
+    //
+    // 2. 多个 locationsInMesh，每个点带 cellZone 名。
+    //    用连通行走划分区域，并在 cellZone 外侧自动建 faceZone。
+    //    特殊名 none 表示未分区/背景网格。
+
+
+        // 写法 1. 单个位置，以及 cellZone 之间的面如何处理
+        locationInMesh (5 0.28 0.43);
+
+        // refinementSurfaces 里指定的 faceZone 是否只出现在对应 cellZone 边界上。
+        // 没有 faceZone 时无意义。相对旧版行为有变化:
+        //  true  : 与表面的所有交面都进 faceZone(与以前相同)
+        //  false : 视相交表面类型而定:
+        //      - 只有 faceZone、没有 cellZone: 仍留在 faceZone(行为有变)
+        //      - 同时有 faceZone 和 cellZone:
+        //        若夹在同一 cellZone 之间或在边界上则去掉(与以前相同)
+        allowFreeStandingZoneFaces true;
+
+
+
+        // 写法 2. 多个位置，可选 cellZone 名(用 none 表示未分区单元)
+        //    faceZone 名自动生成为 <cellZoneA>_to_<cellZoneB>
+        //    cellZoneA 取编号较小者(无 cellZone 的单元属于特殊区域 none，
+        //    none 总是排在最后)。
+
+        locationsInMesh
+        (
+            ((-0.09 -0.039 -0.049)  bottomAir)  // cellZone 0
+            ((-0.09 0.009 -0.049)   topAir)     // cellZone 1
+            ((-0.09 0.001 -0.049)   leftSolid)  // cellZone 2
+            ((0.02  0.001 -0.049)   rightSolid) // cellZone 3
+            ((-0.001 -0.039 0.0015) heater)     // cellZone 4
+        );
+
+        // 按自动生成的 faceZone 名指定 faceType 和挡板类型
+        faceZoneControls
+        {
+            bottomAir_to_heater
+            {
+                // 可选: patch 类型(默认 wall)。不允许 cyclic、symmetry 等。
+                patchInfo
+                {
+                    type patch;
+                    inGroups (patchPatches);
+                }
+                faceType baffle;
+            }
+        }
+
+
+
+    // 可选: 从 location(s)InMesh 不应到达的点
+    locationsOutsideMesh ((100 100 100));
+
+    // 可选: 不删除可能造成吸附问题的单元
+    // handleSnapProblems false;
+
+    // 可选: 关掉「将被压扁单元」的拓扑检测，改用几何检测
+    //useTopologicalSnapDetection false;
+
+    // 可选: 不要细化相对两面细化等级不同的表面单元
+    //interfaceRefine false;
+
+    // 可选: 用腐蚀而不是区域分配，把剩余单元划给背景区
+    // (让 cellZone 与表面交线一致)。腐蚀次数即迭代次数。
+    // 腐蚀比「渗色」改掉整块区域的风险小。
+    // 负值表示「生长」cellZone，有助于填 cellZone 之间的非物理小缝。
+    // (目前只支持单层生长，即 -1)。默认 0。
+    //nCellZoneErodeIter 2;
+
+    // 可选: 删除小于总体积该比例的碎区(按每个 zone)。
+    // 生成带 baffle/边界 faceZone 时偶尔有用。
+    //minCellFraction 0.001;
+    // 可选: 同上，但用绝对单元数。默认 0。
+    //nMinCells 100;
+
+    // 可选: 自动封漏(默认是立刻退出)
+    //useLeakClosure true;
+}
+
+// 吸附设置
+snapControls
+{
+    // 找与表面对应关系之前，对 patch 做平滑的次数
+    nSmoothPatch 3;
+
+    // 可选: 细化交界面上内部点的平滑次数，可减小交界面非正交性
+    //nSmoothInternal $nSmoothPatch;
+
+    // 点被表面吸引的最大相对距离。
+    // 实际距离 = 该系数 x 当地最大边长。
+    tolerance 2.0;
+
+    // 网格位移松弛迭代次数
+    nSolveIter 30;
+
+    // 吸附松弛最大次数。网格合格应提前停下。
+    nRelaxIter 5;
+
+    // (试验中) 禁止吸附到对面很近的表面(回到 22x 行为)
+    // detectNearSurfacesSnap false;
+
+
+    // 特征吸附
+
+        // 特征边吸附迭代次数。整项不写则关闭。
+        nFeatureSnapIter 10;
+
+        // 仅用几何、通过采样表面检测特征(默认 false)
+        implicitFeatureSnap false;
+
+        // 使用 castellatedMeshControls::features (默认 true)
+        explicitFeatureSnap true;
+
+        // 检测多个表面之间的特征
+        // (仅当 explicitFeatureSnap，默认 false)
+        multiRegionFeatureSnap false;
+
+
+        //- 何时做面分裂(第一轮从不做，最后一轮总做)。为间隔。默认 -1(关闭)
+        //nFaceSplitInterval 5;
+
+
+        // (试验中) 显式特征吸附的可选项:
+        //- 检测挡板边。默认 true。
+        //detectBaffles false;
+        //- 面上有点属于多个区域时(见 multiRegionFeatureSnap)，
+        //  让其它点跟着这些点走，而不是各自独立运动，
+        //  即多区域边/点的吸附优先。有助于吸到同时也是区域边界的锐边。
+        //  默认 false，因为也可能添乱: morph 时拓扑仍可能不对，
+        //  点会被「松开」而不再像普通点那样动。
+        //releasePoints true;
+        //- 沿特征边行走并补上缺失段。默认 true。
+        //stringFeatures false;
+        //- 若对角线被吸引，也吸引该面上其它点。默认 false。
+        //avoidDiagonal true;
+        //- 分裂时何种凹面保持不动。默认 45 度。
+        //concaveAngle 30;
+        //- 分裂后面面积比下限。小于此值则不分裂。默认 0.3
+        //minAreaRatio 0.3;
+        //- 点只被吸引到它原来所在的表面。默认 false。
+        //  可改善相交表面的吸附。
+        //  strictRegionSnap true;
+
+
+    // 铺层时的网格运动算法(仅 type = castellatedBufferLayer 时用)
+
+        //solver  displacementPointSmoothing;
+        //displacementPointSmoothingCoeffs
+        //{
+        //    // 用拉普拉斯解开缠结
+        //    pointSmoother           laplacian;
+        //    nPointSmootherIter      10;
+        //}
+}
+
+// 近壁层设置
+addLayersControls
+{
+    // 下面的厚度是相对层外未畸变细化单元尺寸(true)，还是绝对尺寸(false)
+    relativeSizes true;
+
+    // 层厚可用 thicknessModel(新)或逐项指定。参数包括:
+    // 贴壁第一层高度 firstLayerThickness、靠主流最后一层高度
+    // finalLayerThickness、膨胀比 expansionRatio、总厚度 thickness。
+
+    //- 指定 firstLayerThickness 和总厚度，由此算 expansionRatio
+    // thicknessModel firstAndOverall;
+
+    //- 指定 firstLayerThickness 和 expansionRatio
+    // thicknessModel firstAndExpansion;
+
+    //- 指定 finalLayerThickness 和 expansionRatio
+    // thicknessModel finalAndExpansion;
+
+    //- 指定 thickness 和 expansionRatio
+    // thicknessModel overallAndExpansion;
+
+    //- 指定 firstLayerThickness 和 finalLayerThickness。
+    //  first 总是绝对，final 总是相对，与 relativeSizes 无关
+    // thicknessModel firstAndRelativeFinal;
+
+
+        // 层网格膨胀比
+        expansionRatio 1.0;
+
+        // 最远离壁那一层的目标厚度。
+        // relativeSizes 时相对层外未畸变单元尺寸。
+        finalLayerThickness 0.3;
+
+
+    // 所有层合计的最小总厚度。达不到则不加层。
+    // relativeSizes 时相对层外未畸变单元尺寸。
+    minThickness 0.1;
+
+
+    // 按最终 patch 或 faceZone(不是 geometry 名!) 给出铺层信息:
+    // - 相对还是绝对尺寸
+    // - thicknessModel(或单项)
+    // - 最小厚度
+    //
+    // 注意: 21x 之后收缩行为变了。未提到的 patch 现在会滑动，除非:
+    //          - 显式写 nSurfaceLayers 0
+    //          - 与最近表面夹角 < slipFeatureAngle(见下)
+    layers
+    {
+        sphere.stl_firstSolid
+        {
+            nSurfaceLayers 1;
+
+        }
+        maxY
+        {
+            nSurfaceLayers 1;
+            // 该 patch 单独的层参数
+            expansionRatio      1.3;
+            finalLayerThickness 0.3;
+            minThickness        0.1;
+        }
+
+        // nSurfaceLayers 0: 该 patch 上任何点都不收缩、不加层
+        frozenPatches
+        {
+            nSurfaceLayers 0;
+        }
+    }
+
+    // 若某些点挤不出去，相连的 nGrow 层面也不挤。
+    // 有助于特征附近铺层收敛。
+    // 相对 1.7.x 已修正(1.7.x 里这项实际没起作用)
+    nGrow 0;
+
+    // 高级设置
+
+
+    // 起始网格的静态分析
+
+        // 何时不挤出。0 为平面，90 为两面垂直。注意 1806 以前不正确。
+        featureAngle 120;
+
+        // 何时合并 patch 面。默认等于 featureAngle。featureAngle 很大时有用。
+        //mergePatchFacesAngle 45;
+
+        // 高度扭曲的单元上停止长层
+        maxFaceThicknessRatio 0.5;
+
+
+    // Patch 位移
+
+        // 表面法向平滑次数
+        nSmoothSurfaceNormals 1;
+
+        // 沿表面平滑层厚
+        nSmoothThickness 10;
+
+
+
+    // 网格收缩算法
+
+        // 可选收缩算法(默认 displacementMedialAxis)
+        // displacementMotionSolver 是位移运动求解器的包装，
+        // 需指定求解器及其控制字典。
+        //meshShrinker displacementMotionSolver;
+        //solver displacementLaplacian;
+        //displacementLaplacianCoeffs
+        //{
+        //    diffusivity quadratic inverseDistance
+        //    (
+        //        sphere.stl_firstSolid
+        //        maxY
+        //    );
+        //}
+        // displacementLaplacian 需要 fvSchemes、fvSolution 条目。
+        // 解 cellDisplacement 时 minIter 应 > 1，否则点上精度不够。
+
+
+    // 中轴分析(默认 displacementMedialAxis 使用)
+
+        // 拾取中轴点的角度
+        // 相对 1.7.x 已修正: 现在 90 度相当于当时的 130。
+        minMedialAxisAngle 90;
+
+        // 层厚与到中轴距离之比过大时减弱长层
+        maxThicknessToMedialRatio 0.3;
+
+        // 内部网格运动方向的平滑次数
+        nSmoothNormals 3;
+
+        // 可选: 限制从表面向外走的步数。默认不限。
+        //nMedialAxisIter 10;
+
+        // 可选: 中轴确定后平滑位移。默认 0。
+        //nSmoothDisplacement 90;
+
+        // (试验中) 可选: 在下列情况下不挤出任何点
+        //   (false) : 周围所有面都未完全挤出
+        //   (true)  : 周围所有点都未挤出
+        // 默认 false。
+        //detectExtrusionIsland true;
+
+        // 可选: 锐边两侧若都未完全挤出(否则会变成楔)则不挤。
+        // 默认 0.5*featureAngle。设 -180 则总是尝试挤出。
+        //layerTerminationAngle 25;
+
+        // 可选: 禁止收缩一端(或两端)在挤出 patch 上的边。
+        // 默认 false，以便一两层厚的通道仍能加层。
+        // 1806 及以前默认 true。大缝里影响不大。
+        //disableWallEdges true;
+
+        // 可选: 非 patch 侧，若挤出方向夹角大于 slipFeatureAngle 则允许滑动。
+        // 默认 0.5*featureAngle。
+        slipFeatureAngle 30;
+
+        // 吸附松弛最大次数。网格合格应提前停下。
+        nRelaxIter 5;
+
+
+    // 网格收缩
+
+        // 新层终止处建缓冲，即层数逐步减。设 <0 则一次终止。
+        nBufferCellsNoExtrude 0;
+
+        // 铺层总迭代上限。到此次数就退出，网格可能仍不合法。
+        nLayerIter 50;
+
+        // 超过该迭代后改用放宽的 meshQuality。
+        // 之前用 meshQualityControls，之后用 meshQualityControls::relaxed。
+        nRelaxedIter 20;
+
+        // 额外报告: 加层后若只有很少出错面，打印它们的面心，便于定位问题区。
+        //additionalReporting true;
+}
+
+// 通用网格质量。任何可回退阶段都用这些标准决定何处撤销。
+meshQualityControls
+{
+    // 质量约束放到单独字典，便于复用(如 checkMesh -meshQuality)
+    #include "meshQualityDict"
+
+
+    // 可选: 某些阶段允许放宽规则。见 addLayersControls::nRelaxedIter。
+    relaxed
+    {
+        // 允许的最大非正交角。180 表示关闭该项。
+        maxNonOrtho 75;
+    }
+
+
+    // 高级
+
+        // 误差扩散迭代次数
+        nSmoothScale 4;
+        // 出错点处把位移往回缩的比例
+        errorReduction 0.75;
+}
+
+// 高级
+
+//// 调试开关
+//debugFlags
+//(
+//    mesh            // 写出中间网格
+//    intersections   // 当前网格交线写成 .obj
+//    featureSeeds    // 显式特征边细化信息
+//    attraction      // 吸引力写成 .obj
+//    layerInfo       // 铺层信息
+//);
+//
+//// 写出开关
+//writeFlags
+//(
+//    scalarLevels    // 写出 cellLevel 体标量场供后处理
+//    layerSets       // 写出层内 cellSet、faceSet
+//    layerFields     // 写出铺层覆盖率体标量场
+//);
+
+
+//// 线(如漏路径)写出格式。默认 vtk。
+//setFormat ensight;
+
+//// 面(如封漏面)写出格式。默认 vtk。
+//surfaceFormat vtk;
+
+// 合并容差。相对初始网格总体包围盒的比例。
+// 注意: 写出精度需要高于此值。
+mergeTolerance 1e-6;
+
+// ************************************************************************* //

@@ -1,0 +1,144 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| SHYX SnappyHexMesh example — matches the filter defaults                    |
+| Copy to <case>/system/snappyHexMeshDict                                     |
+| STL must be at constant/triSurface/geometry.stl                             |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    object      snappyHexMeshDict;
+}
+
+// Three stages. castellated must be true before snap / layers.
+castellatedMesh true;
+snap            true;
+addLayers       false;
+
+geometry
+{
+    geometry.stl
+    {
+        type triSurfaceMesh;
+        name geometry;          // patch name after meshing
+    }
+
+    // Optional extra closed surface for volumetric refinement:
+    // refineBox
+    // {
+    //     type searchableBox;
+    //     min  (-10 -200 -560);
+    //     max  ( 10 -180 -530);
+    // }
+}
+
+castellatedMeshControls
+{
+    maxLocalCells       1000000;
+    maxGlobalCells      2000000;
+    minRefinementCells  0;
+    maxLoadUnbalance    0.10;
+    nCellsBetweenLevels 3;      // buffer cells between refinement levels
+
+    features ();                // explicit .eMesh feature edges; unused here
+
+    refinementSurfaces
+    {
+        geometry
+        {
+            level (0 2);        // (min max) surface refinement
+
+            // Optional region marking (not written by the filter today):
+            // patchInfo { type wall; }
+            // faceZone  wallInterface;
+            // cellZone  lumen;
+            // cellZoneInside inside;
+        }
+    }
+
+    resolveFeatureAngle 30;     // edges sharper than this are features
+
+    refinementRegions
+    {
+        // refineBox
+        // {
+        //     mode inside;
+        //     levels ((1e15 2));
+        // }
+    }
+
+    // MUST be inside the volume you want to keep (vessel lumen, not wall).
+    // Filter: empty Inside points list = AABB centre; Add insidePoint in the
+    // Properties panel (drag the selected handle). Several points become
+    // locationsInMesh with zone name none (one keep-seed per disconnected region).
+    locationInMesh (-0.161259 -193.503 -545.011);
+
+    // Named regions instead of a single keep-point:
+    // locationsInMesh
+    // (
+    //     ((-0.16 -193.5 -545.0) fluid)
+    // );
+
+    allowFreeStandingZoneFaces true;
+}
+
+snapControls
+{
+    nSmoothPatch       3;
+    tolerance          2.0;     // relative to local edge length
+    nSolveIter         30;
+    nRelaxIter         5;
+    nFeatureSnapIter   10;
+    implicitFeatureSnap true;   // detect feature edges from the STL
+    explicitFeatureSnap false;  // would use features () / .eMesh
+    multiRegionFeatureSnap false;
+}
+
+addLayersControls
+{
+    relativeSizes true;         // thicknesses relative to undistorted cell size
+    layers
+    {
+        geometry
+        {
+            nSurfaceLayers 3;
+        }
+    }
+    expansionRatio      1.2;
+    finalLayerThickness 0.3;
+    minThickness        0.1;
+    nGrow               0;
+    featureAngle        30;
+    slipFeatureAngle    30;
+    nRelaxIter          5;
+    nSmoothSurfaceNormals 1;
+    nSmoothNormals      3;
+    nSmoothThickness    10;
+    maxFaceThicknessRatio 0.5;
+    maxThicknessToMedialRatio 0.3;
+    minMedialAxisAngle  90;
+    nBufferCellsNoExtrude 0;
+    nLayerIter          50;
+}
+
+meshQualityControls
+{
+    maxNonOrtho         65;
+    maxBoundarySkewness 20;
+    maxInternalSkewness 4;
+    maxConcave          80;
+    minVol              1e-13;
+    minTetQuality       1e-15;
+    minArea             -1;
+    minTwist            0.02;
+    minDeterminant      0.001;
+    minFaceWeight       0.05;
+    minVolRatio         0.01;
+    minTriangleTwist    -1;
+    minEdgeLength       -1;
+    nSmoothScale        4;
+    errorReduction      0.75;
+}
+
+mergeTolerance 1e-6;

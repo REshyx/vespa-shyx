@@ -170,6 +170,39 @@
         <BooleanDomain name="bool"/>
       </IntVectorProperty>
 
+      <DoubleVectorProperty command="SetInsidePoint"
+                            name="InsidePoints"
+                            label="Inside points"
+                            number_of_elements="0"
+                            number_of_elements_per_command="3"
+                            repeat_command="1"
+                            set_number_command="SetNumberOfInsidePoints"
+                            use_index="1">
+        <Documentation>
+          Keep-mesh points for castellated meshing (OpenFOAM locationInMesh, or
+          locationsInMesh when there are several). Empty = AABB centre of the
+          input. Add one point per disconnected region. Each point must lie in a
+          cell that should be kept, not on a face. Select a row to drag the 3D handle.
+        </Documentation>
+        <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator" mode="enabled_state"
+                                   property="CastellatedMesh" value="1"/>
+        </Hints>
+      </DoubleVectorProperty>
+
+      <StringVectorProperty name="CaseFoamPath"
+                            command="GetCaseFoamPath"
+                            label="Case Folder"
+                            number_of_elements="1"
+                            information_only="1"
+                            animateable="0"
+                            panel_visibility="default">
+        <Documentation>
+          After Apply: %TEMP%/shyx-snappy-last (copy of this run's case). Read-only;
+          copy the path or use the folder button to open it.
+        </Documentation>
+      </StringVectorProperty>
+
       <PropertyGroup label="Background mesh">
         <Property name="BackgroundCellSize"/>
         <Property name="BoundsMargin"/>
@@ -180,6 +213,10 @@
         <Property name="NCellsBetweenLevels"/>
         <Property name="RefinementMin"/>
         <Property name="RefinementMax"/>
+      </PropertyGroup>
+      <PropertyGroup label="Inside points" panel_widget="shyx_snappy_inside_points">
+        <Property function="Input" name="Input"/>
+        <Property function="InsidePointsList" name="InsidePoints"/>
       </PropertyGroup>
       <PropertyGroup label="Snap">
         <Property name="Snap"/>
@@ -194,6 +231,9 @@
         <Property name="ExpansionRatio"/>
         <Property name="FeatureAngle"/>
         <Property name="ImplicitFeatureSnap"/>
+      </PropertyGroup>
+      <PropertyGroup label="Case Folder" panel_widget="shyx_snappy_case_folder">
+        <Property function="CaseFoamPath" name="CaseFoamPath"/>
       </PropertyGroup>
 
       <Hints>

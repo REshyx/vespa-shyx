@@ -21,6 +21,7 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <string>
@@ -264,6 +265,28 @@ vtkSHYXSnappyHexMesh::vtkSHYXSnappyHexMesh()
   this->SetNumberOfOutputPorts(1);
 }
 
+vtkSHYXSnappyHexMesh::~vtkSHYXSnappyHexMesh()
+{
+  this->SetCaseFoamPathNoModified(nullptr);
+}
+
+void vtkSHYXSnappyHexMesh::SetCaseFoamPathNoModified(const char* msg)
+{
+  if ((this->CaseFoamPath == nullptr && (msg == nullptr || msg[0] == '\0')) ||
+    (this->CaseFoamPath && msg && std::strcmp(this->CaseFoamPath, msg) == 0))
+  {
+    return;
+  }
+  delete[] this->CaseFoamPath;
+  this->CaseFoamPath = nullptr;
+  if (msg && msg[0] != '\0')
+  {
+    const size_t n = std::strlen(msg) + 1;
+    this->CaseFoamPath = new char[n];
+    std::memcpy(this->CaseFoamPath, msg, n);
+  }
+}
+
 void vtkSHYXSnappyHexMesh::PrintSelf(ostream& os, vtkIndent indent)
 {
   this->Superclass::PrintSelf(os, indent);
@@ -271,6 +294,76 @@ void vtkSHYXSnappyHexMesh::PrintSelf(ostream& os, vtkIndent indent)
   os << indent << "Snap: " << (this->Snap ? "ON" : "OFF") << "\n";
   os << indent << "AddLayers: " << (this->AddLayers ? "ON" : "OFF") << "\n";
   os << indent << "BackgroundCellSize: " << this->BackgroundCellSize << "\n";
+  os << indent << "NumberOfInsidePoints: " << this->GetNumberOfInsidePoints() << "\n";
+  os << indent << "CaseFoamPath: " << (this->CaseFoamPath ? this->CaseFoamPath : "(none)") << "\n";
+}
+
+int vtkSHYXSnappyHexMesh::GetNumberOfInsidePoints() const
+{
+  return static_cast<int>(this->InsidePoints.size() / 3);
+}
+
+void vtkSHYXSnappyHexMesh::SetNumberOfInsidePoints(int n)
+{
+  if (n < 0)
+  {
+    n = 0;
+  }
+  const size_t want = static_cast<size_t>(n) * 3;
+  if (this->InsidePoints.size() == want)
+  {
+    return;
+  }
+  this->InsidePoints.resize(want, 0.0);
+  this->Modified();
+}
+
+void vtkSHYXSnappyHexMesh::SetInsidePoint(int i, double x, double y, double z)
+{
+  if (i < 0)
+  {
+    return;
+  }
+  if (i >= this->GetNumberOfInsidePoints())
+  {
+    this->SetNumberOfInsidePoints(i + 1);
+  }
+  double* p = &this->InsidePoints[static_cast<size_t>(i) * 3];
+  if (p[0] == x && p[1] == y && p[2] == z)
+  {
+    return;
+  }
+  p[0] = x;
+  p[1] = y;
+  p[2] = z;
+  this->Modified();
+}
+
+void vtkSHYXSnappyHexMesh::SetInsidePoint(int i, const double xyz[3])
+{
+  this->SetInsidePoint(i, xyz[0], xyz[1], xyz[2]);
+}
+
+double* vtkSHYXSnappyHexMesh::GetInsidePoint(int i)
+{
+  if (i < 0 || i >= this->GetNumberOfInsidePoints())
+  {
+    return nullptr;
+  }
+  return &this->InsidePoints[static_cast<size_t>(i) * 3];
+}
+
+void vtkSHYXSnappyHexMesh::GetInsidePoint(int i, double xyz[3])
+{
+  const double* p = this->GetInsidePoint(i);
+  if (!p)
+  {
+    xyz[0] = xyz[1] = xyz[2] = 0.0;
+    return;
+  }
+  xyz[0] = p[0];
+  xyz[1] = p[1];
+  xyz[2] = p[2];
 }
 
 int vtkSHYXSnappyHexMesh::FillInputPortInformation(int port, vtkInformation* info)
@@ -296,6 +389,7 @@ int vtkSHYXSnappyHexMesh::FillOutputPortInformation(int port, vtkInformation* in
 int vtkSHYXSnappyHexMesh::RequestData(
   vtkInformation*, vtkInformationVector** inputVector, vtkInformationVector* outputVector)
 {
+  this->SetCaseFoamPathNoModified(nullptr);
   vtkPolyData* input = vtkPolyData::GetData(inputVector[0]);
   vtkUnstructuredGrid* output = vtkUnstructuredGrid::GetData(outputVector);
   if (!input || !output)
@@ -439,6 +533,15 @@ int vtkSHYXSnappyHexMesh::RequestData(
   p.min_thickness = this->MinThickness;
   p.feature_angle = this->FeatureAngle;
   p.implicit_feature_snap = this->ImplicitFeatureSnap ? 1 : 0;
+  p.n_locations = this->GetNumberOfInsidePoints();
+  p.locations = p.n_locations > 0 ? this->InsidePoints.data() : nullptr;
+  if (p.n_locations == 1)
+  {
+    p.location_specified = 1;
+    p.location_in_mesh[0] = this->InsidePoints[0];
+    p.location_in_mesh[1] = this->InsidePoints[1];
+    p.location_in_mesh[2] = this->InsidePoints[2];
+  }
 
   char err[2048];
   err[0] = '\0';
@@ -448,6 +551,7 @@ int vtkSHYXSnappyHexMesh::RequestData(
   const fs::path foamPath = fs::path(caseDir) / "case.foam";
   const fs::path lastFoam = LastLogDir() / "case.foam";
   const fs::path caseLog = fs::path(caseDir) / "snappyHexMesh.log";
+  this->SetCaseFoamPathNoModified(LastLogDir().string().c_str());
   if (rc != 0 && rc != 5)
   {
     const std::string tail = TailFile(caseLog, 1200);
@@ -470,7 +574,5 @@ int vtkSHYXSnappyHexMesh::RequestData(
                   << "; log: " << logPath.string() << ")");
     return 0;
   }
-  vtkWarningMacro(<< "OpenFOAM case kept. File -> Open: " << lastFoam.string()
-                  << " (this run: " << foamPath.string() << ")");
   return 1;
 }

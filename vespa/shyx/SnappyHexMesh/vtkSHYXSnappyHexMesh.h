@@ -12,6 +12,8 @@
 #include "vtkSHYXSnappyHexMeshModule.h"
 #include "vtkDataSetAlgorithm.h"
 
+#include <vector>
+
 class VTKSHYXSNAPPYHEXMESH_EXPORT vtkSHYXSnappyHexMesh : public vtkDataSetAlgorithm
 {
 public:
@@ -80,9 +82,23 @@ public:
   vtkSetMacro(ImplicitFeatureSnap, bool);
   vtkBooleanMacro(ImplicitFeatureSnap, bool);
 
+  /** Last Apply's case directory (%TEMP%/shyx-snappy-last). Read-only in Properties. */
+  vtkGetStringMacro(CaseFoamPath);
+
+  /** Keep-mesh points (OpenFOAM locationInMesh / locationsInMesh). Empty = AABB centre. */
+  void SetNumberOfInsidePoints(int n);
+  int GetNumberOfInsidePoints() const;
+  void SetInsidePoint(int i, double x, double y, double z);
+  void SetInsidePoint(int i, const double xyz[3]);
+  double* GetInsidePoint(int i);
+  void GetInsidePoint(int i, double xyz[3]);
+
 protected:
   vtkSHYXSnappyHexMesh();
-  ~vtkSHYXSnappyHexMesh() override = default;
+  ~vtkSHYXSnappyHexMesh() override;
+
+  /** Updates CaseFoamPath without calling Modified() (avoids update loops). */
+  void SetCaseFoamPathNoModified(const char* msg);
 
   int FillInputPortInformation(int port, vtkInformation* info) override;
   int FillOutputPortInformation(int port, vtkInformation* info) override;
@@ -107,6 +123,8 @@ protected:
   double MinThickness = 0.1;
   double FeatureAngle = 30.0;
   bool ImplicitFeatureSnap = true;
+  char* CaseFoamPath = nullptr;
+  std::vector<double> InsidePoints;
 
 private:
   vtkSHYXSnappyHexMesh(const vtkSHYXSnappyHexMesh&) = delete;
