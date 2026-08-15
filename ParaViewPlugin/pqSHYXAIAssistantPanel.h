@@ -10,6 +10,7 @@
 #include <QPointer>
 
 class QCheckBox;
+class QComboBox;
 class QEvent;
 class QHBoxLayout;
 class QLabel;
@@ -19,12 +20,13 @@ class QNetworkReply;
 class QPlainTextEdit;
 class QPushButton;
 class QSlider;
+class QToolButton;
 class QWidget;
 class pqSHYXAIChatView;
 
 /**
  * View-menu dock for SHYX AI Assistant: question / code / dialog editors,
- * Send to AI, and OpenAI-compatible endpoint fields. The Run script button
+ * Send, and OpenAI-compatible endpoint fields. The Run script button
  * (and agent run_code_script) execute the code box.
  */
 class pqSHYXAIAssistantPanel : public QDockWidget
@@ -42,10 +44,12 @@ protected:
 
 private Q_SLOTS:
   void onSendClicked();
-  void onClearDialogClicked();
+  void onResetAllClicked();
   void onReplyFinished(QNetworkReply* reply);
   void onStreamReadyRead();
   void onCaptureScreenshot();
+  void onRefreshModelsClicked();
+  void onAddModelClicked();
 
 private:
   void constructor();
@@ -67,13 +71,19 @@ private:
   bool attachRenderView() const;
   void postJson(const QByteArray& payload);
   void resetStreamState();
+  void resetAllSessionState();
   void ingestStreamBytes(const QByteArray& bytes);
   void handleStreamEvent(const QJsonObject& obj);
   QJsonObject assembledAssistantMessage() const;
   void completeStreamReply();
   void failRequest(const QString& err);
+  void dropActiveReply();
+  void finishStoppedUi();
   void stopChatRequest();
   void setSendBusy(bool busy);
+  QString currentModel() const;
+  void ensureModelItem(const QString& name, bool makeCurrent);
+  void applyModelsReply(QNetworkReply* reply);
 
   QPlainTextEdit* QuestionEdit = nullptr;
   QHBoxLayout* QuestionThumbsLayout = nullptr;
@@ -83,14 +93,16 @@ private:
   QSlider* HistorySlider = nullptr;
   QLabel* HistoryCountLabel = nullptr;
   QLineEdit* EndpointEdit = nullptr;
-  QLineEdit* ModelEdit = nullptr;
+  QComboBox* ModelCombo = nullptr;
   QLineEdit* ApiKeyEdit = nullptr;
   QCheckBox* RenderViewCheck = nullptr;
   QCheckBox* AgentModeCheck = nullptr;
   QPushButton* SendButton = nullptr;
+  QToolButton* RefreshModelsButton = nullptr;
   QLabel* StatusLabel = nullptr;
   QNetworkAccessManager* Network = nullptr;
   QPointer<QNetworkReply> ActiveReply;
+  QPointer<QNetworkReply> ModelsReply;
   QJsonArray AgentMessages;
   QList<QByteArray> AgentFollowupJpegs;
   int AgentRound = 0;

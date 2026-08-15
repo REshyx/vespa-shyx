@@ -15,9 +15,11 @@
 #include "vtkSMViewProxy.h"
 #include "vtkSmartPointer.h"
 
+#include <QAbstractSocket>
 #include <QBuffer>
 #include <QByteArray>
 #include <QCheckBox>
+#include <QComboBox>
 #include <QCoreApplication>
 #include <QDir>
 #include <QDockWidget>
@@ -26,9 +28,10 @@
 #include <QFont>
 #include <QFormLayout>
 #include <QFrame>
-#include <QGroupBox>
 #include <QHBoxLayout>
+#include <QIcon>
 #include <QImage>
+#include <QInputDialog>
 #include <QInputMethodEvent>
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -59,6 +62,7 @@
 #include <QStyle>
 #include <QTextCursor>
 #include <QToolButton>
+#include <QUrl>
 #include <QVBoxLayout>
 #include <QVariant>
 #include <QVector>
@@ -214,7 +218,7 @@ Rules:
 - If the user is only asking a question, reply in the dialog. Do not emit a fenced code block.
 - If the user asks you to write or edit a script and you do NOT have run_code_script, put the complete script in one ```python fenced block. The plugin copies that block into the code box. Keep a short explanation outside the fence.
 - When a current code box is provided, treat it as the file to edit. Return the full updated script, not a partial patch, unless the user asks for a snippet.
-- The Run script button (and run_code_script) execute the code box. Send to AI does not, unless you call run_code_script.
+- The Run script button (and run_code_script) execute the code box. Send does not, unless you call run_code_script.
 - Prefer existing pipeline objects (FindSource, GetActiveSource) over recreating readers.
 - Never create a second Clip/Slice/Threshold/Calculator/etc. on the same input. On retries, FindSource the existing filter (use get_pipeline_tree for names) and set its properties (ClipType.Origin, ClipType.Normal, ...). If you must replace it, Delete(FindSource('Clip1')) first. Pass registrationName= when creating so later turns can find it.
 - The assistant is a View-menu dock, not a pipeline filter. Do not create a SHYXAIAssistant source.
@@ -353,6 +357,94 @@ QUrl completionsUrl(QString endpoint)
     return QUrl(endpoint);
   }
   return QUrl(endpoint + QStringLiteral("/chat/completions"));
+}
+
+QUrl modelsUrl(QString endpoint)
+{
+  endpoint = endpoint.trimmed();
+  while (endpoint.endsWith(QLatin1Char('/')))
+  {
+    endpoint.chop(1);
+  }
+  const int chat = endpoint.indexOf(QLatin1String("/chat/completions"), 0, Qt::CaseInsensitive);
+  if (chat >= 0)
+  {
+    return QUrl(endpoint.left(chat) + QStringLiteral("/models"));
+  }
+  if (endpoint.endsWith(QLatin1String("/models"), Qt::CaseInsensitive))
+  {
+    return QUrl(endpoint);
+  }
+  return QUrl(endpoint + QStringLiteral("/models"));
+}
+
+QToolButton* makeIconToolButton(QWidget* parent, const QString& iconPath, const QString& tip)
+{
+  auto* btn = new QToolButton(parent);
+  btn->setIcon(QIcon(iconPath));
+  btn->setIconSize(QSize(16, 16));
+  btn->setAutoRaise(true);
+  btn->setToolTip(tip);
+  btn->setFocusPolicy(Qt::NoFocus);
+  btn->setToolButtonStyle(Qt::ToolButtonIconOnly);
+  const int side = qMax(22, btn->sizeHint().height());
+  btn->setFixedSize(side, side);
+  return btn;
+}
+
+QStringList parseModelIds(const QJsonDocument& doc)
+{
+  QStringList ids;
+  const auto takeId = [&](const QJsonValue& v) {
+    if (v.isString())
+    {
+      const QString id = v.toString().trimmed();
+      if (!id.isEmpty())
+      {
+        ids.append(id);
+      }
+      return;
+    }
+    if (!v.isObject())
+    {
+      return;
+    }
+    const QJsonObject obj = v.toObject();
+    QString id = obj.value(QLatin1String("id")).toString().trimmed();
+    if (id.isEmpty())
+    {
+      id = obj.value(QLatin1String("name")).toString().trimmed();
+    }
+    if (!id.isEmpty())
+    {
+      ids.append(id);
+    }
+  };
+
+  if (doc.isArray())
+  {
+    const QJsonArray arr = doc.array();
+    for (const QJsonValue& v : arr)
+    {
+      takeId(v);
+    }
+  }
+  else if (doc.isObject())
+  {
+    const QJsonObject obj = doc.object();
+    QJsonArray arr = obj.value(QLatin1String("data")).toArray();
+    if (arr.isEmpty())
+    {
+      arr = obj.value(QLatin1String("models")).toArray();
+    }
+    for (const QJsonValue& v : arr)
+    {
+      takeId(v);
+    }
+  }
+  ids.removeDuplicates();
+  ids.sort(Qt::CaseInsensitive);
+  return ids;
 }
 
 QImage imageFromDataUrl(const QString& url)
@@ -688,7 +780,7 @@ void pqSHYXAIAssistantPanel::constructor()
   if (hostPythonManager())
   {
     hint->setText(tr(
-      "Run script executes the code box in this ParaView's Python. Send to AI does not run it."));
+      "Run script executes the code box in this ParaView's Python. Send does not run it."));
   }
   else
   {
@@ -722,20 +814,36 @@ void pqSHYXAIAssistantPanel::constructor()
   layout->addWidget(questionBox);
 
   auto* sendRow = new QHBoxLayout();
-  auto* captureBtn = new QPushButton(tr("Capture screenshot"), root);
+  auto* captureBtn = new QPushButton(tr("Screenshot"), root);
   sendRow->addWidget(captureBtn);
-  this->SendButton = new QPushButton(tr("Send to AI"), root);
+  this->SendButton = new QPushButton(tr("Send"), root);
   this->SendButton->setDefault(false);
   sendRow->addWidget(this->SendButton);
-  auto* runBtn = new QPushButton(tr("Run script"), root);
-  sendRow->addWidget(runBtn);
-  sendRow->addStretch(1);
+  sendRow->addSpacing(12);
+  sendRow->addWidget(new QLabel(tr("Model"), root), 0, Qt::AlignVCenter);
+  this->ModelCombo = new QComboBox(root);
+  this->ModelCombo->setEditable(true);
+  this->ModelCombo->setInsertPolicy(QComboBox::NoInsert);
+  this->ModelCombo->setMinimumWidth(100);
+  this->ModelCombo->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+  if (this->ModelCombo->lineEdit())
+  {
+    this->ModelCombo->lineEdit()->setPlaceholderText(QStringLiteral("gpt-4o-mini"));
+  }
+  sendRow->addWidget(this->ModelCombo, 1);
+  this->RefreshModelsButton = makeIconToolButton(root,
+    QStringLiteral(":/pqWidgets/Icons/pqReloadFile.svg"),
+    tr("Fetch the model list from the API"));
+  sendRow->addWidget(this->RefreshModelsButton, 0, Qt::AlignVCenter);
+  auto* addModelBtn = makeIconToolButton(root, QStringLiteral(":/QtWidgets/Icons/pqPlus.svg"),
+    tr("Add a model name"));
+  sendRow->addWidget(addModelBtn, 0, Qt::AlignVCenter);
   layout->addLayout(sendRow);
 
   this->RenderViewCheck = new QCheckBox(tr("Access Auto Render Review"), root);
   this->RenderViewCheck->setToolTip(tr(
     "When on, the agent may capture and send RenderView JPEGs (costly). "
-    "When off, use Capture screenshot on the question box to attach images yourself."));
+    "When off, use Screenshot on the question box to attach images yourself."));
   this->AgentModeCheck = new QCheckBox(
     tr("Agent mode (look up context, run script, and fix errors)"), root);
   this->RenderViewCheck->setChecked(false);
@@ -743,7 +851,16 @@ void pqSHYXAIAssistantPanel::constructor()
   layout->addWidget(this->RenderViewCheck);
   layout->addWidget(this->AgentModeCheck);
 
-  layout->addWidget(new QLabel(tr("Code (ParaView Python)"), root));
+  auto* codeHeader = new QWidget(root);
+  auto* codeHeaderLay = new QHBoxLayout(codeHeader);
+  codeHeaderLay->setContentsMargins(0, 0, 0, 0);
+  codeHeaderLay->setSpacing(6);
+  codeHeaderLay->setAlignment(Qt::AlignVCenter);
+  codeHeaderLay->addWidget(new QLabel(tr("Code (ParaView Python)"), codeHeader), 0, Qt::AlignVCenter);
+  auto* runBtn = new QPushButton(tr("Run script"), codeHeader);
+  codeHeaderLay->addWidget(runBtn, 0, Qt::AlignVCenter);
+  codeHeaderLay->addStretch(1);
+  layout->addWidget(codeHeader);
   this->CodeEdit = makeEditor(root, true, 120);
   new pqSHYXPythonSyntaxHighlighter(this->CodeEdit);
   layout->addWidget(this->CodeEdit);
@@ -782,14 +899,16 @@ void pqSHYXAIAssistantPanel::constructor()
   dialogHeaderLay->addWidget(this->HistorySlider, 0, Qt::AlignVCenter);
   dialogHeaderLay->addWidget(this->HistoryCountLabel, 0, Qt::AlignVCenter);
   dialogHeaderLay->addStretch(1);
-  auto* dialogClearBtn = new QPushButton(tr("Clear"), dialogHeader);
-  dialogClearBtn->setToolTip(tr("Clear the conversation"));
+  auto* dialogResetBtn = new QPushButton(tr("Reset"), dialogHeader);
+  dialogResetBtn->setToolTip(tr(
+    "Stop any in-flight request and clear question, screenshots, dialog, agent state, "
+    "and the code box. API URL / model / key and History are kept."));
   auto* dialogPopBtn = new QPushButton(dialogHeader);
   dialogPopBtn->setIcon(this->style()->standardIcon(QStyle::SP_TitleBarMaxButton));
   dialogPopBtn->setToolTip(tr("Open Dialog in a separate window"));
   dialogPopBtn->setFlat(true);
   dialogPopBtn->setFixedSize(dialogPopBtn->sizeHint().height(), dialogPopBtn->sizeHint().height());
-  dialogHeaderLay->addWidget(dialogClearBtn, 0, Qt::AlignVCenter);
+  dialogHeaderLay->addWidget(dialogResetBtn, 0, Qt::AlignVCenter);
   dialogHeaderLay->addWidget(dialogPopBtn, 0, Qt::AlignVCenter);
   layout->addWidget(dialogHeader);
 
@@ -800,26 +919,56 @@ void pqSHYXAIAssistantPanel::constructor()
   dialogPopOut->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::MinimumExpanding);
   layout->addWidget(dialogPopOut, 1);
 
-  auto* apiBox = new QGroupBox(tr("OpenAI-compatible API"), root);
-  auto* apiForm = new QFormLayout(apiBox);
-  apiForm->setContentsMargins(4, 4, 4, 4);
-  this->EndpointEdit = new QLineEdit(apiBox);
+  auto* apiFooter = new QWidget(root);
+  apiFooter->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Maximum);
+  auto* apiFooterLay = new QVBoxLayout(apiFooter);
+  apiFooterLay->setContentsMargins(0, 0, 0, 0);
+  apiFooterLay->setSpacing(2);
+
+  auto* apiToggle = new QToolButton(apiFooter);
+  apiToggle->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
+  apiToggle->setArrowType(Qt::RightArrow);
+  apiToggle->setText(tr("API (URL / Key)"));
+  apiToggle->setAutoRaise(true);
+  apiToggle->setCursor(Qt::PointingHandCursor);
+  apiToggle->setFocusPolicy(Qt::NoFocus);
+  apiToggle->setSizePolicy(QSizePolicy::Maximum, QSizePolicy::Fixed);
+  apiToggle->setStyleSheet(QStringLiteral(
+    "QToolButton { border: none; background: transparent; padding: 2px; }"
+    "QToolButton:hover { background: transparent; }"
+    "QToolButton:pressed { background: transparent; }"));
+  apiToggle->setToolTip(tr("Base URL and API key (saved locally, not in state files)"));
+
+  auto* apiBody = new QWidget(apiFooter);
+  apiBody->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Maximum);
+  auto* apiForm = new QFormLayout(apiBody);
+  apiForm->setContentsMargins(12, 2, 0, 2);
+  apiForm->setSpacing(4);
+  this->EndpointEdit = new QLineEdit(apiBody);
   this->EndpointEdit->setPlaceholderText(QStringLiteral("https://api.openai.com/v1"));
   this->EndpointEdit->setText(QStringLiteral("https://api.openai.com/v1"));
-  this->ModelEdit = new QLineEdit(apiBox);
-  this->ModelEdit->setPlaceholderText(QStringLiteral("gpt-4o-mini"));
-  this->ModelEdit->setText(QStringLiteral("gpt-4o-mini"));
-  this->ApiKeyEdit = new QLineEdit(apiBox);
+  this->ApiKeyEdit = new QLineEdit(apiBody);
   this->ApiKeyEdit->setEchoMode(QLineEdit::Password);
   this->ApiKeyEdit->setPlaceholderText(tr("API key (saved locally, not in state files)"));
   apiForm->addRow(tr("Base URL"), this->EndpointEdit);
-  apiForm->addRow(tr("Model"), this->ModelEdit);
   apiForm->addRow(tr("API key"), this->ApiKeyEdit);
-  layout->addWidget(apiBox);
+  apiBody->hide();
+  apiBody->setMaximumHeight(0);
+  QObject::connect(apiToggle, &QToolButton::clicked, apiFooter, [apiToggle, apiBody]() {
+    const bool on = !apiBody->isVisibleTo(apiBody->parentWidget());
+    apiBody->setMaximumHeight(on ? QWIDGETSIZE_MAX : 0);
+    apiBody->setVisible(on);
+    apiToggle->setArrowType(on ? Qt::DownArrow : Qt::RightArrow);
+  });
+  apiFooterLay->addWidget(apiToggle, 0, Qt::AlignLeft);
+  apiFooterLay->addWidget(apiBody);
 
-  this->StatusLabel = new QLabel(root);
+  this->StatusLabel = new QLabel(apiFooter);
   this->StatusLabel->setWordWrap(true);
-  layout->addWidget(this->StatusLabel);
+  this->StatusLabel->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Maximum);
+  this->StatusLabel->hide();
+  apiFooterLay->addWidget(this->StatusLabel);
+  layout->addWidget(apiFooter, 0);
 
   this->Network = new QNetworkAccessManager(this);
   ensureHttpsTls();
@@ -828,7 +977,6 @@ void pqSHYXAIAssistantPanel::constructor()
     {
       this->HistoryCountLabel->setText(QString::number(v));
     }
-    this->saveClientSettings();
   });
   this->loadClientSettings();
   if (this->CodeEdit->toPlainText().trimmed().isEmpty())
@@ -839,20 +987,31 @@ void pqSHYXAIAssistantPanel::constructor()
   connect(this->SendButton, &QPushButton::clicked, this, &pqSHYXAIAssistantPanel::onSendClicked);
   connect(captureBtn, &QPushButton::clicked, this, &pqSHYXAIAssistantPanel::onCaptureScreenshot);
   connect(runBtn, &QPushButton::clicked, this, &pqSHYXAIAssistantPanel::runCodeScript);
-  connect(dialogClearBtn, &QPushButton::clicked, this, &pqSHYXAIAssistantPanel::onClearDialogClicked);
+  connect(dialogResetBtn, &QPushButton::clicked, this, &pqSHYXAIAssistantPanel::onResetAllClicked);
+  connect(this->RefreshModelsButton, &QToolButton::clicked, this,
+    &pqSHYXAIAssistantPanel::onRefreshModelsClicked);
+  connect(addModelBtn, &QToolButton::clicked, this, &pqSHYXAIAssistantPanel::onAddModelClicked);
   connect(this->Network, &QNetworkAccessManager::finished, this, &pqSHYXAIAssistantPanel::onReplyFinished);
   connect(this->ApiKeyEdit, &QLineEdit::editingFinished, this, [this]() { this->saveClientSettings(); });
   connect(this->EndpointEdit, &QLineEdit::editingFinished, this, [this]() { this->saveClientSettings(); });
-  connect(this->ModelEdit, &QLineEdit::editingFinished, this, [this]() { this->saveClientSettings(); });
+  if (this->ModelCombo->lineEdit())
+  {
+    connect(this->ModelCombo->lineEdit(), &QLineEdit::editingFinished, this,
+      [this]() { this->saveClientSettings(); });
+  }
+  connect(this->ModelCombo, &QComboBox::textActivated, this,
+    [this](const QString&) { this->saveClientSettings(); });
 }
 
 pqSHYXAIAssistantPanel::~pqSHYXAIAssistantPanel()
 {
   this->saveClientSettings();
-  if (this->ActiveReply)
+  if (this->ModelsReply)
   {
-    this->ActiveReply->abort();
+    this->ModelsReply->abort();
+    this->ModelsReply.clear();
   }
+  this->dropActiveReply();
 }
 
 bool pqSHYXAIAssistantPanel::eventFilter(QObject* watched, QEvent* event)
@@ -891,9 +1050,55 @@ bool pqSHYXAIAssistantPanel::eventFilter(QObject* watched, QEvent* event)
   return Superclass::eventFilter(watched, event);
 }
 
-void pqSHYXAIAssistantPanel::onClearDialogClicked()
+void pqSHYXAIAssistantPanel::onResetAllClicked()
 {
-  this->ChatView->clear();
+  this->resetAllSessionState();
+}
+
+void pqSHYXAIAssistantPanel::resetAllSessionState()
+{
+  this->UserStopped = true;
+  QObject::disconnect(this->Network, &QNetworkAccessManager::finished, this,
+    &pqSHYXAIAssistantPanel::onReplyFinished);
+  if (this->ActiveReply)
+  {
+    this->ActiveReply->abort();
+    this->ActiveReply->deleteLater();
+    this->ActiveReply.clear();
+  }
+  QObject::connect(this->Network, &QNetworkAccessManager::finished, this,
+    &pqSHYXAIAssistantPanel::onReplyFinished);
+
+  this->resetStreamState();
+  this->AgentMessages = QJsonArray();
+  this->AgentFollowupJpegs.clear();
+  this->AgentRound = 0;
+  this->UserStopped = false;
+  this->ImePreedit.clear();
+  this->setSendBusy(false);
+
+  if (this->QuestionEdit)
+  {
+    this->QuestionEdit->clear();
+  }
+  this->clearQuestionImages();
+  if (this->CodeEdit)
+  {
+    this->CodeEdit->setPlainText(QString::fromUtf8(kDefaultCode));
+  }
+  if (this->ChatView)
+  {
+    this->ChatView->clear();
+  }
+  if (this->RenderViewCheck)
+  {
+    this->RenderViewCheck->setChecked(false);
+  }
+  if (this->AgentModeCheck)
+  {
+    this->AgentModeCheck->setChecked(true);
+  }
+  this->setStatus(tr("Reset. Question, screenshots, dialog, and code were cleared."));
 }
 
 void pqSHYXAIAssistantPanel::onSendClicked()
@@ -907,18 +1112,29 @@ void pqSHYXAIAssistantPanel::onSendClicked()
   this->sendChatRequest();
 }
 
-void pqSHYXAIAssistantPanel::stopChatRequest()
+void pqSHYXAIAssistantPanel::dropActiveReply()
 {
-  this->UserStopped = true;
-  if (this->ActiveReply)
+  QNetworkReply* reply = this->ActiveReply;
+  if (!reply)
   {
-    this->ActiveReply->abort();
     return;
   }
+  this->ActiveReply.clear();
+  QObject::disconnect(reply, &QNetworkReply::readyRead, this, &pqSHYXAIAssistantPanel::onStreamReadyRead);
+  const auto socks = reply->findChildren<QAbstractSocket*>();
+  for (QAbstractSocket* sock : socks)
+  {
+    sock->abort();
+  }
+  reply->abort();
+}
+
+void pqSHYXAIAssistantPanel::finishStoppedUi()
+{
   this->AgentMessages = QJsonArray();
   this->AgentRound = 0;
   this->AgentFollowupJpegs.clear();
-  if (this->ChatView->isStreaming())
+  if (this->ChatView && this->ChatView->isStreaming())
   {
     const QString soFar = this->ChatView->streamingText().trimmed();
     if ((soFar.isEmpty() || soFar == QLatin1String("…")) &&
@@ -932,6 +1148,13 @@ void pqSHYXAIAssistantPanel::stopChatRequest()
   this->setSendBusy(false);
 }
 
+void pqSHYXAIAssistantPanel::stopChatRequest()
+{
+  this->UserStopped = true;
+  this->dropActiveReply();
+  this->finishStoppedUi();
+}
+
 void pqSHYXAIAssistantPanel::setSendBusy(bool busy)
 {
   this->SendBusy = busy;
@@ -940,12 +1163,17 @@ void pqSHYXAIAssistantPanel::setSendBusy(bool busy)
     return;
   }
   this->SendButton->setEnabled(true);
-  this->SendButton->setText(busy ? tr("Stop") : tr("Send to AI"));
+  this->SendButton->setText(busy ? tr("Stop") : tr("Send"));
 }
 
 void pqSHYXAIAssistantPanel::setStatus(const QString& text)
 {
+  if (!this->StatusLabel)
+  {
+    return;
+  }
   this->StatusLabel->setText(text);
+  this->StatusLabel->setVisible(!text.trimmed().isEmpty());
 }
 
 void pqSHYXAIAssistantPanel::loadClientSettings()
@@ -961,19 +1189,29 @@ void pqSHYXAIAssistantPanel::loadClientSettings()
       this->EndpointEdit->setText(endpoint);
     }
   }
-  if (settings.contains(QStringLiteral("modelName")))
+  if (this->ModelCombo)
   {
-    const QString model = settings.value(QStringLiteral("modelName")).toString().trimmed();
+    this->ModelCombo->clear();
+    const QStringList saved = settings.value(QStringLiteral("modelList")).toStringList();
+    for (const QString& item : saved)
+    {
+      this->ensureModelItem(item, false);
+    }
+    QString model = settings.value(QStringLiteral("modelName")).toString().trimmed();
+    if (model.isEmpty() && this->ModelCombo->count() == 0)
+    {
+      model = QStringLiteral("gpt-4o-mini");
+    }
     if (!model.isEmpty())
     {
-      this->ModelEdit->setText(model);
+      this->ensureModelItem(model, true);
+    }
+    else if (this->ModelCombo->count() > 0)
+    {
+      this->ModelCombo->setCurrentIndex(0);
     }
   }
-  if (this->HistorySlider)
-  {
-    this->HistorySlider->setValue(
-      qBound(0, settings.value(QStringLiteral("historyCount"), 0).toInt(), kHistoryMaxMessages));
-  }
+  settings.remove(QStringLiteral("historyCount"));
 }
 
 void pqSHYXAIAssistantPanel::saveClientSettings() const
@@ -982,11 +1220,157 @@ void pqSHYXAIAssistantPanel::saveClientSettings() const
   settings.beginGroup(QLatin1String(kSettingsGroup));
   settings.setValue(QStringLiteral("apiKey"), this->ApiKeyEdit->text());
   settings.setValue(QStringLiteral("endpointUrl"), this->EndpointEdit->text().trimmed());
-  settings.setValue(QStringLiteral("modelName"), this->ModelEdit->text().trimmed());
-  if (this->HistorySlider)
+  settings.setValue(QStringLiteral("modelName"), this->currentModel());
+  if (this->ModelCombo)
   {
-    settings.setValue(QStringLiteral("historyCount"), this->HistorySlider->value());
+    QStringList models;
+    for (int i = 0; i < this->ModelCombo->count(); ++i)
+    {
+      const QString item = this->ModelCombo->itemText(i).trimmed();
+      if (!item.isEmpty() && !models.contains(item))
+      {
+        models.append(item);
+      }
+    }
+    const QString current = this->currentModel();
+    if (!current.isEmpty() && !models.contains(current))
+    {
+      models.append(current);
+    }
+    settings.setValue(QStringLiteral("modelList"), models);
   }
+  settings.remove(QStringLiteral("historyCount"));
+}
+
+QString pqSHYXAIAssistantPanel::currentModel() const
+{
+  return this->ModelCombo ? this->ModelCombo->currentText().trimmed() : QString();
+}
+
+void pqSHYXAIAssistantPanel::ensureModelItem(const QString& name, bool makeCurrent)
+{
+  if (!this->ModelCombo)
+  {
+    return;
+  }
+  const QString trimmed = name.trimmed();
+  if (trimmed.isEmpty())
+  {
+    return;
+  }
+  int idx = this->ModelCombo->findText(trimmed, Qt::MatchExactly);
+  if (idx < 0)
+  {
+    this->ModelCombo->addItem(trimmed);
+    idx = this->ModelCombo->findText(trimmed, Qt::MatchExactly);
+  }
+  if (makeCurrent && idx >= 0)
+  {
+    this->ModelCombo->setCurrentIndex(idx);
+  }
+}
+
+void pqSHYXAIAssistantPanel::onAddModelClicked()
+{
+  bool ok = false;
+  const QString name =
+    QInputDialog::getText(this, tr("Add model"), tr("Model name:"), QLineEdit::Normal,
+      this->currentModel(), &ok)
+      .trimmed();
+  if (!ok || name.isEmpty())
+  {
+    return;
+  }
+  this->ensureModelItem(name, true);
+  this->saveClientSettings();
+  this->setStatus(tr("Added model %1.").arg(name));
+}
+
+void pqSHYXAIAssistantPanel::onRefreshModelsClicked()
+{
+  const QString endpoint = this->EndpointEdit ? this->EndpointEdit->text().trimmed() : QString();
+  if (endpoint.isEmpty())
+  {
+    this->setStatus(tr("Set Base URL first."));
+    return;
+  }
+  if (this->ModelsReply)
+  {
+    this->ModelsReply->abort();
+    this->ModelsReply.clear();
+  }
+
+  QNetworkRequest req(::modelsUrl(endpoint));
+  if (req.url().scheme().compare(QLatin1String("https"), Qt::CaseInsensitive) == 0)
+  {
+    ensureHttpsTls();
+    if (!QSslSocket::supportsSsl())
+    {
+      this->setStatus(tr("HTTPS is unavailable in this ParaView/Qt (%1).")
+                        .arg(tlsDiagnostic()));
+      return;
+    }
+  }
+  req.setRawHeader("Accept", "application/json");
+  const QString key = this->ApiKeyEdit ? this->ApiKeyEdit->text().trimmed() : QString();
+  if (!key.isEmpty())
+  {
+    req.setRawHeader("Authorization", QByteArray("Bearer ") + key.toUtf8());
+  }
+  req.setTransferTimeout(15000);
+  QNetworkReply* reply = this->Network->get(req);
+  reply->setProperty("shyxModels", true);
+  this->ModelsReply = reply;
+  if (this->RefreshModelsButton)
+  {
+    this->RefreshModelsButton->setEnabled(false);
+  }
+  this->setStatus(tr("Fetching model list..."));
+}
+
+void pqSHYXAIAssistantPanel::applyModelsReply(QNetworkReply* reply)
+{
+  if (!reply)
+  {
+    return;
+  }
+  const QByteArray body = reply->readAll();
+  if (reply->error() != QNetworkReply::NoError)
+  {
+    this->setStatus(tr("Could not fetch models: %1").arg(replyErrorDetail(reply, body)));
+    return;
+  }
+  const QJsonDocument doc = QJsonDocument::fromJson(body);
+  const QStringList ids = parseModelIds(doc);
+  if (ids.isEmpty())
+  {
+    this->setStatus(tr("API returned no models. Check Base URL and key, or add a name with +."));
+    return;
+  }
+  const QString keep = this->currentModel();
+  QStringList extra;
+  if (this->ModelCombo)
+  {
+    for (int i = 0; i < this->ModelCombo->count(); ++i)
+    {
+      extra.append(this->ModelCombo->itemText(i).trimmed());
+    }
+    this->ModelCombo->clear();
+  }
+  for (const QString& id : ids)
+  {
+    this->ensureModelItem(id, false);
+  }
+  for (const QString& id : extra)
+  {
+    this->ensureModelItem(id, false);
+  }
+  if (!keep.isEmpty())
+  {
+    this->ensureModelItem(keep, true);
+  }
+  this->saveClientSettings();
+  this->setStatus(tr("Loaded %1 model(s).").arg(ids.size()));
 }
 
 void pqSHYXAIAssistantPanel::runCodeScript()
@@ -1194,7 +1578,7 @@ QByteArray pqSHYXAIAssistantPanel::buildRequestJson(
   messages.append(userMsg);
 
   QJsonObject root;
-  root.insert(QStringLiteral("model"), this->ModelEdit->text().trimmed());
+  root.insert(QStringLiteral("model"), this->currentModel());
   root.insert(QStringLiteral("messages"), messages);
   root.insert(QStringLiteral("temperature"), 0.2);
   root.insert(QStringLiteral("stream"), true);
@@ -1209,7 +1593,7 @@ QByteArray pqSHYXAIAssistantPanel::buildRequestJson(
 QByteArray pqSHYXAIAssistantPanel::buildAgentRequestJson() const
 {
   QJsonObject root;
-  root.insert(QStringLiteral("model"), this->ModelEdit->text().trimmed());
+  root.insert(QStringLiteral("model"), this->currentModel());
   root.insert(QStringLiteral("messages"), this->AgentMessages);
   root.insert(QStringLiteral("temperature"), 0.2);
   root.insert(QStringLiteral("stream"), true);
@@ -1235,6 +1619,7 @@ void pqSHYXAIAssistantPanel::postJson(const QByteArray& payload)
   }
   req.setHeader(QNetworkRequest::ContentTypeHeader, QStringLiteral("application/json"));
   req.setRawHeader("Accept", "text/event-stream, application/json");
+  req.setRawHeader("Connection", "close");
   const QString key = this->ApiKeyEdit->text().trimmed();
   if (!key.isEmpty())
   {
@@ -1260,7 +1645,7 @@ void pqSHYXAIAssistantPanel::sendChatRequest()
     question = tr("(see screenshot)");
   }
   const QString endpoint = this->EndpointEdit->text().trimmed();
-  const QString model = this->ModelEdit->text().trimmed();
+  const QString model = this->currentModel();
   if (endpoint.isEmpty() || model.isEmpty())
   {
     this->setStatus(tr("Set Base URL and Model first."));
@@ -1328,6 +1713,10 @@ void pqSHYXAIAssistantPanel::resetStreamState()
 
 void pqSHYXAIAssistantPanel::onStreamReadyRead()
 {
+  if (this->UserStopped)
+  {
+    return;
+  }
   auto* reply = qobject_cast<QNetworkReply*>(this->sender());
   if (!reply || reply != this->ActiveReply)
   {
@@ -1550,6 +1939,11 @@ void pqSHYXAIAssistantPanel::failRequest(const QString& err)
 
 void pqSHYXAIAssistantPanel::completeStreamReply()
 {
+  if (this->UserStopped)
+  {
+    this->finishStoppedUi();
+    return;
+  }
   if (!this->StreamError.isEmpty())
   {
     this->failRequest(this->StreamError);
@@ -1582,12 +1976,37 @@ void pqSHYXAIAssistantPanel::onReplyFinished(QNetworkReply* reply)
     return;
   }
   reply->deleteLater();
+  if (reply->property("shyxModels").toBool())
+  {
+    if (this->ModelsReply == reply)
+    {
+      this->ModelsReply.clear();
+    }
+    if (this->RefreshModelsButton)
+    {
+      this->RefreshModelsButton->setEnabled(true);
+    }
+    if (reply->error() != QNetworkReply::OperationCanceledError)
+    {
+      this->applyModelsReply(reply);
+    }
+    return;
+  }
+  const bool stopped = this->UserStopped ||
+    reply->error() == QNetworkReply::OperationCanceledError;
   if (this->ActiveReply == reply)
   {
     this->ActiveReply.clear();
   }
-  else if (this->ActiveReply)
+  else if (this->ActiveReply && !stopped)
   {
+    return;
+  }
+
+  if (stopped)
+  {
+    this->UserStopped = false;
+    this->finishStoppedUi();
     return;
   }
 
@@ -1617,28 +2036,6 @@ void pqSHYXAIAssistantPanel::onReplyFinished(QNetworkReply* reply)
 
   if (reply->error() != QNetworkReply::NoError)
   {
-    const bool stopped = this->UserStopped ||
-      reply->error() == QNetworkReply::OperationCanceledError;
-    this->UserStopped = false;
-    if (stopped)
-    {
-      this->AgentMessages = QJsonArray();
-      this->AgentRound = 0;
-      this->AgentFollowupJpegs.clear();
-      if (this->ChatView->isStreaming())
-      {
-        const QString soFar = this->ChatView->streamingText().trimmed();
-        const bool empty = soFar.isEmpty() || soFar == QLatin1String("…");
-        if (empty && this->ChatView->streamingThinking().trimmed().isEmpty())
-        {
-          this->ChatView->appendAssistantDelta(tr("Stopped."));
-        }
-        this->ChatView->finishAssistantStream();
-      }
-      this->setStatus(tr("Stopped."));
-      this->setSendBusy(false);
-      return;
-    }
     const int http = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
     const bool httpFailed = http >= 400;
     const bool gotUsefulStream = this->StreamIsSse && this->StreamError.isEmpty() && !httpFailed &&
@@ -1875,6 +2272,11 @@ QString pqSHYXAIAssistantPanel::executeCodeBoxForAgent(bool captureScreenshot)
 
 bool pqSHYXAIAssistantPanel::continueAgentIfNeeded(const QJsonObject& message)
 {
+  if (this->UserStopped)
+  {
+    this->finishStoppedUi();
+    return true;
+  }
   const QJsonArray calls = message.value(QLatin1String("tool_calls")).toArray();
   if (calls.isEmpty())
   {
@@ -1924,6 +2326,7 @@ bool pqSHYXAIAssistantPanel::continueAgentIfNeeded(const QJsonObject& message)
 
   if (this->UserStopped)
   {
+    this->finishStoppedUi();
     return true;
   }
 

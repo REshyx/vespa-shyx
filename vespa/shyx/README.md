@@ -57,7 +57,7 @@ Vascular 工具条顺序：骨架 → 切端 → 平面裁 → 端点重网格 �
 
 ## 工具
 
-* [**AI Assistant**](./AIAssistant/README.md) — **View → SHYX AI Assistant** 可勾选停靠窗口；Send to AI / Run script 跑 ParaView Python（需 ParaView 开启 Python）
+* [**AI Assistant**](./AIAssistant/README.md) — **View → SHYX AI Assistant** 可勾选停靠窗口；Send / Run script 跑 ParaView Python（需 ParaView 开启 Python）
 
 ## 表示
 

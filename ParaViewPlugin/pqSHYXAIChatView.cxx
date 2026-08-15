@@ -583,10 +583,6 @@ void pqSHYXAIChatView::clear()
   this->StreamThinkingToggle.clear();
   this->StreamBubbleFrame.clear();
   this->StreamBubbleLayout.clear();
-  if (this->Messages.isEmpty())
-  {
-    return;
-  }
   this->clearBubbles();
   this->Messages.clear();
   this->updateEmptyState();
