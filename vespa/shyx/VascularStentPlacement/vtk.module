@@ -3,7 +3,7 @@ NAME
 DESCRIPTION
   "Radial mesh displacement along a centerline segment for stent placement visualization."
 GROUPS
-  Meshing
+  Vascular
 DEPENDS
   VTK::FiltersCore
   VTK::CommonDataModel

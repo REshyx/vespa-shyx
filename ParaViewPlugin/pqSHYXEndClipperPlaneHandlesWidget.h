@@ -1,5 +1,5 @@
-#ifndef pqVESPAEndClipperPlaneHandlesWidget_h
-#define pqVESPAEndClipperPlaneHandlesWidget_h
+#ifndef pqSHYXEndClipperPlaneHandlesWidget_h
+#define pqSHYXEndClipperPlaneHandlesWidget_h
 
 #include "pqPropertyGroupWidget.h"
 
@@ -27,17 +27,17 @@ class vtkSMNewWidgetRepresentationProxy;
  * InteractiveCutPacked always drives clipping on the server when it parses.
  *
  * Visibility matches the port-1 representation eye icon in the active view (same idea as
- * pqVESPAOBBInteractiveBoxWidget).
+ * pqSHYXOBBInteractiveBoxWidget).
  */
-class pqVESPAEndClipperPlaneHandlesWidget : public pqPropertyGroupWidget
+class pqSHYXEndClipperPlaneHandlesWidget : public pqPropertyGroupWidget
 {
     Q_OBJECT
     typedef pqPropertyGroupWidget Superclass;
 
 public:
-    pqVESPAEndClipperPlaneHandlesWidget(
+    pqSHYXEndClipperPlaneHandlesWidget(
         vtkSMProxy* proxy, vtkSMPropertyGroup* smgroup, QWidget* parent = nullptr);
-    ~pqVESPAEndClipperPlaneHandlesWidget() override;
+    ~pqSHYXEndClipperPlaneHandlesWidget() override;
 
     void select() override;
     void deselect() override;

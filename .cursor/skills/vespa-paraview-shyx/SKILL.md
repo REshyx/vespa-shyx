@@ -31,18 +31,18 @@ description: >-
 
 | 目的 | 看哪里 |
 |------|--------|
-| 全仓库有哪些 VTK 模块 | `vtk_module_find_modules` 扫整个 `vespa/`；作者目录见 `vespa/README.md` |
+| 全仓库有哪些 VTK 模块 | `vtk_module_find_modules` 扫整个 `vespa/`；作者目录见 `vespa/README.md`；对照表 `vespa/INVENTORY.md` |
 | 新模块是否进构建、是否被条件排除 | 根 `CMakeLists.txt` 里对 `vespa_module_files` 的 `list(FILTER ... EXCLUDE ...)`：VMTK、CGAL 版本、非 ParaView 下排除 `Representation` 等 |
 | SHYX 实现根 | `vespa/shyx/*/` |
 | 上游 VESPA（CGAL） | `vespa/vespa/*/` |
 | 单模块 CMake 与类列表 | `vespa/shyx/<Name>/CMakeLists.txt`（`set(classes ...)` + `vtk_module_add_module`） |
-| 模块对外 VTK 依赖 | 同目录 `vtk.module` 的 `NAME` / `DEPENDS` / `PRIVATE_DEPENDS` / `GROUPS` |
+| 模块对外 VTK 依赖 | 同目录 `vtk.module` 的 `NAME` / `DEPENDS` / `PRIVATE_DEPENDS` / `GROUPS`（`Core` `Meshing` `Vascular` `Flow` `PointCloud`；表示层 `ParaView`） |
 | ParaView UI/proxy 定义 | `ParaViewPlugin/SHYX<Name>.xml`（`SourceProxy` 的 `class="vtkSHYX..."` 与属性） |
 | 哪些 XML 已挂进插件 | `ParaViewPlugin/CMakeLists.txt` → `paraview_add_plugin` → `SERVER_MANAGER_XML` 列表 |
 | 菜单/图标 | XML 里 `<Hints><ShowInMenu category="SHYX" .../></Hints>`；资源常挂在 `ParaViewPlugin/VESPAIcons.qrc` |
 | 某输出端口默认表示法（如 Point Gaussian） | `<Hints>` 里 `<RepresentationType view="RenderView" type="..." port="N"/>`；**§8.6.7** |
-| 需要 Qt 的客户端逻辑 | 少数在 `vespa/shyx/...` 的 `pq*` 源文件，在 `ParaViewPlugin/CMakeLists.txt` 里以 `paraview_plugin_add_auto_start` 或 `UI_INTERFACES` / `SOURCES` 显式列出；并 `target_link_libraries(VESPAPlugin ... ParaView::...)` |
-| 可选的聚合 XML | 例如 `ParaViewPlugin/VESPAFilters.xml`：是否要把新算子也列进去取决于项目惯例，以现有同类型算子为准 |
+| 需要 Qt 的客户端逻辑 | `ParaViewPlugin/` 下的 `pq*`（含 Pulse Glyph / Animated Streamline 动画管理器）；用 `paraview_plugin_add_auto_start` 或 `UI_INTERFACES` / `SOURCES` 列出 |
+| 上游 VESPA 的聚合 XML | `ParaViewPlugin/VESPAFilters.xml` 只注册 Kitware 原版滤镜；**不要**把 SHYX 代理再塞回去。SHYX 一律 `SHYX<Name>.xml` |
 
 **搜索技巧**：在仓库内 `rg "vtkSHYX"`, `rg "SHYX" ParaViewPlugin`, `rg "vtk_module_add_module" vespa/shyx` 可快速定位命名与已接入项。
 
@@ -66,7 +66,7 @@ description: >-
    - 类名 `vtkSHYX*`；基类与项目内同类算子一致（`vtkImageAlgorithm` / `vtkPolyDataAlgorithm` / `vtkCGALPolyDataAlgorithm` 等）。
    - `Set*` / `Get*` 与 XML 里 `command="Set..."` 一致；多输出端口在 XML 中声明 `<OutputPort ... index="N"/>`。
 5. **Server-manager XML** `ParaViewPlugin/SHYX<YourName>.xml`：`<SourceProxy class="vtkSHYX<YourName>" label="...">`，`Input` / 属性与 Hints 与现有一致风格。布局上按功能切 `<PropertyGroup>` 分节、把整组次要项压到 `panel_visibility="advanced"`、条件性子项用 `GenericDecorator`（`enabled_state` 或 `visibility`，按 §8.6.3 的取舍）。多算法 single-proxy 走 §8.6.5 模板。
-6. **注册 XML**：在 `ParaViewPlugin/CMakeLists.txt` 的 `SERVER_MANAGER_XML` 中**追加**一行 `"SHYX<YourName>.xml"`（保持字母顺序可维护性更好，与现有块一致即可）。
+6. **注册 XML**：在 `ParaViewPlugin/CMakeLists.txt` 追加 `"SHYX<YourName>.xml"`。纯 VTK / TetGen 等放无条件 `SERVER_MANAGER_XML` 列表；依赖 CGAL 的放 `SHYX_CGAL_SERVER_MANAGER_XML`（随 `VESPA_BUILT_WITH_CGAL`）。**不要**写入 `VESPAFilters.xml`。
 7. **若需图标**：`VESPAIcons.qrc` 增加资源并在 XML `ShowInMenu` 里引用 `:/...` 路径（对照已有条目）。
 8. **若根 CMake 有条件排除**：如果新目录名命中 `list(FILTER ... EXCLUDE` 的规则，或依赖可选组件（VMTK/CGAL 6），在根 `CMakeLists.txt` 的注释与逻辑中保持一致，并在 README 里说明开启方式。
 
@@ -266,7 +266,7 @@ description: >-
 </Hints>
 ```
 
-仓库内参考：`ParaViewPlugin/SHYXVmtkOpeningCenterlines.xml`（Opening seed points → `Point Gaussian`）；`ParaViewPlugin/VESPAFilters.xml`（某端口 → `Point Label`）。
+仓库内参考：`ParaViewPlugin/SHYXVmtkOpeningCenterlines.xml`（Opening seed points → `Point Gaussian`）；`ParaViewPlugin/SHYXVesselEndClipper.xml`（Clip Planes 端口 → `Point Label`）。
 
 ### 8.7 `BoundsDomain` 与「自动刷新」（示例：`MinEdgeLength` / `MaxEdgeLength`）
 

@@ -1,5 +1,5 @@
 set(classes
-  vtkCGALDensityBasedSampler)
+  vtkSHYXDensityBasedSampler)
 vtk_module_add_module(vtkSHYXDensityBasedSampler
   FORCE_STATIC
   CLASSES ${classes})

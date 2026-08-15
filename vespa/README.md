@@ -15,4 +15,6 @@ To add a new line of work, create `vespa/<your-id>/YourFilter/` with `vtk.module
 Third-party sources that are not VTK modules (TetGen, …) stay at the **repository root**, not here.
 The ParaView UI (`ParaViewPlugin/`) is a thin aggregator of whichever modules were built.
 
+**Inventory** (module ↔ class ↔ XML ↔ menu ↔ icon): [`INVENTORY.md`](./INVENTORY.md).
+
 CGAL is **one optional backend**. Set `VESPA_USE_CGAL=ON` (default) to build modules whose `vtk.module` lists `vtkCGALAlgorithm` or `CGAL::CGAL`; `find_package(CGAL)` runs only in that case. Pure VTK / TetGen / VMTK modules do not inherit `vtkCGALPolyDataAlgorithm`.

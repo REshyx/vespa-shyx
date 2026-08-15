@@ -3,7 +3,7 @@ NAME
 DESCRIPTION
   "Write vtkPartitionedDataSetCollection to Exodus on WSL, run external script, read result.exo."
 GROUPS
-  Meshing
+  Vascular
 DEPENDS
   VTK::CommonCore
   VTK::CommonDataModel

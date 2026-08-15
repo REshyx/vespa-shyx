@@ -52,7 +52,7 @@
       </IntVectorProperty>
 
       <Hints>
-        <ShowInMenu category="SHYX" icon=":/VESPA/VESPA_Hole_Filling.png"/>
+        <ShowInMenu category="SHYX" icon=":/VESPA/SHYX_Hole_Fill.png"/>
       </Hints>
     </SourceProxy>
   </ProxyGroup>

@@ -1,4 +1,4 @@
-#include "pqVESPAOBBInteractiveBoxWidget.h"
+#include "pqSHYXOBBInteractiveBoxWidget.h"
 
 #include "pqApplicationCore.h"
 #include "pqDataRepresentation.h"
@@ -194,7 +194,7 @@ void SetWidgetPlaceFactorOne(vtkSMProxy* wdg)
 } // namespace
 
 //-----------------------------------------------------------------------------
-pqVESPAOBBInteractiveBoxWidget::pqVESPAOBBInteractiveBoxWidget(
+pqSHYXOBBInteractiveBoxWidget::pqSHYXOBBInteractiveBoxWidget(
     vtkSMProxy* proxy, vtkSMPropertyGroup* smgroup, QWidget* parent)
     : pqBoxPropertyWidget(proxy, smgroup, parent, true)
 {
@@ -204,7 +204,7 @@ pqVESPAOBBInteractiveBoxWidget::pqVESPAOBBInteractiveBoxWidget(
         resetBtn->setToolTip(
             tr("Restore Translate / Rotate / Scale to the fitted OBB or AABB (before interactive adjustments)."));
         vbox->addWidget(resetBtn);
-        QObject::connect(resetBtn, &QPushButton::clicked, this, &pqVESPAOBBInteractiveBoxWidget::resetToFittedBox);
+        QObject::connect(resetBtn, &QPushButton::clicked, this, &pqSHYXOBBInteractiveBoxWidget::resetToFittedBox);
     }
 
     // Minimum OBB: when BoxType changes, force re-place PRS to the new fitted box and push
@@ -218,7 +218,7 @@ pqVESPAOBBInteractiveBoxWidget::pqVESPAOBBInteractiveBoxWidget(
 }
 
 //-----------------------------------------------------------------------------
-pqVESPAOBBInteractiveBoxWidget::~pqVESPAOBBInteractiveBoxWidget()
+pqSHYXOBBInteractiveBoxWidget::~pqSHYXOBBInteractiveBoxWidget()
 {
     this->disconnectViewVisibilityLinks();
     if (this->BoxTypeConnect)
@@ -229,7 +229,7 @@ pqVESPAOBBInteractiveBoxWidget::~pqVESPAOBBInteractiveBoxWidget()
 }
 
 //-----------------------------------------------------------------------------
-void pqVESPAOBBInteractiveBoxWidget::resetToFittedBox()
+void pqSHYXOBBInteractiveBoxWidget::resetToFittedBox()
 {
     BEGIN_UNDO_SET(tr("Reset OBB Interactive Box"));
     this->LastObbFieldFingerprint = 0ULL;
@@ -240,14 +240,14 @@ void pqVESPAOBBInteractiveBoxWidget::resetToFittedBox()
 }
 
 //-----------------------------------------------------------------------------
-void pqVESPAOBBInteractiveBoxWidget::onBoxTypeChanged()
+void pqSHYXOBBInteractiveBoxWidget::onBoxTypeChanged()
 {
     // Run after the current event so BoxType on the proxy is the value the user just chose.
     QTimer::singleShot(0, this, [this]() { this->resetToFittedBox(); });
 }
 
 //-----------------------------------------------------------------------------
-void pqVESPAOBBInteractiveBoxWidget::disconnectViewVisibilityLinks()
+void pqSHYXOBBInteractiveBoxWidget::disconnectViewVisibilityLinks()
 {
     for (const QMetaObject::Connection& c : this->ViewVisibilityConnections)
     {
@@ -257,13 +257,13 @@ void pqVESPAOBBInteractiveBoxWidget::disconnectViewVisibilityLinks()
 }
 
 //-----------------------------------------------------------------------------
-int pqVESPAOBBInteractiveBoxWidget::obbOutputPort() const
+int pqSHYXOBBInteractiveBoxWidget::obbOutputPort() const
 {
     return 0;
 }
 
 //-----------------------------------------------------------------------------
-bool pqVESPAOBBInteractiveBoxWidget::isObbOutputVisibleInView(pqView* view) const
+bool pqSHYXOBBInteractiveBoxWidget::isObbOutputVisibleInView(pqView* view) const
 {
     if (!view)
     {
@@ -303,7 +303,7 @@ bool pqVESPAOBBInteractiveBoxWidget::isObbOutputVisibleInView(pqView* view) cons
 }
 
 //-----------------------------------------------------------------------------
-void pqVESPAOBBInteractiveBoxWidget::setView(pqView* view)
+void pqSHYXOBBInteractiveBoxWidget::setView(pqView* view)
 {
     this->disconnectViewVisibilityLinks();
     if (view)
@@ -316,7 +316,7 @@ void pqVESPAOBBInteractiveBoxWidget::setView(pqView* view)
 }
 
 //-----------------------------------------------------------------------------
-void pqVESPAOBBInteractiveBoxWidget::updateWidgetVisibility()
+void pqSHYXOBBInteractiveBoxWidget::updateWidgetVisibility()
 {
     bool visible = this->isSelected() && this->isWidgetVisible() && this->view();
     if (visible && !this->isObbOutputVisibleInView(this->view()))
@@ -336,7 +336,7 @@ void pqVESPAOBBInteractiveBoxWidget::updateWidgetVisibility()
 }
 
 //-----------------------------------------------------------------------------
-void pqVESPAOBBInteractiveBoxWidget::placeWidget()
+void pqSHYXOBBInteractiveBoxWidget::placeWidget()
 {
     auto* src = vtkSMSourceProxy::SafeDownCast(this->proxy());
     auto* wdg = this->widgetProxy();

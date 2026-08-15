@@ -90,7 +90,7 @@
       </DoubleVectorProperty>
 
       <Hints>
-        <ShowInMenu category="SHYX" icon=":/VESPA/SHYX_TetGen.png"/>
+        <ShowInMenu category="SHYX" icon=":/VESPA/SHYX_TetGen_Mesh_Optimize.png"/>
       </Hints>
     </SourceProxy>
   </ProxyGroup>

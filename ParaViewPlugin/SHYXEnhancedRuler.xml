@@ -102,7 +102,7 @@
       </PropertyGroup>
 
       <Hints>
-        <ShowInMenu category="SHYX" icon=":/VESPA/SHYX_Geodesic_Distance.png"/>
+        <ShowInMenu category="SHYX" icon=":/VESPA/SHYX_Enhanced_Ruler.png"/>
         <RepresentationType view="RenderView" type="Wireframe" port="0"/>
       </Hints>
     </SourceProxy>

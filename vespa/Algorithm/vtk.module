@@ -3,7 +3,7 @@ NAME
 DESCRIPTION
   "Shared VTK↔CGAL helpers (vtkCGALPolyDataAlgorithm, vtkCGALHelper). Not an author namespace."
 GROUPS
-  Meshing
+  Core
 DEPENDS
   vtkVESPACore
   VTK::CommonCore

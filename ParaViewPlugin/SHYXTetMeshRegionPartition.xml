@@ -117,7 +117,7 @@
       </IntVectorProperty>
 
       <Hints>
-        <ShowInMenu category="SHYX"/>
+        <ShowInMenu category="SHYX" icon=":/VESPA/SHYX_Tet_Mesh_Region_Partition.png"/>
         <RepresentationType view="RenderView" type="Wireframe" port="1"/>
       </Hints>
     </SourceProxy>

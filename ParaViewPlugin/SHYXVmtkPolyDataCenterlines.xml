@@ -105,7 +105,7 @@
       </IntVectorProperty>
 
       <Hints>
-        <ShowInMenu category="SHYX" icon=":/VESPA/SHYX_Radius_Neighbor_Count.png"/>
+        <ShowInMenu category="SHYX" icon=":/VESPA/SHYX_Vmtk_Centerlines.png"/>
       </Hints>
     </SourceProxy>
   </ProxyGroup>

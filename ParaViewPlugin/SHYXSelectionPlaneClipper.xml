@@ -189,7 +189,7 @@
       </StringVectorProperty>
 
       <PropertyGroup label="Interactive cut plane"
-                     panel_widget="vespa_selection_plane_clipper">
+                     panel_widget="shyx_selection_plane_clipper">
         <Property name="UseInteractiveCutPlanes" />
         <Property name="InteractiveCutPacked" />
       </PropertyGroup>

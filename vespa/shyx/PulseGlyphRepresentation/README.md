@@ -11,7 +11,7 @@
 
 ### 工作原理与算法
 动态表现的底层逻辑基于一套相位包络 (Phase Envelope) 算法：
-1. **动画驱动器**: 借助 `pqPulseGlyphAnimationManager` 统筹管理，当视图中包含开启了 `Animate` 的脉冲图元时，管理器将连续触发视图重绘 (`view->render()`)，以生成连续的动画帧。
+1. **动画驱动器**: 借助 `ParaViewPlugin/pqPulseGlyphAnimationManager` 统筹管理，当视图中包含开启了 `Animate` 的脉冲图元时，管理器将连续触发视图重绘 (`view->render()`)，以生成连续的动画帧。
 2. **混合相位计算 (Mix Value)**: 针对数据集中的每个顶点，算法读取指定的 `AnimationCoordinateArray`（若未指定则采用空间坐标）的值。将其乘以空间频响系数 `IntegrationScale`，并叠加基于时间驱动项（当前时间或帧数与 `TimeScale` 的乘积），以此得到该顶点的混合相位。
 3. **包络函数 (Envelope)**: 相位数据将被传入非线性包络函数中。首先提取小数部分并根据 `Trunc` 进行区间截断和限制（钳制在 `[0, 1]` 之间），最后通过幂次运算 `1.0 - pow(clamped, Pow)` 计算出当前时刻的脉冲强度包络值。
 4. **变换映射**:

@@ -9,7 +9,8 @@ endif()
 
 ## Config
 
-set(CMAKE_CXX_STANDARD 11)
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 
 set(Boost_DIR "C:/SoftWare/boost_1_82_0/lib64-msvc-14.2/cmake/Boost-1.82.0")
@@ -45,9 +46,9 @@ option(VESPA_USE_SMP "Use VTK SMP in DensityBasedSampler (disable if plugin cras
 
 option(VESPA_USE_CGAL "Build CGAL-backed modules (vespa/vespa, Algorithm helpers, SHYX filters that DEPENDS CGAL)" ON)
 option(VESPA_USE_VMTK "Build SHYX VMTK centerline filter (VMTK must match ParaView VTK)" ON)
-option(VESPA_USE_SNAPPYHEXMESH "Build SHYX SnappyHexMesh filter (needs SHYXSnappyHex_DIR)" OFF)
-set(SHYXSnappyHex_DIR "" CACHE PATH
-  "SHYXSnappyHex install prefix (lib/cmake/SHYXSnappyHex)")
+option(VESPA_USE_SNAPPYHEXMESH "Build SHYX SnappyHexMesh filter (needs SHYXSnappyHex_DIR)" ON)
+set(SHYXSnappyHex_DIR "C:/Users/18490/Documents/Github/shyx-snappyhex/install/lib/cmake/SHYXSnappyHex" CACHE PATH
+  "Directory containing SHYXSnappyHexConfig.cmake (install prefix /lib/cmake/SHYXSnappyHex)")
 set(VMTK_DIR "C:/SoftWare/vmtk-install" CACHE PATH
   "VMTK install prefix: include/vmtk and lib (e.g. vtkvmtk*.lib) live beneath this directory")
 

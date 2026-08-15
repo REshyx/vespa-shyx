@@ -3,7 +3,7 @@ NAME
 DESCRIPTION
   "Compute geodesic (shortest surface) distance from all vertices to a source vertex."
 GROUPS
-  Meshing
+  PointCloud
 DEPENDS
   VTK::FiltersCore
   VTK::FiltersModeling

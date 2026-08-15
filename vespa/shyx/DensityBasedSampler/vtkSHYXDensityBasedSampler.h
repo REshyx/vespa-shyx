@@ -1,30 +1,29 @@
 /**
- * @class   vtkCGALDensityBasedSampler
+ * @class   vtkSHYXDensityBasedSampler
  * @brief   Samples random points inside a closed mesh with density controlled by a scalar field.
  *
- * vtkCGALDensityBasedSampler accepts either a volume mesh (vtkUnstructuredGrid,
+ * vtkSHYXDensityBasedSampler accepts either a volume mesh (vtkUnstructuredGrid,
  * e.g. .vtu) or a closed surface mesh (vtkPolyData) and generates random
  * sample points within the enclosed volume. The spatial density of the
  * output point cloud is governed by a user-selected scalar array on the
  * input, automatically linearly mapped from its value range to 0-100%.
  *
  * The output is a vtkPolyData containing only vertices (the sampled point cloud).
- * Historical class name still has CGAL in it; the implementation is VTK-only.
  */
 
-#ifndef vtkCGALDensityBasedSampler_h
-#define vtkCGALDensityBasedSampler_h
+#ifndef vtkSHYXDensityBasedSampler_h
+#define vtkSHYXDensityBasedSampler_h
 
 #include "vtkPolyDataAlgorithm.h"
 
 #include "vtkSHYXDensityBasedSamplerModule.h" // For export macro
 #include <string>
 
-class VTKSHYXDENSITYBASEDSAMPLER_EXPORT vtkCGALDensityBasedSampler : public vtkPolyDataAlgorithm
+class VTKSHYXDENSITYBASEDSAMPLER_EXPORT vtkSHYXDensityBasedSampler : public vtkPolyDataAlgorithm
 {
 public:
-    static vtkCGALDensityBasedSampler* New();
-    vtkTypeMacro(vtkCGALDensityBasedSampler, vtkPolyDataAlgorithm);
+    static vtkSHYXDensityBasedSampler* New();
+    vtkTypeMacro(vtkSHYXDensityBasedSampler, vtkPolyDataAlgorithm);
     void PrintSelf(ostream& os, vtkIndent indent) override;
 
     ///@{
@@ -55,8 +54,8 @@ public:
     ///@}
 
 protected:
-    vtkCGALDensityBasedSampler();
-    ~vtkCGALDensityBasedSampler() override = default;
+    vtkSHYXDensityBasedSampler();
+    ~vtkSHYXDensityBasedSampler() override = default;
 
     int FillInputPortInformation(int port, vtkInformation* info) override;
     int RequestData(vtkInformation*, vtkInformationVector**, vtkInformationVector*) override;
@@ -66,8 +65,8 @@ protected:
     int         Seed             = 0;
 
 private:
-    vtkCGALDensityBasedSampler(const vtkCGALDensityBasedSampler&) = delete;
-    void operator=(const vtkCGALDensityBasedSampler&)              = delete;
+    vtkSHYXDensityBasedSampler(const vtkSHYXDensityBasedSampler&) = delete;
+    void operator=(const vtkSHYXDensityBasedSampler&)              = delete;
 };
 
 #endif

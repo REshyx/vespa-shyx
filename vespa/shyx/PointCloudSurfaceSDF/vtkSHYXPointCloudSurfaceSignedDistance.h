@@ -1,5 +1,5 @@
 /**
- * @class   vtkCGALPointCloudSurfaceSignedDistance
+ * @class   vtkSHYXPointCloudSurfaceSignedDistance
  * @brief   Signed distance from point cloud samples to a reference surface (VTK only)
  *
  * For each point in the first input (point cloud; vtkPolyData or any vtkDataSet whose
@@ -11,18 +11,18 @@
  * geometry.
  */
 
-#ifndef vtkCGALPointCloudSurfaceSignedDistance_h
-#define vtkCGALPointCloudSurfaceSignedDistance_h
+#ifndef vtkSHYXPointCloudSurfaceSignedDistance_h
+#define vtkSHYXPointCloudSurfaceSignedDistance_h
 
 #include "vtkPolyDataAlgorithm.h"
 
 #include "vtkSHYXPointCloudSurfaceSDFModule.h" // For export macro
 
-class VTKSHYXPOINTCLOUDSURFACESDF_EXPORT vtkCGALPointCloudSurfaceSignedDistance : public vtkPolyDataAlgorithm
+class VTKSHYXPOINTCLOUDSURFACESDF_EXPORT vtkSHYXPointCloudSurfaceSignedDistance : public vtkPolyDataAlgorithm
 {
 public:
-  static vtkCGALPointCloudSurfaceSignedDistance* New();
-  vtkTypeMacro(vtkCGALPointCloudSurfaceSignedDistance, vtkPolyDataAlgorithm);
+  static vtkSHYXPointCloudSurfaceSignedDistance* New();
+  vtkTypeMacro(vtkSHYXPointCloudSurfaceSignedDistance, vtkPolyDataAlgorithm);
   void PrintSelf(ostream& os, vtkIndent indent) override;
 
   /**
@@ -38,8 +38,8 @@ public:
   vtkBooleanMacro(TakeAbsoluteValue, vtkTypeBool);
 
 protected:
-  vtkCGALPointCloudSurfaceSignedDistance();
-  ~vtkCGALPointCloudSurfaceSignedDistance() override = default;
+  vtkSHYXPointCloudSurfaceSignedDistance();
+  ~vtkSHYXPointCloudSurfaceSignedDistance() override = default;
 
   int RequestData(vtkInformation*, vtkInformationVector**, vtkInformationVector*) override;
   int FillInputPortInformation(int port, vtkInformation* info) override;
@@ -47,8 +47,8 @@ protected:
   vtkTypeBool TakeAbsoluteValue = 1;
 
 private:
-  vtkCGALPointCloudSurfaceSignedDistance(const vtkCGALPointCloudSurfaceSignedDistance&) = delete;
-  void operator=(const vtkCGALPointCloudSurfaceSignedDistance&) = delete;
+  vtkSHYXPointCloudSurfaceSignedDistance(const vtkSHYXPointCloudSurfaceSignedDistance&) = delete;
+  void operator=(const vtkSHYXPointCloudSurfaceSignedDistance&) = delete;
 };
 
 #endif

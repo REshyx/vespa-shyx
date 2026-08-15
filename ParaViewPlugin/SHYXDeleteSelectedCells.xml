@@ -45,7 +45,7 @@
       </StringVectorProperty>
 
       <Hints>
-        <ShowInMenu category="SHYX" icon=":/VESPA/SHYX_Surface_to_Volume_Mesh.png"/>
+        <ShowInMenu category="SHYX" icon=":/VESPA/SHYX_Delete_Selected_Cells.png"/>
       </Hints>
     </SourceProxy>
   </ProxyGroup>

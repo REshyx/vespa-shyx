@@ -3,7 +3,7 @@ NAME
 DESCRIPTION
   "Map a scalar array through an interactive piecewise curve to a new range."
 GROUPS
-  Meshing
+  PointCloud
 DEPENDS
   VTK::FiltersCore
 PRIVATE_DEPENDS

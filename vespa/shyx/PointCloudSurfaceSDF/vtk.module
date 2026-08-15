@@ -3,7 +3,7 @@ NAME
 DESCRIPTION
   "Signed distance from point cloud to a reference surface (VTK only, vtkImplicitPolyDataDistance)."
 GROUPS
-  Meshing
+  PointCloud
 DEPENDS
   VTK::FiltersCore
   VTK::FiltersGeometry

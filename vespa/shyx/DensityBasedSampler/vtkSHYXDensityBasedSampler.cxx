@@ -1,4 +1,4 @@
-#include "vtkCGALDensityBasedSampler.h"
+#include "vtkSHYXDensityBasedSampler.h"
 
 #include <vtkCellArray.h>
 #include <vtkCellLocator.h>
@@ -25,17 +25,17 @@
 #include <cmath>
 #include <vector>
 
-vtkStandardNewMacro(vtkCGALDensityBasedSampler);
+vtkStandardNewMacro(vtkSHYXDensityBasedSampler);
 
 //------------------------------------------------------------------------------
-vtkCGALDensityBasedSampler::vtkCGALDensityBasedSampler()
+vtkSHYXDensityBasedSampler::vtkSHYXDensityBasedSampler()
 {
     this->SetNumberOfInputPorts(1);
     this->SetNumberOfOutputPorts(1);
 }
 
 //------------------------------------------------------------------------------
-int vtkCGALDensityBasedSampler::FillInputPortInformation(int port, vtkInformation* info)
+int vtkSHYXDensityBasedSampler::FillInputPortInformation(int port, vtkInformation* info)
 {
     if (port == 0)
     {
@@ -46,7 +46,7 @@ int vtkCGALDensityBasedSampler::FillInputPortInformation(int port, vtkInformatio
 }
 
 //------------------------------------------------------------------------------
-void vtkCGALDensityBasedSampler::PrintSelf(ostream& os, vtkIndent indent)
+void vtkSHYXDensityBasedSampler::PrintSelf(ostream& os, vtkIndent indent)
 {
     os << indent << "PreSampleCount: " << this->PreSampleCount << std::endl;
     os << indent << "DensityArrayName: " << this->DensityArrayName << std::endl;
@@ -111,7 +111,7 @@ bool IsUniformSelection(const std::string& name)
 } // anonymous namespace
 
 //------------------------------------------------------------------------------
-int vtkCGALDensityBasedSampler::RequestData(
+int vtkSHYXDensityBasedSampler::RequestData(
     vtkInformation* vtkNotUsed(request),
     vtkInformationVector** inputVector,
     vtkInformationVector* outputVector)

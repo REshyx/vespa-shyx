@@ -1,4 +1,4 @@
-#include "vtkCGALPointCloudSurfaceSignedDistance.h"
+#include "vtkSHYXPointCloudSurfaceSignedDistance.h"
 
 #include <vtkFloatArray.h>
 #include <vtkLogger.h>
@@ -30,7 +30,7 @@ int TestPMPPointCloudSurfaceSignedDistance(int, char*[])
   vtkNew<vtkPolyData> cloud;
   cloud->SetPoints(pts);
 
-  vtkNew<vtkCGALPointCloudSurfaceSignedDistance> sdf;
+  vtkNew<vtkSHYXPointCloudSurfaceSignedDistance> sdf;
   sdf->SetInputData(0, cloud);
   sdf->SetInputData(1, tri->GetOutput());
   sdf->Update();

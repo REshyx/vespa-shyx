@@ -3,7 +3,7 @@ NAME
 DESCRIPTION
   "Probabilistic point subsampling using per-point keep probabilities (VTK only)."
 GROUPS
-  Meshing
+  PointCloud
 DEPENDS
   VTK::FiltersCore
 PRIVATE_DEPENDS

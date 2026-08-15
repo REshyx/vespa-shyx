@@ -229,7 +229,7 @@
       </PropertyGroup>
 
       <Hints>
-        <ShowInMenu category="SHYX" icon=":/VESPA/SHYX_Bidirectional_Streamline_Merge.png"/>
+        <ShowInMenu category="SHYX" icon=":/VESPA/SHYX_Auto_Streamline.png"/>
         <RepresentationType view="RenderView" type="Surface" port="0"/>
         <RepresentationType view="RenderView" type="Point Gaussian" port="1"/>
       </Hints>

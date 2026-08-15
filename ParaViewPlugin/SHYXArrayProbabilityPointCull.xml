@@ -1,0 +1,66 @@
+<ServerManagerConfiguration>
+  <ProxyGroup name="filters">
+    <!-- Probability cull: scalar = literal keep probability, clamped to [0, 1] -->
+    <SourceProxy class="vtkSHYXArrayProbabilityPointCull"
+                 label="SHYX Array Probability Point Cull"
+                 name="SHYXArrayProbabilityPointCull">
+      <Documentation short_help="SHYX Array Probability Point Cull: Subsample point cloud: keep each point with probability = clamp(scalar, 0, 1).">
+        Each point-data scalar is interpreted as the keep probability for that point. Values outside
+        [0, 1] are clamped; there is no rescaling by the array's min/max (e.g. data in [0.1, 0.5] gives
+        10%–50% keep rates). No volumetric interpolation. Input may be any vtkDataSet; coordinates use
+        vtkDataSet::GetPoint. Output is a vertex-only vtkPolyData point cloud. Empty weight array or
+        (Uniform) keeps all points.
+      </Documentation>
+
+      <InputProperty name="Input"
+                     command="SetInputConnection">
+        <ProxyGroupDomain name="groups">
+          <Group name="sources"/>
+          <Group name="filters"/>
+        </ProxyGroupDomain>
+        <DataTypeDomain name="input_type">
+          <DataType value="vtkDataSet"/>
+        </DataTypeDomain>
+        <InputArrayDomain name="point_arrays" attribute_type="point" optional="1" />
+      </InputProperty>
+
+      <StringVectorProperty command="SetWeightArrayName"
+                            name="WeightArrayName"
+                            label="Weight Array"
+                            number_of_elements="1"
+                            default_values="">
+        <ArrayListDomain attribute_type="Scalars"
+                         name="array_list"
+                         none_string="(Uniform)"
+                         input_domain_name="point_arrays">
+          <RequiredProperties>
+            <Property function="Input"
+                      name="Input" />
+          </RequiredProperties>
+        </ArrayListDomain>
+        <Documentation>
+          Point-data scalar used as keep probability; each value is clamped to [0, 1] only.
+          Leave empty or choose (Uniform) to keep every point.
+        </Documentation>
+        <Hints>
+          <ArraySelectionWidget icon_type="point"/>
+        </Hints>
+      </StringVectorProperty>
+
+      <IntVectorProperty command="SetSeed"
+                         name="Seed"
+                         label="Random Seed"
+                         number_of_elements="1"
+                         default_values="0">
+        <Documentation>
+          Seed for vtkMinimalStandardRandomSequence (reproducible subsampling).
+        </Documentation>
+      </IntVectorProperty>
+
+      <Hints>
+        <ShowInMenu category="SHYX" icon=":/VESPA/SHYX_Array_Probability_Point_Cull.png"/>
+      </Hints>
+
+    </SourceProxy>
+  </ProxyGroup>
+</ServerManagerConfiguration>

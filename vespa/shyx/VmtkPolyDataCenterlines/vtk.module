@@ -3,7 +3,7 @@ NAME
 DESCRIPTION
   "Vessel centerlines via VMTK vtkvmtkPolyDataCenterlines (optional VMTK dependency)."
 GROUPS
-  Meshing
+  Vascular
 DEPENDS
   VTK::FiltersCore
   VTK::CommonDataModel

@@ -71,7 +71,7 @@
       </IntVectorProperty>
 
       <Hints>
-        <ShowInMenu category="SHYX" icon=":/VESPA/VESPA_Mesh_Checker.png"/>
+        <ShowInMenu category="SHYX" icon=":/VESPA/SHYX_Edge_Collapse.png"/>
       </Hints>
 
     </SourceProxy>

@@ -3,7 +3,7 @@ NAME
 DESCRIPTION
   "Surface tip / sharpness extractor for polygonal meshes."
 GROUPS
-  Meshing
+  PointCloud
 DEPENDS
   VTK::FiltersCore
 PRIVATE_DEPENDS

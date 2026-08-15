@@ -2,8 +2,8 @@
  * @class   vtkSHYXSnappyHexMesh
  * @brief   Hex-dominant volume mesh from a closed surface via snappyHexMesh.
  *
- * Input vtkPolyData (closed triangulated surface). Output vtkUnstructuredGrid
- * (hexahedra / polyhedra / prisms after snap and layer addition).
+ * Input vtkPolyData (closed triangulated surface). Writes an OpenFOAM case,
+ * then reads it back with vtkOpenFOAMReader into vtkUnstructuredGrid.
  */
 
 #ifndef vtkSHYXSnappyHexMesh_h

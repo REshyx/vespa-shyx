@@ -3,7 +3,7 @@ NAME
 DESCRIPTION
   "Inside Fluids: Clebsch Maps for visualization (SIGGRAPH 2017). Maps velocity field to S3 wave function."
 GROUPS
-  Meshing
+  Flow
 DEPENDS
   VTK::CommonCore
   VTK::CommonDataModel

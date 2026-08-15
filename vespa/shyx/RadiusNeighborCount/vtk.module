@@ -3,7 +3,7 @@ NAME
 DESCRIPTION
   "Parallel count of points within a fixed search radius of each point (VTK-only)."
 GROUPS
-  Meshing
+  PointCloud
 DEPENDS
   VTK::FiltersCore
   VTK::FiltersGeneral

@@ -1,5 +1,5 @@
-#ifndef pqVESPAOBBInteractiveBoxWidget_h
-#define pqVESPAOBBInteractiveBoxWidget_h
+#ifndef pqSHYXOBBInteractiveBoxWidget_h
+#define pqSHYXOBBInteractiveBoxWidget_h
 
 #include "pqBoxPropertyWidget.h"
 
@@ -22,14 +22,14 @@ class vtkEventQtSlotConnect;
  * "Reset to Fitted Box" restores Position / Rotation / Scale to the values that match the current
  * fitted OBB field data (state before interactive adjustments).
  */
-class pqVESPAOBBInteractiveBoxWidget : public pqBoxPropertyWidget
+class pqSHYXOBBInteractiveBoxWidget : public pqBoxPropertyWidget
 {
     Q_OBJECT
     typedef pqBoxPropertyWidget Superclass;
 
 public:
-    pqVESPAOBBInteractiveBoxWidget(vtkSMProxy* proxy, vtkSMPropertyGroup* smgroup, QWidget* parent = nullptr);
-    ~pqVESPAOBBInteractiveBoxWidget() override;
+    pqSHYXOBBInteractiveBoxWidget(vtkSMProxy* proxy, vtkSMPropertyGroup* smgroup, QWidget* parent = nullptr);
+    ~pqSHYXOBBInteractiveBoxWidget() override;
 
 public Q_SLOTS:
     void setView(pqView* view) override;

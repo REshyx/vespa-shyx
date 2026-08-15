@@ -1,5 +1,5 @@
 set(classes
-  vtkCGALPointCloudSurfaceSignedDistance)
+  vtkSHYXPointCloudSurfaceSignedDistance)
 vtk_module_add_module(vtkSHYXPointCloudSurfaceSDF
   FORCE_STATIC
   CLASSES ${classes})

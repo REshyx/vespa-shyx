@@ -1,0 +1,62 @@
+<ServerManagerConfiguration>
+  <ProxyGroup name="filters">
+    <SourceProxy class="vtkSHYXPointCloudSurfaceSignedDistance"
+                 label="SHYX Point Cloud Surface SDF"
+                 name="SHYXPointCloudSurfaceSDF">
+      <Documentation short_help="SHYX Point Cloud Surface SDF: Signed distance from point cloud to a surface (VTK ImplicitPolyDataDistance).">
+        For each point in the first input (point cloud vtkDataSet), evaluates signed distance to the
+        second input using vtkImplicitPolyDataDistance (internal clean + triangulation, vtkCellLocator,
+        angle-weighted pseudonormals). Non-polydata reference surfaces are extracted with
+        vtkDataSetSurfaceFilter. Open surfaces are allowed. The scalar array is named SDF.
+      </Documentation>
+
+      <InputProperty name="PointCloud"
+                     label="Point Cloud"
+                     command="SetInputConnection">
+        <ProxyGroupDomain name="groups">
+          <Group name="sources"/>
+          <Group name="filters"/>
+        </ProxyGroupDomain>
+        <DataTypeDomain name="input_type">
+          <DataType value="vtkDataSet"/>
+        </DataTypeDomain>
+        <Documentation>
+          Point cloud (vtkPolyData or any vtkDataSet; all points are sampled; one vtkVertex per point when none exist).
+        </Documentation>
+      </InputProperty>
+
+      <InputProperty name="ReferenceSurface"
+                     label="Reference Surface"
+                     command="SetSourceConnection">
+        <ProxyGroupDomain name="groups">
+          <Group name="sources"/>
+          <Group name="filters"/>
+        </ProxyGroupDomain>
+        <DataTypeDomain name="input_type">
+          <DataType value="vtkDataSet"/>
+        </DataTypeDomain>
+        <Documentation>
+          Reference surface (vtkPolyData or vtkDataSet; volume inputs are surfaced with vtkDataSetSurfaceFilter).
+        </Documentation>
+      </InputProperty>
+
+      <IntVectorProperty name="TakeAbsoluteValue"
+                         label="Take Absolute Value"
+                         command="SetTakeAbsoluteValue"
+                         number_of_elements="1"
+                         default_values="1"
+                         animateable="0">
+        <BooleanDomain name="bool"/>
+        <Documentation>
+          If ON (default), store the absolute value of the signed distance in the SDF array.
+          If OFF, keep the signed distance (negative inside / positive outside).
+        </Documentation>
+      </IntVectorProperty>
+
+      <Hints>
+        <ShowInMenu category="SHYX" icon=":/VESPA/SHYX_Point_Cloud_Surface_SDF.png"/>
+      </Hints>
+
+    </SourceProxy>
+  </ProxyGroup>
+</ServerManagerConfiguration>

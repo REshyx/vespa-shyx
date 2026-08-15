@@ -90,7 +90,7 @@
       </IntVectorProperty>
 
       <Hints>
-        <ShowInMenu category="SHYX" icon=":/VESPA/VESPA_Boolean_Operation.png"/>
+        <ShowInMenu category="SHYX" icon=":/VESPA/SHYX_Boolean.png"/>
       </Hints>
     </SourceProxy>
   </ProxyGroup>

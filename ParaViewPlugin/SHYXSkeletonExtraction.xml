@@ -1,0 +1,128 @@
+<ServerManagerConfiguration>
+  <ProxyGroup name="filters">
+    <SourceProxy class="vtkCGALSkeletonExtraction"
+                 label="SHYX Skeleton Extraction"
+                 name="SHYXSkeletonExtraction">
+      <Documentation short_help="SHYX Skeleton Extraction: Extracts a curve skeleton from a closed triangle mesh.">
+        This filter extracts a 1D curve skeleton from a closed triangulated surface mesh
+        using the CGAL Mean Curvature Flow Skeletonization algorithm.
+        The input mesh must be watertight. The output is a set of polylines
+        representing the medial skeleton of the shape.
+      </Documentation>
+
+      <InputProperty name="Input"
+                     command="SetInputConnection">
+        <ProxyGroupDomain name="groups">
+          <Group name="sources"/>
+          <Group name="filters"/>
+        </ProxyGroupDomain>
+        <DataTypeDomain name="input_type">
+          <DataType value="vtkPolyData"/>
+        </DataTypeDomain>
+      </InputProperty>
+
+      <DoubleVectorProperty command="SetMaxTriangleAngle"
+                            name="MaxTriangleAngle"
+                            label="Max Triangle Angle (deg)"
+                            number_of_elements="1"
+                            default_values="110"
+                            panel_visibility="advanced">
+        <DoubleRangeDomain name="range" min="1" max="179"/>
+        <Documentation>
+          Local remeshing parameter. Triangles with an angle larger than this value
+          may be split during contraction (CGAL max_triangle_angle). Unit is degrees.
+        </Documentation>
+      </DoubleVectorProperty>
+
+      <DoubleVectorProperty command="SetMinEdgeLength"
+                            name="MinEdgeLength"
+                            label="Min Edge Length"
+                            number_of_elements="1"
+                            default_values="0"
+                            panel_visibility="advanced">
+        <!-- vtkSMBoundsDomain scaled_extent: same convention as many ParaView filters (slider + scale + reset). -->
+        <BoundsDomain mode="scaled_extent" name="bounds" scale_factor="0.002">
+          <RequiredProperties>
+            <Property function="Input" name="Input" />
+          </RequiredProperties>
+        </BoundsDomain>
+        <Documentation>
+          Local remeshing parameter. Edges shorter than this value may be collapsed
+          during contraction (CGAL min_edge_length). Automatic length is 0.002 times the
+          longest side of the input axis-aligned bounding box (matches ParaView BoundsDomain
+          scaled_extent). The property&apos;s initial value is 0 for that rule; values &lt;= 0
+          use it as well. The panel shows scale and reset controls when a BoundsDomain is present.
+        </Documentation>
+      </DoubleVectorProperty>
+
+      <IntVectorProperty command="SetMaxIterations"
+                         name="MaxIterations"
+                         label="Max Iterations"
+                         number_of_elements="1"
+                         default_values="500">
+        <IntRangeDomain name="range" min="1" max="5000"/>
+        <Documentation>
+          Maximum number of contraction iterations.
+        </Documentation>
+      </IntVectorProperty>
+
+      <DoubleVectorProperty command="SetAreaThreshold"
+                            name="AreaThreshold"
+                            label="Area Threshold"
+                            number_of_elements="1"
+                            default_values="1e-4"
+                            panel_visibility="advanced">
+        <DoubleRangeDomain name="range" min="1e-8" max="1"/>
+        <Documentation>
+          Area variation factor controlling convergence precision.
+          Smaller values produce finer skeletons but take longer.
+        </Documentation>
+      </DoubleVectorProperty>
+
+      <DoubleVectorProperty command="SetQualitySpeedTradeoff"
+                            name="QualitySpeedTradeoff"
+                            label="Quality / Speed Tradeoff (w_H)"
+                            number_of_elements="1"
+                            default_values="0.1"
+                            panel_visibility="advanced">
+        <DoubleRangeDomain name="range" min="0" max="10"/>
+        <Documentation>
+          Controls contraction speed and approximation quality (CGAL quality_speed_tradeoff, w_H).
+          Smaller values converge faster but may reduce skeleton quality.
+        </Documentation>
+      </DoubleVectorProperty>
+
+      <IntVectorProperty command="SetMediallyCentered"
+                         name="MediallyCentered"
+                         label="Medially Centered"
+                         number_of_elements="1"
+                         default_values="1"
+                         panel_visibility="advanced">
+        <BooleanDomain name="bool"/>
+        <Documentation>
+          If ON, a medial centering step is applied to improve skeleton quality.
+          This produces better results but takes more time.
+        </Documentation>
+      </IntVectorProperty>
+
+      <DoubleVectorProperty command="SetMediallyCenteredSpeedTradeoff"
+                            name="MediallyCenteredSpeedTradeoff"
+                            label="Medial Centering Tradeoff (w_M)"
+                            number_of_elements="1"
+                            default_values="0.2"
+                            panel_visibility="advanced">
+        <DoubleRangeDomain name="range" min="0" max="10"/>
+        <Documentation>
+          Controls smoothness of medial approximation (CGAL medially_centered_speed_tradeoff, w_M).
+          Higher values move the skeleton closer to the medial axis but may slow convergence.
+          Only used if MediallyCentered is ON.
+        </Documentation>
+      </DoubleVectorProperty>
+
+      <Hints>
+        <ShowInMenu category="SHYX" icon=":/VESPA/SHYX_Skeleton_Extraction.png"/>
+      </Hints>
+
+    </SourceProxy>
+  </ProxyGroup>
+</ServerManagerConfiguration>

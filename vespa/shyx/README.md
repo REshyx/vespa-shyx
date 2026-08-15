@@ -1,51 +1,66 @@
 # SHYX 模块总览
 
-SHYX 是本仓库里 **一个作者命名空间**（[`vespa/shyx/`](.)），不是整个工程的中心。仓库布局与如何另开作者目录见 [`../README.md`](../README.md)。
+SHYX 是本仓库里 **一个作者命名空间**（[`vespa/shyx/`](.)），不是整个工程的中心。仓库布局见 [`../README.md`](../README.md)。**模块 ↔ 类 ↔ XML ↔ 菜单 ↔ 图标** 的完整对照以 [`../INVENTORY.md`](../INVENTORY.md) 为准。
 
-本目录专注于血管与体积网格、流场与涡结构、数据采样与点云、以及可视化辅助。每个子目录是独立的 VTK 模块（自有 `vtk.module` / `DEPENDS`）；需要 CGAL 的才依赖 `vtkCGALAlgorithm`，TetGen / VMTK / 纯 VTK 的不要走 CGAL 基类。
+每个子目录是独立 VTK 模块（自有 `vtk.module` / `DEPENDS`）。需要 CGAL 的才依赖 `vtkCGALAlgorithm`；TetGen / VMTK / 纯 VTK 不要走 CGAL 基类。纯 VTK 的 Density Sampler / 点云 SDF 类名是 `vtkSHYX*`；骨架、切端、Surface-to-Volume 等仍走 CGAL 的可保留 `vtkCGAL*` 实现类名。
 
-以下是各子模块的功能概述与内部文档链接。
+`vtk.module` 的 **GROUPS**：`Meshing` / `Vascular` / `Flow` / `PointCloud`（表示层为 `ParaView`）。
 
-## 模块列表
+## 网格修复 / 几何
 
-### 🕸️ 网格与几何处理
+* [**Adaptive Isotropic Remesher**](./AdaptiveIsotropicRemesher/README.md) — 曲率自适应各向同性重网格（CGAL ≥ 6）；同模块含 **Remesh With Endpoint**
+* [**Mesh Checker**](./MeshChecker/README.md) — 汤边 / 边界环 / 自交诊断，可选修复
+* [**Hole Fill**](./HoleFill/README.md) / [**Repair Degeneracies**](./RepairDegeneracies/README.md) / [**Edge Collapse**](./EdgeCollapse/README.md) / [**Boolean (relaxed)**](./BooleanOperation/README.md) / [**Shape Smoothing**](./ShapeSmoothing/README.md) — CGAL PMP
+* [**Convex Hull**](./ConvexHullFilter/README.md)
+* [**Disconnected Region Fuse**](./DisconnectedRegionFuse/README.md)
+* [**Selection Extrude**](./SelectionExtrude/README.md) / [**Point Extrude**](./PointExtrude/README.md) / [**Delete Selected Cells**](./DeleteSelectedCells/README.md) / [**Flip Selected Cells Winding**](./FlipSelectedCellsWinding/README.md)
+* [**Selection: Fill, Alpha Wrap, Union**](./SelectionFillAlphaReunion/README.md) — CGAL ≥ 5.5
+* [**Minimum OBB**](./MinimumOBB/README.md)
+* [**Enhanced Ruler**](./EnhancedRuler/README.md)
 
-* [**Skeleton Extraction (骨架提取)**](./SkeletonExtraction/README.md) - 对封闭表面网格提取 1D 曲线骨架（基于 CGAL 平均曲率流）。
-* [**Vessel End Clipper (血管末端裁剪)**](./VesselEndClipper/README.md) - 在血管骨架端点处平切血管末端，适用于生成 CFD 边界。
-* [**Surface To Volume Mesh (表面转体积网格 - CGAL)**](./SurfaceToVolumeMesh/README.md) - 使用 CGAL 的 Delaunay 细化从封闭表面生成四面体体积网格。
-* [**TetGen (表面转体积网格 - TetGen)**](./TetGen/README.md) - 使用 TetGen 库的约束 Delaunay 四面体化生成高质量体积网格。
-* [**Disconnected Region Fuse (不连通区域融合)**](./DisconnectedRegionFuse/README.md) - 多路表面输入（每路为一区域）之间按距离阈值融合近邻顶点；单路输入内不连通片互不合并。
-* [**Adaptive Isotropic Remesher (自适应各向同性重网格)**](./AdaptiveIsotropicRemesher/README.md) - *(需 CGAL ≥ 6.0)* 基于离散曲率的自适应尺寸场重网格滤镜。多轮 remesh 须 `collect_garbage`（见该 README §3）。
-* [**Selection Extrude (选区平均法线挤出)**](./SelectionExtrude/README.md) - 对表面选区计算面积加权平均法线，沿法线挤出并封闭侧壁；选区与 VESPA Region Fairing 相同（`vtkSelection` / SelectionInput），可动画调节挤出距离。
+## 血管与体积网格
 
-### 💧 流场与涡结构分析
+Vascular 工具条顺序：骨架 → 切端 → 平面裁 → 端点重网格 → TetGen → PDC → 边界分配。
 
-* [**Vortex Criteria (涡识别准则)**](./VortexCriteria/README.md) - 计算流场的涡量、Q-Criterion、Lambda2、Liutex 等多种主流涡识别准则。
-* [**FTLE Filter (有限时间李雅普诺夫指数)**](./FTLEFilter/README.md) - 计算流场的 FTLE，用于识别和提取拉格朗日相干结构 (LCS)。
-* [**Clebsch Map Filter (Clebsch 映射)**](./ClebschMapFilter/README.md) - 将速度场映射为波函数以用于涡管等流场结构的高级可视化。
+* [**Skeleton Extraction**](./SkeletonExtraction/README.md)
+* [**Vessel End Clipper**](./VesselEndClipper/README.md)
+* [**Selection Plane Clipper**](./SelectionPlaneClipper/README.md)
+* [**Surface To Volume Mesh**](./SurfaceToVolumeMesh/README.md)
+* [**TetGen**](./TetGen/README.md) — 同模块含 **TetGen Mesh Optimize**
+* [**SnappyHexMesh**](./SnappyHexMesh/README.md) — 需 `VESPA_USE_SNAPPYHEXMESH`；**Filters → SHYX**（不在 Vascular）
+* [**Tet Mesh Region Partition**](./TetMeshRegionPartition/README.md)
+* [**DataSet To Partitioned Collection**](./DataSetToPartitionedCollection/README.md)
+* [**Partitioned Collection Boundary Assignment**](./PartitionedCollectionBoundaryAssignment/README.md)
+* [**Partitioned Collection Boundary Fields**](./PartitionedCollectionBoundaryFields/README.md)
+* [**Partitioned Collection WSL Simulation**](./PartitionedCollectionWslSimulation/README.md)
+* [**VMTK Centerlines**](./VmtkPolyDataCenterlines/README.md) / [**Opening Centerlines**](./VmtkOpeningCenterlines/README.md) — 需 `VESPA_USE_VMTK`
+* [**Vascular Stent Placement**](./VascularStentPlacement/README.md) / [**Endpoint Stent Placement**](./EndpointStentPlacement/README.md)
 
-### 📊 数据采样与点云分析
+## 流场
 
-* [**Density-Based Sampler (基于密度的体积采样)**](./DensityBasedSampler/README.md) - 在封闭网格体积内按点数据标量定义的密度场生成随机采样点。
-* [**Array Probability Point Cull (数组概率点剔除)**](./ArrayProbabilityPointCull/README.md) - 根据点数组标量（作为概率）对已有数据点进行并行伯努利抽样剔除。
-* [**Radius Neighbor Count (半径内邻点统计)**](./RadiusNeighborCount/README.md) - 统计给定搜索半径内的欧氏距离邻居点个数。
-* [**Point Cloud Surface SDF (点云表面有符号距离场)**](./PointCloudSurfaceSDF/README.md) - 计算点云中每个点到参考曲面的有符号距离场 (SDF)。
+* [**Vortex Criteria**](./VortexCriteria/README.md)
+* [**FTLE Filter**](./FTLEFilter/README.md)
+* [**Clebsch Map Filter**](./ClebschMapFilter/README.md) — 可选 MKL
+* [**Vector Field Topology**](./VectorFieldTopology/README.md) — 包装 VTK `vtkVectorFieldTopology`
+* [**Auto Streamline**](./AutoStreamline/README.md)
+* [**Bidirectional Streamline Merge**](./BidirectionalStreamlineMerge/README.md)
 
-### 📏 表面属性计算
+## 点云 / 采样 / 映射
 
-* [**Geodesic Distance (测地距离计算)**](./GeodesicDistance/README.md) - 计算表面上所有顶点到指定源顶点的最短测地距离 (基于 Dijkstra 算法)。
-* [**Surface Tip Extractor (表面尖端提取)**](./SurfaceTipExtractor/README.md) - 识别并评估多边形表面上的尖端或尖锐特征点。
+* [**Density-Based Sampler**](./DensityBasedSampler/README.md) — 纯 VTK
+* [**Array Probability Point Cull**](./ArrayProbabilityPointCull/README.md)
+* [**Radius Neighbor Count**](./RadiusNeighborCount/README.md)
+* [**Point Cloud Surface SDF**](./PointCloudSurfaceSDF/README.md) — 纯 VTK；勿与 PMP 体素 SDF 混淆
+* [**Geodesic Distance**](./GeodesicDistance/README.md)
+* [**Surface Tip Extractor**](./SurfaceTipExtractor/README.md)
+* [**Array Curve Mapper**](./ArrayCurveMapper/README.md)
 
-### 🎨 可视化与数据映射辅助
+## 表示
 
-* [**Array Curve Mapper (数组曲线映射)**](./ArrayCurveMapper/README.md) - 通过界面上可编辑的分段线性曲线，将标量或矢量映射到新的标量范围。
-* [**Bidirectional Streamline Merge (双向流线合并)**](./BidirectionalStreamlineMerge/README.md) - 合并同一种子点生成的双向流线，并支持沿线积分与差分计算。
-* [**DataSet To Partitioned Collection (数据集转分区集合)**](./DataSetToPartitionedCollection/README.md) - 为 IOSS/Exodus 输出准备，提取体网格和表面分区并生成对应的装配元数据。
-* [**Partitioned Collection Boundary Fields (分区集合边界场修改)**](./PartitionedCollectionBoundaryFields/README.md) - 对已划分的 vtkPartitionedDataSetCollection 写入径向法线、边界变量，并支持重命名 block（不含 OPT 文本）。
-* [**Partitioned Collection Boundary Assignment (分区集合边界角色分配)**](./PartitionedCollectionBoundaryAssignment/README.md) - 分类 wall/inlet/outlet；Boundary assignment + 完整 options 文件（PV/HV 模板）；可合并多入口；port 1 诊断；可导出 exo + txt。
-* [**Pulse Glyph Representation (脉冲 Glyph 表示)**](./PulseGlyphRepresentation/README.md) - GPU 实例化路径上带有脉冲缩放与旋转效果的 Glyph 动画表示。
-* [**Animated Streamline Representation (流线动画表示)**](./AnimatedStreamlineRepresentation/README.md) - 基于 GPU 自定义 Shader 渲染的流线逐帧动画表示。
+* [**Pulse Glyph Representation**](./PulseGlyphRepresentation/README.md) — 动画管理器在 `ParaViewPlugin/pqPulseGlyphAnimationManager`
+* [**Animated Streamline Representation**](./AnimatedStreamlineRepresentation/README.md) — 动画管理器在 `ParaViewPlugin/pqAnimatedStreamlineAnimationManager`
+* [**Point Label Representation**](./PointLabelRepresentation/README.md) — Display 面板点标签
 
 ---
 
-> 💡 **提示**：更多关于整体插件的配置选项、第三方依赖说明以及 VESPA 核心模块的介绍，请参考根目录的 [**VESPA_Plugin_功能说明.md**](../../VESPA_Plugin_功能说明.md)。
+构建选项、成对滤镜说明、以及插件菜单总表：根目录 [**VESPA_Plugin_功能说明.md**](../../VESPA_Plugin_功能说明.md)。

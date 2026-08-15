@@ -3,7 +3,7 @@ NAME
   DESCRIPTION
   "Split vtkDataSet into vtkPartitionedDataSetCollection: volume cells (tet/hex/polyhedra), then node_sets/side_sets from first-component <=0 merged + >=1 connectivity split (vtkThreshold BETWEEN) or feature-angle connectivity."
 GROUPS
-  Meshing
+  Vascular
 DEPENDS
   VTK::CommonCore
   VTK::CommonDataModel

@@ -3,7 +3,7 @@ NAME
 DESCRIPTION
   "Clip vessel tips at skeleton endpoints to create flat CFD cross-sections."
 GROUPS
-  Meshing
+  Vascular
 DEPENDS
   vtkCGALAlgorithm
   VTK::FiltersCore

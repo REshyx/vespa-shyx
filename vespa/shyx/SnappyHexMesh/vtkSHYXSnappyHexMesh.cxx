@@ -2,13 +2,17 @@
 
 #include "shyx_snappy.h"
 
-#include <vtkCellArray.h>
 #include <vtkCellType.h>
-#include <vtkIdList.h>
+#include <vtkCompositeDataIterator.h>
+#include <vtkCompositeDataSet.h>
+#include <vtkDataObject.h>
 #include <vtkInformation.h>
 #include <vtkInformationVector.h>
+#include <vtkMultiBlockDataSet.h>
 #include <vtkNew.h>
 #include <vtkObjectFactory.h>
+#include <vtkOpenFOAMReader.h>
+#include <vtkSmartPointer.h>
 #include <vtkPoints.h>
 #include <vtkPolyData.h>
 #include <vtkSTLWriter.h>
@@ -16,352 +20,242 @@
 #include <vtkUnstructuredGrid.h>
 
 #include <algorithm>
-#include <cctype>
-#include <cerrno>
+#include <cstdint>
+#include <filesystem>
 #include <fstream>
-#include <sstream>
 #include <string>
-#include <vector>
-
-#ifdef _WIN32
-#include <direct.h>
-#else
-#include <sys/stat.h>
-#endif
+#include <system_error>
 
 vtkStandardNewMacro(vtkSHYXSnappyHexMesh);
 
 namespace
 {
-bool MkDir(const std::string& p)
+namespace fs = std::filesystem;
+
+struct RemoveTree
 {
-#ifdef _WIN32
-  return _mkdir(p.c_str()) == 0 || errno == EEXIST;
-#else
-  return mkdir(p.c_str(), 0755) == 0 || errno == EEXIST;
-#endif
+  fs::path p;
+  bool keep = false;
+  ~RemoveTree()
+  {
+    if (keep)
+    {
+      return;
+    }
+    std::error_code ec;
+    fs::remove_all(p, ec);
+  }
+};
+
+fs::path LastLogDir()
+{
+  std::error_code ec;
+  return fs::temp_directory_path(ec) / "shyx-snappy-last";
 }
 
-std::string Join(const std::string& a, const std::string& b)
+void WriteCaseFoam(const fs::path& caseDir)
 {
-  if (a.empty())
+  std::error_code ec;
+  if (!fs::exists(caseDir, ec) || !fs::is_directory(caseDir, ec))
   {
-    return b;
+    return;
   }
-  const char sep =
-#ifdef _WIN32
-    '\\';
-#else
-    '/';
-#endif
-  if (a.back() == '/' || a.back() == '\\')
+  std::ofstream os(caseDir / "case.foam");
+  if (os)
   {
-    return a + b;
+    os << "// ParaView OpenFOAM reader marker. File -> Open this file.\n";
   }
-  return a + sep + b;
 }
 
-/** Skip Foam comments and whitespace. */
-bool NextToken(std::istream& is, std::string& tok)
+void CopyTreeOverwrite(const fs::path& from, const fs::path& to)
 {
-  tok.clear();
-  for (;;)
+  std::error_code ec;
+  if (!fs::exists(from, ec))
   {
-    const int c = is.peek();
-    if (c == EOF)
-    {
-      return false;
-    }
-    if (std::isspace(c))
-    {
-      is.get();
-      continue;
-    }
-    if (c == '/')
-    {
-      is.get();
-      const int n = is.peek();
-      if (n == '/')
-      {
-        std::string dummy;
-        std::getline(is, dummy);
-        continue;
-      }
-      if (n == '*')
-      {
-        is.get();
-        int prev = 0;
-        int cur = 0;
-        while ((cur = is.get()) != EOF)
-        {
-          if (prev == '*' && cur == '/')
-          {
-            break;
-          }
-          prev = cur;
-        }
-        continue;
-      }
-      tok.push_back('/');
-    }
-    break;
+    return;
   }
-  for (;;)
+  if (fs::is_directory(from, ec))
   {
-    const int c = is.peek();
-    if (c == EOF || std::isspace(c) || c == '(' || c == ')' || c == '{' || c == '}')
-    {
-      if (tok.empty() && (c == '(' || c == ')' || c == '{' || c == '}'))
-      {
-        tok.push_back(static_cast<char>(is.get()));
-        return true;
-      }
-      break;
-    }
-    tok.push_back(static_cast<char>(is.get()));
+    fs::remove_all(to, ec);
+    fs::copy(from, to, fs::copy_options::recursive | fs::copy_options::overwrite_existing, ec);
+    return;
   }
-  return !tok.empty();
+  fs::create_directories(to.parent_path(), ec);
+  fs::copy_file(from, to, fs::copy_options::overwrite_existing, ec);
 }
 
-bool ReadFoamLabelListFile(const std::string& path, std::vector<int>& out, std::string* err)
+void PersistSnappyCase(const fs::path& caseDir)
 {
-  std::ifstream is(path);
+  WriteCaseFoam(caseDir);
+  const fs::path dstDir = LastLogDir();
+  std::error_code ec;
+  fs::create_directories(dstDir, ec);
+  for (const char* name : { "system", "constant", "case.foam", "snappyHexMesh.log" })
+  {
+    CopyTreeOverwrite(caseDir / name, dstDir / name);
+  }
+  WriteCaseFoam(dstDir);
+  std::ofstream ptr(dstDir / "last-case-path.txt");
+  if (ptr)
+  {
+    ptr << caseDir.string() << "\n";
+  }
+}
+
+std::string TailFile(const fs::path& path, std::size_t maxBytes)
+{
+  std::ifstream is(path, std::ios::binary);
   if (!is)
+  {
+    return {};
+  }
+  is.seekg(0, std::ios::end);
+  const auto sz = is.tellg();
+  if (sz <= 0)
+  {
+    return {};
+  }
+  const auto n = std::min<std::streamoff>(static_cast<std::streamoff>(maxBytes), sz);
+  is.seekg(-n, std::ios::end);
+  std::string s(static_cast<std::size_t>(n), '\0');
+  is.read(&s[0], n);
+  return s;
+}
+
+
+vtkUnstructuredGrid* FindInternalMesh(vtkDataObject* root)
+{
+  if (!root)
+  {
+    return nullptr;
+  }
+  vtkUnstructuredGrid* named = nullptr;
+  vtkUnstructuredGrid* largest = nullptr;
+  auto consider = [&](vtkUnstructuredGrid* ug, const char* name) {
+    if (!ug)
+    {
+      return;
+    }
+    if (name && std::string(name) == "internalMesh")
+    {
+      named = ug;
+    }
+    if (!largest || ug->GetNumberOfCells() > largest->GetNumberOfCells())
+    {
+      largest = ug;
+    }
+  };
+  if (auto* ug = vtkUnstructuredGrid::SafeDownCast(root))
+  {
+    return ug;
+  }
+  auto* cds = vtkCompositeDataSet::SafeDownCast(root);
+  if (!cds)
+  {
+    return nullptr;
+  }
+  vtkSmartPointer<vtkCompositeDataIterator> it;
+  it.TakeReference(cds->NewIterator());
+  it->SkipEmptyNodesOn();
+  for (it->InitTraversal(); !it->IsDoneWithTraversal(); it->GoToNextItem())
+  {
+    const char* name = nullptr;
+    if (it->HasCurrentMetaData())
+    {
+      name = it->GetCurrentMetaData()->Get(vtkCompositeDataSet::NAME());
+    }
+    consider(vtkUnstructuredGrid::SafeDownCast(it->GetCurrentDataObject()), name);
+  }
+  return named ? named : largest;
+}
+
+bool ReadCaseWithOpenFOAMReader(const std::string& foamFile, vtkUnstructuredGrid* output, std::string* err)
+{
+  vtkNew<vtkOpenFOAMReader> reader;
+  reader->SetFileName(foamFile.c_str());
+  reader->CreateCellToPointOff();
+  reader->ListTimeStepsByControlDictOff();
+  reader->ReadZonesOn();
+  reader->EnableAllPatchArrays();
+  reader->EnableAllCellArrays();
+  reader->EnableAllPointArrays();
+  reader->Update();
+  vtkUnstructuredGrid* mesh = FindInternalMesh(reader->GetOutput());
+  if (!mesh || mesh->GetNumberOfCells() == 0)
   {
     if (err)
     {
-      *err = "cannot open " + path;
+      *err = "vtkOpenFOAMReader produced no internalMesh from " + foamFile;
     }
     return false;
   }
-  std::string tok;
-  int n = -1;
-  while (NextToken(is, tok))
-  {
-    if (tok == "(" && n >= 0)
-    {
-      out.resize(static_cast<size_t>(n));
-      for (int i = 0; i < n; ++i)
-      {
-        if (!NextToken(is, tok))
-        {
-          return false;
-        }
-        out[static_cast<size_t>(i)] = std::stoi(tok);
-      }
-      return true;
-    }
-    // first integer after FoamFile block is the count
-    if (!tok.empty() && (std::isdigit(tok[0]) || tok[0] == '-'))
-    {
-      try
-      {
-        n = std::stoi(tok);
-      }
-      catch (...)
-      {
-        n = -1;
-      }
-    }
-  }
-  if (err)
-  {
-    *err = "failed to parse " + path;
-  }
-  return false;
+  output->DeepCopy(mesh);
+  return true;
 }
 
-bool ReadFoamPoints(const std::string& path, vtkPoints* pts, std::string* err)
+/** Cartesian hex grid from an AABB. VTK_HEXAHEDRON, no OpenFOAM round-trip. */
+bool BuildBackgroundHexVtk(vtkUnstructuredGrid* output, double xmin, double ymin, double zmin,
+  double xmax, double ymax, double zmax, int nx, int ny, int nz, std::string* err)
 {
-  std::ifstream is(path);
-  if (!is)
+  if (nx < 1 || ny < 1 || nz < 1)
   {
     if (err)
     {
-      *err = "cannot open " + path;
+      *err = "background hex divisions must be >= 1";
     }
     return false;
   }
-  std::string tok;
-  int n = -1;
-  while (NextToken(is, tok))
-  {
-    if (tok == "(" && n >= 0)
-    {
-      pts->SetNumberOfPoints(n);
-      for (int i = 0; i < n; ++i)
-      {
-        if (!NextToken(is, tok) || tok != "(")
-        {
-          return false;
-        }
-        double x = 0, y = 0, z = 0;
-        NextToken(is, tok);
-        x = std::stod(tok);
-        NextToken(is, tok);
-        y = std::stod(tok);
-        NextToken(is, tok);
-        z = std::stod(tok);
-        NextToken(is, tok); // )
-        pts->SetPoint(i, x, y, z);
-      }
-      return true;
-    }
-    if (!tok.empty() && std::isdigit(tok[0]))
-    {
-      try
-      {
-        n = std::stoi(tok);
-      }
-      catch (...)
-      {
-        n = -1;
-      }
-    }
-  }
-  if (err)
-  {
-    *err = "failed to parse points";
-  }
-  return false;
-}
+  const int npx = nx + 1;
+  const int npy = ny + 1;
+  const int npz = nz + 1;
+  const vtkIdType nPoints = static_cast<vtkIdType>(npx) * npy * npz;
+  const vtkIdType nCells = static_cast<vtkIdType>(nx) * ny * nz;
+  const double dx = (xmax - xmin) / nx;
+  const double dy = (ymax - ymin) / ny;
+  const double dz = (zmax - zmin) / nz;
+  auto pid = [npx, npy](int i, int j, int k) -> vtkIdType {
+    return static_cast<vtkIdType>(i) + static_cast<vtkIdType>(npx) * (j + npy * k);
+  };
 
-bool ReadFoamFaces(const std::string& path, std::vector<std::vector<int>>& faces, std::string* err)
-{
-  std::ifstream is(path);
-  if (!is)
-  {
-    if (err)
-    {
-      *err = "cannot open " + path;
-    }
-    return false;
-  }
-  std::string tok;
-  int n = -1;
-  while (NextToken(is, tok))
-  {
-    if (tok == "(" && n >= 0)
-    {
-      faces.resize(static_cast<size_t>(n));
-      for (int i = 0; i < n; ++i)
-      {
-        if (!NextToken(is, tok))
-        {
-          return false;
-        }
-        // "4(0" compact or "4" then "("
-        int nv = 0;
-        std::string rest;
-        const auto par = tok.find('(');
-        if (par != std::string::npos)
-        {
-          nv = std::stoi(tok.substr(0, par));
-          rest = tok.substr(par + 1);
-        }
-        else
-        {
-          nv = std::stoi(tok);
-          NextToken(is, tok);
-          if (tok != "(")
-          {
-            return false;
-          }
-        }
-        auto& f = faces[static_cast<size_t>(i)];
-        f.resize(static_cast<size_t>(nv));
-        int filled = 0;
-        if (!rest.empty() && rest != ")")
-        {
-          f[0] = std::stoi(rest);
-          filled = 1;
-        }
-        for (int k = filled; k < nv; ++k)
-        {
-          NextToken(is, tok);
-          if (!tok.empty() && tok.back() == ')')
-          {
-            tok.pop_back();
-            f[static_cast<size_t>(k)] = std::stoi(tok);
-            break;
-          }
-          f[static_cast<size_t>(k)] = std::stoi(tok);
-        }
-        // consume closing ) if still there
-      }
-      return true;
-    }
-    if (!tok.empty() && std::isdigit(tok[0]))
-    {
-      try
-      {
-        n = std::stoi(tok);
-      }
-      catch (...)
-      {
-        n = -1;
-      }
-    }
-  }
-  if (err)
-  {
-    *err = "failed to parse faces";
-  }
-  return false;
-}
-
-bool PolyMeshToVtk(const std::string& meshDir, vtkUnstructuredGrid* output, std::string* err)
-{
   vtkNew<vtkPoints> pts;
-  if (!ReadFoamPoints(Join(meshDir, "points"), pts, err))
+  pts->SetDataTypeToDouble();
+  pts->SetNumberOfPoints(nPoints);
+  for (int k = 0; k < npz; ++k)
   {
-    return false;
-  }
-  std::vector<std::vector<int>> faces;
-  if (!ReadFoamFaces(Join(meshDir, "faces"), faces, err))
-  {
-    return false;
-  }
-  std::vector<int> owner, neighbour;
-  if (!ReadFoamLabelListFile(Join(meshDir, "owner"), owner, err))
-  {
-    return false;
-  }
-  ReadFoamLabelListFile(Join(meshDir, "neighbour"), neighbour, nullptr);
-  int nCells = 0;
-  for (int o : owner)
-  {
-    nCells = std::max(nCells, o + 1);
-  }
-  std::vector<std::vector<int>> cellFaces(static_cast<size_t>(nCells));
-  for (size_t fi = 0; fi < owner.size(); ++fi)
-  {
-    cellFaces[static_cast<size_t>(owner[fi])].push_back(static_cast<int>(fi));
-    if (fi < neighbour.size() && neighbour[fi] >= 0)
+    for (int j = 0; j < npy; ++j)
     {
-      cellFaces[static_cast<size_t>(neighbour[fi])].push_back(static_cast<int>(fi));
+      for (int i = 0; i < npx; ++i)
+      {
+        pts->SetPoint(pid(i, j, k), xmin + i * dx, ymin + j * dy, zmin + k * dz);
+      }
     }
   }
+
+  output->Initialize();
   output->SetPoints(pts);
   output->Allocate(nCells);
-  for (int ci = 0; ci < nCells; ++ci)
+  vtkIdType hex[8];
+  for (int k = 0; k < nz; ++k)
   {
-    const auto& cfs = cellFaces[static_cast<size_t>(ci)];
-    vtkNew<vtkIdList> stream;
-    stream->InsertNextId(static_cast<vtkIdType>(cfs.size()));
-    for (int fi : cfs)
+    for (int j = 0; j < ny; ++j)
     {
-      const auto& f = faces[static_cast<size_t>(fi)];
-      stream->InsertNextId(static_cast<vtkIdType>(f.size()));
-      for (int v : f)
+      for (int i = 0; i < nx; ++i)
       {
-        stream->InsertNextId(v);
+        hex[0] = pid(i, j, k);
+        hex[1] = pid(i + 1, j, k);
+        hex[2] = pid(i + 1, j + 1, k);
+        hex[3] = pid(i, j + 1, k);
+        hex[4] = pid(i, j, k + 1);
+        hex[5] = pid(i + 1, j, k + 1);
+        hex[6] = pid(i + 1, j + 1, k + 1);
+        hex[7] = pid(i, j + 1, k + 1);
+        output->InsertNextCell(VTK_HEXAHEDRON, 8, hex);
       }
     }
-    output->InsertNextCell(VTK_POLYHEDRON, stream);
   }
   return output->GetNumberOfCells() > 0;
 }
+
 } // namespace
 
 vtkSHYXSnappyHexMesh::vtkSHYXSnappyHexMesh()
@@ -415,19 +309,114 @@ int vtkSHYXSnappyHexMesh::RequestData(
     return 0;
   }
 
-  const std::string tmpRoot = Join(".", "shyx-snappy-tmp");
-  MkDir(tmpRoot);
-  const std::string stlPath = Join(tmpRoot, "geometry.stl");
-  const std::string caseDir = Join(tmpRoot, "case");
+  auto backgroundDivisions = [&](const double bb[6], int& nx, int& ny, int& nz, double& cell,
+                               double bOut[6]) {
+    const double dx0 = bb[1] - bb[0];
+    const double dy0 = bb[3] - bb[2];
+    const double dz0 = bb[5] - bb[4];
+    const double m = this->BoundsMargin;
+    bOut[0] = bb[0] - m * dx0;
+    bOut[1] = bb[1] + m * dx0;
+    bOut[2] = bb[2] - m * dy0;
+    bOut[3] = bb[3] + m * dy0;
+    bOut[4] = bb[4] - m * dz0;
+    bOut[5] = bb[5] + m * dz0;
+    const double lx = bOut[1] - bOut[0];
+    const double ly = bOut[3] - bOut[2];
+    const double lz = bOut[5] - bOut[4];
+    cell = (this->BackgroundCellSize > 0.0) ? this->BackgroundCellSize
+                                            : std::max({ lx, ly, lz }) / 16.0;
+    auto nDiv = [&](double len) {
+      const double n = len / cell + 0.5;
+      if (n > 100000.0)
+      {
+        return 100000;
+      }
+      return std::max(1, static_cast<int>(n));
+    };
+    nx = nDiv(lx);
+    ny = nDiv(ly);
+    nz = nDiv(lz);
+  };
+
+  // Snap/layers without castellated: OpenFOAM still builds intersections then
+  // abort()s (no cellLevel). Treat as background-only; Snap stays checked in
+  // the UI when Castellated is turned off.
+  if (!this->CastellatedMesh)
+  {
+    if (this->Snap || this->AddLayers)
+    {
+      vtkWarningMacro("Snap and Add layers need Castellated mesh; generating "
+                      "background hex only.");
+    }
+    double bb[6];
+    input->GetBounds(bb);
+    int nx = 1, ny = 1, nz = 1;
+    double cell = 0.0;
+    double box[6];
+    backgroundDivisions(bb, nx, ny, nz, cell, box);
+    const long long nBg = static_cast<long long>(nx) * ny * nz;
+    const long long cap = std::max<long long>(1000, this->MaxGlobalCells);
+    vtkWarningMacro(<< "Background hex " << nx << " x " << ny << " x " << nz << " (" << nBg
+                    << " cells), cell size=" << cell);
+    if (nBg > cap)
+    {
+      vtkErrorMacro(<< "background hex would have " << nBg << " cells (" << nx << "x" << ny << "x"
+                    << nz << "); increase Background cell size (current " << cell
+                    << ") or Max global cells");
+      return 0;
+    }
+    std::string hexErr;
+    if (!BuildBackgroundHexVtk(
+          output, box[0], box[2], box[4], box[1], box[3], box[5], nx, ny, nz, &hexErr))
+    {
+      vtkErrorMacro(<< "Failed to build background hex: " << hexErr);
+      return 0;
+    }
+    return 1;
+  }
 
   vtkNew<vtkTriangleFilter> tri;
   tri->SetInputData(input);
   tri->Update();
+  vtkPolyData* surface = tri->GetOutput();
+  if (!surface || surface->GetNumberOfCells() == 0)
+  {
+    vtkErrorMacro("Triangulated surface is empty.");
+    return 0;
+  }
+
+  // OpenFOAM still needs a triSurface file; write it under %TEMP% so ParaView's
+  // cwd (often Program Files) does not have to be writable.
+  std::error_code ec;
+  const fs::path tmpRoot = fs::temp_directory_path(ec) /
+    ("shyx-snappy-" + std::to_string(reinterpret_cast<std::uintptr_t>(this)) + "-" +
+      std::to_string(this->GetMTime()));
+  if (ec)
+  {
+    vtkErrorMacro(<< "Cannot resolve temp directory: " << ec.message());
+    return 0;
+  }
+  fs::create_directories(tmpRoot, ec);
+  if (ec)
+  {
+    vtkErrorMacro(<< "Cannot create temp directory " << tmpRoot.string() << ": " << ec.message());
+    return 0;
+  }
+  RemoveTree cleanup{ tmpRoot, /*keep=*/true };
+
+  const std::string stlPath = (tmpRoot / "geometry.stl").string();
+  const std::string caseDir = (tmpRoot / "case").string();
+
   vtkNew<vtkSTLWriter> stl;
   stl->SetFileName(stlPath.c_str());
-  stl->SetInputData(tri->GetOutput());
-  stl->SetFileTypeToASCII();
-  stl->Write();
+  stl->SetInputData(surface);
+  stl->SetFileTypeToBinary();
+  if (stl->Write() == 0)
+  {
+    vtkErrorMacro(<< "Failed to write temporary STL: " << stlPath);
+    return 0;
+  }
 
   ShyxSnappyParams p;
   shyx_snappy_params_default(&p);
@@ -454,9 +443,19 @@ int vtkSHYXSnappyHexMesh::RequestData(
   char err[2048];
   err[0] = '\0';
   const int rc = shyx_snappy_run(stlPath.c_str(), caseDir.c_str(), &p, err, 2048);
+  PersistSnappyCase(caseDir);
+  const fs::path logPath = LastLogDir() / "snappyHexMesh.log";
+  const fs::path foamPath = fs::path(caseDir) / "case.foam";
+  const fs::path lastFoam = LastLogDir() / "case.foam";
+  const fs::path caseLog = fs::path(caseDir) / "snappyHexMesh.log";
   if (rc != 0 && rc != 5)
   {
-    vtkErrorMacro(<< "snappyHexMesh failed (" << rc << "): " << err);
+    const std::string tail = TailFile(caseLog, 1200);
+    vtkErrorMacro(<< "snappyHexMesh failed (" << rc << "): " << err
+                  << "\nlog: " << logPath.string()
+                  << "\ncase.foam: " << foamPath.string()
+                  << "\nlast: " << lastFoam.string()
+                  << (tail.empty() ? "" : ("\n--- log tail ---\n" + tail)));
     return 0;
   }
   if (rc == 5)
@@ -464,12 +463,14 @@ int vtkSHYXSnappyHexMesh::RequestData(
     vtkWarningMacro(<< err);
   }
 
-  std::string meshDir = Join(Join(caseDir, "constant"), "polyMesh");
   std::string parseErr;
-  if (!PolyMeshToVtk(meshDir, output, &parseErr))
+  if (!ReadCaseWithOpenFOAMReader(foamPath.string(), output, &parseErr))
   {
-    vtkErrorMacro(<< "Failed to read polyMesh: " << parseErr);
+    vtkErrorMacro(<< parseErr << " (case.foam: " << foamPath.string() << "; last: " << lastFoam.string()
+                  << "; log: " << logPath.string() << ")");
     return 0;
   }
+  vtkWarningMacro(<< "OpenFOAM case kept. File -> Open: " << lastFoam.string()
+                  << " (this run: " << foamPath.string() << ")");
   return 1;
 }

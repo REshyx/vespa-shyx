@@ -30,8 +30,11 @@ VTK modules live under [`vespa/`](./vespa/README.md), grouped by **author / orig
 | Path | Origin |
 |------|--------|
 | `vespa/Algorithm/` | Shared VTK↔CGAL helpers (outside author folders) |
+| `vespa/Core/` | Shared VTK-only helpers (`vtkVESPAAttributeTransfer`) |
 | `vespa/vespa/` | Original Kitware VESPA (`vtkCGAL*`) |
 | `vespa/shyx/` | SHYX vascular / volume / flow / viz filters |
+
+Module ↔ class ↔ XML ↔ menu ↔ icon: [`vespa/INVENTORY.md`](./vespa/INVENTORY.md).
 
 `ParaViewPlugin/` is a thin aggregator (`VESPAPlugin`) of whichever modules were built.
 Third-party sources that are not VTK modules (e.g. TetGen) stay at the repository root.

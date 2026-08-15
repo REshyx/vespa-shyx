@@ -1,4 +1,4 @@
-#include "vtkCGALPointCloudSurfaceSignedDistance.h"
+#include "vtkSHYXPointCloudSurfaceSignedDistance.h"
 
 #include <vtkCellArray.h>
 #include <vtkDataSet.h>
@@ -97,29 +97,29 @@ vtkPolyData* ToSurfacePolyData(vtkDataSet* input, vtkPolyData* cache)
 
 } // namespace
 
-vtkStandardNewMacro(vtkCGALPointCloudSurfaceSignedDistance);
+vtkStandardNewMacro(vtkSHYXPointCloudSurfaceSignedDistance);
 
 //------------------------------------------------------------------------------
-vtkCGALPointCloudSurfaceSignedDistance::vtkCGALPointCloudSurfaceSignedDistance()
+vtkSHYXPointCloudSurfaceSignedDistance::vtkSHYXPointCloudSurfaceSignedDistance()
 {
   this->SetNumberOfInputPorts(2);
 }
 
 //------------------------------------------------------------------------------
-void vtkCGALPointCloudSurfaceSignedDistance::PrintSelf(ostream& os, vtkIndent indent)
+void vtkSHYXPointCloudSurfaceSignedDistance::PrintSelf(ostream& os, vtkIndent indent)
 {
   this->Superclass::PrintSelf(os, indent);
   os << indent << "TakeAbsoluteValue: " << (this->TakeAbsoluteValue ? "On" : "Off") << "\n";
 }
 
 //------------------------------------------------------------------------------
-void vtkCGALPointCloudSurfaceSignedDistance::SetSourceConnection(vtkAlgorithmOutput* algOutput)
+void vtkSHYXPointCloudSurfaceSignedDistance::SetSourceConnection(vtkAlgorithmOutput* algOutput)
 {
   this->SetInputConnection(1, algOutput);
 }
 
 //------------------------------------------------------------------------------
-int vtkCGALPointCloudSurfaceSignedDistance::FillInputPortInformation(
+int vtkSHYXPointCloudSurfaceSignedDistance::FillInputPortInformation(
   int port, vtkInformation* info)
 {
   if (port == 0 || port == 1)
@@ -131,7 +131,7 @@ int vtkCGALPointCloudSurfaceSignedDistance::FillInputPortInformation(
 }
 
 //------------------------------------------------------------------------------
-int vtkCGALPointCloudSurfaceSignedDistance::RequestData(
+int vtkSHYXPointCloudSurfaceSignedDistance::RequestData(
   vtkInformation*, vtkInformationVector** inputVector, vtkInformationVector* outputVector)
 {
   vtkDataSet* pointCloudIn = vtkDataSet::GetData(inputVector[0]);

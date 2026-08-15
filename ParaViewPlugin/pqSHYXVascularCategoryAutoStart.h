@@ -1,5 +1,5 @@
-#ifndef pqVESPAVascularCategoryAutoStart_h
-#define pqVESPAVascularCategoryAutoStart_h
+#ifndef pqSHYXVascularCategoryAutoStart_h
+#define pqSHYXVascularCategoryAutoStart_h
 
 #include <QObject>
 
@@ -13,14 +13,14 @@
  * Needed because ParaView merges category XML/settings (does not replace), so
  * stale proxies survive reload unless we remove + rewrite on each load.
  */
-class pqVESPAVascularCategoryAutoStart : public QObject
+class pqSHYXVascularCategoryAutoStart : public QObject
 {
   Q_OBJECT
   typedef QObject Superclass;
 
 public:
-  pqVESPAVascularCategoryAutoStart(QObject* parent = nullptr);
-  ~pqVESPAVascularCategoryAutoStart() override;
+  pqSHYXVascularCategoryAutoStart(QObject* parent = nullptr);
+  ~pqSHYXVascularCategoryAutoStart() override;
 
   void onStartup();
   void onShutdown();
@@ -28,7 +28,7 @@ public:
 private:
   void enforceVascularOrder();
 
-  Q_DISABLE_COPY(pqVESPAVascularCategoryAutoStart)
+  Q_DISABLE_COPY(pqSHYXVascularCategoryAutoStart)
 };
 
 #endif

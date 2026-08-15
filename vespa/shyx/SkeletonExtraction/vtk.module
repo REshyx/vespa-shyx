@@ -3,7 +3,7 @@ NAME
 DESCRIPTION
   "Mean curvature flow curve skeleton extraction from a closed triangle mesh."
 GROUPS
-  Meshing
+  Vascular
 DEPENDS
   vtkCGALAlgorithm
   VTK::FiltersCore

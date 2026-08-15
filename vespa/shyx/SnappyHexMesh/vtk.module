@@ -3,7 +3,7 @@ NAME
 DESCRIPTION
   "Hex-dominant volume mesh from a closed surface using snappyHexMesh."
 GROUPS
-  Meshing
+  Vascular
 DEPENDS
   VTK::FiltersCore
 PRIVATE_DEPENDS

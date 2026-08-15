@@ -385,7 +385,7 @@
       </PropertyGroup>
 
       <Hints>
-        <ShowInMenu category="SHYX" icon=":/VESPA/VESPA_Hole_Filling.png"/>
+        <ShowInMenu category="SHYX" icon=":/VESPA/SHYX_Selection_Fill_Alpha_Reunion.png"/>
       </Hints>
     </SourceProxy>
   </ProxyGroup>

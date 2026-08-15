@@ -3,7 +3,7 @@ NAME
 DESCRIPTION
   "Shared VTK-only utilities (attribute transfer after remesh/deform). No CGAL."
 GROUPS
-  Meshing
+  Core
 DEPENDS
   VTK::CommonCore
   VTK::CommonDataModel

@@ -1,0 +1,80 @@
+<ServerManagerConfiguration>
+  <ProxyGroup name="filters">
+    <SourceProxy class="vtkSHYXDensityBasedSampler"
+                 label="SHYX Density-Based Volume Sampler"
+                 name="SHYXDensityBasedVolumeSampler">
+      <Documentation short_help="SHYX Density-Based Volume Sampler: Samples random points inside a closed mesh with density controlled by a scalar field.">
+        This filter generates random sample points within the enclosed volume of
+        a mesh. It accepts either a volume mesh (vtkUnstructuredGrid, e.g. .vtu)
+        or a closed surface mesh (vtkPolyData). For volume meshes the outer
+        surface is extracted automatically for the inside/outside test, and the
+        volume cells are used for accurate scalar interpolation. The spatial
+        density of the output point cloud is governed by a user-selected scalar
+        array, automatically linearly mapped from its value range to 0-100%.
+      </Documentation>
+
+      <InputProperty name="Input"
+                     command="SetInputConnection">
+        <ProxyGroupDomain name="groups">
+          <Group name="sources"/>
+          <Group name="filters"/>
+        </ProxyGroupDomain>
+        <DataTypeDomain name="input_type">
+          <DataType value="vtkDataSet"/>
+        </DataTypeDomain>
+        <InputArrayDomain name="point_arrays" attribute_type="point" optional="1" />
+      </InputProperty>
+
+      <StringVectorProperty command="SetDensityArrayName"
+                            name="DensityArrayName"
+                            label="Density Array"
+                            number_of_elements="1"
+                            default_values="">
+        <ArrayListDomain attribute_type="Scalars"
+                         name="array_list"
+                         none_string="(Uniform)"
+                         input_domain_name="point_arrays">
+          <RequiredProperties>
+            <Property function="Input"
+                      name="Input" />
+          </RequiredProperties>
+        </ArrayListDomain>
+        <Documentation>
+          Point-data scalar array whose values control sampling density.
+          If left empty or the array is not found, uniform sampling is used.
+        </Documentation>
+        <Hints>
+          <ArraySelectionWidget icon_type="point"/>
+        </Hints>
+      </StringVectorProperty>
+
+      <IntVectorProperty command="SetPreSampleCount"
+                         name="PreSampleCount"
+                         label="Pre-Sample Count"
+                         number_of_elements="1"
+                         default_values="100000">
+        <IntRangeDomain name="range" min="1" max="100000000"/>
+        <Documentation>
+          Number of Cartesian grid points to pre-sample. Output = interior points
+          kept after density filtering.
+        </Documentation>
+      </IntVectorProperty>
+
+      <IntVectorProperty command="SetSeed"
+                         name="Seed"
+                         label="Random Seed"
+                         number_of_elements="1"
+                         default_values="0">
+        <Documentation>
+          Random seed for reproducible results. Change this value to
+          obtain a different point distribution.
+        </Documentation>
+      </IntVectorProperty>
+
+      <Hints>
+        <ShowInMenu category="SHYX" icon=":/VESPA/SHYX_Density_Based_Volume_Sampler.png"/>
+      </Hints>
+
+    </SourceProxy>
+  </ProxyGroup>
+</ServerManagerConfiguration>

@@ -3,7 +3,7 @@ NAME
   DESCRIPTION
   "Modify vtkPartitionedDataSetCollection boundary radial/normal/variable fields and block names."
 GROUPS
-  Meshing
+  Vascular
 DEPENDS
   VTK::CommonCore
   VTK::CommonDataModel

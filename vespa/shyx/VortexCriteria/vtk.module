@@ -3,7 +3,7 @@ NAME
 DESCRIPTION
   "Compute vortex identification criteria and flow quantities from velocity."
 GROUPS
-  Meshing
+  Flow
 DEPENDS
   VTK::FiltersCore
   VTK::FiltersGeneral

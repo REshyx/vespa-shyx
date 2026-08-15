@@ -1,5 +1,5 @@
-#ifndef pqVESPASelectionPlaneClipperWidget_h
-#define pqVESPASelectionPlaneClipperWidget_h
+#ifndef pqSHYXSelectionPlaneClipperWidget_h
+#define pqSHYXSelectionPlaneClipperWidget_h
 
 #include "pqPropertyGroupWidget.h"
 
@@ -23,15 +23,15 @@ class vtkSMNewWidgetRepresentationProxy;
  * InteractiveCutPacked proxy property when set; otherwise from vtkSHYXSelectionPlaneClipper::ClipPlaneHintPackedString
  * after a successful clip (six doubles: origin + direction handle).
  */
-class pqVESPASelectionPlaneClipperWidget : public pqPropertyGroupWidget
+class pqSHYXSelectionPlaneClipperWidget : public pqPropertyGroupWidget
 {
   Q_OBJECT
   typedef pqPropertyGroupWidget Superclass;
 
 public:
-  pqVESPASelectionPlaneClipperWidget(
+  pqSHYXSelectionPlaneClipperWidget(
     vtkSMProxy* proxy, vtkSMPropertyGroup* smgroup, QWidget* parent = nullptr);
-  ~pqVESPASelectionPlaneClipperWidget() override;
+  ~pqSHYXSelectionPlaneClipperWidget() override;
 
   void select() override;
   void deselect() override;

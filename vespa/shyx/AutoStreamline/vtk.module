@@ -3,7 +3,7 @@ NAME
 DESCRIPTION
   "Auto streamlines: vortex cores → surface-distance cull → uniform seed sample → StreamTracer (VTK only)."
 GROUPS
-  Meshing
+  Flow
 DEPENDS
   VTK::CommonExecutionModel
   VTK::FiltersCore

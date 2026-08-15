@@ -1,4 +1,21 @@
-vtk_module_find_modules(vespa_vtk_modules "${CMAKE_SOURCE_DIR}/vespa")
+# Upstream VESPA proxies live in VESPAFilters.xml (CGAL). SHYX filters each have SHYX*.xml.
+# Do not register CGAL-backed proxies when those modules were not built.
+set(VESPA_UPSTREAM_SERVER_MANAGER_XML "")
+set(SHYX_CGAL_SERVER_MANAGER_XML "")
+if (VESPA_BUILT_WITH_CGAL)
+  set(VESPA_UPSTREAM_SERVER_MANAGER_XML "VESPAFilters.xml")
+  set(SHYX_CGAL_SERVER_MANAGER_XML
+    "SHYXBooleanOperationFilter.xml"
+    "SHYXEdgeCollapse.xml"
+    "SHYXHoleFillFilter.xml"
+    "SHYXMeshChecker.xml"
+    "SHYXMinimumOBB.xml"
+    "SHYXRepairDegeneracies.xml"
+    "SHYXShapeSmoothing.xml"
+    "SHYXSkeletonExtraction.xml"
+    "SHYXSurfaceToVolumeMesh.xml"
+    "SHYXVesselEndClipper.xml")
+endif()
 
 if (${VESPA_ALPHA_WRAPPING})
   set(ALPHA_WRAPPING_SERVER_MANAGER_XML "VESPAAlphaWrapping.xml")
@@ -42,24 +59,24 @@ paraview_plugin_add_property_widget(
 
 paraview_plugin_add_property_widget(
   KIND GROUP_WIDGET
-  TYPE "vespa_obb_interactive_box"
-  CLASS_NAME pqVESPAOBBInteractiveBoxWidget
+  TYPE "shyx_obb_interactive_box"
+  CLASS_NAME pqSHYXOBBInteractiveBoxWidget
   INTERFACES vespa_obb_box_interfaces
   SOURCES vespa_obb_box_sources)
 
 paraview_plugin_add_property_widget(
   KIND GROUP_WIDGET
-  TYPE "vespa_endclipper_plane_handles"
-  CLASS_NAME pqVESPAEndClipperPlaneHandlesWidget
+  TYPE "shyx_endclipper_plane_handles"
+  CLASS_NAME pqSHYXEndClipperPlaneHandlesWidget
   INTERFACES vespa_endclipper_plane_interfaces
   SOURCES vespa_endclipper_plane_sources)
 
 paraview_plugin_add_property_widget(
   KIND GROUP_WIDGET
-  TYPE "vespa_selection_plane_clipper"
-  CLASS_NAME pqVESPASelectionPlaneClipperWidget
-  INTERFACES vespa_selection_plane_clipper_interfaces
-  SOURCES vespa_selection_plane_clipper_sources)
+  TYPE "shyx_selection_plane_clipper"
+  CLASS_NAME pqSHYXSelectionPlaneClipperWidget
+  INTERFACES shyx_selection_plane_clipper_interfaces
+  SOURCES shyx_selection_plane_clipper_sources)
 
 paraview_plugin_add_property_widget(
   KIND GROUP_WIDGET
@@ -145,8 +162,8 @@ if (PARAVIEW_USE_QT)
   list(APPEND vespa_plugin_qt_auto_interfaces ${pulse_glyph_autostart_interfaces})
   list(APPEND vespa_plugin_qt_auto_sources
     ${pulse_glyph_autostart_sources}
-    ${CMAKE_SOURCE_DIR}/vespa/shyx/PulseGlyphRepresentation/pqPulseGlyphAnimationManager.cxx
-    ${CMAKE_SOURCE_DIR}/vespa/shyx/PulseGlyphRepresentation/pqPulseGlyphAnimationManager.h)
+    pqPulseGlyphAnimationManager.cxx
+    pqPulseGlyphAnimationManager.h)
 
   paraview_plugin_add_auto_start(
     CLASS_NAME "pqAnimatedStreamlineAnimationManager"
@@ -158,8 +175,8 @@ if (PARAVIEW_USE_QT)
   list(APPEND vespa_plugin_qt_auto_interfaces ${animated_streamline_autostart_interfaces})
   list(APPEND vespa_plugin_qt_auto_sources
     ${animated_streamline_autostart_sources}
-    ${CMAKE_SOURCE_DIR}/vespa/shyx/AnimatedStreamlineRepresentation/pqAnimatedStreamlineAnimationManager.cxx
-    ${CMAKE_SOURCE_DIR}/vespa/shyx/AnimatedStreamlineRepresentation/pqAnimatedStreamlineAnimationManager.h)
+    pqAnimatedStreamlineAnimationManager.cxx
+    pqAnimatedStreamlineAnimationManager.h)
 
   paraview_plugin_add_auto_start(
     CLASS_NAME "pqSHYXSphereSelectionAutoStart"
@@ -196,7 +213,7 @@ if (PARAVIEW_USE_QT)
     GrowSelectionWithSimilar/pqSHYXGrowSelectionWithSimilarController.h)
 
   paraview_plugin_add_auto_start(
-    CLASS_NAME "pqVESPAVascularCategoryAutoStart"
+    CLASS_NAME "pqSHYXVascularCategoryAutoStart"
     STARTUP onStartup
     SHUTDOWN onShutdown
     INTERFACES vascular_category_autostart_interfaces
@@ -205,8 +222,8 @@ if (PARAVIEW_USE_QT)
   list(APPEND vespa_plugin_qt_auto_interfaces ${vascular_category_autostart_interfaces})
   list(APPEND vespa_plugin_qt_auto_sources
     ${vascular_category_autostart_sources}
-    pqVESPAVascularCategoryAutoStart.cxx
-    pqVESPAVascularCategoryAutoStart.h)
+    pqSHYXVascularCategoryAutoStart.cxx
+    pqSHYXVascularCategoryAutoStart.h)
 endif ()
 
 paraview_add_plugin(VESPAPlugin
@@ -219,10 +236,13 @@ paraview_add_plugin(VESPAPlugin
   INITIALIZERS vespa_qrc_init
   EXTRA_INCLUDES "vespa_qrc_init.h"
   SERVER_MANAGER_XML
-    "VESPAFilters.xml"
+    ${VESPA_UPSTREAM_SERVER_MANAGER_XML}
     "VESPAVascularCategory.xml"
+    "SHYXArrayProbabilityPointCull.xml"
+    "SHYXBidirectionalStreamlineMerge.xml"
+    "SHYXDensityBasedVolumeSampler.xml"
+    "SHYXPointCloudSurfaceSDF.xml"
     "SHYXSurfaceTipExtractor.xml"
-    "SHYXSurfaceToVolumeMesh.xml"
     "SHYXTetGen.xml"
     "SHYXTetGenMeshOptimize.xml"
     "SHYXTetMeshRegionPartition.xml"
@@ -230,16 +250,11 @@ paraview_add_plugin(VESPAPlugin
     "SHYXFlipSelectedCellsWinding.xml"
     "SHYXGeodesicDistance.xml"
     "SHYXEnhancedRuler.xml"
-    "SHYXHoleFillFilter.xml"
     "SHYXRadiusNeighborCount.xml"
-    "SHYXRepairDegeneracies.xml"
     "SHYXSelectionExtrude.xml"
     "SHYXSelectionPlaneClipper.xml"
-    "SHYXMeshChecker.xml"
-    "SHYXMinimumOBB.xml"
     "SHYXPointExtrude.xml"
     "SHYXDisconnectedRegionFuse.xml"
-    "SHYXEdgeCollapse.xml"
     "SHYXDataSetToPartitionedCollection.xml"
     "SHYXPartitionedCollectionBoundaryAssignment.xml"
     "SHYXPartitionedCollectionBoundaryFields.xml"
@@ -255,19 +270,18 @@ paraview_add_plugin(VESPAPlugin
     "SHYXVectorFieldTopology.xml"
     "SHYXArrayCurveMapper.xml"
     "SHYXAutoStreamline.xml"
-    "SHYXBooleanOperationFilter.xml"
-    "SHYXShapeSmoothing.xml"
     "PulseGlyphRepresentation.xml"
     "AnimatedStreamlineRepresentation.xml"
     "PointLabelRepresentation.xml"
+     ${SHYX_CGAL_SERVER_MANAGER_XML}
      ${ALPHA_WRAPPING_SERVER_MANAGER_XML}
      ${SHYX_SELECTION_FILL_ALPHA_REUNION_XML}
      ${MESH_SMOOTHING_SERVER_MANAGER_XML}
      ${ADAPTIVE_REMESHING_SERVER_MANAGER_XML}
      ${VMTK_CENTERLINES_SERVER_MANAGER_XML}
      ${SNAPPYHEXMESH_SERVER_MANAGER_XML}
-  UI_INTERFACES ${acm_interfaces} ${vespa_obb_box_interfaces} ${vespa_endclipper_plane_interfaces} ${vespa_selection_plane_clipper_interfaces} ${vespa_stent_cylinder_interfaces} ${vespa_enhanced_ruler_interfaces} ${vespa_endpoint_stent_interfaces} ${shyx_partitioned_block_names_interfaces} ${shyx_boundary_assignment_info_interfaces} ${shyx_remesh_uncapped_histogram_interfaces} ${shyx_openings_table_interfaces} ${vespa_plugin_qt_auto_interfaces}
-  SOURCES ${acm_sources} ${vespa_obb_box_sources} ${vespa_endclipper_plane_sources} ${vespa_selection_plane_clipper_sources} ${vespa_stent_cylinder_sources} ${vespa_enhanced_ruler_sources} ${vespa_endpoint_stent_sources} ${shyx_partitioned_block_names_sources} ${shyx_boundary_assignment_info_sources} ${shyx_remesh_uncapped_histogram_sources} ${shyx_openings_table_sources}
+  UI_INTERFACES ${acm_interfaces} ${vespa_obb_box_interfaces} ${vespa_endclipper_plane_interfaces} ${shyx_selection_plane_clipper_interfaces} ${vespa_stent_cylinder_interfaces} ${vespa_enhanced_ruler_interfaces} ${vespa_endpoint_stent_interfaces} ${shyx_partitioned_block_names_interfaces} ${shyx_boundary_assignment_info_interfaces} ${shyx_remesh_uncapped_histogram_interfaces} ${shyx_openings_table_interfaces} ${vespa_plugin_qt_auto_interfaces}
+  SOURCES ${acm_sources} ${vespa_obb_box_sources} ${vespa_endclipper_plane_sources} ${shyx_selection_plane_clipper_sources} ${vespa_stent_cylinder_sources} ${vespa_enhanced_ruler_sources} ${vespa_endpoint_stent_sources} ${shyx_partitioned_block_names_sources} ${shyx_boundary_assignment_info_sources} ${shyx_remesh_uncapped_histogram_sources} ${shyx_openings_table_sources}
     TransferCurve/pqArrayCurveMapperPanel.cxx
     TransferCurve/pqArrayCurveMapperPanel.h
     TransferCurve/pqSHYXTransferCurveWidget.cxx
@@ -282,12 +296,12 @@ paraview_add_plugin(VESPAPlugin
     TransferCurve/vtkSHYXInputRangeHandlesItem.h
     TransferCurve/vtkSHYXOutputRangeHandlesItem.cxx
     TransferCurve/vtkSHYXOutputRangeHandlesItem.h
-    pqVESPAOBBInteractiveBoxWidget.cxx
-    pqVESPAOBBInteractiveBoxWidget.h
-    pqVESPAEndClipperPlaneHandlesWidget.cxx
-    pqVESPAEndClipperPlaneHandlesWidget.h
-    pqVESPASelectionPlaneClipperWidget.cxx
-    pqVESPASelectionPlaneClipperWidget.h
+    pqSHYXOBBInteractiveBoxWidget.cxx
+    pqSHYXOBBInteractiveBoxWidget.h
+    pqSHYXEndClipperPlaneHandlesWidget.cxx
+    pqSHYXEndClipperPlaneHandlesWidget.h
+    pqSHYXSelectionPlaneClipperWidget.cxx
+    pqSHYXSelectionPlaneClipperWidget.h
     Resources/UI/pqCylinderPropertyWidget.ui
     vespa_qrc_init.cxx
     vespa_qrc_init.h
@@ -308,10 +322,14 @@ endif ()
 
 target_link_libraries(VESPAPlugin
   PRIVATE
-    vtkCGALDelaunay
-    vtkCGALPMP
     VTK::FiltersCore
     VTK::FiltersParallel)
+if (VESPA_BUILT_WITH_CGAL)
+  target_link_libraries(VESPAPlugin
+    PRIVATE
+      vtkCGALDelaunay
+      vtkCGALPMP)
+endif()
 
 if (PARAVIEW_USE_QT)
   target_link_libraries(VESPAPlugin
@@ -327,6 +345,30 @@ if (PARAVIEW_USE_QT)
       vtkSHYXEnhancedRuler)
   if (VESPA_ADAPTIVE_REMESHING)
     target_link_libraries(VESPAPlugin PRIVATE vtkSHYXAdaptiveIsotropicRemesher)
+  endif ()
+endif ()
+
+# MSVC drops RTS-only members of SHYXSnappyHex.lib unless the whole archive is pulled.
+if (VESPA_USE_SNAPPYHEXMESH)
+  if (COMMAND shyx_snappyhex_whole_archive)
+    shyx_snappyhex_whole_archive(VESPAPlugin)
+  elseif (MSVC AND TARGET SHYXSnappyHex::SHYXSnappyHex)
+    target_link_options(VESPAPlugin PRIVATE
+      "/WHOLEARCHIVE:$<TARGET_FILE:SHYXSnappyHex::SHYXSnappyHex>"
+      "/OPT:NOICF")
+  endif ()
+  if (DEFINED SHYXSnappyHex_DIR)
+    get_filename_component(_shyx_cli_prefix "${SHYXSnappyHex_DIR}/../../.." ABSOLUTE)
+    if (NOT DEFINED SHYXSnappyHex_CLI OR NOT EXISTS "${SHYXSnappyHex_CLI}")
+      set(SHYXSnappyHex_CLI "${_shyx_cli_prefix}/bin/snappy_cli.exe")
+    endif ()
+  endif ()
+  if (EXISTS "${SHYXSnappyHex_CLI}")
+    add_custom_command(TARGET VESPAPlugin POST_BUILD
+      COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+        "${SHYXSnappyHex_CLI}"
+        "$<TARGET_FILE_DIR:VESPAPlugin>/snappy_cli.exe"
+      COMMENT "Copy snappy_cli.exe next to VESPAPlugin")
   endif ()
 endif ()
 

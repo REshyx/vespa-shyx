@@ -1,0 +1,10 @@
+NAME
+  vtkSHYXVectorFieldTopology
+DESCRIPTION
+  "SHYX wrapper around VTK vtkVectorFieldTopology (critical points and separatrices)."
+GROUPS
+  Flow
+DEPENDS
+  VTK::FiltersFlowPaths
+PRIVATE_DEPENDS
+  VTK::CommonCore

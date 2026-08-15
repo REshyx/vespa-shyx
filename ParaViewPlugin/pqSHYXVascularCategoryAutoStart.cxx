@@ -1,4 +1,4 @@
-#include "pqVESPAVascularCategoryAutoStart.h"
+#include "pqSHYXVascularCategoryAutoStart.h"
 
 #include "pqProxyCategory.h"
 #include "pqProxyGroupMenuManager.h"
@@ -31,7 +31,6 @@ constexpr const char* kVascularFiltersXml = R"xml(
              icon=":/VESPA/SHYX_Remesh_With_Endpoint.png"/>
       <Proxy group="filters" name="SHYXTetGen"
              icon=":/VESPA/SHYX_TetGen.png"/>
-      <Proxy group="filters" name="SHYXSnappyHexMesh"/>
       <Proxy group="filters" name="SHYXDataSetToPartitionedCollection"
              icon=":/VESPA/SHYX_DataSet_To_Partitioned_Collection.png"/>
       <Proxy group="filters" name="SHYXPartitionedCollectionBoundaryAssignment"
@@ -172,19 +171,19 @@ void showVascularToolbar(pqProxyGroupMenuManager* mgr)
 } // namespace
 
 //-----------------------------------------------------------------------------
-pqVESPAVascularCategoryAutoStart::pqVESPAVascularCategoryAutoStart(QObject* parent)
+pqSHYXVascularCategoryAutoStart::pqSHYXVascularCategoryAutoStart(QObject* parent)
   : Superclass(parent)
 {
 }
 
 //-----------------------------------------------------------------------------
-pqVESPAVascularCategoryAutoStart::~pqVESPAVascularCategoryAutoStart()
+pqSHYXVascularCategoryAutoStart::~pqSHYXVascularCategoryAutoStart()
 {
   this->onShutdown();
 }
 
 //-----------------------------------------------------------------------------
-void pqVESPAVascularCategoryAutoStart::onStartup()
+void pqSHYXVascularCategoryAutoStart::onStartup()
 {
   // Plugin SM XML / category toolbars may finish after auto_start; refresh on
   // every load so settings residuals cannot stick around.
@@ -194,10 +193,10 @@ void pqVESPAVascularCategoryAutoStart::onStartup()
 }
 
 //-----------------------------------------------------------------------------
-void pqVESPAVascularCategoryAutoStart::onShutdown() {}
+void pqSHYXVascularCategoryAutoStart::onShutdown() {}
 
 //-----------------------------------------------------------------------------
-void pqVESPAVascularCategoryAutoStart::enforceVascularOrder()
+void pqSHYXVascularCategoryAutoStart::enforceVascularOrder()
 {
   for (pqProxyGroupMenuManager* mgr : ::findFiltersMenuManagers())
   {

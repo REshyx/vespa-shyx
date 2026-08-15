@@ -3,7 +3,7 @@ NAME
 DESCRIPTION
   "Compute Finite-Time Lyapunov Exponent (FTLE) field from velocity."
 GROUPS
-  Meshing
+  Flow
 DEPENDS
   VTK::FiltersCore
   VTK::FiltersFlowPaths

@@ -1,4 +1,4 @@
-#include "pqVESPASelectionPlaneClipperWidget.h"
+#include "pqSHYXSelectionPlaneClipperWidget.h"
 
 #include "pqApplicationCore.h"
 #include "pqCoreUtilities.h"
@@ -81,7 +81,7 @@ bool ParsePackedDoubles(const QString& s, std::vector<double>& out)
 } // namespace
 
 //-----------------------------------------------------------------------------
-pqVESPASelectionPlaneClipperWidget::pqVESPASelectionPlaneClipperWidget(
+pqSHYXSelectionPlaneClipperWidget::pqSHYXSelectionPlaneClipperWidget(
   vtkSMProxy* proxy, vtkSMPropertyGroup* smgroup, QWidget* parent)
   : pqPropertyGroupWidget(proxy, smgroup, parent)
 {
@@ -101,7 +101,7 @@ pqVESPASelectionPlaneClipperWidget::pqVESPASelectionPlaneClipperWidget(
 
   this->addPropertyLink(this->UseInteractiveCheckbox, "UseInteractiveCutPlanes");
   QObject::connect(this->UseInteractiveCheckbox, &QCheckBox::toggled, this,
-    &pqVESPASelectionPlaneClipperWidget::onUseInteractiveToggled);
+    &pqSHYXSelectionPlaneClipperWidget::onUseInteractiveToggled);
 
   if (auto* smm = pqApplicationCore::instance()->getServerManagerModel())
   {
@@ -117,34 +117,34 @@ pqVESPASelectionPlaneClipperWidget::pqVESPASelectionPlaneClipperWidget(
 }
 
 //-----------------------------------------------------------------------------
-pqVESPASelectionPlaneClipperWidget::~pqVESPASelectionPlaneClipperWidget()
+pqSHYXSelectionPlaneClipperWidget::~pqSHYXSelectionPlaneClipperWidget()
 {
   this->disconnectViewVisibilityLinks();
   this->tearDownPlaneWidgets();
 }
 
 //-----------------------------------------------------------------------------
-void pqVESPASelectionPlaneClipperWidget::select()
+void pqSHYXSelectionPlaneClipperWidget::select()
 {
   this->Superclass::select();
   this->updatePlaneWidgetsVisibility();
 }
 
 //-----------------------------------------------------------------------------
-void pqVESPASelectionPlaneClipperWidget::deselect()
+void pqSHYXSelectionPlaneClipperWidget::deselect()
 {
   this->Superclass::deselect();
   this->updatePlaneWidgetsVisibility();
 }
 
 //-----------------------------------------------------------------------------
-void pqVESPASelectionPlaneClipperWidget::showEvent(QShowEvent* event)
+void pqSHYXSelectionPlaneClipperWidget::showEvent(QShowEvent* event)
 {
   this->Superclass::showEvent(event);
 }
 
 //-----------------------------------------------------------------------------
-void pqVESPASelectionPlaneClipperWidget::setView(pqView* view)
+void pqSHYXSelectionPlaneClipperWidget::setView(pqView* view)
 {
   this->disconnectViewVisibilityLinks();
   if (view)
@@ -159,19 +159,19 @@ void pqVESPASelectionPlaneClipperWidget::setView(pqView* view)
 }
 
 //-----------------------------------------------------------------------------
-void pqVESPASelectionPlaneClipperWidget::onUseInteractiveToggled(bool /*on*/)
+void pqSHYXSelectionPlaneClipperWidget::onUseInteractiveToggled(bool /*on*/)
 {
   this->rebuildPlaneWidgetsIfNeeded();
 }
 
 //-----------------------------------------------------------------------------
-void pqVESPASelectionPlaneClipperWidget::onPipelineDataUpdated()
+void pqSHYXSelectionPlaneClipperWidget::onPipelineDataUpdated()
 {
   this->rebuildPlaneWidgetsIfNeeded();
 }
 
 //-----------------------------------------------------------------------------
-void pqVESPASelectionPlaneClipperWidget::onPlaneInteraction()
+void pqSHYXSelectionPlaneClipperWidget::onPlaneInteraction()
 {
   if (this->PlaneWidget)
   {
@@ -186,7 +186,7 @@ void pqVESPASelectionPlaneClipperWidget::onPlaneInteraction()
 }
 
 //-----------------------------------------------------------------------------
-void pqVESPASelectionPlaneClipperWidget::onPlaneEndInteraction()
+void pqSHYXSelectionPlaneClipperWidget::onPlaneEndInteraction()
 {
   if (this->PlaneWidget)
   {
@@ -202,7 +202,7 @@ void pqVESPASelectionPlaneClipperWidget::onPlaneEndInteraction()
 }
 
 //-----------------------------------------------------------------------------
-void pqVESPASelectionPlaneClipperWidget::tearDownPlaneWidgets()
+void pqSHYXSelectionPlaneClipperWidget::tearDownPlaneWidgets()
 {
   this->detachPlaneWidgetsFromView();
   vtkSMNewWidgetRepresentationProxy* w = this->PlaneWidget.GetPointer();
@@ -224,7 +224,7 @@ void pqVESPASelectionPlaneClipperWidget::tearDownPlaneWidgets()
 }
 
 //-----------------------------------------------------------------------------
-void pqVESPASelectionPlaneClipperWidget::detachPlaneWidgetsFromView()
+void pqSHYXSelectionPlaneClipperWidget::detachPlaneWidgetsFromView()
 {
   pqRenderView* rv = this->LastPlaneHostRenderView.data();
   if (!rv)
@@ -247,7 +247,7 @@ void pqVESPASelectionPlaneClipperWidget::detachPlaneWidgetsFromView()
 }
 
 //-----------------------------------------------------------------------------
-void pqVESPASelectionPlaneClipperWidget::disconnectViewVisibilityLinks()
+void pqSHYXSelectionPlaneClipperWidget::disconnectViewVisibilityLinks()
 {
   for (const QMetaObject::Connection& c : this->ViewVisibilityConnections)
   {
@@ -257,7 +257,7 @@ void pqVESPASelectionPlaneClipperWidget::disconnectViewVisibilityLinks()
 }
 
 //-----------------------------------------------------------------------------
-bool pqVESPASelectionPlaneClipperWidget::isOutputPort0VisibleInView(pqView* view) const
+bool pqSHYXSelectionPlaneClipperWidget::isOutputPort0VisibleInView(pqView* view) const
 {
   if (!view)
   {
@@ -296,7 +296,7 @@ bool pqVESPASelectionPlaneClipperWidget::isOutputPort0VisibleInView(pqView* view
 }
 
 //-----------------------------------------------------------------------------
-void pqVESPASelectionPlaneClipperWidget::attachPlaneWidgetsToView()
+void pqSHYXSelectionPlaneClipperWidget::attachPlaneWidgetsToView()
 {
   pqView* view = this->view();
   auto* rv     = qobject_cast<pqRenderView*>(view);
@@ -311,7 +311,7 @@ void pqVESPASelectionPlaneClipperWidget::attachPlaneWidgetsToView()
 }
 
 //-----------------------------------------------------------------------------
-void pqVESPASelectionPlaneClipperWidget::updatePlaneWidgetsVisibility()
+void pqSHYXSelectionPlaneClipperWidget::updatePlaneWidgetsVisibility()
 {
   const bool use = this->UseInteractiveCheckbox && this->UseInteractiveCheckbox->isChecked();
   bool base =
@@ -333,7 +333,7 @@ void pqVESPASelectionPlaneClipperWidget::updatePlaneWidgetsVisibility()
 }
 
 //-----------------------------------------------------------------------------
-void pqVESPASelectionPlaneClipperWidget::placePlaneBounds(
+void pqSHYXSelectionPlaneClipperWidget::placePlaneBounds(
   vtkSMNewWidgetRepresentationProxy* wdg, const double bounds[6])
 {
   if (!wdg)
@@ -350,7 +350,7 @@ void pqVESPASelectionPlaneClipperWidget::placePlaneBounds(
 }
 
 //-----------------------------------------------------------------------------
-void pqVESPASelectionPlaneClipperWidget::stylePlaneWidget(vtkSMNewWidgetRepresentationProxy* wdg) const
+void pqSHYXSelectionPlaneClipperWidget::stylePlaneWidget(vtkSMNewWidgetRepresentationProxy* wdg) const
 {
   if (!wdg)
   {
@@ -367,7 +367,7 @@ void pqVESPASelectionPlaneClipperWidget::stylePlaneWidget(vtkSMNewWidgetRepresen
 }
 
 //-----------------------------------------------------------------------------
-int pqVESPASelectionPlaneClipperWidget::planeHintCountFromOutput(vtkAlgorithm* alg, vtkPolyData* out) const
+int pqSHYXSelectionPlaneClipperWidget::planeHintCountFromOutput(vtkAlgorithm* alg, vtkPolyData* out) const
 {
   if (!out || out->GetNumberOfPoints() <= 0)
   {
@@ -402,7 +402,7 @@ int pqVESPASelectionPlaneClipperWidget::planeHintCountFromOutput(vtkAlgorithm* a
 }
 
 //-----------------------------------------------------------------------------
-void pqVESPASelectionPlaneClipperWidget::syncWidgetsFromFilterState()
+void pqSHYXSelectionPlaneClipperWidget::syncWidgetsFromFilterState()
 {
   auto* src = vtkSMSourceProxy::SafeDownCast(this->proxy());
   if (!src || !this->PlaneWidget)
@@ -449,7 +449,7 @@ void pqVESPASelectionPlaneClipperWidget::syncWidgetsFromFilterState()
 }
 
 //-----------------------------------------------------------------------------
-void pqVESPASelectionPlaneClipperWidget::pushPackedFromWidgetsToFilter()
+void pqSHYXSelectionPlaneClipperWidget::pushPackedFromWidgetsToFilter()
 {
   auto* src = vtkSMSourceProxy::SafeDownCast(this->proxy());
   if (!src || !this->PlaneWidget)
@@ -507,7 +507,7 @@ void pqVESPASelectionPlaneClipperWidget::pushPackedFromWidgetsToFilter()
 }
 
 //-----------------------------------------------------------------------------
-void pqVESPASelectionPlaneClipperWidget::rebuildPlaneWidgetsIfNeeded()
+void pqSHYXSelectionPlaneClipperWidget::rebuildPlaneWidgetsIfNeeded()
 {
   if (!this->UseInteractiveCheckbox || !this->UseInteractiveCheckbox->isChecked())
   {

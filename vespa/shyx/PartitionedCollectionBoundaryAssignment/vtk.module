@@ -3,7 +3,7 @@ NAME
 DESCRIPTION
   "Reorder partitioned side/node sets by area and classify wall/inlet/outlet for BC map and inlet OPT text."
 GROUPS
-  Meshing
+  Vascular
 DEPENDS
   VTK::CommonCore
   VTK::CommonDataModel

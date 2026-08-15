@@ -3,7 +3,7 @@ NAME
 DESCRIPTION
   "Constrained Delaunay tetrahedralization from a closed surface using TetGen."
 GROUPS
-  Meshing
+  Vascular
 DEPENDS
   VTK::FiltersCore
 PRIVATE_DEPENDS

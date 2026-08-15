@@ -3,7 +3,7 @@ NAME
 DESCRIPTION
   "Threshold vessel openings, pick inlet/outlet seeds, optional VMTK centerlines."
 GROUPS
-  Meshing
+  Vascular
 DEPENDS
   VTK::FiltersCore
   VTK::FiltersGeneral

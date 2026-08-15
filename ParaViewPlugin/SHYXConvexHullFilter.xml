@@ -80,7 +80,7 @@
       </IntVectorProperty>
 
       <Hints>
-        <ShowInMenu category="SHYX" icon=":/VESPA/SHYX_Point_Cloud_Surface_SDF.png"/>
+        <ShowInMenu category="SHYX" icon=":/VESPA/SHYX_Convex_Hull.png"/>
       </Hints>
     </SourceProxy>
   </ProxyGroup>

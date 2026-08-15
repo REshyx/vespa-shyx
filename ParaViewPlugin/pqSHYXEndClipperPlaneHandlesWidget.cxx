@@ -1,4 +1,4 @@
-#include "pqVESPAEndClipperPlaneHandlesWidget.h"
+#include "pqSHYXEndClipperPlaneHandlesWidget.h"
 
 #include "pqApplicationCore.h"
 #include "pqArraySelectionWidget.h"
@@ -85,7 +85,7 @@ bool ParsePackedDoubles(const QString& s, std::vector<double>& out)
 } // namespace
 
 //-----------------------------------------------------------------------------
-pqVESPAEndClipperPlaneHandlesWidget::pqVESPAEndClipperPlaneHandlesWidget(
+pqSHYXEndClipperPlaneHandlesWidget::pqSHYXEndClipperPlaneHandlesWidget(
     vtkSMProxy* proxy, vtkSMPropertyGroup* smgroup, QWidget* parent)
     : pqPropertyGroupWidget(proxy, smgroup, parent)
 {
@@ -107,7 +107,7 @@ pqVESPAEndClipperPlaneHandlesWidget::pqVESPAEndClipperPlaneHandlesWidget(
 
     this->addPropertyLink(this->UseInteractiveCheckbox, "UseInteractiveCutPlanes");
     QObject::connect(this->UseInteractiveCheckbox, &QCheckBox::toggled, this,
-        &pqVESPAEndClipperPlaneHandlesWidget::onUseInteractiveToggled);
+        &pqSHYXEndClipperPlaneHandlesWidget::onUseInteractiveToggled);
 
     if (auto* smm = pqApplicationCore::instance()->getServerManagerModel())
     {
@@ -127,7 +127,7 @@ pqVESPAEndClipperPlaneHandlesWidget::pqVESPAEndClipperPlaneHandlesWidget(
 }
 
 //-----------------------------------------------------------------------------
-pqVESPAEndClipperPlaneHandlesWidget::~pqVESPAEndClipperPlaneHandlesWidget()
+pqSHYXEndClipperPlaneHandlesWidget::~pqSHYXEndClipperPlaneHandlesWidget()
 {
     this->disconnectViewVisibilityLinks();
     this->disconnectEndpointListSelection();
@@ -135,7 +135,7 @@ pqVESPAEndClipperPlaneHandlesWidget::~pqVESPAEndClipperPlaneHandlesWidget()
 }
 
 //-----------------------------------------------------------------------------
-void pqVESPAEndClipperPlaneHandlesWidget::select()
+void pqSHYXEndClipperPlaneHandlesWidget::select()
 {
     this->Superclass::select();
     QTimer::singleShot(0, this, [this]() { this->tryConnectEndpointListSelection(); });
@@ -143,7 +143,7 @@ void pqVESPAEndClipperPlaneHandlesWidget::select()
 }
 
 //-----------------------------------------------------------------------------
-void pqVESPAEndClipperPlaneHandlesWidget::deselect()
+void pqSHYXEndClipperPlaneHandlesWidget::deselect()
 {
     this->Superclass::deselect();
     this->ActiveRowEndpointIndex = -1;
@@ -151,14 +151,14 @@ void pqVESPAEndClipperPlaneHandlesWidget::deselect()
 }
 
 //-----------------------------------------------------------------------------
-void pqVESPAEndClipperPlaneHandlesWidget::showEvent(QShowEvent* event)
+void pqSHYXEndClipperPlaneHandlesWidget::showEvent(QShowEvent* event)
 {
     this->Superclass::showEvent(event);
     QTimer::singleShot(0, this, [this]() { this->tryConnectEndpointListSelection(); });
 }
 
 //-----------------------------------------------------------------------------
-void pqVESPAEndClipperPlaneHandlesWidget::setView(pqView* view)
+void pqSHYXEndClipperPlaneHandlesWidget::setView(pqView* view)
 {
     this->disconnectViewVisibilityLinks();
     if (view)
@@ -175,19 +175,19 @@ void pqVESPAEndClipperPlaneHandlesWidget::setView(pqView* view)
 }
 
 //-----------------------------------------------------------------------------
-void pqVESPAEndClipperPlaneHandlesWidget::onUseInteractiveToggled(bool /*on*/)
+void pqSHYXEndClipperPlaneHandlesWidget::onUseInteractiveToggled(bool /*on*/)
 {
     this->rebuildPlaneWidgetsIfNeeded();
 }
 
 //-----------------------------------------------------------------------------
-void pqVESPAEndClipperPlaneHandlesWidget::onPipelineDataUpdated()
+void pqSHYXEndClipperPlaneHandlesWidget::onPipelineDataUpdated()
 {
     this->rebuildPlaneWidgetsIfNeeded();
 }
 
 //-----------------------------------------------------------------------------
-void pqVESPAEndClipperPlaneHandlesWidget::onPlaneInteraction()
+void pqSHYXEndClipperPlaneHandlesWidget::onPlaneInteraction()
 {
     for (const auto& wdg : this->PlaneWidgets)
     {
@@ -205,7 +205,7 @@ void pqVESPAEndClipperPlaneHandlesWidget::onPlaneInteraction()
 }
 
 //-----------------------------------------------------------------------------
-void pqVESPAEndClipperPlaneHandlesWidget::onPlaneEndInteraction()
+void pqSHYXEndClipperPlaneHandlesWidget::onPlaneEndInteraction()
 {
     for (const auto& wdg : this->PlaneWidgets)
     {
@@ -224,7 +224,7 @@ void pqVESPAEndClipperPlaneHandlesWidget::onPlaneEndInteraction()
 }
 
 //-----------------------------------------------------------------------------
-void pqVESPAEndClipperPlaneHandlesWidget::tearDownPlaneWidgets()
+void pqSHYXEndClipperPlaneHandlesWidget::tearDownPlaneWidgets()
 {
     this->detachPlaneWidgetsFromView();
     for (size_t i = 0; i < this->PlaneWidgets.size(); ++i)
@@ -250,7 +250,7 @@ void pqVESPAEndClipperPlaneHandlesWidget::tearDownPlaneWidgets()
 }
 
 //-----------------------------------------------------------------------------
-void pqVESPAEndClipperPlaneHandlesWidget::detachPlaneWidgetsFromView()
+void pqSHYXEndClipperPlaneHandlesWidget::detachPlaneWidgetsFromView()
 {
     pqRenderView* rv = this->LastPlaneHostRenderView.data();
     if (!rv)
@@ -276,7 +276,7 @@ void pqVESPAEndClipperPlaneHandlesWidget::detachPlaneWidgetsFromView()
 }
 
 //-----------------------------------------------------------------------------
-void pqVESPAEndClipperPlaneHandlesWidget::disconnectViewVisibilityLinks()
+void pqSHYXEndClipperPlaneHandlesWidget::disconnectViewVisibilityLinks()
 {
     for (const QMetaObject::Connection& c : this->ViewVisibilityConnections)
     {
@@ -286,7 +286,7 @@ void pqVESPAEndClipperPlaneHandlesWidget::disconnectViewVisibilityLinks()
 }
 
 //-----------------------------------------------------------------------------
-bool pqVESPAEndClipperPlaneHandlesWidget::isClipPreviewPort1VisibleInView(pqView* view) const
+bool pqSHYXEndClipperPlaneHandlesWidget::isClipPreviewPort1VisibleInView(pqView* view) const
 {
     if (!view)
     {
@@ -325,7 +325,7 @@ bool pqVESPAEndClipperPlaneHandlesWidget::isClipPreviewPort1VisibleInView(pqView
 }
 
 //-----------------------------------------------------------------------------
-void pqVESPAEndClipperPlaneHandlesWidget::attachPlaneWidgetsToView()
+void pqSHYXEndClipperPlaneHandlesWidget::attachPlaneWidgetsToView()
 {
     pqView* view = this->view();
     auto*   rv   = qobject_cast<pqRenderView*>(view);
@@ -346,7 +346,7 @@ void pqVESPAEndClipperPlaneHandlesWidget::attachPlaneWidgetsToView()
 }
 
 //-----------------------------------------------------------------------------
-void pqVESPAEndClipperPlaneHandlesWidget::updatePlaneWidgetsVisibility()
+void pqSHYXEndClipperPlaneHandlesWidget::updatePlaneWidgetsVisibility()
 {
     const bool use = this->UseInteractiveCheckbox && this->UseInteractiveCheckbox->isChecked();
     bool base =
@@ -378,7 +378,7 @@ void pqVESPAEndClipperPlaneHandlesWidget::updatePlaneWidgetsVisibility()
 }
 
 //-----------------------------------------------------------------------------
-void pqVESPAEndClipperPlaneHandlesWidget::disconnectEndpointListSelection()
+void pqSHYXEndClipperPlaneHandlesWidget::disconnectEndpointListSelection()
 {
     for (const QMetaObject::Connection& c : this->EndpointListConnections)
     {
@@ -389,7 +389,7 @@ void pqVESPAEndClipperPlaneHandlesWidget::disconnectEndpointListSelection()
 }
 
 //-----------------------------------------------------------------------------
-int pqVESPAEndClipperPlaneHandlesWidget::ParseEndpointIndexFromArrayRowLabel(const QString& label)
+int pqSHYXEndClipperPlaneHandlesWidget::ParseEndpointIndexFromArrayRowLabel(const QString& label)
 {
     static const QRegularExpression re(QStringLiteral("^Endpoint\\s+(\\d+)"));
     const QRegularExpressionMatch    m = re.match(label);
@@ -401,7 +401,7 @@ int pqVESPAEndClipperPlaneHandlesWidget::ParseEndpointIndexFromArrayRowLabel(con
 }
 
 //-----------------------------------------------------------------------------
-void pqVESPAEndClipperPlaneHandlesWidget::tryConnectEndpointListSelection()
+void pqSHYXEndClipperPlaneHandlesWidget::tryConnectEndpointListSelection()
 {
     this->disconnectEndpointListSelection();
 
@@ -454,14 +454,14 @@ void pqVESPAEndClipperPlaneHandlesWidget::tryConnectEndpointListSelection()
     {
         this->EndpointListConnections.push_back(QObject::connect(sm,
             &QItemSelectionModel::currentChanged, this,
-            &pqVESPAEndClipperPlaneHandlesWidget::onEndpointListCurrentChanged));
+            &pqSHYXEndClipperPlaneHandlesWidget::onEndpointListCurrentChanged));
 
         this->onEndpointListCurrentChanged(sm->currentIndex(), QModelIndex());
     }
 }
 
 //-----------------------------------------------------------------------------
-void pqVESPAEndClipperPlaneHandlesWidget::onEndpointListCurrentChanged(
+void pqSHYXEndClipperPlaneHandlesWidget::onEndpointListCurrentChanged(
     const QModelIndex& current, const QModelIndex& /*previous*/)
 {
     if (!current.isValid())
@@ -478,13 +478,13 @@ void pqVESPAEndClipperPlaneHandlesWidget::onEndpointListCurrentChanged(
         const QModelIndex nameIdx = src.siblingAtColumn(0);
         const QString     text    = nameIdx.data(Qt::DisplayRole).toString();
         this->ActiveRowEndpointIndex =
-            pqVESPAEndClipperPlaneHandlesWidget::ParseEndpointIndexFromArrayRowLabel(text);
+            pqSHYXEndClipperPlaneHandlesWidget::ParseEndpointIndexFromArrayRowLabel(text);
     }
     this->updatePlaneWidgetsVisibility();
 }
 
 //-----------------------------------------------------------------------------
-void pqVESPAEndClipperPlaneHandlesWidget::placePlaneBounds(
+void pqSHYXEndClipperPlaneHandlesWidget::placePlaneBounds(
     vtkSMNewWidgetRepresentationProxy* wdg, const double bounds[6])
 {
     if (!wdg)
@@ -501,7 +501,7 @@ void pqVESPAEndClipperPlaneHandlesWidget::placePlaneBounds(
 }
 
 //-----------------------------------------------------------------------------
-void pqVESPAEndClipperPlaneHandlesWidget::stylePlaneWidget(vtkSMNewWidgetRepresentationProxy* wdg) const
+void pqSHYXEndClipperPlaneHandlesWidget::stylePlaneWidget(vtkSMNewWidgetRepresentationProxy* wdg) const
 {
     if (!wdg)
     {
@@ -518,7 +518,7 @@ void pqVESPAEndClipperPlaneHandlesWidget::stylePlaneWidget(vtkSMNewWidgetReprese
 }
 
 //-----------------------------------------------------------------------------
-int pqVESPAEndClipperPlaneHandlesWidget::endpointCountFromClipViz(vtkPolyData* viz) const
+int pqSHYXEndClipperPlaneHandlesWidget::endpointCountFromClipViz(vtkPolyData* viz) const
 {
     if (!viz || viz->GetNumberOfPoints() < 2)
     {
@@ -528,7 +528,7 @@ int pqVESPAEndClipperPlaneHandlesWidget::endpointCountFromClipViz(vtkPolyData* v
 }
 
 //-----------------------------------------------------------------------------
-bool pqVESPAEndClipperPlaneHandlesWidget::readEndpointHandlesFromViz(
+bool pqSHYXEndClipperPlaneHandlesWidget::readEndpointHandlesFromViz(
     vtkPolyData* viz, int idx, double origin[3], double dirHandle[3]) const
 {
     if (!viz || idx < 0 || 2 * idx + 1 >= viz->GetNumberOfPoints())
@@ -541,7 +541,7 @@ bool pqVESPAEndClipperPlaneHandlesWidget::readEndpointHandlesFromViz(
 }
 
 //-----------------------------------------------------------------------------
-void pqVESPAEndClipperPlaneHandlesWidget::syncWidgetsFromFilterState()
+void pqSHYXEndClipperPlaneHandlesWidget::syncWidgetsFromFilterState()
 {
     auto* src = vtkSMSourceProxy::SafeDownCast(this->proxy());
     if (!src || static_cast<int>(this->PlaneWidgets.size()) == 0)
@@ -600,7 +600,7 @@ void pqVESPAEndClipperPlaneHandlesWidget::syncWidgetsFromFilterState()
 }
 
 //-----------------------------------------------------------------------------
-void pqVESPAEndClipperPlaneHandlesWidget::pushPackedFromWidgetsToFilter()
+void pqSHYXEndClipperPlaneHandlesWidget::pushPackedFromWidgetsToFilter()
 {
     auto* src = vtkSMSourceProxy::SafeDownCast(this->proxy());
     if (!src)
@@ -675,7 +675,7 @@ void pqVESPAEndClipperPlaneHandlesWidget::pushPackedFromWidgetsToFilter()
 }
 
 //-----------------------------------------------------------------------------
-void pqVESPAEndClipperPlaneHandlesWidget::rebuildPlaneWidgetsIfNeeded()
+void pqSHYXEndClipperPlaneHandlesWidget::rebuildPlaneWidgetsIfNeeded()
 {
     if (!this->UseInteractiveCheckbox || !this->UseInteractiveCheckbox->isChecked())
     {

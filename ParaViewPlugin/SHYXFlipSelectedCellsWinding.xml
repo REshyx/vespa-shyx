@@ -43,7 +43,7 @@
       </StringVectorProperty>
 
       <Hints>
-        <ShowInMenu category="SHYX" icon=":/VESPA/SHYX_Surface_to_Volume_Mesh.png"/>
+        <ShowInMenu category="SHYX" icon=":/VESPA/SHYX_Flip_Selected_Cells_Winding.png"/>
       </Hints>
     </SourceProxy>
   </ProxyGroup>

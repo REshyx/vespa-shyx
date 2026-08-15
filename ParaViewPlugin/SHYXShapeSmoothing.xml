@@ -490,7 +490,7 @@
       </PropertyGroup>
 
       <Hints>
-        <ShowInMenu category="SHYX"/>
+        <ShowInMenu category="SHYX" icon=":/VESPA/SHYX_Shape_Smoothing.png"/>
       </Hints>
 
     </SourceProxy>

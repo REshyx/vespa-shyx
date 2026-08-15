@@ -3,7 +3,7 @@ NAME
 DESCRIPTION
   "Clip full vtkPolyData with a plane from selection patch centroid and average normal; optional interactive plane."
 GROUPS
-  Meshing
+  Vascular
 DEPENDS
   VTK::FiltersCore
   VTK::FiltersExtraction

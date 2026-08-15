@@ -3,7 +3,7 @@ NAME
 DESCRIPTION
   "Merge bidirectional streamline segments by SeedIds with optional along-line integral and random offset."
 GROUPS
-  Meshing
+  Flow
 DEPENDS
   VTK::FiltersCore
   VTK::FiltersGeneral

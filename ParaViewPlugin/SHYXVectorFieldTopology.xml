@@ -1,7 +1,7 @@
 <ServerManagerConfiguration>
   <ProxyGroup name="filters">
     <SourceProxy name="SHYXVectorFieldTopology"
-                 class="vtkVectorFieldTopology"
+                 class="vtkSHYXVectorFieldTopology"
                  label="SHYX Vector Field Topology">
       <Documentation long_help="Extract critical points, separatrix lines and optional surfaces, and boundary-switch structures using VTK vtkVectorFieldTopology (steady vector fields on vtkImageData, vtkUnstructuredGrid, or vtkUniformGridAMR)."
                      short_help="SHYX Vector Field Topology: Vector field topology (critical points and separatrices).">
