@@ -1,6 +1,6 @@
 # VESPA / ParaView 插件 — 滤镜算法原理图解生成提示词
 
-本文档为 **VESPAPlugin** (`vespa/shyx/` 目录下) 的各核心算法模块提供了一套**风格统一**的「四格技术原理图解（Schematic Overview）」生成提示词。
+本文档为 **VESPAPlugin** (`vespa/shyx/` 目录下) **部分**核心算法提供四格原理图提示词，**不是**完整模块清单。对照以 [`vespa/INVENTORY.md`](vespa/INVENTORY.md) 为准。
 
 这套提示词旨在通过类似学术论文或技术文档中的分步流程图，生动直观地向用户解释底层的三维几何与流体力学算法黑魔法。适用于 Midjourney、Stable Diffusion、DALL·E 等 AI 图像生成工具。
 
@@ -83,7 +83,7 @@ Panel 1: Overview of the goal: organizing an unstructured mesh into IOSS/Exodus 
 Panel 1: Overview of the goal: detecting and visualizing swirling vortex tubes hidden within chaotic 3D fluid velocity fields. Panel 2: Computing the velocity gradient tensor and splitting it into symmetric strain and antisymmetric rotation components. Panel 3: Evaluating advanced mathematical criteria like Q-criterion or Lambda-2 to identify rotation-dominant regions. Panel 4: Final output isolating and rendering 3D isosurfaces of the extracted vortex cores.
 ```
 
-### 12. PulseGlyphRepresentation (脉冲体素表示法)
+### 12. PulseGlyphRepresentation (Pulse Glyphs)
 ```text
 Panel 1: Overview of the goal: creating a beating, pulsating animation for 3D data glyphs to represent dynamic variables. Panel 2: Instancing 3D arrow or cone glyphs at spatial data points. Panel 3: Modulating glyph scale and orientation using a periodic time-based mathematical envelope function. Panel 4: Final animated visualization showing a field of glyphs rhythmically growing and shrinking like a heartbeat.
 ```
@@ -96,6 +96,11 @@ Panel 1: Overview of the goal: optimizing a 3D mesh by allocating tiny triangles
 ### 14. ClebschMapFilter (Clebsch映射滤镜)
 ```text
 Panel 1: Overview of the goal: generating a smooth, singularity-free texture mapping (Clebsch Map) to visualize fluid vortex topologies. Panel 2: Initializing random complex wave functions on a 4D sphere (S3) for each mesh vertex. Panel 3: Iteratively optimizing a massive sparse Hermitian linear system to align gradients with the velocity field. Panel 4: Final output displaying elegant, intertwined level-set ribbons that highlight the fluid's topological structure.
+```
+
+### 15. AutoStreamline (自动布种流线)
+```text
+Panel 1: Overview of the goal: automatically seeding and tracing streamlines from a 3D velocity volume. Panel 2: Extracting the outer surface and vortex core, then culling seeds too close to the wall using a distance field. Panel 3: Downsampling remaining seed points and running a stream tracer (forward/backward/both). Panel 4: Two outputs: streamline polylines and the seed point cloud (often shown as Point Gaussian).
 ```
 
 ### 16. ArrayCurveMapper (数组曲线映射器)

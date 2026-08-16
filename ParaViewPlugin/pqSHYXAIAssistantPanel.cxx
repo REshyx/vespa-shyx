@@ -12,10 +12,12 @@
 #include "pqView.h"
 
 #include "vtkImageData.h"
+#include "vtkJPEGWriter.h"
+#include "vtkNew.h"
 #include "vtkSMViewProxy.h"
 #include "vtkSmartPointer.h"
+#include "vtkUnsignedCharArray.h"
 
-#include <QBuffer>
 #include <QByteArray>
 #include <QCheckBox>
 #include <QComboBox>
@@ -100,10 +102,11 @@ You answer questions about visualization, meshing, and this pipeline, and you wr
 
 Rules:
 - Default script language is ParaView Python using `from paraview.simple import *`.
-- If the user is only asking a question, reply in the dialog. Do not emit a fenced code block.
-- If the user asks you to write or edit a script and you do NOT have run_code_script, put the complete script in one ```python fenced block. The plugin copies that block into the code box. Keep a short explanation outside the fence.
-- When a current code box is provided, treat it as the file to edit. Return the full updated script, not a partial patch, unless the user asks for a snippet.
-- The Run script button (and run_code_script) execute the code box. Send does not, unless you call run_code_script.
+- If the user is only asking a question and no script change is needed, reply in the dialog. Do not emit a fenced code block.
+- If tools include set_code_script / run_code_script: never finish a write/edit/fix-script request with only a markdown fence or an explanation. Call set_code_script with the full script, then run_code_script, then read the run result (Output Window, data, pipeline). If there is a traceback, ERROR, empty/wrong data, or a bad view, fix and run again before the final reply.
+- If those tools are NOT available and the user asked for a script, put the complete script in one ```python fenced block. The plugin copies that block into the code box.
+- When a current code box is provided, treat it as the file to edit. Write the full updated script, not a partial patch, unless the user asks for a snippet.
+- The Run script button (and run_code_script) execute the code box. Send does not, unless you call run_code_script. Writing code is not the same as running it.
 - Prefer existing pipeline objects (FindSource, GetActiveSource) over recreating readers.
 - Never create a second Clip/Slice/Threshold/Calculator/etc. on the same input. On retries, FindSource the existing filter (use get_pipeline_tree for names) and set its properties (ClipType.Origin, ClipType.Normal, ...). If you must replace it, Delete(FindSource('Clip1')) first. Pass registrationName= when creating so later turns can find it.
 - The assistant is a View-menu dock, not a pipeline filter. Do not create a SHYXAIAssistant source.
@@ -112,10 +115,12 @@ Rules:
 - If tools are provided, call them when you lack live ParaView context. Do not guess FindSource names or SHYX XML/python names.
 - Use get_source_data(name, port) for non-active nodes and extra output ports. get_source_properties includes nested proxies (ClipType).
 - Use list_filters / describe_proxy / lookup_shyx_docs before creating SHYX or VESPA filters. lookup_shyx_docs knows the Vascular pipeline order.
+- SHYX is not only Filters → SHYX. It also has Display representations (Pulse Glyphs, Animated Streamline, Point Label) and RenderView title-bar selection tools (Sphere cell selection, Grow selection with similar normals). For "what does SHYX have" / available features, call lookup_shyx_docs with an empty query and list_filters with an empty query. Do not answer from filters alone.
+- Representations are not pipeline filters: GetDisplayProperties().Representation = 'Pulse Glyphs' (never PulseGlyphRepresentation()). Title-bar selection tools have no Python constructor; after the user uses them, call get_selection_ids.
+- For SHYX Display or title-bar tool parameters, call describe_proxy with the display type (Pulse Glyphs, Animated Streamline, Point Label) or sphere / grow. Use exposed names (disp.PG_Animate, disp.AS_TimeScale, disp.PL_PointLabelArray). get_display reports current PG_/AS_/PL_ values on the active representation.
 - Use get_selection_ids before selection-based SHYX filters; get_blocks before ExtractBlock / PDC tools.
 - Use get_color_map for LUT range/log; get_time for timesteps.
-- pick_world_point: prefer a single pick. Multiple calls are allowed when you need several distinct locations (several brush marks, clip origin plus a second point) or one miss needs a single corrected click. Pass image_width/height from capture_screenshot (origin=top_left). Do not grid-sample the screenshot, and do not retry the same click with origin/normalized/pixel variants.
-- When set_code_script and run_code_script are available: write the full script with set_code_script, then run_code_script. Read the Output Window and data from the tool result. Use a screenshot only if one was actually attached. If there is a traceback, ERROR, empty/wrong data, or a bad view, fix the script and run again. Repeat until it works or you are stuck, then explain in the dialog.
+- pick_world_point: pass ALL brush marks / clicks in one call as points=[{x,y}, ...]. Never call it once per mark. Pass image_width/height from the JPEG (origin=top_left). Do not grid-sample, and do not retry the same click with origin/normalized/pixel variants.
 - Reply in the same language the user uses.)SYS";
 
 QPlainTextEdit* makeEditor(QWidget* parent, bool mono, int minHeight)
@@ -160,18 +165,43 @@ protected:
 
 QByteArray jpegFromImage(const QImage& img)
 {
-  if (img.isNull())
+  if (img.isNull() || img.width() < 1 || img.height() < 1)
   {
     return {};
   }
-  QByteArray bytes;
-  QBuffer buffer(&bytes);
-  buffer.open(QIODevice::WriteOnly);
-  if (!img.save(&buffer, "JPEG", 75))
+  const QImage rgb = img.convertToFormat(QImage::Format_RGB888);
+  if (rgb.isNull())
   {
     return {};
   }
-  return bytes;
+  const int w = rgb.width();
+  const int h = rgb.height();
+  vtkNew<vtkImageData> vtkImg;
+  vtkImg->SetDimensions(w, h, 1);
+  vtkImg->AllocateScalars(VTK_UNSIGNED_CHAR, 3);
+  for (int y = 0; y < h; ++y)
+  {
+    const uchar* src = rgb.constScanLine(y);
+    auto* dst = static_cast<unsigned char*>(vtkImg->GetScalarPointer(0, h - 1 - y, 0));
+    if (!src || !dst)
+    {
+      return {};
+    }
+    std::memcpy(dst, src, static_cast<size_t>(w) * 3u);
+  }
+
+  vtkNew<vtkJPEGWriter> writer;
+  writer->SetInputData(vtkImg);
+  writer->SetQuality(75);
+  writer->WriteToMemoryOn();
+  writer->Write();
+  vtkUnsignedCharArray* out = writer->GetResult();
+  if (!out || out->GetNumberOfValues() < 32)
+  {
+    return {};
+  }
+  return QByteArray(reinterpret_cast<const char*>(out->GetVoidPointer(0)),
+    static_cast<int>(out->GetNumberOfValues()));
 }
 
 QString truncateTail(const QString& text, int maxChars)
@@ -504,10 +534,31 @@ QString jsonErrorMessage(const QJsonObject& obj, const QString& fallback)
   return msg;
 }
 
-QJsonObject sanitizeAssistantToolMessage(QJsonObject msg)
+QJsonObject sanitizeAssistantToolMessage(QJsonObject msg, bool keepReasoning)
 {
-  msg.remove(QStringLiteral("reasoning_content"));
-  msg.remove(QStringLiteral("reasoning"));
+  if (!keepReasoning)
+  {
+    msg.remove(QStringLiteral("reasoning_content"));
+    msg.remove(QStringLiteral("reasoning"));
+  }
+  else
+  {
+    const QString alt = msg.value(QLatin1String("reasoning")).toString();
+    QString think = msg.value(QLatin1String("reasoning_content")).toString();
+    if (think.isEmpty() && !alt.isEmpty())
+    {
+      think = alt;
+    }
+    msg.remove(QStringLiteral("reasoning"));
+    if (!msg.value(QLatin1String("tool_calls")).toArray().isEmpty() || !think.isEmpty())
+    {
+      msg.insert(QStringLiteral("reasoning_content"), think);
+    }
+    else
+    {
+      msg.remove(QStringLiteral("reasoning_content"));
+    }
+  }
   msg.insert(QStringLiteral("role"), QStringLiteral("assistant"));
   const QJsonValue content = msg.value(QLatin1String("content"));
   if (content.isNull() || content.isUndefined() ||
@@ -630,10 +681,6 @@ QString replyErrorDetail(pqSHYXCurlRequest* reply, const QByteArray& body)
   return err;
 }
 
-void applyToolRequestFields(QJsonObject& root)
-{
-  root.insert(QStringLiteral("enable_thinking"), false);
-}
 }
 
 pqSHYXAIAssistantPanel::pqSHYXAIAssistantPanel(const QString& title, QWidget* parent)
@@ -719,6 +766,11 @@ void pqSHYXAIAssistantPanel::constructor()
     this->ModelCombo->lineEdit()->setPlaceholderText(QStringLiteral("gpt-4o-mini"));
   }
   sendRow->addWidget(this->ModelCombo, 1);
+  this->ThinkingCheck = new QCheckBox(tr("Thinking"), root);
+  this->ThinkingCheck->setChecked(false);
+  this->ThinkingCheck->setToolTip(
+    tr("Send enable_thinking. Off by default. On: the API may reason before tool calls."));
+  sendRow->addWidget(this->ThinkingCheck, 0, Qt::AlignVCenter);
   this->RefreshModelsButton = makeIconToolButton(root,
     QStringLiteral(":/pqWidgets/Icons/pqReloadFile.svg"),
     tr("Fetch the model list from the API"));
@@ -887,6 +939,8 @@ void pqSHYXAIAssistantPanel::constructor()
   }
   connect(this->ModelCombo, &QComboBox::textActivated, this,
     [this](const QString&) { this->saveClientSettings(); });
+  connect(this->ThinkingCheck, &QCheckBox::toggled, this,
+    [this](bool) { this->saveClientSettings(); });
 }
 
 pqSHYXAIAssistantPanel::~pqSHYXAIAssistantPanel()
@@ -1092,6 +1146,10 @@ void pqSHYXAIAssistantPanel::loadClientSettings()
       this->ModelCombo->setCurrentIndex(0);
     }
   }
+  if (this->ThinkingCheck)
+  {
+    this->ThinkingCheck->setChecked(settings.value(QStringLiteral("enableThinking"), false).toBool());
+  }
   settings.remove(QStringLiteral("historyCount"));
 }
 
@@ -1120,12 +1178,21 @@ void pqSHYXAIAssistantPanel::saveClientSettings() const
     }
     settings.setValue(QStringLiteral("modelList"), models);
   }
+  if (this->ThinkingCheck)
+  {
+    settings.setValue(QStringLiteral("enableThinking"), this->ThinkingCheck->isChecked());
+  }
   settings.remove(QStringLiteral("historyCount"));
 }
 
 QString pqSHYXAIAssistantPanel::currentModel() const
 {
   return this->ModelCombo ? this->ModelCombo->currentText().trimmed() : QString();
+}
+
+bool pqSHYXAIAssistantPanel::thinkingEnabled() const
+{
+  return this->ThinkingCheck && this->ThinkingCheck->isChecked();
 }
 
 void pqSHYXAIAssistantPanel::ensureModelItem(const QString& name, bool makeCurrent)
@@ -1398,6 +1465,16 @@ QByteArray pqSHYXAIAssistantPanel::buildRequestJson(
   const QString& question, const QList<QByteArray>& jpegs) const
 {
   QString sys = QString::fromUtf8(kSystemPrompt);
+  if (this->AgentModeCheck && this->AgentModeCheck->isChecked())
+  {
+    sys = QStringLiteral(
+            "AGENT MODE IS ON. Tools are available. Writing a script is not finished work: "
+            "you must set_code_script, then run_code_script, then read the run result "
+            "(Output Window errors, data, pipeline) before the final reply. "
+            "If the run failed, fix and run again. Do not answer a write/run/fix-script "
+            "request with only an explanation or a markdown fence.\n\n") +
+      sys;
+  }
   sys += this->attachRenderView()
     ? QStringLiteral("\n- Render-view screenshots: ENABLED for this request.")
     : QStringLiteral(
@@ -1458,10 +1535,10 @@ QByteArray pqSHYXAIAssistantPanel::buildRequestJson(
   root.insert(QStringLiteral("messages"), messages);
   root.insert(QStringLiteral("temperature"), 0.2);
   root.insert(QStringLiteral("stream"), true);
+  root.insert(QStringLiteral("enable_thinking"), this->thinkingEnabled());
   if (this->AgentModeCheck && this->AgentModeCheck->isChecked())
   {
     root.insert(QStringLiteral("tools"), pqSHYXAIAgentTools::schema());
-    applyToolRequestFields(root);
   }
   return QJsonDocument(root).toJson(QJsonDocument::Compact);
 }
@@ -1473,8 +1550,8 @@ QByteArray pqSHYXAIAssistantPanel::buildAgentRequestJson() const
   root.insert(QStringLiteral("messages"), this->AgentMessages);
   root.insert(QStringLiteral("temperature"), 0.2);
   root.insert(QStringLiteral("stream"), true);
+  root.insert(QStringLiteral("enable_thinking"), this->thinkingEnabled());
   root.insert(QStringLiteral("tools"), pqSHYXAIAgentTools::schema());
-  applyToolRequestFields(root);
   return QJsonDocument(root).toJson(QJsonDocument::Compact);
 }
 
@@ -1530,6 +1607,11 @@ void pqSHYXAIAssistantPanel::sendChatRequest()
       jpegs.append(jpeg);
     }
   }
+  if (!this->QuestionImages.isEmpty() && jpegs.isEmpty())
+  {
+    this->setStatus(tr("Could not encode screenshot JPEG. The image was not sent."));
+    return;
+  }
 
   this->AgentMessages = QJsonArray();
   this->AgentFollowupJpegs.clear();
@@ -1574,6 +1656,7 @@ void pqSHYXAIAssistantPanel::resetStreamState()
 {
   this->StreamBuf.clear();
   this->StreamContent.clear();
+  this->StreamReasoning.clear();
   this->StreamToolCalls.clear();
   this->StreamFinishReason.clear();
   this->StreamError.clear();
@@ -1698,6 +1781,7 @@ void pqSHYXAIAssistantPanel::handleStreamEvent(const QJsonObject& obj)
     : delta.value(QLatin1String("reasoning"));
   if (reasoning.isString() && !reasoning.toString().isEmpty())
   {
+    this->StreamReasoning += reasoning.toString();
     const QString soFar = this->ChatView->streamingText().trimmed();
     if (soFar.isEmpty() || soFar == QLatin1String("…"))
     {
@@ -1759,6 +1843,10 @@ QJsonObject pqSHYXAIAssistantPanel::assembledAssistantMessage() const
   QJsonObject msg;
   msg.insert(QStringLiteral("role"), QStringLiteral("assistant"));
   msg.insert(QStringLiteral("content"), this->StreamContent);
+  if (!this->StreamReasoning.isEmpty())
+  {
+    msg.insert(QStringLiteral("reasoning_content"), this->StreamReasoning);
+  }
   if (!this->StreamToolCalls.isEmpty())
   {
     QJsonArray arr;
@@ -1768,7 +1856,7 @@ QJsonObject pqSHYXAIAssistantPanel::assembledAssistantMessage() const
     }
     msg.insert(QStringLiteral("tool_calls"), arr);
   }
-  return sanitizeAssistantToolMessage(msg);
+  return sanitizeAssistantToolMessage(msg, this->thinkingEnabled());
 }
 
 void pqSHYXAIAssistantPanel::failRequest(const QString& err)
@@ -1961,6 +2049,7 @@ void pqSHYXAIAssistantPanel::onChatFinished()
     }
     if (!think.isEmpty())
     {
+      this->StreamReasoning = think;
       this->ChatView->appendAssistantThinkingDelta(think);
     }
     if (!content.isEmpty())
@@ -2057,7 +2146,8 @@ QString pqSHYXAIAssistantPanel::runAgentTool(const QString& name, const QJsonObj
     this->AgentFollowupJpegs.append(jpeg);
     return QStringLiteral(
              "Captured %1x%2 JPEG; image attached as image_url on this turn. "
-             "For pick_world_point use image_width=%3 image_height=%4 (origin=top_left).")
+             "For pick_world_point pass ALL marks in one call: "
+             "points=[{x,y}, ...] with image_width=%3 image_height=%4 (origin=top_left).")
       .arg(img.width())
       .arg(img.height())
       .arg(img.width())
@@ -2155,7 +2245,7 @@ bool pqSHYXAIAssistantPanel::continueAgentIfNeeded(const QJsonObject& message)
     return false;
   }
 
-  this->AgentMessages.append(sanitizeAssistantToolMessage(message));
+  this->AgentMessages.append(sanitizeAssistantToolMessage(message, this->thinkingEnabled()));
   QStringList names;
   const QJsonArray sanitizedCalls =
     this->AgentMessages.last().toObject().value(QLatin1String("tool_calls")).toArray();

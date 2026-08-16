@@ -83,6 +83,7 @@ private:
   void stopChatRequest();
   void setSendBusy(bool busy);
   QString currentModel() const;
+  bool thinkingEnabled() const;
   void ensureModelItem(const QString& name, bool makeCurrent);
   void applyModelsReply(pqSHYXCurlRequest* reply);
 
@@ -95,6 +96,7 @@ private:
   QLabel* HistoryCountLabel = nullptr;
   QLineEdit* EndpointEdit = nullptr;
   QComboBox* ModelCombo = nullptr;
+  QCheckBox* ThinkingCheck = nullptr;
   QLineEdit* ApiKeyEdit = nullptr;
   QCheckBox* RenderViewCheck = nullptr;
   QCheckBox* AgentModeCheck = nullptr;
@@ -108,6 +110,7 @@ private:
   int AgentRound = 0;
   QByteArray StreamBuf;
   QString StreamContent;
+  QString StreamReasoning;
   QMap<int, QJsonObject> StreamToolCalls;
   QString StreamFinishReason;
   QString StreamError;

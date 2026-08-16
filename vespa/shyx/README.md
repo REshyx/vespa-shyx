@@ -2,7 +2,7 @@
 
 SHYX 是本仓库里 **一个作者命名空间**（[`vespa/shyx/`](.)），不是整个工程的中心。仓库布局见 [`../README.md`](../README.md)。**模块 ↔ 类 ↔ XML ↔ 菜单 ↔ 图标** 的完整对照以 [`../INVENTORY.md`](../INVENTORY.md) 为准。
 
-每个子目录通常是独立 VTK 模块（自有 `vtk.module` / `DEPENDS`）。例外：[**AI Assistant**](./AIAssistant/README.md) 是客户端 View dock，没有 VTK 算子。需要 CGAL 的才依赖 `vtkCGALAlgorithm`；TetGen / VMTK / 纯 VTK 不要走 CGAL 基类。纯 VTK 的 Density Sampler / 点云 SDF 类名是 `vtkSHYX*`；骨架、切端、Surface-to-Volume 等仍走 CGAL 的可保留 `vtkCGAL*` 实现类名。
+每个子目录通常是独立 VTK 模块（自有 `vtk.module` / `DEPENDS`）。例外：[**AI Assistant**](./AIAssistant/README.md) 的**用户界面**是 View dock（`pqSHYXAI*`）。目录里仍有遗留模块 `vtkSHYXAIAssistant`；`SHYXAIAssistant.xml` **未**加入 `SERVER_MANAGER_XML`，Filters 菜单不应出现该节点，不要 `SHYXAIAssistant()`。需要 CGAL 的才依赖 `vtkCGALAlgorithm`；TetGen / VMTK / 纯 VTK 不要走 CGAL 基类。纯 VTK 的 Density Sampler / 点云 SDF 类名是 `vtkSHYX*`。骨架、切端、Surface-to-Volume 的 **vtk.module NAME** 是 `vtkSHYX*`，**C++ / XML `class=`** 仍是 `vtkCGAL*`。
 
 `vtk.module` 的 **GROUPS**：`Meshing` / `Vascular` / `Flow` / `PointCloud`（表示层为 `ParaView`）。
 
@@ -20,17 +20,17 @@ SHYX 是本仓库里 **一个作者命名空间**（[`vespa/shyx/`](.)），不�
 
 ## 血管与体积网格
 
-Vascular 工具条顺序：骨架 → 切端 → 平面裁 → 端点重网格 → TetGen → PDC → 边界分配。
+**Vascular 工具条**（`VESPAVascularCategory.xml`，顺序固定）：骨架 → 切端 → 平面裁 → 端点重网格 → TetGen → PDC → 边界分配。下列其余项只在 **Filters → SHYX**。
 
-* [**Skeleton Extraction**](./SkeletonExtraction/README.md)
-* [**Vessel End Clipper**](./VesselEndClipper/README.md)
-* [**Selection Plane Clipper**](./SelectionPlaneClipper/README.md)
-* [**Surface To Volume Mesh**](./SurfaceToVolumeMesh/README.md)
-* [**TetGen**](./TetGen/README.md) — 同模块含 **TetGen Mesh Optimize**
-* [**SnappyHexMesh**](./SnappyHexMesh/README.md) — 需 `VESPA_USE_SNAPPYHEXMESH`；**Filters → SHYX**（不在 Vascular）
+* [**Skeleton Extraction**](./SkeletonExtraction/README.md) — **Vascular**
+* [**Vessel End Clipper**](./VesselEndClipper/README.md) — **Vascular**
+* [**Selection Plane Clipper**](./SelectionPlaneClipper/README.md) — **Vascular**
+* [**TetGen**](./TetGen/README.md) — **Vascular**；同模块含 **TetGen Mesh Optimize**
+* [**DataSet To Partitioned Collection**](./DataSetToPartitionedCollection/README.md) — **Vascular**
+* [**Partitioned Collection Boundary Assignment**](./PartitionedCollectionBoundaryAssignment/README.md) — **Vascular**
+* [**Surface To Volume Mesh**](./SurfaceToVolumeMesh/README.md) — SHYX only（CGAL Mesh_3）
+* [**SnappyHexMesh**](./SnappyHexMesh/README.md) — 需 `VESPA_USE_SNAPPYHEXMESH`；SHYX only
 * [**Tet Mesh Region Partition**](./TetMeshRegionPartition/README.md)
-* [**DataSet To Partitioned Collection**](./DataSetToPartitionedCollection/README.md)
-* [**Partitioned Collection Boundary Assignment**](./PartitionedCollectionBoundaryAssignment/README.md)
 * [**Partitioned Collection Boundary Fields**](./PartitionedCollectionBoundaryFields/README.md)
 * [**Partitioned Collection WSL Simulation**](./PartitionedCollectionWslSimulation/README.md)
 * [**VMTK Centerlines**](./VmtkPolyDataCenterlines/README.md) / [**Opening Centerlines**](./VmtkOpeningCenterlines/README.md) — 需 `VESPA_USE_VMTK`

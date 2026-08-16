@@ -30,4 +30,4 @@ vtkDataSet → SHYX DataSet To Partitioned Collection → SHYX Partitioned Colle
 
 ## ParaView
 
-菜单：**SHYX** / **Vascular** → **SHYX Partitioned Collection Boundary Fields**
+菜单：**Filters → SHYX** → **SHYX Partitioned Collection Boundary Fields**（**不在** Vascular 工具条；`GROUPS Vascular` 只是 vtk.module 分组）。

@@ -32,4 +32,6 @@
 | Output 0 | 流线 |
 | Output 1 | 采样后的 seed 点 |
 
-不依赖仓库内现有 shyx filter；仅链接 VTK Modules。
+不依赖仓库内现有 shyx filter；仅链接 VTK Modules。菜单 **SHYX Auto Streamline**，proxy `SHYXAutoStreamline()`。种子点端口默认 **Point Gaussian**。
+
+面板还暴露 Stream Tracer 属性（见 `SHYXAutoStreamline.xml`）：`SelectInputVectors`、`RandomSeed`、`IntegrationDirection`（默认 BOTH）、`IntegratorType`（默认 RK45）、`IntegrationStepUnit`、`InitialIntegrationStep`、`MaximumPropagation`、`MaximumNumberOfSteps`、`TerminalSpeed`、`InterpolatorType`。C++ 里的 `HigherOrderMethod` / `FasterApproximation` **未**进 XML。

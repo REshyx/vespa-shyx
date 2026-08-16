@@ -2,7 +2,7 @@
 
 Upstream VTK wrappers around CGAL:
 
-- `Delaunay` — `vtkCGALDelaunay`
+- `Delaunay` — module `vtkCGALDelaunay`, class `vtkCGALDelaunay2` (UI: VESPA Delaunay 2D)
 - `PolygonMeshProcessing` — boolean, remesh, hole fill, mesh checker, …
 - `PointSetProcessing` — XYZ reader, PCA normals
 - `ShapeReconstruction` — Poisson / advancing-front

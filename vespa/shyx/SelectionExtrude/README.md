@@ -1,6 +1,6 @@
 # SHYX Selection Extrude（选区沿平均法线挤出）
 
-`vtkSHYXSelectionExtrudeFilter` 对三角表面网格上的一块选区，先按面积加权求**平均法线**，再沿该方向平移复制选区三角面并补上选区边界上的**侧壁四边形**，得到类似挤出（extrude）的几何结果。
+`vtkSHYXSelectionExtrudeFilter` 对三角表面网格上的一块选区挤出。默认 **AverageNormals=1**：按面积加权求**一条平均法线**再平移。**AverageNormals=0** 时帽面各顶点用各自选中三角形的点法线。场数据 **`SHYX_SelectionExtrude_AvgNormal`** 始终是该片的单位平均法线。
 
 ## ParaView 用法（与 VESPA Region Fairing 相同的选区方式）
 

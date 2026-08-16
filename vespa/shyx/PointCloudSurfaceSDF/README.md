@@ -22,7 +22,7 @@
 
 | 端口/方法名称 | 数据类型 / 作用 | 效果与含义 |
 | :--- | :--- | :--- |
-| **Input Port 0** <br>*(点云数据)* | `vtkPolyData` | 待求值的散乱点云集合。算法将逐点评估它们与参考曲面之间的距离并赋予 SDF 标量值。该输入项必须提供。 |
-| **Input Port 1** <br>*(SetSourceConnection)* | `vtkPolyData` | 参考曲面数据。必须是包含面片拓扑结构 (Cells) 的网格对象。若输入的 `vtkPolyData` 不包含任何面片数据，管线将抛出 `Surface has no cells.` 的错误并中断执行。 |
+| **Input Port 0 (`PointCloud`)** | `vtkDataSet` | 待求值点云。采样全部点。 |
+| **Input Port 1 (`ReferenceSurface`)** | `vtkDataSet` | 参考曲面。非 PolyData 会先抽表面。无面片则报 `Surface has no cells.`。Python：`SHYXPointCloudSurfaceSDF(PointCloud=…, ReferenceSurface=…)`。C++ 仍可用 `SetSourceConnection`。 |
 | **TakeAbsoluteValue** <br>*(默认 ON)* | `bool` | 勾选后对 SDF 取绝对值（无符号距离）。关闭则保留有符号距离（内负外正）。 |
 | **输出数组 (SDF)** | `vtkFloatArray` | 计算的最终产出。结果输出的点属性 (`PointData`) 中将新增或更新一个名为 `SDF` 的单通道浮点数组。 |

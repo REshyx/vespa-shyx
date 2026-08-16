@@ -78,12 +78,11 @@ VESPA can be installed using the standard CMake procedure:
 
 1. Create a build folder
 1. Launch CMake with this repository as source folder
-1. Configure the project. It will need CGAL, as well as VTK or ParaView
-depending on whether only the VTK module or the full ParaView plugin should
-be built.
+1. Configure the project with VTK or ParaView. Set `VESPA_USE_CGAL=ON` (the
+default) if you need CGAL-backed modules; that is the only path that calls
+`find_package(CGAL)`. TetGen / VMTK / VTK-only modules do not require CGAL.
 
-If you want to build the ParaView plugin, set the CMake variable `VESPA_BUILD_PV_PLUGIN` to `ON`.
-CGAL-backed modules (original VESPA and SHYX filters that declare CGAL in `vtk.module`) require `VESPA_USE_CGAL=ON` (the default); that is the only path that calls `find_package(CGAL)`.
+If you want to build the ParaView plugin, set the CMake variable `VESPA_BUILD_PV_PLUGIN` to `ON` (it is already ON by default in this tree).
    - If you have installed a library in a custom folder, you can find it in CMake
      by giving the folder: **install_dir**/lib/cmake/**project-version**. For example,
      for VTK: **install_dir**/lib/cmake/vtk-9.1.
@@ -105,7 +104,7 @@ With VTK, you may use the
 [vtkTriangleFilter](https://vtk.org/doc/nightly/html/classvtkTriangleFilter.html)
 and the
 [vtkGeometryFilter](https://vtk.org/doc/nightly/html/classvtkGeometryFilter.html)
-to get a valid triangulation. The `vtkCGALAlphaWrapping ` filter can be used
+to get a valid triangulation. The `vtkCGALAlphaWrapping` filter can be used
 to ensure watertight, 2-manifold mesh then.
 
 #### Code examples

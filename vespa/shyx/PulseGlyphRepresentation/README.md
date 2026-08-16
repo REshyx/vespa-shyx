@@ -1,4 +1,6 @@
-# PulseGlyphRepresentation - 脉冲体素表示法 🫀
+# PulseGlyphRepresentation — Pulse Glyphs
+
+Display 下拉 **`Pulse Glyphs`**。不要 `PulseGlyphRepresentation()`。Python：`GetDisplayProperties().Representation = 'Pulse Glyphs'`，属性用 **`PG_*`**（如 `disp.PG_Animate`、`PG_OverallScale`）以及继承的 `PulseGlyph_GlyphType` / LOD。
 
 ## 示意图
 
@@ -11,12 +13,12 @@
 
 ### 工作原理与算法
 动态表现的底层逻辑基于一套相位包络 (Phase Envelope) 算法：
-1. **动画驱动器**: 借助 `ParaViewPlugin/pqPulseGlyphAnimationManager` 统筹管理，当视图中包含开启了 `Animate` 的脉冲图元时，管理器将连续触发视图重绘 (`view->render()`)，以生成连续的动画帧。
-2. **混合相位计算 (Mix Value)**: 针对数据集中的每个顶点，算法读取指定的 `AnimationCoordinateArray`（若未指定则采用空间坐标）的值。将其乘以空间频响系数 `IntegrationScale`，并叠加基于时间驱动项（当前时间或帧数与 `TimeScale` 的乘积），以此得到该顶点的混合相位。
-3. **包络函数 (Envelope)**: 相位数据将被传入非线性包络函数中。首先提取小数部分并根据 `Trunc` 进行区间截断和限制（钳制在 `[0, 1]` 之间），最后通过幂次运算 `1.0 - pow(clamped, Pow)` 计算出当前时刻的脉冲强度包络值。
+1. **动画驱动器**: 借助 `ParaViewPlugin/pqPulseGlyphAnimationManager` 统筹管理，当视图中包含开启了 `PG_Animate` 的脉冲图元时，管理器将连续触发视图重绘 (`view->render()`)，以生成连续的动画帧。
+2. **混合相位计算 (Mix Value)**: 读取 `AnimationCoordinateArray`（找不到则用到原点的点半径）× `IntegrationScale`，再加 **renderFrame × TimeScale**（不是墙钟时间）。
+3. **包络函数 (Envelope)**: 相位小数部分经 `Trunc` 钳制到 `[0, 1]`，再 `1.0 - pow(clamped, Pow)`。
 4. **变换映射**:
-   - **缩放 (Scale)**: 顶点的缩放系数计算为 `OverallScale * (Envelope + ExtraArrayMagnitude * ArrayAffectScaleRatio)`。
-   - **旋转 (Orientation)**: 脉冲包络值将乘上 `RotationSweep` 中设定的最大欧拉角。若启用 `Shuffle` 模式，每个轴向将生成独立的伪随机相位偏差，以表现非均匀的随机动态旋转。
+   - **缩放**: 受 `PulseAffectsScale` 门控；可叠加 ExtraScaleArray。
+   - **旋转**: 包络 × `RotationSweep`。`Shuffle` 用 `std::minstd_rand`，种子来自 mixValue。
 
 ---
 
@@ -26,7 +28,7 @@
 
 | 参数名称 | 类型 | 含义与效果 |
 | :--- | :---: | :--- |
-| **Animate** | `bool` | **动画总开关**。设为 `true` 时，开启时间与帧序列演化，视图将执行连续重绘。 |
+| **PG_Animate** | `bool` | **动画总开关**。 |
 | **TimeScale** | `double` | **时间缩放系数**。控制脉冲动画随时间演化的频率与速度。 |
 | **IntegrationScale** | `double` | **空间频响**。作为空间坐标或目标数组的乘数，控制脉冲状态在空间分布上的密集度与变化率。 |
 | **Trunc** | `double` | **截断因子**。决定脉冲包络的波形截断占比，控制图元处于极值状态的时长比例。 |

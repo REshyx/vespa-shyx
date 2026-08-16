@@ -10,13 +10,14 @@
 
 | CMake 选项 | 作用 |
 |------------|------|
-| **`VESPA_BUILD_PV_PLUGIN`** | 必须为 ON 才会构建 ParaView 插件。 |
+| **`VESPA_BUILD_PV_PLUGIN`** | 默认 ON；关闭则不构建 ParaView 插件。 |
 | **`VESPA_USE_CGAL`** | 为 ON（默认）时才编译依赖 CGAL 的模块，并 `find_package(CGAL)`。OFF 时跳过原版 VESPA 与所有 `DEPENDS vtkCGALAlgorithm` / `CGAL::CGAL` 的 SHYX 滤镜。 |
-| **`VESPA_ALPHA_WRAPPING`** | 为 ON 时额外注册 **VESPA Alpha Wrapping** 滤镜（需 CGAL ≥ 5.5）。 |
-| **`VESPA_MESH_SMOOTHING`** | 为 ON 时额外注册 **VESPA Mesh Smoothing** 滤镜。 |
+| **`VESPA_USE_VMTK`** | ON 时编 VMTK 中心线两个滤镜并注册对应 XML。 |
+| **`VESPA_USE_SNAPPYHEXMESH`** | ON 时编 SnappyHexMesh（需 `SHYXSnappyHex_DIR`）。 |
+| **`USE_CERES`** | 找到 Ceres 且为 ON 时才编 **VESPA Mesh Smoothing**（内部变量 `VESPA_MESH_SMOOTHING`）。 |
 | **`VESPA_USE_MKL`** | 构建含 MKL 时，**SHYX Clebsch Map Filter** 中可选用 MKL 直接法求解器。 |
-| **`VESPA_USE_SMP`** | 部分滤镜内部并行（如密度采样、数组概率点剔除）；**SHYX Radius Neighbor Count** 使用 VTK 自带的 **vtkSMPTools**，不依赖此开关。 |
-| **（CGAL 版本）** | **CGAL ≥ 6.0** 时构建系统会包含 **SHYX Adaptive Isotropic Remesher**（`vtkSHYXAdaptiveIsotropicRemesher`）；低于 6.0 或 `VESPA_USE_CGAL=OFF` 时不编译该类。 |
+| **`VESPA_USE_SMP`** | 部分滤镜内部并行（Density Sampler、Array Probability Point Cull、Clebsch、Bidirectional Streamline Merge、Disconnected Region Fuse、Tet Mesh Region Partition）。**SHYX Radius Neighbor Count** 使用 VTK 自带的 **vtkSMPTools**，不依赖此开关。 |
+| **（CGAL 版本，内部状态）** | CGAL ≥ 5.5 时内部 `VESPA_ALPHA_WRAPPING` 打开（Alpha Wrapping / Selection Fill XML）。CGAL ≥ 6.0 时内部 `VESPA_ADAPTIVE_REMESHING` 打开（Adaptive Remesher / Remesh With Endpoint）。二者不是 cmake-gui 用户开关。 |
 
 客户端若使用 Qt 版 ParaView，插件还可注册 **Pulse Glyph** / **Animated Streamline** 相关的自动启动管理器与自定义面板（如数组曲线映射面板）；表示类型仍可在显示面板中选择。
 
@@ -48,8 +49,8 @@
 | VESPA Poisson Surface Reconstruction Delaunay |
 | VESPA Advancing Front Surface Reconstruction |
 | VESPA PCA Estimate Normals |
-| VESPA Alpha Wrapping（可选，`VESPA_ALPHA_WRAPPING`） |
-| VESPA Mesh Smoothing（可选，`VESPA_MESH_SMOOTHING`） |
+| VESPA Alpha Wrapping（CGAL ≥ 5.5 时自动注册） |
+| VESPA Mesh Smoothing（需 `USE_CERES`） |
 
 **Filters → SHYX**（下列均出现在 SHYX 菜单；标 Vascular 的同时进入 Filters → Vascular 工具条，顺序固定）：
 
@@ -321,10 +322,12 @@
 | **Centerline** | vtkPolyData | — | 中心线骨架（如 SHYX Skeleton Extraction 输出）。 |
 | **Clip Offset** | double | 0.0 | 沿中心线切向平移切割平面的距离。正向外，负向内。 |
 | **Tangent Depth** | int | 1 | 估计切向时沿骨架向内走的边数，越大切向越平滑。 |
-| **Cap Endpoints** | bool | true | 是否在裁剪后的孔洞处封口，生成水密网格。 |
+| **Min Branch Length** | double | 0 | 短于该弧长的端点默认不勾选；0 = 全部勾选。界面 BoundsDomain 建议约 AABB 最长边的 1%。 |
+| **Cap Endpoints** | bool | true | 是否在裁剪后的孔洞处用 CGAL `triangulate_refine_and_fair_hole` 封口（可调 Fairing Continuity 0/1/2），不是单纯平面多边形。 |
+| **Show Interactive Cut Planes** | bool | — | 交互切平面 widget（`shyx_endclipper_plane_handles`）。 |
 | **Endpoints to Clip** | 选择 | — | 选择要裁剪的端点。需先 Apply 以发现端点。 |
 
-**输出**：端口 0 = 裁剪后的网格；端口 1 = 裁剪平面可视化（位置与法向）。
+**输出**：端口 0 = 裁剪后的网格；端口 1 = 裁剪平面可视化（位置与法向；首次显示默认 **Point Label**）。
 
 ---
 
@@ -455,8 +458,8 @@
 
 | 界面标签 | 内部名（Python / trace） | 说明 |
 |----------|--------------------------|------|
-| **Point Cloud** | PointCloud | 点云 `vtkPolyData`（仅需点；若有顶点单元会保留）。 |
-| **Reference Surface** | ReferenceSurface | 参考曲面 `vtkPolyData`；可为开放网格，面片会被三角化。 |
+| **Point Cloud** | PointCloud | 点云 `vtkDataSet`（PolyData 或其他；采样全部点）。 |
+| **Reference Surface** | ReferenceSurface | 参考曲面 `vtkDataSet`；非 PolyData 会先抽表面。面片会被三角化。 |
 
 **输出**：与点云同拓扑的 `vtkPolyData`，在点数据上增加（或覆盖）**SDF**。
 
@@ -590,18 +593,20 @@
 
 ### 31. SHYX Adaptive Isotropic Remesher（`vtkSHYXAdaptiveIsotropicRemesher`，CGAL ≥ 6.0）
 
-**功能**：在 **CGAL 6.0+** 上使用 **`Adaptive_sizing_field`（离散曲率）** 与各向同性重网格（`isotropic_remeshing`）：高曲率处倾向更细三角形，边长限制在 **[Min, Max]** 区间内；特征边按角度阈值保护，行为类似 **VESPA Isotropic Remesher** 中的特征保护思路。输入须为三角 **`vtkPolyData`**。
+**功能**：CGAL 6 `isotropic_remeshing` + 仓库自定义 **FeatureAwareAdaptiveSizingField**（ICC；**不是** CGAL 自带 `Adaptive_sizing_field`）。边长限制在 **[Min, Max]**；可选 Selection / 标量范围只重网格一部分。输入须为三角 **`vtkPolyData`**。
+
+**输出**：端口 0 remeshed；1 sharp features；2 mask patch；3 ICC sizing preview。
 
 | 参数 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
-| **Min Edge Length** | double | 0 | 最小边长。**≤ 0** 表示自动：AABB **最长边**的 **0.1%**（与 ParaView **BoundsDomain** scaled_extent 一致）。该属性挂了 Domain，界面带缩放/重置。 |
-| **Max Edge Length** | double | 0 | 最大边长。**≤ 0** 表示自动：同一最长边的 **5%**；数值框为宽范围，便于手动设更大的粗网格上限。 |
-| **Adaptive Tolerance (tol)** | double | 0.001 | CGAL 自适应尺寸场容差；**更小**时在 Min/Max 范围内往往更细。 |
-| **Number Of Iterations** | int | 3 | 重网格迭代次数（1–20）。 |
-| **Protection Angle**（高级） | double | 45 | 特征边二面角阈值（度），重网格时予以保护。 |
+| **Min Edge Length** | double | 0 | XML 默认未设。`RequestData` 要求 **0 < Min < Max**。ParaView BoundsDomain 建议约 AABB 最长边的 **0.1%**；点 Scale/Reset 才写入。非 ParaView 调用必须显式设正值。 |
+| **Max Edge Length** | double | 0 | 同上；Domain 建议约最长边的 **10%**（`scale_factor=0.1`）。 |
+| **Adaptive Tolerance (tol)** | double | **0.01** | Vespa ICC sizing 容差；更小往往更细。 |
+| **Number Of Iterations** | int | 3 | 重网格迭代次数。 |
+| **Protection Angle**（高级） | double | **70** | 特征边二面角阈值（度）。 |
 | **Interpolate attributes**（高级） | bool | true | 是否将点/单元数据插值到新网格。 |
 
-**说明**：若工程使用的 **CGAL 低于 6.0**，该滤镜不会出现在插件中（见上文「构建与可选组件」）。与 **VESPA Isotropic Remesher**（固定目标边长）相比，本滤镜为**曲率自适应**且通过 Min/Max 约束边长范围。
+**说明**：CGAL 低于 6.0 时该滤镜不会出现（内部 `VESPA_ADAPTIVE_REMESHING`）。与 **VESPA Isotropic Remesher**（固定目标边长）相比，本滤镜为曲率自适应且通过 Min/Max 约束边长范围。
 
 ---
 
@@ -619,7 +624,7 @@
 | **SHYX Edge Collapse** | CGAL 边塌缩 |
 | **SHYX Remesh With Endpoint** | Vascular 第 4 步；CGAL ≥ 6；与 Adaptive Remesher 同模块 |
 | **SHYX Convex Hull** | 纯 VTK 凸包 |
-| **SHYX Selection / Point Extrude** | 选区或点挤出 |
+| **SHYX Selection / Point Extrude** | 选区挤出 / **全部顶点**沿法线或矢量位移（Point Extrude 无选区端口） |
 | **SHYX Delete / Flip Selected Cells** | 删单元 / 翻转绕向 |
 | **SHYX Selection: Fill, Alpha Wrap, Union** | CGAL ≥ 5.5 |
 | **SHYX Minimum OBB** | 最小 OBB；交互 box |

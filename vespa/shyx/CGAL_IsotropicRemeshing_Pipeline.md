@@ -1,6 +1,6 @@
 # CGAL 各向同性 Remesh 流程概要
 
-本文说明 [CGAL Polygon Mesh Processing](https://doc.cgal.org/latest/Polygon_mesh_processing/index.html) 包中 **`CGAL::Polygon_mesh_processing::isotropic_remeshing()`** 所实现的**增量式三角形各向同性 remesh**在逻辑上分为哪些阶段。算法来源为 Botsch 等人的局部增量 remesh 思路（边分裂、边塌缩、边翻转与 Laplacian 平滑的组合），在 CGAL 文档中有集中描述。
+本文说明 CGAL PMP **`isotropic_remeshing()`** 的官方阶段划分，**不是** SHYX Adaptive Remesher 的属性表。SHYX 使用自定义 **FeatureAwareAdaptiveSizingField**；`NumberOfRelaxationSteps` 默认 **3**（CGAL 文档常写 1）。
 
 官方入口：
 

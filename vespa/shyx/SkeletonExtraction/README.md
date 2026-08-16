@@ -7,7 +7,7 @@
 ## 1. 目的与功能算法详细解释
 
 **目的**： 
-本模块的核心功能是从闭合的 (Watertight) 3D 三角表面网格中，计算并提取出其对应的一维曲线骨架 (1D Curve Skeleton)。算法输出结果为由多段线 (Polylines) 构成的 `vtkPolyData` 对象，可用于模型分析、骨骼绑定与形状检索。
+本模块（**vtk.module** `vtkSHYXSkeletonExtraction`，实现类 **`vtkCGALSkeletonExtraction`**）从闭合 3D 三角表面提取一维曲线骨架。
 
 **算法与流程**： 
 底层计算依赖于 **CGAL (Computational Geometry Algorithms Library) 的平均曲率流骨架化 (Mean Curvature Flow Skeletonization)** 算法。整体处理工作流包括以下步骤：

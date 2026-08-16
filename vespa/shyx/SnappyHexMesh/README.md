@@ -1,6 +1,6 @@
 # vtkSHYXSnappyHexMesh
 
-静态链接 sibling 仓库 [shyx-snappyhex](https://github.com) 的 `SHYXSnappyHex.lib`（OpenFOAM-v2412 snappyHexMesh，MSVC ABI）做以六面体为主的体积网格。菜单在 **Filters → SHYX**（不进 Vascular 工具条）。
+静态链接 sibling 仓库 **shyx-snappyhex**（本机常见路径见根 `CMakeLists.txt` 的 `SHYXSnappyHex_DIR`）的 `SHYXSnappyHex.lib`（OpenFOAM-v2412 snappyHexMesh，MSVC ABI）做以六面体为主的体积网格。菜单在 **Filters → SHYX**（不进 Vascular 工具条）。
 
 开启：
 

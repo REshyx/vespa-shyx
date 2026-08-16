@@ -1,10 +1,14 @@
 ---
 name: vespa-paraview-shyx
 description: >-
-  Maps the VESPA/vespa “shyx” ParaView plugin layout (VTK modules, CMake, server-manager XML) and
-  the steps to add filters like those under vespa/shyx. Use when building or extending SHYX ParaView
-  filters, vtkSHYX* classes, ParaViewPlugin XML, RepresentationType default representation hints, or
-  when the user asks how shyx plugins are wired into VESPAPlugin.
+  Maps the VESPA/vespa “shyx” ParaView plugin layout (VTK modules, CMake, server-manager XML)
+  and how SHYX capabilities are wired: pipeline filters, Display representations (Pulse Glyphs,
+  Animated Streamline, Point Label), RenderView title-bar selection tools, and the SHYX AI
+  Assistant catalog/parameter tools (list_filters, lookup_shyx_docs, describe_proxy). Use when
+  building or extending SHYX filters, vtkSHYX* classes, ParaViewPlugin XML, RepresentationType
+  hints, custom representations, Sphere/Grow selection, or when adding a SHYX feature that the
+  assistant cannot list or describe_proxy. New non-filter features must be wired into describe_proxy
+  or the assistant will only see Filters.
 ---
 
 # VESPA: SHYX-style ParaView 插件架构
@@ -18,7 +22,13 @@ description: >-
   - `vespa/Core/`：公用纯 VTK 工具（`vtkVESPAAttributeTransfer` 形变后点/胞数据映射），不拉 CGAL。
   - `vespa/vespa/`：Kitware 原版 VESPA（`vtkCGAL*`）。
   - `vespa/shyx/`：SHYX；新作者应新建 `vespa/<id>/`，不要往 shyx 或 vespa/vespa 里塞。
-- **SHYX 实现**：每个功能在 `vespa/shyx/<FeatureName>/` 下；至少包含 `vtk.module` 与 `CMakeLists.txt`（`vtk_module_add_module`，`shyx` 里通常带 `FORCE_STATIC`）。
+- **SHYX 不只是 Filters 菜单**。用户可见能力分几类（清单见 `vespa/INVENTORY.md`；AI 查询约定见 **§9**）：
+  - **Pipeline filter / source**：`vespa/shyx/<Feature>/` + `ParaViewPlugin/SHYX*.xml`，`ProxyGroup name="filters"`（或 sources）。
+  - **Display 表示**：`PulseGlyphRepresentation` / `AnimatedStreamlineRepresentation` / `PointLabelRepresentation`，挂在 Display 下拉框，不是 pipeline 节点。
+  - **RenderView 标题栏选择工具**：`ParaViewPlugin/SphereSelection/`、`GrowSelectionWithSimilar/`，纯客户端 Qt，**没有** SM proxy。
+  - **3D widget 表示**：支架/圆柱（`SHYX*WidgetRepresentation.xml`），不是 Display 下拉项。
+  - **View 停靠窗**：SHYX AI Assistant（`ParaViewPlugin/pqSHYXAI*`），不是 pipeline filter。
+- **SHYX 实现**：每个 **VTK 算子或表示** 在 `vespa/shyx/<FeatureName>/` 下；至少包含 `vtk.module` 与 `CMakeLists.txt`（`vtk_module_add_module`，`shyx` 里通常带 `FORCE_STATIC`）。标题栏选择工具只有 `ParaViewPlugin/` 下的 `pq*`。AI 面板 UI 是 `pqSHYXAI*`；`vespa/shyx/AIAssistant/` 里仍有遗留 `vtkSHYXAIAssistant`，对应 XML **不要**再写入 `SERVER_MANAGER_XML`。
 - **ParaView 插件包**：`ParaViewPlugin/CMakeLists.txt` 中 `paraview_add_plugin(VESPAPlugin ...)` 的 `SERVER_MANAGER_XML` 列表注册每个 `SHYX*.xml`；**一个 DLL（VESPAPlugin）** 聚合已构建模块，而不是每个算子一个插件目标。
 - **注册入口**：`ParaViewPlugin/paraview.plugin` 只描述插件名；`paraview_plugin_build` 与主工程里的 `VESPA_BUILD_PV_PLUGIN` 一起驱动构建。
 - **与 CGAL 的边界**：只有真正调用 CGAL 的算子才依赖 `vtkCGALAlgorithm` / `vtkCGALPolyDataAlgorithm`；纯 VTK / TetGen / VMTK 算子只写自己的 `DEPENDS`。根 `CMakeLists.txt` 在扫完 `vtk.module` 后，仅当仍有模块声明 `vtkCGALAlgorithm` 或 `CGAL::CGAL` 且 `VESPA_USE_CGAL=ON` 时才 `find_package(CGAL)`。
@@ -41,8 +51,9 @@ description: >-
 | 哪些 XML 已挂进插件 | `ParaViewPlugin/CMakeLists.txt` → `paraview_add_plugin` → `SERVER_MANAGER_XML` 列表 |
 | 菜单/图标 | XML 里 `<Hints><ShowInMenu category="SHYX" .../></Hints>`；资源常挂在 `ParaViewPlugin/VESPAIcons.qrc` |
 | 某输出端口默认表示法（如 Point Gaussian） | `<Hints>` 里 `<RepresentationType view="RenderView" type="..." port="N"/>`；**§8.6.7** |
-| 需要 Qt 的客户端逻辑 | `ParaViewPlugin/` 下的 `pq*`（含 Pulse Glyph / Animated Streamline 动画管理器）；用 `paraview_plugin_add_auto_start` 或 `UI_INTERFACES` / `SOURCES` 列出 |
-| 上游 VESPA 的聚合 XML | `ParaViewPlugin/VESPAFilters.xml` 只注册 Kitware 原版滤镜；**不要**把 SHYX 代理再塞回去。SHYX 一律 `SHYX<Name>.xml` |
+| 需要 Qt 的客户端逻辑 | `ParaViewPlugin/` 下的 `pq*`（含 Pulse Glyph / Animated Streamline 动画管理器、Sphere / Grow 选择）；用 `paraview_plugin_add_auto_start` 或 `UI_INTERFACES` / `SOURCES` 列出 |
+| SHYX AI Assistant 能力目录与参数查询 | `ParaViewPlugin/pqSHYXAIAgentTools.cxx`（`list_filters` / `lookup_shyx_docs` / `describe_proxy`）；系统提示 `pqSHYXAIAssistantPanel.cxx` 的 `kSystemPrompt`；**§9** |
+| 上游 VESPA 的聚合 XML | `ParaViewPlugin/VESPAFilters.xml` 只注册 Kitware 原版滤镜；**不要**把 SHYX 代理再塞回去。SHYX 一律 `SHYX*.xml` |
 
 **搜索技巧**：在仓库内 `rg "vtkSHYX"`, `rg "SHYX" ParaViewPlugin`, `rg "vtk_module_add_module" vespa/shyx` 可快速定位命名与已接入项。
 
@@ -66,9 +77,11 @@ description: >-
    - 类名 `vtkSHYX*`；基类与项目内同类算子一致（`vtkImageAlgorithm` / `vtkPolyDataAlgorithm` / `vtkCGALPolyDataAlgorithm` 等）。
    - `Set*` / `Get*` 与 XML 里 `command="Set..."` 一致；多输出端口在 XML 中声明 `<OutputPort ... index="N"/>`。
 5. **Server-manager XML** `ParaViewPlugin/SHYX<YourName>.xml`：`<SourceProxy class="vtkSHYX<YourName>" label="...">`，`Input` / 属性与 Hints 与现有一致风格。布局上按功能切 `<PropertyGroup>` 分节、把整组次要项压到 `panel_visibility="advanced"`、条件性子项用 `GenericDecorator`（`enabled_state` 或 `visibility`，按 §8.6.3 的取舍）。多算法 single-proxy 走 §8.6.5 模板。
-6. **注册 XML**：在 `ParaViewPlugin/CMakeLists.txt` 追加 `"SHYX<YourName>.xml"`。纯 VTK / TetGen 等放无条件 `SERVER_MANAGER_XML` 列表；依赖 CGAL 的放 `SHYX_CGAL_SERVER_MANAGER_XML`（随 `VESPA_BUILT_WITH_CGAL`）。**不要**写入 `VESPAFilters.xml`。
+6. **注册 XML**：在 `ParaViewPlugin/CMakeLists.txt` 追加 `"SHYX<YourName>.xml"`。纯 VTK / TetGen 等放无条件 `SERVER_MANAGER_XML` 列表；多数 CGAL 滤镜放 `SHYX_CGAL_SERVER_MANAGER_XML`（随 `VESPA_BUILT_WITH_CGAL`）。CGAL ≥ 6 重网格 → `ADAPTIVE_REMESHING_SERVER_MANAGER_XML`；Alpha Wrap / Selection Fill → 随内部变量 `VESPA_ALPHA_WRAPPING`；VMTK / Snappy → 各自 `if()` 列表。**不要**写入 `VESPAFilters.xml`。
 7. **若需图标**：`VESPAIcons.qrc` 增加资源并在 XML `ShowInMenu` 里引用 `:/...` 路径（对照已有条目）。
 8. **若根 CMake 有条件排除**：如果新目录名命中 `list(FILTER ... EXCLUDE` 的规则，或依赖可选组件（VMTK/CGAL 6），在根 `CMakeLists.txt` 的注释与逻辑中保持一致，并在 README 里说明开启方式。
+9. **AI Assistant（必做，见 §9）**：UI 进插件 ≠ 助手能列出或查出参数。普通 filter 一般能被 `describe_proxy` 扫到；**Display 表示、无 proxy 的客户端工具、以及需要用法备注的 filter 必须在 `pqSHYXAIAgentTools.cxx` 里补上**，并改 `kSystemPrompt`。漏了助手就只看得到 Filters。
+10. **对照表**：`vespa/INVENTORY.md`（及 shyx README / 根目录功能说明，若该功能要出现在文档里）。
 
 **不必改**：`paraview.plugin` 的 NAME/描述在增加普通 filter 时通常不需要动；`vtk_module_find_modules` 会自动发现新 `vtk.module`。
 
@@ -82,6 +95,7 @@ description: >-
 - **忘把 XML 加进 `SERVER_MANAGER_XML`**：算子 C++ 已进 DLL，但 UI 不出现。
 - **vtk.module 少写了依赖**：链接期或 `vtk_header_dep` 类错误。
 - **条件构建**：VMTK/CGAL 6 相关模块被根 CMake 排除后，与 XML 仍引用该 filter 会不一致——改 CMake 或改 XML/文档，避免“一半发布”。
+- **AI Assistant 没补 describe_proxy**：新功能已经在菜单/Display/标题栏出现，但助手问「有什么 / 参数」时仍只有 filter。**§9 是加功能清单的一部分，不是事后文档。**
 
 完成一次端到端修改后，应用户环境重新配置/编译 ParaView 插件目标（工程里为 `VESPAPVPLUGIN` 相关与 `VESPAPlugin` 产物，以本仓库 CMake 为准）并在 ParaView 中 `Tools → Manage Plugins` 验证加载与菜单项。
 
@@ -93,6 +107,8 @@ description: >-
 - SHYX 实现根：`vespa/shyx/*/`
 - 上游 VESPA（CGAL）：`vespa/vespa/*/`
 - 公用 CGAL 辅助：`vespa/Algorithm/`
+- 模块对照表：`vespa/INVENTORY.md`（滤镜 / 表示 / 仅客户端 Qt）
+- AI Assistant 工具：`ParaViewPlugin/pqSHYXAIAgentTools.cxx`（**§9**）
 - **ParaView 上游源码（本地参考）**：`C:\SoftWare\ParaView` — 可对照 Proxy、Server Manager XML、插件 CMake、`paraview_add_plugin` 等与版本一致的实现；本路径为开发机约定，若不存在则以实际安装的 ParaView 源码目录为准。
 
 更细的 **Domain / Decorator** 与常见 Hints 见 **§8**。其余 ParaView SM 细节以**已有 `SHYX*.xml`** 为模板，对照本地 `ParaView` 源码（如 `Remoting/ServerManager`、`Qt/ApplicationComponents`）与官方文档。
@@ -266,12 +282,12 @@ description: >-
 </Hints>
 ```
 
-仓库内参考：`ParaViewPlugin/SHYXVmtkOpeningCenterlines.xml`（Opening seed points → `Point Gaussian`）；`ParaViewPlugin/SHYXVesselEndClipper.xml`（Clip Planes 端口 → `Point Label`）。
+仓库内参考：`ParaViewPlugin/SHYXVmtkOpeningCenterlines.xml`（Opening seed points → `Point Label`）；`ParaViewPlugin/SHYXVesselEndClipper.xml`（Clip Planes → `Point Label`）；`ParaViewPlugin/SHYXAutoStreamline.xml`（port 1 种子点 → `Point Gaussian`）。
 
 ### 8.7 `BoundsDomain` 与「自动刷新」（示例：`MinEdgeLength` / `MaxEdgeLength`）
 
 - XML：`BoundsDomain mode="scaled_extent"` + `scale_factor` + `RequiredProperties` 绑定 **`Input`**。
-- **含义**：**不是** VTK 算子在 `RequestData` 里改 Min/Max；而是 **Input 的包围盒变化**时，ParaView **更新该属性的 Domain**（建议尺度、Scale/Reset 等）。`scaled_extent` 下 `scale_factor` 是相对包围盒特征长度的比例（`SHYXAdaptiveIsotropicRemesher.xml`：Min 约 **0.1%** 最长边、Max 约 **5%** 最长边）。
+- **含义**：**不是** VTK 算子在 `RequestData` 里改 Min/Max；而是 **Input 的包围盒变化**时，ParaView **更新该属性的 Domain**（建议尺度、Scale/Reset 等）。`scaled_extent` 下 `scale_factor` 是相对包围盒特征长度的比例（`SHYXAdaptiveIsotropicRemesher.xml`：Min 约 **0.1%** 最长边、Max 约 **10%** 最长边）。`RequestData` 要求 `0 < Min < Max`；XML 默认 0 表示未设，需用户填正值或点 Scale/Reset。
 - **不会**在后台静默覆盖用户已填的数值，除非用户在 UI 上点 **Reset/Scale** 显式采用建议值。
 
 ### 8.8 其它与面板相关的常见能力
@@ -287,3 +303,32 @@ description: >-
 - `GenericDecorator` 逻辑：`Remoting/ApplicationComponents/vtkGenericPropertyDecorator.cxx`
 - 组合逻辑：`vtkCompositePropertyDecorator.cxx`
 - 面板组装：`Qt/Components/pqProxyWidget.cxx`（多 decorator 取 AND 的判定在此）
+
+## 9. 加功能时必须接到 AI Assistant（`describe_proxy`）
+
+**漏改助手 = 用户在 UI 里能用，助手却列不出、也查不到参数。** 实现在 `ParaViewPlugin/pqSHYXAIAgentTools.cxx`；系统提示 `pqSHYXAIAssistantPanel.cxx` 的 `kSystemPrompt`。
+
+`describe_proxy` / `list_filters` **不会自动覆盖所有 SHYX 能力**。它们默认擅长 SM `filters`/`sources`。新类型若不补代码，助手只能当 filter 查。
+
+### 9.1 按类型要改什么
+
+| 新功能类型 | SM 里有没有 | 只加 XML/C++ 够不够 | 还必须改 |
+|------------|-------------|---------------------|----------|
+| Pipeline filter / source | `filters` / `sources` | **参数**：`describe_proxy('XML名')` 一般能扫到 | `INVENTORY.md`；有用法偏好时加 `kShyxExtra`（血管顺序、多端口、与 VESPA 成对选用） |
+| Display 表示 | `representations` + GeometryRepresentation `Extension` + `exposed_name` | **不够**。空目录看不到；即使用 XML 名查到，列的是 `Animate` 不是 `PG_Animate` | `isShyxDisplayRepresentation`、`representationDisplayName`（下拉框文案，如 `Pulse Glyphs`）；确认 `exposedNamesForSubproxy` 能从 Extension 读到 `exposed_name`；`kShyxExtra`；`kSystemPrompt` 举例；`get_display` 的 `PG_`/`AS_`/`PL_` 前缀若换了也要加 |
+| 标题栏 / 纯 Qt 工具 | **无 proxy** | **完全不够**。`describe_proxy` 会报找不到 | `describeClientTool()`（交互与参数，如 `DihedralThresholdDegrees`）；`kShyxExtra`；空查询 `list_filters`/`lookup_shyx_docs` 的目录句；`kSystemPrompt` |
+| 3D widget 表示 | `representations` / `3d_widget_representations` | 精确 XML 名也许能 dump，但不是 Display 下拉 | `kShyxExtra` 标明「支架 widget，不是 Representation 下拉」 |
+
+对照表：`vespa/INVENTORY.md` 的滤镜 / 表示 / 仅客户端 Qt。
+
+### 9.2 助手侧查询入口（补完之后才成立）
+
+- 目录：空查询 `lookup_shyx_docs` + `list_filters`。
+- Filter 参数：`describe_proxy('SHYXMeshChecker')` → Python `Name(Input=..., registrationName='...')`。
+- Display 参数：`describe_proxy('Pulse Glyphs')` → `GetDisplayProperties().Representation = 'Pulse Glyphs'`，属性用 **exposed 名**（`disp.PG_Animate`）。**不要** `PulseGlyphRepresentation()`。
+- 无 proxy 工具：`describe_proxy('sphere')` / `describe_proxy('grow')`；用完 `get_selection_ids`。
+
+### 9.3 检查（加完功能后）
+
+在 `pqSHYXAIAgentTools.cxx` 确认：新 XML 名或 Display 文案能被 `describe_proxy` 命中；若无 SM 属性，`describeClientTool` 有条目。同步工具 schema 描述和 `kSystemPrompt`，否则模型仍只会对 filter 调 `describe_proxy`。
+

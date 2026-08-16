@@ -449,6 +449,7 @@ if (PARAVIEW_USE_QT)
       CURL::libcurl
       VTK::ChartsCore
       VTK::InteractionWidgets
+      VTK::IOImage
       VTK::IOIOSS
       vtkSHYXSelectionPlaneClipper
       vtkSHYXVascularStentPlacement

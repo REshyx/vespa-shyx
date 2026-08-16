@@ -17,4 +17,12 @@ ParaView **View → SHYX AI Assistant**：可勾选的停靠窗口（默认停�
 
 HTTPS 走静态链进 `VESPAPlugin.dll` 的 **libcurl**（Windows 上 TLS 为系统 Schannel）。不依赖 Qt Network，也不需要旁边的 `qschannelbackend.dll`。
 
-实现都在 `ParaViewPlugin/pqSHYXAI*` 与 `pqSHYXCurlRequest`（dock + agent tools + HTTP）。本目录没有 VTK 算子。
+实现都在 `ParaViewPlugin/pqSHYXAI*` 与 `pqSHYXCurlRequest`（dock + agent tools + HTTP）。`vespa/shyx/AIAssistant/` 仍有遗留 VTK 模块 `vtkSHYXAIAssistant`；`SHYXAIAssistant.xml` **未**注册，不要创建该 pipeline 节点。
+
+## Agent 工具（`pqSHYXAIAgentTools.cxx`）
+
+目录：空查询 `lookup_shyx_docs`、`list_filters`。参数：`describe_proxy('XML名')`。Display：`describe_proxy('Pulse Glyphs'|'Animated Streamline'|'Point Label')`，再用 `GetDisplayProperties().Representation = '…'` 与 `disp.PG_*` / `AS_*` / `PL_*`（不要 representation 构造函数）。标题栏：`describe_proxy('sphere'|'grow')`；grow 的 `DihedralThresholdDegrees` 默认 15；选完后 `get_selection_ids`。
+
+其它：`get_pipeline_tree`、`get_active_data`、`get_source_data`、`get_selection`、`get_display`（会列出 `PG_`/`AS_`/`PL_`/`PulseGlyph_*`）、`get_color_map`、`get_camera`、`get_time`、`get_output_window`、`capture_screenshot`、`pick_world_point`、`get_code_script`、`set_code_script`、`run_code_script`、`get_source_properties`、`get_blocks`。
+
+**Run script** 需要**正在运行的 ParaView 进程**里有 Python manager；编译插件时不必打开 `PARAVIEW_USE_PYTHON`。

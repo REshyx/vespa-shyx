@@ -10,7 +10,8 @@
 - **GROUPS**（`vtk.module`）：`Core` / `Meshing` / `Vascular` / `Flow` / `PointCloud`；表示层保持 `ParaView`。
 - **后端**：模块 `vtk.module` 实际依赖，不是类名里的 `CGAL` 字样。
 
-CMake 开关：`VESPA_USE_CGAL`（默认 ON）、`VESPA_USE_VMTK`、`VESPA_USE_SNAPPYHEXMESH`、`VESPA_ALPHA_WRAPPING`（CGAL ≥ 5.5）、`VESPA_MESH_SMOOTHING`（Ceres）、`VESPA_ADAPTIVE_REMESHING`（CGAL ≥ 6）。
+CMake **用户选项**：`VESPA_USE_CGAL`（默认 ON）、`VESPA_USE_VMTK`、`VESPA_USE_SNAPPYHEXMESH`、`USE_CERES`（Mesh Smoothing）、`VESPA_BUILD_PV_PLUGIN`、`VESPA_USE_SMP`、`VESPA_USE_MKL`。  
+**内部状态**（`CACHE INTERNAL`，由 CGAL 版本 / Ceres 自动 FORCE，不要当 cmake-gui 开关）：`VESPA_ALPHA_WRAPPING`（CGAL ≥ 5.5）、`VESPA_MESH_SMOOTHING`（`USE_CERES`）、`VESPA_ADAPTIVE_REMESHING`（CGAL ≥ 6）。
 
 ---
 
@@ -126,7 +127,7 @@ Vascular 顺序（[`VESPAVascularCategory.xml`](../ParaViewPlugin/VESPAVascularC
 
 | 界面标签 | 类 | 目录 | XML | 图标 | README | 后端 |
 |----------|----|------|-----|------|--------|------|
-| SHYX AI Assistant | `pqSHYXAIAssistantPanel` | AIAssistant | —（View dock） | — | [有](shyx/AIAssistant/README.md) | 客户端 Qt（OpenAI 兼容 HTTP） |
+| SHYX AI Assistant | `pqSHYXAIAssistantPanel` | AIAssistant | —（View dock） | — | [有](shyx/AIAssistant/README.md) | 客户端 Qt（OpenAI 兼容 HTTP）。遗留 VTK 模块 `vtkSHYXAIAssistant` + `SHYXAIAssistant.xml` **不要再注册**；不要 `SHYXAIAssistant()` |
 
 ---
 

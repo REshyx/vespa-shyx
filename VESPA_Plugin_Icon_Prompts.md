@@ -1,6 +1,6 @@
 # VESPA / ParaView 插件 — 滤镜图标图像生成提示词
 
-本文档为 **VESPAPlugin** 中各 **Filter**（及唯一 **Source**）各提供一条**风格统一**的提示词，侧重**算法意象**与**可识别的视觉隐喻**，便于 Midjourney、Stable Diffusion、DALL·E、通义万相等工具生成 **方形工具栏图标**。
+本文档为 **VESPAPlugin** 中**部分** Filter / Source 提供风格统一的图标提示词，**不是**完整滤镜清单。对照以 [`vespa/INVENTORY.md`](vespa/INVENTORY.md) 与 `VESPAIcons.qrc` 为准。
 
 ---
 
@@ -266,6 +266,14 @@
 **English prompt:** Critical points as colored dots (saddle, spiral, node) on a plane, separatrix curves connecting them, small vector field arrows in background; conveys topological skeleton of vector field.
 
 **中文备选：** 平面上临界点用不同颜色点（鞍点、焦点等），分界线连接各点，背景小矢量箭头，表达向量场拓扑结构。
+
+---
+
+### SHYX Auto Streamline
+
+**English prompt:** A volumetric velocity field with a few automatically placed seed dots near a vortex core, streamlines tracing through the volume, one output as curves and another as the seed point cloud; conveys auto-seeded stream tracer.
+
+**中文备选：** 体速度场中涡核附近自动布种的小点，流线穿过体积，一侧曲线一侧种子点云，表达自动布种流线。
 
 ---
 

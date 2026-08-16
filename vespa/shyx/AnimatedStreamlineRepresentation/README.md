@@ -1,4 +1,6 @@
-# Animated Streamline Representation (动态流线可视化)
+# Animated Streamline Representation
+
+Display 下拉 **`Animated Streamline`**。不要构造 representation proxy。Python：`Representation = 'Animated Streamline'`，属性 **`AS_*`**（`disp.AS_Animate`、`AS_TimeScale`、`AS_IntegrationScale`、`AS_OpacityScale`、`AS_Trunc`、`AS_Pow`、`AS_AnimationCoordinateArray`、`AS_AnimationCoordinateYArray`）。
 
 ## 示意图
 

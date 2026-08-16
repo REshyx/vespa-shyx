@@ -1,6 +1,7 @@
 #include "pqSHYXAIAgentTools.h"
 
 #include "pqSHYXAIOutputLog.h"
+#include "pqSHYXGrowSelectionWithSimilarController.h"
 
 #include "pqActiveObjects.h"
 #include "pqAnimationManager.h"
@@ -57,6 +58,10 @@ constexpr int kMaxSelIds = 64;
 constexpr int kMaxFilterHits = 40;
 constexpr int kMaxBlockNodes = 80;
 constexpr int kMaxTimeSteps = 40;
+constexpr int kMaxPickPoints = 32;
+
+QString formatHelperValues(vtkSMProperty* prop, int maxElems);
+QString propTypeShort(vtkSMProperty* prop);
 
 QJsonObject fn(const char* name, const char* desc, const QJsonObject& properties = QJsonObject(),
   const QJsonArray& required = QJsonArray())
@@ -661,7 +666,34 @@ QString displayInfo()
   addNum(out, p, "EdgeVisibility");
   addNum(out, p, "RenderPointsAsSpheres");
   addNum(out, p, "RenderLinesAsTubes");
-  out += QStringLiteral("  (LUT details: call get_color_map)\n");
+  {
+    vtkSmartPointer<vtkSMPropertyIterator> it;
+    it.TakeReference(p->NewPropertyIterator());
+    bool anyShyx = false;
+    for (it->Begin(); !it->IsAtEnd(); it->Next())
+    {
+      const char* key = it->GetKey();
+      vtkSMProperty* prop = it->GetProperty();
+      if (!key || !prop || prop->GetInformationOnly() || prop->GetIsInternal())
+      {
+        continue;
+      }
+      const QString k = QString::fromUtf8(key);
+      if (!k.startsWith(QLatin1String("PG_")) && !k.startsWith(QLatin1String("AS_")) &&
+        !k.startsWith(QLatin1String("PL_")) && !k.startsWith(QLatin1String("PulseGlyph_")))
+      {
+        continue;
+      }
+      if (!anyShyx)
+      {
+        out += QStringLiteral("  SHYX display properties:\n");
+        anyShyx = true;
+      }
+      const QString vals = formatHelperValues(prop, kMaxPropElems);
+      out += QStringLiteral("    %1=%2\n").arg(k, vals.isEmpty() ? QStringLiteral("(empty)") : vals);
+    }
+  }
+  out += QStringLiteral("  (LUT details: call get_color_map; schema: describe_proxy on the display type)\n");
   return out;
 }
 
@@ -905,11 +937,215 @@ bool queryHits(const QString& query, const QStringList& fields)
   return false;
 }
 
+bool isAsciiLetter(QChar c)
+{
+  const char16_t u = c.unicode();
+  return (u >= 'A' && u <= 'Z') || (u >= 'a' && u <= 'z');
+}
+
+bool looksLikeSpecificProxyQuery(const QString& s)
+{
+  auto afterPrefix = [&](const QLatin1String& prefix) {
+    int i = 0;
+    while (true)
+    {
+      i = s.indexOf(prefix, i, Qt::CaseInsensitive);
+      if (i < 0)
+      {
+        return false;
+      }
+      int j = i + static_cast<int>(prefix.size());
+      int letters = 0;
+      while (j < s.size() && isAsciiLetter(s[j]))
+      {
+        ++letters;
+        ++j;
+      }
+      if (letters >= 3)
+      {
+        return true;
+      }
+      ++i;
+    }
+  };
+  if (afterPrefix(QLatin1String("SHYX")) || afterPrefix(QLatin1String("VESPA")) ||
+    afterPrefix(QLatin1String("CGAL")))
+  {
+    return true;
+  }
+  return s.contains(QLatin1String("PulseGlyph"), Qt::CaseInsensitive) ||
+    s.contains(QLatin1String("Pulse Glyphs"), Qt::CaseInsensitive) ||
+    s.contains(QLatin1String("AnimatedStreamline"), Qt::CaseInsensitive) ||
+    s.contains(QLatin1String("Animated Streamline"), Qt::CaseInsensitive) ||
+    s.contains(QLatin1String("PointLabel"), Qt::CaseInsensitive) ||
+    s.contains(QLatin1String("Point Label"), Qt::CaseInsensitive);
+}
+
+bool isCatalogQuery(const QString& q)
+{
+  const QString s = q.trimmed();
+  if (s.isEmpty())
+  {
+    return true;
+  }
+  if (looksLikeSpecificProxyQuery(s))
+  {
+    return false;
+  }
+  static const char* keys[] = { "catalog", "overview", "features", "capabilities", "capability",
+    "\xE5\x8A\x9F\xE8\x83\xBD", "\xE6\x9C\x89\xE4\xBB\x80\xE4\xB9\x88", "\xE8\x83\xBD\xE5\x8A\x9B",
+    "\xE6\xB8\x85\xE5\x8D\x95", "\xE9\x83\xBD\xE8\x83\xBD" };
+  for (const char* k : keys)
+  {
+    if (s.contains(QString::fromUtf8(k), Qt::CaseInsensitive))
+    {
+      return true;
+    }
+  }
+  return false;
+}
+
+bool isShyxDisplayRepresentation(const QString& xml)
+{
+  return xml == QLatin1String("PulseGlyphRepresentation") ||
+    xml == QLatin1String("AnimatedStreamlineRepresentation") ||
+    xml == QLatin1String("PointLabelRepresentation");
+}
+
+QString representationDisplayName(const QString& xml)
+{
+  if (xml == QLatin1String("PulseGlyphRepresentation"))
+  {
+    return QStringLiteral("Pulse Glyphs");
+  }
+  if (xml == QLatin1String("AnimatedStreamlineRepresentation"))
+  {
+    return QStringLiteral("Animated Streamline");
+  }
+  if (xml == QLatin1String("PointLabelRepresentation"))
+  {
+    return QStringLiteral("Point Label");
+  }
+  return {};
+}
+
+void collectExposedFromElement(vtkPVXMLElement* el, const QString& wantProxy,
+  QList<QPair<QString, QString>>& out, bool inMatchingSubProxy)
+{
+  if (!el)
+  {
+    return;
+  }
+  const QString tag = QString::fromUtf8(el->GetName() ? el->GetName() : "");
+  if (tag == QLatin1String("SubProxy"))
+  {
+    bool match = false;
+    const unsigned int n = el->GetNumberOfNestedElements();
+    for (unsigned int i = 0; i < n; ++i)
+    {
+      vtkPVXMLElement* child = el->GetNestedElement(i);
+      if (!child)
+      {
+        continue;
+      }
+      if (QString::fromUtf8(child->GetName() ? child->GetName() : "") != QLatin1String("Proxy"))
+      {
+        continue;
+      }
+      const char* pn = child->GetAttribute("proxyname");
+      if (pn && QString::fromUtf8(pn) == wantProxy)
+      {
+        match = true;
+        break;
+      }
+    }
+    for (unsigned int i = 0; i < n; ++i)
+    {
+      collectExposedFromElement(el->GetNestedElement(i), wantProxy, out, match);
+    }
+    return;
+  }
+  if (inMatchingSubProxy && tag == QLatin1String("Property"))
+  {
+    const char* sm = el->GetAttribute("name");
+    const char* ex = el->GetAttribute("exposed_name");
+    if (sm && sm[0] && ex && ex[0])
+    {
+      const QString smName = QString::fromUtf8(sm);
+      const QString exName = QString::fromUtf8(ex);
+      bool exists = false;
+      for (const auto& p : out)
+      {
+        if (p.first == smName)
+        {
+          exists = true;
+          break;
+        }
+      }
+      if (!exists)
+      {
+        out.append(qMakePair(smName, exName));
+      }
+    }
+  }
+  const unsigned int n = el->GetNumberOfNestedElements();
+  for (unsigned int i = 0; i < n; ++i)
+  {
+    collectExposedFromElement(el->GetNestedElement(i), wantProxy, out, inMatchingSubProxy);
+  }
+}
+
+QList<QPair<QString, QString>> exposedNamesForSubproxy(const QString& xml)
+{
+  QList<QPair<QString, QString>> out;
+  vtkSMSessionProxyManager* pxm = sessionPxm();
+  vtkSMProxyDefinitionManager* defs = pxm ? pxm->GetProxyDefinitionManager() : nullptr;
+  if (!defs || xml.isEmpty())
+  {
+    return out;
+  }
+  const char* hosts[] = { "GeometryRepresentation", "UnstructuredGridRepresentation",
+    "UniformGridRepresentation", "StructuredGridRepresentation" };
+  for (const char* host : hosts)
+  {
+    vtkPVXMLElement* def = defs->GetProxyDefinition("representations", host, false);
+    if (!def)
+    {
+      continue;
+    }
+    collectExposedFromElement(def, xml, out, false);
+    if (!out.isEmpty())
+    {
+      return out;
+    }
+  }
+  return out;
+}
+
+bool isShyxishProxy(const QString& xml, const QString& label)
+{
+  if (xml.startsWith(QLatin1String("SHYX")) || xml.startsWith(QLatin1String("CGAL")) ||
+    xml.startsWith(QLatin1String("vtkCGAL")) ||
+    xml.contains(QLatin1String("VESPA"), Qt::CaseInsensitive) ||
+    label.startsWith(QLatin1String("SHYX")) || label.startsWith(QLatin1String("VESPA")) ||
+    label.contains(QLatin1String("CGAL"), Qt::CaseInsensitive))
+  {
+    return true;
+  }
+  return isShyxDisplayRepresentation(xml);
+}
+
 int hitScore(const QString& query, const QString& xml, const QString& label)
 {
+  const QString display = representationDisplayName(xml);
   if (query.isEmpty())
   {
-    return xml.startsWith(QLatin1String("SHYX")) ? 20 : 5;
+    int s = xml.startsWith(QLatin1String("SHYX")) ? 20 : 5;
+    if (!display.isEmpty())
+    {
+      s += 20;
+    }
+    return s;
   }
   int s = 0;
   if (xml.compare(query, Qt::CaseInsensitive) == 0)
@@ -932,7 +1168,19 @@ int hitScore(const QString& query, const QString& xml, const QString& label)
   {
     s += 25;
   }
-  if (xml.startsWith(QLatin1String("SHYX")))
+  if (!display.isEmpty())
+  {
+    if (display.compare(query, Qt::CaseInsensitive) == 0)
+    {
+      s += 80;
+    }
+    else if (display.contains(query, Qt::CaseInsensitive) ||
+      query.contains(display, Qt::CaseInsensitive))
+    {
+      s += 70;
+    }
+  }
+  if (xml.startsWith(QLatin1String("SHYX")) || isShyxDisplayRepresentation(xml))
   {
     s += 8;
   }
@@ -947,7 +1195,7 @@ QString listFilters(const QString& queryRaw)
   {
     return QStringLiteral("No proxy definition manager.");
   }
-  const QString query = queryRaw.trimmed();
+  const QString query = isCatalogQuery(queryRaw) ? QString() : queryRaw.trimmed();
   vtkSmartPointer<vtkPVProxyDefinitionIterator> it;
   it.TakeReference(defs->NewIterator());
   if (!it)
@@ -956,13 +1204,15 @@ QString listFilters(const QString& queryRaw)
   }
   it->AddTraversalGroupName("filters");
   it->AddTraversalGroupName("sources");
+  it->AddTraversalGroupName("representations");
 
   struct Hit
   {
     int score;
     QString line;
   };
-  QList<Hit> hits;
+  QList<Hit> filterHits;
+  QList<Hit> reprHits;
   for (it->GoToFirstItem(); !it->IsDoneWithTraversal(); it->GoToNextItem())
   {
     const char* group = it->GetGroupName();
@@ -972,22 +1222,24 @@ QString listFilters(const QString& queryRaw)
       continue;
     }
     const QString xml = QString::fromUtf8(xmlc);
+    const QString groupStr = QString::fromUtf8(group);
     vtkPVXMLElement* def = it->GetProxyDefinition();
     const char* labelc = def ? def->GetAttribute("label") : nullptr;
-    const QString label = labelc ? QString::fromUtf8(labelc) : xml;
+    const QString display = representationDisplayName(xml);
+    const QString label = labelc ? QString::fromUtf8(labelc) : (display.isEmpty() ? xml : display);
     const QString menu = menuFromHints(it->GetProxyHints() ? it->GetProxyHints()
                                                            : (def ? def->FindNestedElementByName("Hints") : nullptr));
     const QString doc = xmlDocSummary(def, 90);
-    const bool shyxish = xml.startsWith(QLatin1String("SHYX")) ||
-      xml.startsWith(QLatin1String("CGAL")) || xml.startsWith(QLatin1String("vtkCGAL")) ||
-      xml.contains(QLatin1String("VESPA"), Qt::CaseInsensitive) ||
-      label.startsWith(QLatin1String("SHYX")) || label.startsWith(QLatin1String("VESPA")) ||
-      label.contains(QLatin1String("CGAL"), Qt::CaseInsensitive);
+    const bool shyxish = isShyxishProxy(xml, label);
+    if (groupStr == QLatin1String("representations") && !shyxish)
+    {
+      continue;
+    }
     if (query.isEmpty() && !shyxish)
     {
       continue;
     }
-    if (!queryHits(query, { xml, label, menu, doc, QString::fromUtf8(group) }))
+    if (!queryHits(query, { xml, label, menu, doc, groupStr, display }))
     {
       continue;
     }
@@ -996,43 +1248,104 @@ QString listFilters(const QString& queryRaw)
     {
       continue;
     }
-    QString line = QStringLiteral("- %1()  label=%2  group=%3")
-                     .arg(xml, label, QString::fromUtf8(group));
-    if (!menu.isEmpty())
+    QString line;
+    if (groupStr == QLatin1String("representations"))
     {
-      line += QStringLiteral("  menu=%1").arg(menu);
+      line = QStringLiteral("- %1  group=representations").arg(xml);
+      if (!display.isEmpty())
+      {
+        line += QStringLiteral("  display='%1'  kind=display  "
+                               "python: GetDisplayProperties().Representation = '%2'  "
+                               "then describe_proxy for PG_/AS_/PL_ names")
+                  .arg(display, display);
+      }
+      else if (xml.contains(QLatin1String("WidgetRepresentation")))
+      {
+        line += QStringLiteral("  kind=3d_widget (stent/cylinder; not Display dropdown)");
+      }
+      if (label != xml && display.isEmpty())
+      {
+        line += QStringLiteral("  label=%1").arg(label);
+      }
+    }
+    else
+    {
+      line = QStringLiteral("- %1()  label=%2  group=%3").arg(xml, label, groupStr);
+      if (!menu.isEmpty())
+      {
+        line += QStringLiteral("  menu=%1").arg(menu);
+      }
     }
     if (!doc.isEmpty())
     {
       line += QStringLiteral("\n    %1").arg(doc);
     }
-    hits.push_back(Hit{ score, line });
+    if (groupStr == QLatin1String("representations"))
+    {
+      reprHits.push_back(Hit{ score, line });
+    }
+    else
+    {
+      filterHits.push_back(Hit{ score, line });
+    }
   }
-  std::sort(hits.begin(), hits.end(), [](const Hit& a, const Hit& b) { return a.score > b.score; });
+  auto byScore = [](const Hit& a, const Hit& b) { return a.score > b.score; };
+  std::sort(filterHits.begin(), filterHits.end(), byScore);
+  std::sort(reprHits.begin(), reprHits.end(), byScore);
   QString out;
   if (query.isEmpty())
   {
-    out += QStringLiteral("SHYX/VESPA filters and sources (pass query to search all ParaView proxies):\n");
+    out += QStringLiteral(
+      "SHYX/VESPA catalog: filters/sources plus Display representations. "
+      "Pass a query to search all ParaView filters/sources (SHYX representations always).\n");
   }
   else
   {
-    out += QStringLiteral("Filters/sources matching %1:\n").arg(query);
+    out += QStringLiteral("Filters/sources/representations matching %1:\n").arg(query);
   }
-  const int n = std::min(static_cast<int>(hits.size()), kMaxFilterHits);
+  if (!reprHits.isEmpty())
+  {
+    out += QStringLiteral("Representations (not pipeline filters):\n");
+    for (const Hit& h : reprHits)
+    {
+      out += h.line;
+      out += QLatin1Char('\n');
+    }
+  }
+  else if (query.isEmpty())
+  {
+    out += QStringLiteral(
+      "Representations: (none loaded; expect Pulse Glyphs / Animated Streamline / Point Label)\n");
+  }
+  out += QStringLiteral("Filters/sources:\n");
+  const int n = std::min(static_cast<int>(filterHits.size()), kMaxFilterHits);
   if (n == 0)
   {
-    return out + QStringLiteral("(none)\n");
+    out += QStringLiteral("(none)\n");
   }
-  for (int i = 0; i < n; ++i)
+  else
   {
-    out += hits[i].line;
-    out += QLatin1Char('\n');
+    for (int i = 0; i < n; ++i)
+    {
+      out += filterHits[i].line;
+      out += QLatin1Char('\n');
+    }
+    if (filterHits.size() > n)
+    {
+      out += QStringLiteral("... %1 more; narrow the query.\n").arg(filterHits.size() - n);
+    }
   }
-  if (hits.size() > n)
+  out += QStringLiteral(
+    "Python filters/sources: from paraview.simple import *; Name(Input=..., registrationName='...')\n"
+    "Python display representations: GetDisplayProperties().Representation = 'Pulse Glyphs' "
+    "(do not call PulseGlyphRepresentation() as a filter).\n");
+  if (query.isEmpty())
   {
-    out += QStringLiteral("... %1 more; narrow the query.\n").arg(hits.size() - n);
+    out += QStringLiteral(
+      "RenderView title-bar tools are not proxies: Sphere cell selection; "
+      "Grow selection with similar normals. See lookup_shyx_docs. "
+      "After the user uses them, call get_selection_ids.\n");
   }
-  out += QStringLiteral("Python: from paraview.simple import *; Name(Input=..., registrationName='...')\n");
   return out;
 }
 
@@ -1068,6 +1381,7 @@ vtkSMProxy* findPrototype(const QString& query, QString& groupOut, QString& xmlO
   }
   it->AddTraversalGroupName("filters");
   it->AddTraversalGroupName("sources");
+  it->AddTraversalGroupName("representations");
   QString bestGroup;
   QString bestXml;
   int best = 0;
@@ -1082,7 +1396,12 @@ vtkSMProxy* findPrototype(const QString& query, QString& groupOut, QString& xmlO
     vtkPVXMLElement* def = it->GetProxyDefinition();
     const char* labelc = def ? def->GetAttribute("label") : nullptr;
     const QString xml = QString::fromUtf8(xmlc);
-    const QString label = labelc ? QString::fromUtf8(labelc) : xml;
+    const QString display = representationDisplayName(xml);
+    const QString label = labelc ? QString::fromUtf8(labelc) : (display.isEmpty() ? xml : display);
+    if (QString::fromUtf8(group) == QLatin1String("representations") && !isShyxishProxy(xml, label))
+    {
+      continue;
+    }
     const int score = hitScore(q, xml, label);
     if (score > best)
     {
@@ -1104,7 +1423,8 @@ vtkSMProxy* findPrototype(const QString& query, QString& groupOut, QString& xmlO
   return p;
 }
 
-void describeOneProperty(QString& out, vtkSMProperty* prop, const char* pname, int indent)
+void describeOneProperty(QString& out, vtkSMProperty* prop, const char* pname, int indent,
+  const QString& pythonName = QString())
 {
   if (!prop || !pname)
   {
@@ -1116,7 +1436,12 @@ void describeOneProperty(QString& out, vtkSMProperty* prop, const char* pname, i
     return;
   }
   const QString pad = QString(indent, QLatin1Char(' '));
-  QString line = QStringLiteral("%1%2  type=%3").arg(pad, QString::fromUtf8(pname), propTypeShort(prop));
+  const QString shown = pythonName.isEmpty() ? QString::fromUtf8(pname) : pythonName;
+  QString line = QStringLiteral("%1%2  type=%3").arg(pad, shown, propTypeShort(prop));
+  if (!pythonName.isEmpty())
+  {
+    line += QStringLiteral("  sm=%1").arg(QString::fromUtf8(pname));
+  }
   if (vis && vis[0] && QString::fromUtf8(vis) != QLatin1String("default"))
   {
     line += QStringLiteral("  panel=%1").arg(QString::fromUtf8(vis));
@@ -1205,16 +1530,94 @@ void describeOneProperty(QString& out, vtkSMProperty* prop, const char* pname, i
   }
 }
 
+QString describeClientTool(const QString& query)
+{
+  const QString q = query.trimmed();
+  if (q.isEmpty())
+  {
+    return {};
+  }
+  const QString ql = q.toLower();
+  const bool sphere = ql.contains(QLatin1String("sphere")) ||
+    ql.contains(QLatin1String("shyxsphereselection"));
+  const bool grow = ql.contains(QLatin1String("grow")) ||
+    ql.contains(QLatin1String("dihedral")) || ql.contains(QLatin1String("similar normal")) ||
+    ql.contains(QLatin1String("shyxgrowselection"));
+  if (sphere && !grow)
+  {
+    return QStringLiteral(
+      "SHYX Sphere cell selection (RenderView title-bar; not a Server Manager proxy)\n"
+      "No Python constructor and no SM properties. After the user uses it, call get_selection_ids.\n"
+      "Interaction:\n"
+      "  Toggle: title-bar sphere button\n"
+      "  On enable: snap center to nearest vertex at the view center\n"
+      "  Initial radius: ~15% of the viewport short edge in world units\n"
+      "  Left-drag: move center (grab point stays under the cursor)\n"
+      "  Hover + mouse wheel: scale radius (min 1e-12)\n"
+      "  Selects cells whose vertices lie inside the sphere\n"
+      "  Selection modifiers: ParaView add/subtract/toggle (Shift/Ctrl as usual)\n"
+      "  Right-click the button: 'Apply selection on release only' (DeferSelectionUntilRelease)\n");
+  }
+  if (grow && !sphere)
+  {
+    const double deg = pqSHYXGrowSelectionWithSimilarController::DihedralThresholdDegrees();
+    return QStringLiteral(
+      "SHYX Grow selection with similar normals (RenderView title-bar; not a Server Manager proxy)\n"
+      "No Python constructor. After the user uses it, call get_selection_ids.\n"
+      "Parameters:\n"
+      "  DihedralThresholdDegrees  type=double  current=%1  range=[0, 180]  default=15\n"
+      "    Angle between face normals. Right-click the title-bar button to edit. "
+      "Shared across views; not a paraview.simple property.\n"
+      "Behavior:\n"
+      "  Requires an existing cell selection\n"
+      "  Grows by one ring of edge-adjacent faces with normal-normal angle <= threshold\n"
+      "  Click once: one ring; press-and-hold: keep growing until no more similar neighbors\n"
+      "  Reports a warning to the Output Window if the selection does not grow\n")
+      .arg(deg, 0, 'g', 4);
+  }
+  return {};
+}
+
 QString describeProxy(const QString& query)
 {
+  const QString client = describeClientTool(query);
+  if (!client.isEmpty())
+  {
+    return client;
+  }
   QString group;
   QString xml;
   vtkSMProxy* proto = findPrototype(query, group, xml);
   if (!proto)
   {
-    return QStringLiteral("No proxy definition matching '%1'. Try list_filters.").arg(query.trimmed());
+    return QStringLiteral("No proxy definition matching '%1'. Try list_filters or describe_proxy('sphere') / "
+                          "describe_proxy('Pulse Glyphs').")
+      .arg(query.trimmed());
   }
-  QString out = QStringLiteral("Proxy %1  group=%2\nPython: %3()\n").arg(xml, group, xml);
+  QString out;
+  const QString display = representationDisplayName(xml);
+  const bool displayRepr = group == QLatin1String("representations") && !display.isEmpty();
+  if (group == QLatin1String("representations"))
+  {
+    out = QStringLiteral("Proxy %1  group=%2\n").arg(xml, group);
+    if (displayRepr)
+    {
+      out += QStringLiteral(
+        "Display type (not a pipeline filter): GetDisplayProperties().Representation = '%1'\n"
+        "Do not call %2() as a filter. Python names are the exposed names below (disp.PG_Animate), "
+        "not the sm= names.\n")
+               .arg(display, xml);
+    }
+    else
+    {
+      out += QStringLiteral(
+        "Widget/internal representation; not a pipeline filter and not a Display dropdown type.\n");
+    }
+  }
+  else
+  {
+    out = QStringLiteral("Proxy %1  group=%2\nPython: %3()\n").arg(xml, group, xml);
+  }
   const char* label = proto->GetXMLLabel();
   if (label && label[0])
   {
@@ -1241,6 +1644,36 @@ QString describeProxy(const QString& query)
                .arg(pn && pn[0] ? QStringLiteral(" %1").arg(QString::fromUtf8(pn)) : QString());
     }
   }
+
+  if (displayRepr)
+  {
+    const QList<QPair<QString, QString>> exposed = exposedNamesForSubproxy(xml);
+    out += QStringLiteral("Python: disp = GetDisplayProperties(); disp.Representation = '%1'\n").arg(display);
+    if (exposed.isEmpty())
+    {
+      out += QStringLiteral("Could not read exposed_name map; listing subproxy SM properties.\n");
+    }
+    else
+    {
+      out += QStringLiteral("SHYX Display properties (use the first name in Python):\n");
+      int n = 0;
+      for (const auto& pair : exposed)
+      {
+        const QByteArray smUtf = pair.first.toUtf8();
+        vtkSMProperty* prop = proto->GetProperty(smUtf.constData());
+        if (!prop)
+        {
+          out += QStringLiteral("  %1  sm=%2  (not on subproxy prototype)\n").arg(pair.second, pair.first);
+          continue;
+        }
+        describeOneProperty(out, prop, smUtf.constData(), 2, pair.second);
+        ++n;
+      }
+      out += QStringLiteral("(%1 exposed properties)\n").arg(n);
+      return out;
+    }
+  }
+
   out += QStringLiteral("Properties (skip Input / never / information_only):\n");
   vtkSmartPointer<vtkSMPropertyIterator> it;
   it.TakeReference(proto->NewPropertyIterator());
@@ -1424,13 +1857,31 @@ const ShyxExtra kShyxExtra[] = {
   { "SHYXSelectionFillAlphaReunionFilter", "Selection -> fill / alpha wrap / union (CGAL>=5.5)." },
   { "SHYXPointCloudSurfaceSDF", "Point cloud to surface SDF (VTK). Not CGAL vtkCGALSignedDistanceFunction." },
   { "SHYXSurfaceToVolumeMesh", "CGAL Mesh_3 tets from closed surface (alternative to TetGen)." },
+  { "PulseGlyphRepresentation",
+    "Display representation, not a filter. Display dropdown 'Pulse Glyphs'. "
+    "Python: GetDisplayProperties().Representation = 'Pulse Glyphs'. Never call PulseGlyphRepresentation(). "
+    "Call describe_proxy('Pulse Glyphs') for PG_* names (PG_Animate, PG_IntegrationScale, PG_TimeScale, ...)." },
+  { "AnimatedStreamlineRepresentation",
+    "Display representation, not a filter. Display dropdown 'Animated Streamline'. "
+    "Python: GetDisplayProperties().Representation = 'Animated Streamline'. "
+    "Call describe_proxy('Animated Streamline') for AS_* names (AS_Animate, AS_IntegrationScale, AS_OpacityScale, ...)." },
+  { "PointLabelRepresentation",
+    "Display representation, not a filter. Display dropdown 'Point Label'. "
+    "Python: GetDisplayProperties().Representation = 'Point Label'. "
+    "Call describe_proxy('Point Label') for PL_* names (PL_ShowPointLabels, PL_PointLabelArray, PL_VertexOnly, ...)." },
+  { "SHYXSphereSelection",
+    "Not a filter and not a proxy. RenderView title-bar sphere button. "
+    "Call describe_proxy('sphere') for interaction parameters. After the user uses it, call get_selection_ids." },
+  { "SHYXGrowSelectionWithSimilar",
+    "Not a filter and not a proxy. RenderView title-bar button. "
+    "Call describe_proxy('grow') for DihedralThresholdDegrees (default 15). After use, call get_selection_ids." },
   { "SHYXAIAssistant",
     "Deprecated. The assistant is View → SHYX AI Assistant, not a pipeline filter. Do not create this node." },
 };
 
 QString lookupShyxDocs(const QString& queryRaw)
 {
-  const QString query = queryRaw.trimmed();
+  const QString query = isCatalogQuery(queryRaw) ? QString() : queryRaw.trimmed();
   QString out;
   if (query.isEmpty() || query.contains(QLatin1String("vascular"), Qt::CaseInsensitive) ||
     query.contains(QLatin1String("pipeline"), Qt::CaseInsensitive))
@@ -1442,16 +1893,34 @@ QString lookupShyxDocs(const QString& queryRaw)
   }
   if (query.isEmpty())
   {
-    out += QStringLiteral("Pass a filter name or topic (remesh, clip, tet, PDC, selection, ...).\n");
+    out += QStringLiteral(
+      "SHYX is not only Filters → SHYX. Capability groups:\n"
+      "1) Pipeline filters/sources: Filters → SHYX and Vascular toolbar. "
+      "Live XML names: list_filters with empty query.\n"
+      "2) Display representations (Display panel Representation dropdown; NOT pipeline nodes):\n"
+      "   Pulse Glyphs, Animated Streamline, Point Label. "
+      "Python: GetDisplayProperties().Representation = 'Pulse Glyphs'.\n"
+      "3) RenderView title-bar selection tools (client Qt; no SM proxy / no Python constructor):\n"
+      "   Sphere cell selection; Grow selection with similar normals. "
+      "After the user uses them, call get_selection_ids.\n"
+      "4) Widget representations (stent placement 3D widgets, not Display dropdown): "
+      "SHYXImplicitCylinderWidgetRepresentation, SHYXEndpointStentWidgetRepresentation.\n"
+      "5) View → SHYX AI Assistant: this dock, not a pipeline filter.\n"
+      "Pass a name/topic (remesh, clip, representation, selection, sphere, glyph, ...) to filter notes.\n"
+      "For parameter names/defaults: describe_proxy('Pulse Glyphs'), describe_proxy('Animated Streamline'), "
+      "describe_proxy('Point Label'), describe_proxy('sphere'), describe_proxy('grow').\n");
   }
 
   for (const ShyxExtra& e : kShyxExtra)
   {
     const QString xml = QString::fromUtf8(e.xml);
+    const QString display = representationDisplayName(xml);
     if (query.isEmpty() || xml.contains(query, Qt::CaseInsensitive) ||
-      QString::fromUtf8(e.note).contains(query, Qt::CaseInsensitive))
+      QString::fromUtf8(e.note).contains(query, Qt::CaseInsensitive) ||
+      query.contains(xml, Qt::CaseInsensitive) ||
+      (!display.isEmpty() && query.contains(display, Qt::CaseInsensitive)))
     {
-      out += QStringLiteral("- %1(): %2\n").arg(xml, QString::fromUtf8(e.note));
+      out += QStringLiteral("- %1: %2\n").arg(xml, QString::fromUtf8(e.note));
     }
   }
 
@@ -1464,11 +1933,13 @@ QString lookupShyxDocs(const QString& queryRaw)
     if (it)
     {
       it->AddTraversalGroupName("filters");
+      it->AddTraversalGroupName("representations");
       int shown = 0;
       out += QStringLiteral("Live XML documentation:\n");
       for (it->GoToFirstItem(); !it->IsDoneWithTraversal() && shown < 8; it->GoToNextItem())
       {
         const char* xmlc = it->GetProxyName();
+        const char* group = it->GetGroupName();
         if (!xmlc)
         {
           continue;
@@ -1476,19 +1947,27 @@ QString lookupShyxDocs(const QString& queryRaw)
         const QString xml = QString::fromUtf8(xmlc);
         vtkPVXMLElement* def = it->GetProxyDefinition();
         const char* labelc = def ? def->GetAttribute("label") : nullptr;
-        const QString label = labelc ? QString::fromUtf8(labelc) : xml;
+        const QString display = representationDisplayName(xml);
+        const QString label = labelc ? QString::fromUtf8(labelc) : (display.isEmpty() ? xml : display);
         const QString doc = xmlDocSummary(def, 280);
         const QString menu = menuFromHints(it->GetProxyHints());
-        if (!queryHits(query, { xml, label, menu, doc }))
+        if (!isShyxishProxy(xml, label))
         {
           continue;
         }
-        if (!xml.startsWith(QLatin1String("SHYX")) && !label.startsWith(QLatin1String("SHYX")) &&
-          !label.startsWith(QLatin1String("VESPA")) && !xml.startsWith(QLatin1String("CGAL")))
+        if (!queryHits(query, { xml, label, menu, doc, display, QString::fromUtf8(group ? group : "") }))
         {
           continue;
         }
-        out += QStringLiteral("- %1()  label=%2").arg(xml, label);
+        out += QStringLiteral("- %1  label=%2").arg(xml, label);
+        if (group && group[0])
+        {
+          out += QStringLiteral("  group=%1").arg(QString::fromUtf8(group));
+        }
+        if (!display.isEmpty())
+        {
+          out += QStringLiteral("  display='%1'").arg(display);
+        }
         if (!menu.isEmpty())
         {
           out += QStringLiteral("  menu=%1").arg(menu);
@@ -1506,7 +1985,28 @@ QString lookupShyxDocs(const QString& queryRaw)
       }
     }
   }
-  out += QStringLiteral("For property names/enums/defaults call describe_proxy with the XML/python name.\n");
+  out += QStringLiteral("For property names/enums/defaults call describe_proxy with the XML/python name "
+                        "or display type (Pulse Glyphs, sphere, grow).\n");
+  if (!query.isEmpty())
+  {
+    const QString client = describeClientTool(query);
+    if (!client.isEmpty())
+    {
+      out += QStringLiteral("\nParameter details:\n");
+      out += client;
+    }
+    else
+    {
+      QString g;
+      QString x;
+      vtkSMProxy* proto = findPrototype(query, g, x);
+      if (proto && g == QLatin1String("representations") && isShyxDisplayRepresentation(x))
+      {
+        out += QStringLiteral("\nParameter details:\n");
+        out += describeProxy(query);
+      }
+    }
+  }
   return out;
 }
 
@@ -1582,36 +2082,9 @@ QString timeInfo()
   return out;
 }
 
-QString pickWorldPoint(const QJsonObject& args)
+QString pickOneWorldPoint(vtkSMRenderViewProxy* rvp, int vw, int vh, double x, double y, int imgW,
+  int imgH, const QString& origin, bool snap, int index, int total)
 {
-  pqView* view = pqActiveObjects::instance().activeView();
-  if (!view || !view->getViewProxy())
-  {
-    return QStringLiteral("No active view.");
-  }
-  auto* rvp = vtkSMRenderViewProxy::SafeDownCast(view->getViewProxy());
-  if (!rvp)
-  {
-    return QStringLiteral("Active view is not a RenderView.");
-  }
-  if (!args.contains(QStringLiteral("x")) || !args.contains(QStringLiteral("y")))
-  {
-    return QStringLiteral("x and y are required.");
-  }
-  const double x = jsonDouble(args, "x");
-  const double y = jsonDouble(args, "y");
-  const int imgW = jsonInt(args, "image_width", 0);
-  const int imgH = jsonInt(args, "image_height", 0);
-  const QString origin = args.value(QStringLiteral("origin")).toString(QStringLiteral("top_left"));
-  const bool snap = args.value(QStringLiteral("snap_mesh")).toBool(false);
-  const QSize sz = view->getSize();
-  const int vw = sz.width();
-  const int vh = sz.height();
-  if (vw <= 1 || vh <= 1)
-  {
-    return QStringLiteral("View size is invalid.");
-  }
-
   double nx = x;
   double ny = y;
   QString space = QStringLiteral("display-pixels");
@@ -1644,6 +2117,10 @@ QString pickWorldPoint(const QJsonObject& args)
   vtkSMRepresentationProxy* picked = rvp->Pick(dx, dy);
 
   QString out;
+  if (total > 1)
+  {
+    out += QStringLiteral("[%1/%2] input=(%3, %4)\n").arg(index + 1).arg(total).arg(x).arg(y);
+  }
   out += QStringLiteral("Pick display=(%1,%2) vtk-origin  (%3) origin=%4\n")
            .arg(dx)
            .arg(dy)
@@ -1676,6 +2153,104 @@ QString pickWorldPoint(const QJsonObject& args)
   {
     out += QStringLiteral("hit repr xml=%1\n")
              .arg(QString::fromUtf8(picked->GetXMLName() ? picked->GetXMLName() : "?"));
+  }
+  return out;
+}
+
+bool parsePickXY(const QJsonValue& v, double& x, double& y)
+{
+  if (v.isArray())
+  {
+    const QJsonArray arr = v.toArray();
+    if (arr.size() < 2)
+    {
+      return false;
+    }
+    x = arr.at(0).toDouble();
+    y = arr.at(1).toDouble();
+    return true;
+  }
+  if (v.isObject())
+  {
+    const QJsonObject o = v.toObject();
+    if (!o.contains(QStringLiteral("x")) || !o.contains(QStringLiteral("y")))
+    {
+      return false;
+    }
+    x = jsonDouble(o, "x");
+    y = jsonDouble(o, "y");
+    return true;
+  }
+  return false;
+}
+
+QString pickWorldPoint(const QJsonObject& args)
+{
+  pqView* view = pqActiveObjects::instance().activeView();
+  if (!view || !view->getViewProxy())
+  {
+    return QStringLiteral("No active view.");
+  }
+  auto* rvp = vtkSMRenderViewProxy::SafeDownCast(view->getViewProxy());
+  if (!rvp)
+  {
+    return QStringLiteral("Active view is not a RenderView.");
+  }
+  const int imgW = jsonInt(args, "image_width", 0);
+  const int imgH = jsonInt(args, "image_height", 0);
+  const QString origin = args.value(QStringLiteral("origin")).toString(QStringLiteral("top_left"));
+  const bool snap = args.value(QStringLiteral("snap_mesh")).toBool(false);
+  const QSize sz = view->getSize();
+  const int vw = sz.width();
+  const int vh = sz.height();
+  if (vw <= 1 || vh <= 1)
+  {
+    return QStringLiteral("View size is invalid.");
+  }
+
+  QList<QPair<double, double>> pts;
+  const QJsonValue pointsVal = args.value(QStringLiteral("points"));
+  if (pointsVal.isArray())
+  {
+    const QJsonArray arr = pointsVal.toArray();
+    for (const QJsonValue& v : arr)
+    {
+      double x = 0;
+      double y = 0;
+      if (parsePickXY(v, x, y))
+      {
+        pts.append(qMakePair(x, y));
+      }
+    }
+  }
+  if (pts.isEmpty() && args.contains(QStringLiteral("x")) && args.contains(QStringLiteral("y")))
+  {
+    pts.append(qMakePair(jsonDouble(args, "x"), jsonDouble(args, "y")));
+  }
+  if (pts.isEmpty())
+  {
+    return QStringLiteral(
+      "Provide points=[{x,y}, ...] (preferred) or a single x and y. "
+      "Put every brush mark in one call.");
+  }
+  if (pts.size() > kMaxPickPoints)
+  {
+    pts = pts.mid(0, kMaxPickPoints);
+  }
+
+  QString out;
+  if (pts.size() > 1)
+  {
+    out += QStringLiteral("Picked %1 points in one call:\n").arg(pts.size());
+  }
+  for (int i = 0; i < pts.size(); ++i)
+  {
+    if (i > 0)
+    {
+      out += QLatin1Char('\n');
+    }
+    out += pickOneWorldPoint(
+      rvp, vw, vh, pts[i].first, pts[i].second, imgW, imgH, origin, snap, i, pts.size());
   }
   return out;
 }
@@ -1721,22 +2296,32 @@ QJsonArray pqSHYXAIAgentTools::schema()
     "Prefer get_display / get_camera / get_active_data when screenshots are disabled. "
     "The result includes JPEG width/height for pick_world_point image_width/image_height."));
   tools.append(fn("pick_world_point",
-    "Convert a 2D click to a 3D world point and hit source. Prefer one call. Multiple calls are "
-    "allowed for distinct locations (several brush marks, or one miss followed by one corrected "
-    "click). Do not grid-sample the screenshot or re-pick the same pixel with different "
-    "origin/normalized/pixel conventions. "
-    "Default origin is top_left (screenshots / brush marks). Pass image_width/image_height from "
-    "capture_screenshot when picking on that JPEG. If x,y are both in [0,1] and no image size is "
-    "given, they are treated as normalized coordinates.",
-    QJsonObject{ { QStringLiteral("x"), numArg("X in image pixels, view pixels, or 0-1 normalized.") },
-      { QStringLiteral("y"), numArg("Y in image pixels, view pixels, or 0-1 normalized.") },
+    "Convert 2D screenshot/view clicks to 3D world points. Put EVERY brush mark / click in ONE "
+    "call using points=[{x,y}, {x,y}, ...]. Do not call this once per mark. "
+    "Default origin is top_left (screenshots). Pass image_width/image_height from the JPEG. "
+    "If x,y are both in [0,1] and no image size is given, they are treated as normalized. "
+    "Do not grid-sample or re-pick the same pixel with different origin/normalized/pixel conventions.",
+    QJsonObject{ { QStringLiteral("points"),
+        QJsonObject{ { QStringLiteral("type"), QStringLiteral("array") },
+          { QStringLiteral("description"),
+            QStringLiteral("All clicks in one call. Each item is {x,y} or [x,y] in image pixels "
+                           "(with image_width/height) or 0-1 normalized.") },
+          { QStringLiteral("items"),
+            QJsonObject{ { QStringLiteral("type"), QStringLiteral("object") },
+              { QStringLiteral("properties"),
+                QJsonObject{ { QStringLiteral("x"), numArg("X") },
+                  { QStringLiteral("y"), numArg("Y") } } },
+              { QStringLiteral("required"),
+                QJsonArray{ QStringLiteral("x"), QStringLiteral("y") } } } } } },
+      { QStringLiteral("x"),
+        numArg("Single-point X. Prefer points[] when there is more than one click.") },
+      { QStringLiteral("y"), numArg("Single-point Y. Prefer points[] for multiple clicks.") },
       { QStringLiteral("image_width"),
-        intArg("JPEG/screenshot width from capture_screenshot. Maps x into the view.") },
-      { QStringLiteral("image_height"), intArg("JPEG/screenshot height from capture_screenshot.") },
+        intArg("JPEG/screenshot width. Maps x into the view. Shared by all points.") },
+      { QStringLiteral("image_height"), intArg("JPEG/screenshot height. Shared by all points.") },
       { QStringLiteral("origin"),
         strArg("top_left (default, screenshots) or vtk (bottom-left display coords).") },
-      { QStringLiteral("snap_mesh"), boolArg("If true, snap to a mesh point. Default false.") } },
-    QJsonArray{ QStringLiteral("x"), QStringLiteral("y") }));
+      { QStringLiteral("snap_mesh"), boolArg("If true, snap to a mesh point. Default false.") } }));
   tools.append(fn("get_code_script",
     "Return the current contents of the code box (the ParaView Python script)."));
   QJsonObject setCodeProps;
@@ -1746,7 +2331,8 @@ QJsonArray pqSHYXAIAgentTools::schema()
         QStringLiteral("Full ParaView Python script to store in the code box. No markdown fences.") } });
   tools.append(fn("set_code_script",
     "Replace the code box with a complete ParaView Python script. Always write the full script, "
-    "not a patch. Call this before run_code_script when creating or fixing a script.",
+    "not a patch. After this, you MUST call run_code_script in the same turn (or immediately next) "
+    "and read errors before talking to the user.",
     setCodeProps, QJsonArray{ QStringLiteral("code") }));
   QJsonObject runProps;
   runProps.insert(QStringLiteral("capture"),
@@ -1755,7 +2341,8 @@ QJsonArray pqSHYXAIAgentTools::schema()
         QStringLiteral("If true, attach a screenshot after the script runs. Ignored unless the user "
                        "enabled render-view screenshots. Default is false when screenshots are off.") } });
   tools.append(fn("run_code_script",
-    "Execute the current code box (same as the Run script button). Returns new "
+    "Execute the current code box (same as the Run script button). Always call this after "
+    "set_code_script so you can see whether the script actually works. Returns new "
     "Output Window lines, active-source data, and the pipeline tree after the run. A screenshot is "
     "attached only if the user enabled render-view screenshots. "
     "If the run errors, data looks wrong, or the pipeline grew duplicate filters (two Clips on the "
@@ -1772,18 +2359,23 @@ QJsonArray pqSHYXAIAgentTools::schema()
     QJsonObject{ { QStringLiteral("name"), strArg("Pipeline object name. Omit for active source.") },
       { QStringLiteral("port"), intArg("Output port index. Default 0.") } }));
   tools.append(fn("list_filters",
-    "Search registered ParaView proxies (filters/sources). Empty query lists SHYX/VESPA only. "
-    "Returns python constructor name, label, menu category. Do not invent SHYX XML names.",
-    QJsonObject{ { QStringLiteral("query"), strArg("Substring: remesh, clip, tet, SHYXMeshChecker, ...") } }));
+    "Search registered ParaView proxies. Empty query (or features/catalog) lists SHYX/VESPA "
+    "filters/sources AND Display representations (Pulse Glyphs, Animated Streamline, Point Label) "
+    "plus a reminder of title-bar selection tools. Non-empty query searches all ParaView "
+    "filters/sources and SHYX representations. Representations are not python constructors.",
+    QJsonObject{ { QStringLiteral("query"), strArg("Substring: remesh, glyph, Point Label, SHYXMeshChecker, ...") } }));
   tools.append(fn("describe_proxy",
-    "Property schema for a proxy: types, defaults, enums, proxy_list (Plane/Box for ClipType), "
-    "output ports. Argument is XML/python name or UI label (SHYXMeshChecker, Clip, ...).",
-    QJsonObject{ { QStringLiteral("name"), strArg("XML name, python constructor, or label.") } },
+    "Property schema: types, defaults, enums, docs. For filters: XML/python name. "
+    "For SHYX Display types pass 'Pulse Glyphs', 'Animated Streamline', or 'Point Label' "
+    "(returns exposed Python names PG_*/AS_*/PL_*). "
+    "For title-bar tools pass 'sphere' or 'grow' (no SM proxy).",
+    QJsonObject{ { QStringLiteral("name"), strArg("XML name, display type (Pulse Glyphs), or sphere/grow.") } },
     QJsonArray{ QStringLiteral("name") }));
   tools.append(fn("lookup_shyx_docs",
-    "SHYX/VESPA usage notes: vascular pipeline order, which filter to prefer, multi-port hints, "
-    "and live XML short help. Then call describe_proxy for property names.",
-    QJsonObject{ { QStringLiteral("query"), strArg("Filter name or topic: vascular, remesh, boolean, PDC, ...") } }));
+    "SHYX/VESPA usage notes: capability catalog (filters + Display representations + "
+    "title-bar selection tools), vascular pipeline order, which filter to prefer, multi-port hints, "
+    "and live XML short help. Empty query is the full catalog. Then call describe_proxy for property names.",
+    QJsonObject{ { QStringLiteral("query"), strArg("Empty for catalog, or topic: vascular, representation, selection, remesh, ...") } }));
   return tools;
 }
 
