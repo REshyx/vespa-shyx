@@ -2,10 +2,12 @@
  * @class   vtkSHYXSelectionAppendPatches
  * @brief   Extract named, marked patches from a parent mesh into a vtkPartitionedDataSetCollection.
  *
- * Each stored row is an independent ExtractSelection: overlaps between patches are allowed, unused
- * parent cells are not appended, and patches do not share points or GlobalIds. Apply rebuilds the
- * collection from PatchNames / PatchMarks / PatchCellIds. The optional Selection port is used only
- * when those lists are empty (single Part_0).
+ * Each stored row is an ExtractSelection. The table keeps duplicate names as separate rows. Apply
+ * merges rows that share a name into one output patch (union of cell ids) and keeps the mark of the
+ * first occurrence of that name. Unique names are marked 0, 1, 2, ... in table order. Unused parent
+ * cells are not appended; patches do not share points or GlobalIds. Apply rebuilds the collection
+ * from PatchNames / PatchCellIds. The optional Selection port is used only when those lists are
+ * empty (single geo_0).
  */
 
 #ifndef vtkSHYXSelectionAppendPatches_h
@@ -28,18 +30,12 @@ public:
   void SetSourceConnection(vtkAlgorithmOutput* algOutput);
 
   /**
-   * Newline-separated patch names (Partitioned block names panel order). Empty lines become
-   * Part_N. Duplicate names are allowed.
+   * Newline-separated patch names (table order). Empty lines become geo_N. Duplicate names are
+   * merged into one output patch and reuse the earlier mark. Unique names are marked 0, 1, 2, ...
+   * in first-seen order. Names need not end with _N.
    */
   vtkSetStringMacro(PatchNames);
   vtkGetStringMacro(PatchNames);
-
-  /**
-   * Newline-separated mark values aligned with PatchNames. Written as a constant cell (and field)
-   * array named by MarkArrayName on every cell of that patch.
-   */
-  vtkSetStringMacro(PatchMarks);
-  vtkGetStringMacro(PatchMarks);
 
   /**
    * Newline-separated cell-id lists aligned with PatchNames. Each line is comma-separated ids
@@ -61,7 +57,6 @@ protected:
   int RequestData(vtkInformation*, vtkInformationVector**, vtkInformationVector*) override;
 
   char* PatchNames = nullptr;
-  char* PatchMarks = nullptr;
   char* PatchCellIds = nullptr;
   char* MarkArrayName = nullptr;
 

@@ -16,7 +16,8 @@ MSVC 下 `VESPAPlugin.dll` 必须 `/WHOLEARCHIVE` 该 `.lib`（插件 CMake 已�
 
 参数见 `ParaViewPlugin/SHYXSnappyHexMesh.xml`。**Inside points** 列表可 Add insidePoint：选中一行后视图里出现可拖动手柄。空列表仍用 AABB 中心；多个点写成 OpenFOAM `locationsInMesh`（zone `none`）。点必须落在要保留的单元格内，不要贴在面上。
 
-示例 dict：
+示例 dict 与笔记：
 
 - `example/snappyHexMeshDict`：与当前滤镜默认接近的可跑配置。
 - `example/snappyHexMeshDict.official.zh`：OpenFOAM-v2412 官方 `etc/caseDicts/annotated/snappyHexMeshDict` 的中文注释译本（关键字仍是英文）。
+- `example/snappyHexMesh.pipeline.zh.md`：三阶段、开口/孔洞、refinementSurfaces vs Regions、特征边与质量迭代（对照 v2412 源码）。

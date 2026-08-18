@@ -17,7 +17,8 @@ class vtkSMPropertyGroup;
 
 /**
  * Simplified Partitioned-block-names table for vtkSHYXSelectionAppendPatches:
- * Add current selection as a row (Part_N), rename, fill one mark value. Apply extracts each row.
+ * Add current selection as a row (geo_N), rename only. The table keeps every row. Apply merges
+ * same-named rows into one output patch (first-seen mark 0, 1, 2, ...).
  */
 class pqSHYXSelectionPatchTableWidget : public pqPropertyWidget
 {
@@ -28,7 +29,6 @@ public:
   struct PatchRow
   {
     QString Name;
-    QString Mark;
     QString CellIds;
   };
 
@@ -61,7 +61,6 @@ private:
   pqTreeView* View = nullptr;
   QLabel* Status = nullptr;
   QString NamesPropertyName;
-  QString MarksPropertyName;
   QString CellIdsPropertyName;
   bool UpdatingFromProperty = false;
   bool UpdatingFromUI = false;

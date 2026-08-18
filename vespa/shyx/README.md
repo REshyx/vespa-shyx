@@ -58,6 +58,8 @@ SHYX 是本仓库里 **一个作者命名空间**（[`vespa/shyx/`](.)），不�
 ## 工具
 
 * [**AI Assistant**](./AIAssistant/README.md) — **View → SHYX AI Assistant** 可勾选停靠窗口；Send / Run script 跑 ParaView Python（需 ParaView 开启 Python）
+* **Select Block** — 3D 视图右键复合 block（如 `Part_1`）全选该块 cell；`ParaViewPlugin/SelectBlock/`
+* **Select Similar** — 有 cell 选择时右键 **Select Similar → By Normal**，按法向一次 Grow 完；`ParaViewPlugin/SelectSimilar/`（阈值与标题栏 Grow 共用）
 
 ## 表示
 

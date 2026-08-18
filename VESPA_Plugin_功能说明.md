@@ -109,7 +109,7 @@
 | **Animated Streamline**（`AnimatedStreamlineRepresentation`） | 基于 `SurfaceRepresentation` 的流线类网格 GPU 动画表示。 |
 | **Point Label**（`PointLabelRepresentation`） | 表面表示上叠加点数据文本标签。 |
 
-视图工具：球选（Sphere Selection）、按属性扩张选区（Grow Selection With Similar）为客户端 Qt，无独立 VTK 模块。**SHYX AI Assistant** 在 **View** 菜单中作为可勾选停靠窗口（OpenAI 兼容；**Run script** 执行代码框）。
+视图工具：球选（Sphere Selection）、按属性扩张选区（Grow Selection With Similar）为客户端 Qt，无独立 VTK 模块。复合数据（如 PDC 的 `Part_1`）在 3D 视图右键菜单中有 **Select Block**，用于选中该 block 的全部 cell。有 cell 选择时右键还有 **Select Similar → By Normal**，按法向一次 Grow 完（与标题栏 Grow 共用二面角阈值）。**SHYX AI Assistant** 在 **View** 菜单中作为可勾选停靠窗口（OpenAI 兼容；**Run script** 执行代码框）。
 
 ---
 
@@ -573,7 +573,7 @@
 
 ### 29a. SHYX Selection Append Patches（`vtkSHYXSelectionAppendPatches`）
 
-**功能**：在父网格的 3D 视图里选单元，再点 **Add from selection**（**不需要** Copy Active Selection），把每次选中的单元 **Extract** 成独立 patch，**Apply** 后装进 **`vtkPartitionedDataSetCollection`**。允许重叠；未选中的单元不会自动进任何块；不写 GlobalIds。表里可改 **Name**（默认 `Part_0`…）和常数 **Mark**（写入该块全部单元的 `PatchMark`）。
+**功能**：在父网格的 3D 视图里选单元，再点 **Add from selection**（**不需要** Copy Active Selection）。表里只改 **Name**（默认 `geo_0`…，任意字符串即可）；**表中同名行保持多条，不合并**。**Apply** 时才按名称把同名合成一块并沿用第一次的标记，按表中首次出现顺序给唯一名称打 `0, 1, 2, …`，装进 **`vtkPartitionedDataSetCollection`**。允许重叠；未选中的单元不会自动进任何块；不写 GlobalIds。常数 Mark 写入该块全部单元的 `PatchMark`。
 
 与 **DataSet To Partitioned Collection** 不同：那条是 IOSS/Exodus 装配；本滤镜只做选区 append。
 

@@ -148,6 +148,8 @@ Vascular 顺序（[`VESPAVascularCategory.xml`](../ParaViewPlugin/VESPAVascularC
 |------|------|------|
 | Sphere Selection | `ParaViewPlugin/SphereSelection/` | `SHYX_Sphere_Selection.svg` |
 | Grow Selection With Similar | `ParaViewPlugin/GrowSelectionWithSimilar/` | `SHYX_Grow_Selection_With_Similar.svg` |
+| Select Block（3D 视图 block 右键） | `ParaViewPlugin/SelectBlock/` | ParaView `pqSelectBlock.svg` |
+| Select Similar（选择右键，By Normal 一次 Grow 完） | `ParaViewPlugin/SelectSimilar/` | 复用 Grow 图标 |
 | Vascular 菜单/工具条 | `pqSHYXVascularCategoryAutoStart` + VESPAVascularCategory.xml | （各滤镜 fluent 图标） |
 
 ---

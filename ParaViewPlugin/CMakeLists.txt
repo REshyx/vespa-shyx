@@ -275,6 +275,16 @@ if (PARAVIEW_USE_QT)
     pqSHYXAIAssistantAutoStart.cxx
     pqSHYXAIAssistantAutoStart.h)
 
+  list(APPEND vespa_plugin_qt_auto_interfaces pqSHYXSelectBlockContextMenu)
+  list(APPEND vespa_plugin_qt_auto_sources
+    SelectBlock/pqSHYXSelectBlockContextMenu.cxx
+    SelectBlock/pqSHYXSelectBlockContextMenu.h)
+
+  list(APPEND vespa_plugin_qt_auto_interfaces pqSHYXSelectSimilarContextMenu)
+  list(APPEND vespa_plugin_qt_auto_sources
+    SelectSimilar/pqSHYXSelectSimilarContextMenu.cxx
+    SelectSimilar/pqSHYXSelectSimilarContextMenu.h)
+
   paraview_plugin_add_dock_window(
     CLASS_NAME pqSHYXAIAssistantPanel
     DOCK_AREA Right
@@ -388,7 +398,9 @@ if (PARAVIEW_USE_QT)
   target_include_directories(VESPAPlugin PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/TransferCurve"
     "${CMAKE_CURRENT_SOURCE_DIR}/SphereSelection"
-    "${CMAKE_CURRENT_SOURCE_DIR}/GrowSelectionWithSimilar")
+    "${CMAKE_CURRENT_SOURCE_DIR}/GrowSelectionWithSimilar"
+    "${CMAKE_CURRENT_SOURCE_DIR}/SelectBlock"
+    "${CMAKE_CURRENT_SOURCE_DIR}/SelectSimilar")
 endif ()
 
 target_link_libraries(VESPAPlugin

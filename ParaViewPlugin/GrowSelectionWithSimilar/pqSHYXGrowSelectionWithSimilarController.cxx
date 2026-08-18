@@ -7,6 +7,7 @@
 #include "pqPipelineSource.h"
 #include "pqRenderView.h"
 #include "pqSelectionManager.h"
+#include "pqView.h"
 #include "pqViewFrame.h"
 
 #include "vtkAlgorithm.h"
@@ -319,7 +320,7 @@ void pqSHYXGrowSelectionWithSimilarController::promptDihedralThreshold()
 }
 
 //-----------------------------------------------------------------------------
-void pqSHYXGrowSelectionWithSimilarController::reportToOutputWindow(const QString& message) const
+void pqSHYXGrowSelectionWithSimilarController::reportToOutputWindow(const QString& message)
 {
   const QByteArray utf8 = message.toUtf8();
   if (vtkOutputWindow* win = vtkOutputWindow::GetInstance())
@@ -329,8 +330,8 @@ void pqSHYXGrowSelectionWithSimilarController::reportToOutputWindow(const QStrin
 }
 
 //-----------------------------------------------------------------------------
-bool pqSHYXGrowSelectionWithSimilarController::resolveActiveSelection(
-  pqOutputPort*& portOut, vtkDataSet*& dsOut) const
+bool pqSHYXGrowSelectionWithSimilarController::resolveActiveSelection(pqOutputPort*& portOut,
+  vtkDataSet*& dsOut, pqDataRepresentation* hintRepresentation, pqView* hintView)
 {
   portOut = nullptr;
   dsOut = nullptr;
@@ -344,11 +345,17 @@ bool pqSHYXGrowSelectionWithSimilarController::resolveActiveSelection(
   pqOutputPort* port = core->selectionManager()->getSelectedPort();
   if (!port)
   {
-    // Fall back to active representation port when selection manager has no port yet.
-    pqDataRepresentation* active = pqActiveObjects::instance().activeRepresentation();
-    if (active && active->getView() == this->View)
+    if (hintRepresentation)
     {
-      port = active->getOutputPortFromInput();
+      port = hintRepresentation->getOutputPortFromInput();
+    }
+    else
+    {
+      pqDataRepresentation* active = pqActiveObjects::instance().activeRepresentation();
+      if (active && (!hintView || active->getView() == hintView))
+      {
+        port = active->getOutputPortFromInput();
+      }
     }
   }
   if (!port || !port->getSelectionInput())
@@ -379,7 +386,7 @@ bool pqSHYXGrowSelectionWithSimilarController::resolveActiveSelection(
 
 //-----------------------------------------------------------------------------
 bool pqSHYXGrowSelectionWithSimilarController::collectSelectedCellIds(
-  pqOutputPort* port, vtkDataSet* ds, std::vector<vtkIdType>& ids) const
+  pqOutputPort* port, vtkDataSet* ds, std::vector<vtkIdType>& ids)
 {
   ids.clear();
   vtkSMSourceProxy* appendSel = port->getSelectionInput();
@@ -419,7 +426,7 @@ bool pqSHYXGrowSelectionWithSimilarController::collectSelectedCellIds(
 
 //-----------------------------------------------------------------------------
 bool pqSHYXGrowSelectionWithSimilarController::growSimilar(
-  vtkPolyData* pd, const std::vector<vtkIdType>& seed, std::vector<vtkIdType>& grown) const
+  vtkPolyData* pd, const std::vector<vtkIdType>& seed, std::vector<vtkIdType>& grown)
 {
   grown = seed;
   if (!pd || seed.empty())
@@ -565,7 +572,7 @@ pqSHYXGrowSelectionWithSimilarController::growOnce(bool quietSuccess)
 {
   pqOutputPort* port = nullptr;
   vtkDataSet* ds = nullptr;
-  if (!this->resolveActiveSelection(port, ds))
+  if (!resolveActiveSelection(port, ds, nullptr, this->View))
   {
     this->reportToOutputWindow(
       tr("SHYX Grow Selection With Similar: no active cell selection to grow."));
@@ -625,4 +632,146 @@ void pqSHYXGrowSelectionWithSimilarController::onTriggered()
     return;
   }
   this->growOnce(/*quietSuccess=*/false);
+}
+
+//-----------------------------------------------------------------------------
+bool pqSHYXGrowSelectionWithSimilarController::HasActiveCellSelection(
+  pqDataRepresentation* hintRepresentation)
+{
+  pqOutputPort* port = nullptr;
+  vtkDataSet* ds = nullptr;
+  if (!resolveActiveSelection(port, ds, hintRepresentation, nullptr))
+  {
+    return false;
+  }
+  std::vector<vtkIdType> ids;
+  return collectSelectedCellIds(port, ds, ids);
+}
+
+//-----------------------------------------------------------------------------
+pqSHYXGrowSelectionWithSimilarController::GrowToCompletionResult
+pqSHYXGrowSelectionWithSimilarController::GrowUntilCompleteByNormal(
+  pqDataRepresentation* hintRepresentation)
+{
+  GrowToCompletionResult result;
+
+  pqOutputPort* port = nullptr;
+  vtkDataSet* ds = nullptr;
+  if (!resolveActiveSelection(port, ds, hintRepresentation, nullptr))
+  {
+    result.message =
+      tr("SHYX Select Similar / By Normal: no active cell selection to grow.");
+    reportToOutputWindow(result.message);
+    return result;
+  }
+
+  auto* pd = vtkPolyData::SafeDownCast(ds);
+  if (!pd)
+  {
+    result.message = tr("SHYX Select Similar / By Normal: active data is not vtkPolyData "
+                        "(surface mesh required).");
+    reportToOutputWindow(result.message);
+    return result;
+  }
+
+  std::vector<vtkIdType> seed;
+  if (!collectSelectedCellIds(port, ds, seed))
+  {
+    result.message = tr("SHYX Select Similar / By Normal: could not resolve selected cell IDs "
+                        "(need a cell selection).");
+    reportToOutputWindow(result.message);
+    return result;
+  }
+
+  pd->BuildLinks();
+  const vtkIdType nCells = pd->GetNumberOfCells();
+  const double threshold = SharedDihedralThresholdDegrees;
+
+  std::unordered_set<vtkIdType> selected(seed.begin(), seed.end());
+  std::vector<vtkIdType> frontier = seed;
+
+  vtkNew<vtkIdList> ptIds;
+  vtkNew<vtkIdList> neighbors;
+  int rings = 0;
+  vtkIdType addedTotal = 0;
+
+  while (!frontier.empty() && static_cast<vtkIdType>(selected.size()) < nCells)
+  {
+    std::vector<vtkIdType> next;
+    for (vtkIdType cid : frontier)
+    {
+      double n0[3];
+      if (!CellNormal(pd, cid, n0))
+      {
+        continue;
+      }
+      pd->GetCellPoints(cid, ptIds);
+      const vtkIdType npts = ptIds->GetNumberOfIds();
+      if (npts < 3)
+      {
+        continue;
+      }
+      for (vtkIdType e = 0; e < npts; ++e)
+      {
+        const vtkIdType p0 = ptIds->GetId(e);
+        const vtkIdType p1 = ptIds->GetId((e + 1) % npts);
+        neighbors->Reset();
+        pd->GetCellEdgeNeighbors(cid, p0, p1, neighbors);
+        const vtkIdType nNb = neighbors->GetNumberOfIds();
+        for (vtkIdType i = 0; i < nNb; ++i)
+        {
+          const vtkIdType nid = neighbors->GetId(i);
+          if (selected.count(nid) != 0)
+          {
+            continue;
+          }
+          double n1[3];
+          if (!CellNormal(pd, nid, n1))
+          {
+            continue;
+          }
+          if (NormalAngleDegrees(n0, n1) <= threshold)
+          {
+            selected.insert(nid);
+            next.push_back(nid);
+          }
+        }
+      }
+    }
+    if (next.empty())
+    {
+      break;
+    }
+    addedTotal += static_cast<vtkIdType>(next.size());
+    frontier.swap(next);
+    ++rings;
+  }
+
+  result.ok = true;
+  result.added = addedTotal;
+  result.rings = rings;
+  result.total = static_cast<vtkIdType>(selected.size());
+  if (addedTotal == 0)
+  {
+    result.message = tr("SHYX Select Similar / By Normal: selection did not grow "
+                        "(no adjacent faces within %1° normal angle).")
+                       .arg(SharedDihedralThresholdDegrees, 0, 'g', 4);
+    reportToOutputWindow(result.message);
+    return result;
+  }
+
+  std::vector<vtkIdType> grown(selected.begin(), selected.end());
+  std::sort(grown.begin(), grown.end());
+  applyCellSelection(port, grown);
+
+  result.grew = true;
+  result.message =
+    tr("SHYX Select Similar / By Normal: grew by %1 cell(s) in %2 ring(s) "
+       "(threshold %3°, total %4).")
+      .arg(addedTotal)
+      .arg(rings)
+      .arg(SharedDihedralThresholdDegrees, 0, 'g', 4)
+      .arg(result.total);
+  reportToOutputWindow(result.message);
+  return result;
 }

@@ -27,6 +27,7 @@
 #include <vtkUnstructuredGrid.h>
 #include <algorithm>
 #include <cctype>
+#include <map>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -131,7 +132,7 @@ bool ParseMark(const std::string& text, double& value)
 
 std::string DefaultPartName(unsigned int index)
 {
-  return std::string("Part_") + std::to_string(index);
+  return std::string("geo_") + std::to_string(index);
 }
 
 std::string AssemblyNodeName(unsigned int index)
@@ -304,7 +305,6 @@ vtkSHYXSelectionAppendPatches::vtkSHYXSelectionAppendPatches()
 vtkSHYXSelectionAppendPatches::~vtkSHYXSelectionAppendPatches()
 {
   this->SetPatchNames(nullptr);
-  this->SetPatchMarks(nullptr);
   this->SetPatchCellIds(nullptr);
   this->SetMarkArrayName(nullptr);
 }
@@ -314,7 +314,6 @@ void vtkSHYXSelectionAppendPatches::PrintSelf(ostream& os, vtkIndent indent)
 {
   this->Superclass::PrintSelf(os, indent);
   os << indent << "PatchNames: " << (this->PatchNames ? this->PatchNames : "(none)") << "\n";
-  os << indent << "PatchMarks: " << (this->PatchMarks ? this->PatchMarks : "(none)") << "\n";
   os << indent << "PatchCellIds: " << (this->PatchCellIds ? this->PatchCellIds : "(none)") << "\n";
   os << indent << "MarkArrayName: " << (this->MarkArrayName ? this->MarkArrayName : "(none)") << "\n";
 }
@@ -369,29 +368,33 @@ int vtkSHYXSelectionAppendPatches::RequestData(vtkInformation*, vtkInformationVe
   output->SetNumberOfPartitionedDataSets(0);
 
   auto names = SplitLines(this->PatchNames);
-  auto marks = SplitLines(this->PatchMarks);
   auto idLines = SplitLines(this->PatchCellIds);
-  size_t nRows = names.size();
-  nRows = std::max(nRows, marks.size());
-  nRows = std::max(nRows, idLines.size());
+  size_t nRows = std::max(names.size(), idLines.size());
 
   std::vector<std::pair<std::string, std::vector<vtkIdType>>> patches;
-  patches.reserve(nRows);
-  std::vector<std::string> patchMarks;
-  patchMarks.reserve(nRows);
+  std::map<std::string, size_t> indexOfName;
 
   for (size_t i = 0; i < nRows; ++i)
   {
     const std::string name =
       (i < names.size() && !names[i].empty()) ? names[i] : DefaultPartName(static_cast<unsigned int>(i));
-    const std::string mark = i < marks.size() ? marks[i] : std::string();
-    const std::vector<vtkIdType> ids = i < idLines.size() ? ParseIdList(idLines[i]) : std::vector<vtkIdType>{};
+    const std::vector<vtkIdType> ids =
+      i < idLines.size() ? ParseIdList(idLines[i]) : std::vector<vtkIdType>{};
     if (ids.empty())
     {
       continue;
     }
-    patches.emplace_back(name, ids);
-    patchMarks.push_back(mark);
+    auto found = indexOfName.find(name);
+    if (found == indexOfName.end())
+    {
+      indexOfName[name] = patches.size();
+      patches.emplace_back(name, ids);
+    }
+    else
+    {
+      auto& dest = patches[found->second].second;
+      dest.insert(dest.end(), ids.begin(), ids.end());
+    }
   }
 
   if (patches.empty())
@@ -401,8 +404,13 @@ int vtkSHYXSelectionAppendPatches::RequestData(vtkInformation*, vtkInformationVe
     if (!liveIds.empty())
     {
       patches.emplace_back(DefaultPartName(0), liveIds);
-      patchMarks.emplace_back();
     }
+  }
+
+  for (auto& patch : patches)
+  {
+    std::sort(patch.second.begin(), patch.second.end());
+    patch.second.erase(std::unique(patch.second.begin(), patch.second.end()), patch.second.end());
   }
 
   vtkNew<vtkDataAssembly> assembly;
@@ -420,7 +428,7 @@ int vtkSHYXSelectionAppendPatches::RequestData(vtkInformation*, vtkInformationVe
       vtkWarningMacro(<< "Patch '" << patches[i].first << "' extracted no cells; skipped.");
       continue;
     }
-    StampConstantMark(patch, markName, patchMarks[i]);
+    StampConstantMark(patch, markName, std::to_string(i));
 
     vtkNew<vtkPartitionedDataSet> pds;
     pds->SetPartition(0, patch);

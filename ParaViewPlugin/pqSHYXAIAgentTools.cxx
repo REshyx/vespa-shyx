@@ -1343,8 +1343,9 @@ QString listFilters(const QString& queryRaw)
   {
     out += QStringLiteral(
       "RenderView title-bar tools are not proxies: Sphere cell selection; "
-      "Grow selection with similar normals. See lookup_shyx_docs. "
-      "After the user uses them, call get_selection_ids.\n");
+      "Grow selection with similar normals. Block context menu: Select Block. "
+      "Selection context menu: Select Similar → By Normal (grow to completion). "
+      "See lookup_shyx_docs. After the user uses them, call get_selection_ids.\n");
   }
   return out;
 }
@@ -1542,7 +1543,15 @@ QString describeClientTool(const QString& query)
     ql.contains(QLatin1String("shyxsphereselection"));
   const bool grow = ql.contains(QLatin1String("grow")) ||
     ql.contains(QLatin1String("dihedral")) || ql.contains(QLatin1String("similar normal")) ||
-    ql.contains(QLatin1String("shyxgrowselection"));
+    ql.contains(QLatin1String("shyxgrowselection")) ||
+    ql.contains(QLatin1String("select similar")) ||
+    ql.contains(QLatin1String("selectsimilar")) ||
+    ql.contains(QLatin1String("shyxselectsimilar")) ||
+    ql.contains(QLatin1String("by normal"));
+  const bool selectBlock = ql.contains(QLatin1String("selectblock")) ||
+    ql.contains(QLatin1String("select block")) ||
+    ql.contains(QLatin1String("select entire block")) ||
+    ql.contains(QLatin1String("shyxselectblock"));
   if (sphere && !grow)
   {
     return QStringLiteral(
@@ -1558,22 +1567,34 @@ QString describeClientTool(const QString& query)
       "  Selection modifiers: ParaView add/subtract/toggle (Shift/Ctrl as usual)\n"
       "  Right-click the button: 'Apply selection on release only' (DeferSelectionUntilRelease)\n");
   }
-  if (grow && !sphere)
+  if (grow && !sphere && !selectBlock)
   {
     const double deg = pqSHYXGrowSelectionWithSimilarController::DihedralThresholdDegrees();
     return QStringLiteral(
-      "SHYX Grow selection with similar normals (RenderView title-bar; not a Server Manager proxy)\n"
+      "SHYX Grow / Select Similar by normal (client Qt; not a Server Manager proxy)\n"
       "No Python constructor. After the user uses it, call get_selection_ids.\n"
       "Parameters:\n"
       "  DihedralThresholdDegrees  type=double  current=%1  range=[0, 180]  default=15\n"
-      "    Angle between face normals. Right-click the title-bar button to edit. "
-      "Shared across views; not a paraview.simple property.\n"
-      "Behavior:\n"
+      "    Angle between face normals. Shared by the title-bar button and the context menu.\n"
+      "    Right-click the title-bar Grow button to edit. Not a paraview.simple property.\n"
+      "Title-bar Grow selection with similar normals:\n"
       "  Requires an existing cell selection\n"
       "  Grows by one ring of edge-adjacent faces with normal-normal angle <= threshold\n"
       "  Click once: one ring; press-and-hold: keep growing until no more similar neighbors\n"
-      "  Reports a warning to the Output Window if the selection does not grow\n")
+      "  Reports a warning to the Output Window if the selection does not grow\n"
+      "RenderView context menu (when a cell selection is active):\n"
+      "  Select Similar → By Normal: grow ALL similar rings in one action (not one click per ring)\n")
       .arg(deg, 0, 'g', 4);
+  }
+  if (selectBlock && !sphere && !grow)
+  {
+    return QStringLiteral(
+      "SHYX Select Block (RenderView block context menu; not a Server Manager proxy)\n"
+      "No Python constructor and no SM properties. After the user uses it, call get_selection_ids.\n"
+      "Interaction:\n"
+      "  Right-click a composite block in the 3D view (menu titled Block 'Part_1')\n"
+      "  Choose Select Block to select every cell in that block (BLOCK_SELECTORS, CELL)\n"
+      "  Replaces the current selection; then use Extract Selection / SHYX selection filters\n");
   }
   return {};
 }
@@ -1853,9 +1874,11 @@ const ShyxExtra kShyxExtra[] = {
   { "SHYXPartitionedCollectionBoundaryFields", "Adds boundary field arrays on an assigned PDC." },
   { "SHYXSelectionExtrudeFilter", "Needs an active 3D selection of cells." },
   { "SHYXSelectionAppendPatches",
-    "Add from selection snapshots the 3D-view cell selection into the Patches table (Part_N); "
-    "Copy Active Selection is not required. Rename + Mark; Apply ExtractSelection-appends each "
-    "row as a PDC block. Overlaps allowed; unselected cells are not kept. Not the IOSS "
+    "Add from selection snapshots the 3D-view cell selection into the Patches table (geo_N); "
+    "Copy Active Selection is not required. Rename only (any name); the table keeps every row. "
+    "Apply merges same names into one patch and reuses the earlier mark. Unique names are marked "
+    "0, 1, 2, ... in table order. Apply ExtractSelection-appends each unique name as a PDC "
+    "block. Overlaps allowed; unselected cells are not kept. Not the IOSS "
     "DataSetToPartitionedCollection path." },
   { "SHYXDeleteSelectedCellsFilter",
     "Needs an active cell selection. Creating the filter copies the Input's "
@@ -1881,8 +1904,16 @@ const ShyxExtra kShyxExtra[] = {
     "Not a filter and not a proxy. RenderView title-bar sphere button. "
     "Call describe_proxy('sphere') for interaction parameters. After the user uses it, call get_selection_ids." },
   { "SHYXGrowSelectionWithSimilar",
-    "Not a filter and not a proxy. RenderView title-bar button. "
+    "Not a filter and not a proxy. RenderView title-bar button: one ring per click, hold to keep growing. "
     "Call describe_proxy('grow') for DihedralThresholdDegrees (default 15). After use, call get_selection_ids." },
+  { "SHYXSelectSimilar",
+    "Not a filter and not a proxy. RenderView right-click when a cell selection is active: "
+    "Select Similar → By Normal grows all similar-normal rings in one shot (same dihedral threshold as Grow). "
+    "Call describe_proxy('select similar'). After use, call get_selection_ids." },
+  { "SHYXSelectBlock",
+    "Not a filter and not a proxy. RenderView right-click on a composite block (Block 'Part_1' menu). "
+    "Select Block selects all cells in that block (BLOCK_SELECTORS). Call describe_proxy('select block'). "
+    "After use, call get_selection_ids." },
   { "SHYXAIAssistant",
     "Deprecated. The assistant is View → SHYX AI Assistant, not a pipeline filter. Do not create this node." },
 };
@@ -1911,12 +1942,16 @@ QString lookupShyxDocs(const QString& queryRaw)
       "3) RenderView title-bar selection tools (client Qt; no SM proxy / no Python constructor):\n"
       "   Sphere cell selection; Grow selection with similar normals. "
       "After the user uses them, call get_selection_ids.\n"
+      "   Also: right-click a composite block → Select Block (select all cells in that part).\n"
+      "   Also: right-click an active cell selection → Select Similar → By Normal "
+      "(grow all similar-normal rings in one shot).\n"
       "4) Widget representations (stent placement 3D widgets, not Display dropdown): "
       "SHYXImplicitCylinderWidgetRepresentation, SHYXEndpointStentWidgetRepresentation.\n"
       "5) View → SHYX AI Assistant: this dock, not a pipeline filter.\n"
       "Pass a name/topic (remesh, clip, representation, selection, sphere, glyph, ...) to filter notes.\n"
       "For parameter names/defaults: describe_proxy('Pulse Glyphs'), describe_proxy('Animated Streamline'), "
-      "describe_proxy('Point Label'), describe_proxy('sphere'), describe_proxy('grow').\n");
+      "describe_proxy('Point Label'), describe_proxy('sphere'), describe_proxy('grow'), "
+      "describe_proxy('select block'), describe_proxy('select similar').\n");
   }
 
   for (const ShyxExtra& e : kShyxExtra)
@@ -1994,7 +2029,7 @@ QString lookupShyxDocs(const QString& queryRaw)
     }
   }
   out += QStringLiteral("For property names/enums/defaults call describe_proxy with the XML/python name "
-                        "or display type (Pulse Glyphs, sphere, grow).\n");
+                        "or display type (Pulse Glyphs, sphere, grow, select block, select similar).\n");
   if (!query.isEmpty())
   {
     const QString client = describeClientTool(query);
@@ -2376,8 +2411,10 @@ QJsonArray pqSHYXAIAgentTools::schema()
     "Property schema: types, defaults, enums, docs. For filters: XML/python name. "
     "For SHYX Display types pass 'Pulse Glyphs', 'Animated Streamline', or 'Point Label' "
     "(returns exposed Python names PG_*/AS_*/PL_*). "
-    "For title-bar tools pass 'sphere' or 'grow' (no SM proxy).",
-    QJsonObject{ { QStringLiteral("name"), strArg("XML name, display type (Pulse Glyphs), or sphere/grow.") } },
+    "For title-bar tools pass 'sphere' or 'grow' (no SM proxy). "
+    "For the block context-menu action pass 'select block'. "
+    "For Select Similar / By Normal pass 'select similar'.",
+    QJsonObject{ { QStringLiteral("name"), strArg("XML name, display type (Pulse Glyphs), sphere/grow, select block, or select similar.") } },
     QJsonArray{ QStringLiteral("name") }));
   tools.append(fn("lookup_shyx_docs",
     "SHYX/VESPA usage notes: capability catalog (filters + Display representations + "

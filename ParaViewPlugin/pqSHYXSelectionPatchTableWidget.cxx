@@ -43,8 +43,7 @@ namespace
 {
 constexpr int kColIndex = 0;
 constexpr int kColName = 1;
-constexpr int kColMark = 2;
-constexpr int kColCells = 3;
+constexpr int kColCells = 2;
 
 vtkSMProperty* propertyFromGroup(
   vtkSMPropertyGroup* group, vtkSMProxy* proxy, const char* function, const char* fallbackName)
@@ -104,9 +103,9 @@ QString compactIdList(const std::vector<vtkIdType>& ids)
   return parts.join(QLatin1Char(','));
 }
 
-int countCompactIds(const QString& text)
+std::vector<vtkIdType> parseCompactIds(const QString& text)
 {
-  int n = 0;
+  std::vector<vtkIdType> ids;
   const QStringList tokens = text.split(QLatin1Char(','), Qt::SkipEmptyParts);
   for (QString token : tokens)
   {
@@ -120,18 +119,28 @@ int countCompactIds(const QString& text)
       const qint64 b = token.mid(dash + 1).toLongLong(&okB);
       if (okA && okB)
       {
-        n += static_cast<int>(a < b ? (b - a + 1) : (a - b + 1));
+        const qint64 lo = a < b ? a : b;
+        const qint64 hi = a < b ? b : a;
+        for (qint64 v = lo; v <= hi; ++v)
+        {
+          ids.push_back(static_cast<vtkIdType>(v));
+        }
         continue;
       }
     }
     bool ok = false;
-    token.toLongLong(&ok);
+    const qint64 v = token.toLongLong(&ok);
     if (ok)
     {
-      ++n;
+      ids.push_back(static_cast<vtkIdType>(v));
     }
   }
-  return n;
+  return ids;
+}
+
+int countCompactIds(const QString& text)
+{
+  return static_cast<int>(parseCompactIds(text).size());
 }
 
 vtkDataSet* clientInputDataSet(vtkSMProxy* filter)
@@ -225,17 +234,17 @@ pqSHYXSelectionPatchTableWidget::pqSHYXSelectionPatchTableWidget(
 
   auto* tip = new QLabel(
     tr("Select cells on the Input in the 3D view, then Add (Copy Active Selection is not needed). "
-       "Rename and set Mark (same mark on a whole patch). Overlaps are allowed. Apply extracts each "
-       "row into a PDC block. Unselected cells are not appended."),
+       "Rename only (any name). The table keeps every row. Apply merges same names into one "
+       "output patch and keeps the earlier mark. Unique names are marked 0, 1, 2, ... in table "
+       "order. Overlaps are allowed. Unselected cells are not appended."),
     this);
   tip->setWordWrap(true);
   tip->setStyleSheet(QStringLiteral("color: gray; font-size: 11px;"));
   vbox->addWidget(tip);
 
-  this->Model = new QStandardItemModel(0, 4, this);
+  this->Model = new QStandardItemModel(0, 3, this);
   this->Model->setHeaderData(kColIndex, Qt::Horizontal, tr("#"));
   this->Model->setHeaderData(kColName, Qt::Horizontal, tr("Name"));
-  this->Model->setHeaderData(kColMark, Qt::Horizontal, tr("Mark"));
   this->Model->setHeaderData(kColCells, Qt::Horizontal, tr("Cells"));
 
   this->View = new pqTreeView(this);
@@ -256,7 +265,6 @@ pqSHYXSelectionPatchTableWidget::pqSHYXSelectionPatchTableWidget(
   auto* header = this->View->header();
   header->setSectionResizeMode(kColIndex, QHeaderView::ResizeToContents);
   header->setSectionResizeMode(kColName, QHeaderView::Stretch);
-  header->setSectionResizeMode(kColMark, QHeaderView::ResizeToContents);
   header->setSectionResizeMode(kColCells, QHeaderView::ResizeToContents);
   header->setStretchLastSection(false);
   vbox->addWidget(this->View, 1);
@@ -265,7 +273,7 @@ pqSHYXSelectionPatchTableWidget::pqSHYXSelectionPatchTableWidget(
   buttons->setContentsMargins(0, 0, 0, 0);
   buttons->setSpacing(4);
   auto* addBtn = new QPushButton(tr("Add from selection"), this);
-  addBtn->setToolTip(tr("Snapshot the current cell selection as a new Part_N row."));
+  addBtn->setToolTip(tr("Snapshot the current cell selection as a new geo_N row."));
   auto* removeBtn = new QPushButton(tr("Remove selected"), this);
   buttons->addWidget(addBtn);
   buttons->addWidget(removeBtn);
@@ -292,14 +300,6 @@ pqSHYXSelectionPatchTableWidget::pqSHYXSelectionPatchTableWidget(
     this->addPropertyLink(
       this, this->NamesPropertyName.toUtf8().data(), SIGNAL(patchesChanged()), namesProp);
   }
-  vtkSMProperty* marksProp = propertyFromGroup(smgroup, smproxy, "Marks", "PatchMarks");
-  if (marksProp)
-  {
-    const char* pname = smproxy ? smproxy->GetPropertyName(marksProp) : nullptr;
-    this->MarksPropertyName = QString::fromUtf8(pname ? pname : "PatchMarks");
-    this->addPropertyLink(
-      this, this->MarksPropertyName.toUtf8().data(), SIGNAL(patchesChanged()), marksProp);
-  }
   vtkSMProperty* idsProp = propertyFromGroup(smgroup, smproxy, "CellIds", "PatchCellIds");
   if (idsProp)
   {
@@ -321,8 +321,7 @@ bool pqSHYXSelectionPatchTableWidget::event(QEvent* e)
   {
     auto* devt = static_cast<QDynamicPropertyChangeEvent*>(e);
     const QString name = QString::fromLatin1(devt->propertyName());
-    if (name == this->NamesPropertyName || name == this->MarksPropertyName ||
-      name == this->CellIdsPropertyName)
+    if (name == this->NamesPropertyName || name == this->CellIdsPropertyName)
     {
       this->rebuildFromProperty();
       return true;
@@ -372,14 +371,16 @@ int pqSHYXSelectionPatchTableWidget::nextPartIndex() const
     const QString name = this->Model->item(r, kColName)
       ? this->Model->item(r, kColName)->text().trimmed()
       : QString();
-    if (name.startsWith(QLatin1String("Part_")))
+    const int under = name.lastIndexOf(QLatin1Char('_'));
+    if (under < 0 || under + 1 >= name.size())
     {
-      bool ok = false;
-      const int n = name.mid(5).toInt(&ok);
-      if (ok)
-      {
-        maxN = std::max(maxN, n);
-      }
+      continue;
+    }
+    bool ok = false;
+    const int n = name.mid(under + 1).toInt(&ok);
+    if (ok)
+    {
+      maxN = std::max(maxN, n);
     }
   }
   return maxN + 1;
@@ -397,14 +398,15 @@ void pqSHYXSelectionPatchTableWidget::onAddFromSelection()
   }
 
   PatchRow row;
-  row.Name = QStringLiteral("Part_%1").arg(this->nextPartIndex());
-  row.Mark = QStringLiteral("0");
+  row.Name = QStringLiteral("geo_%1").arg(this->nextPartIndex());
   row.CellIds = compactIdList(ids);
   QList<PatchRow> rows = this->collectRows();
   rows.push_back(row);
   this->rebuildRows(rows);
   this->writeBackProperty();
-  this->setStatus(tr("Added %1 (%2 cells). Apply to extract.").arg(row.Name).arg(ids.size()), false);
+  this->setStatus(
+    tr("Added %1 (%2 cells). Same names merge on Apply.").arg(row.Name).arg(ids.size()),
+    false);
 }
 
 void pqSHYXSelectionPatchTableWidget::onRemoveSelected()
@@ -450,10 +452,8 @@ QStringList pqSHYXSelectionPatchTableWidget::linesFromProperty(const QString& pr
 void pqSHYXSelectionPatchTableWidget::rebuildFromProperty()
 {
   const QStringList names = this->linesFromProperty(this->NamesPropertyName);
-  const QStringList marks = this->linesFromProperty(this->MarksPropertyName);
   const QStringList ids = this->linesFromProperty(this->CellIdsPropertyName);
   int n = static_cast<int>(names.size());
-  n = std::max(n, static_cast<int>(marks.size()));
   n = std::max(n, static_cast<int>(ids.size()));
   QList<PatchRow> rows;
   rows.reserve(n);
@@ -461,7 +461,6 @@ void pqSHYXSelectionPatchTableWidget::rebuildFromProperty()
   {
     PatchRow row;
     row.Name = i < names.size() ? names[i] : QString();
-    row.Mark = i < marks.size() ? marks[i] : QString();
     row.CellIds = i < ids.size() ? ids[i] : QString();
     if (row.Name.isEmpty() && row.CellIds.isEmpty())
     {
@@ -482,11 +481,10 @@ void pqSHYXSelectionPatchTableWidget::rebuildRows(const QList<PatchRow>& rows)
     auto* indexItem = new QStandardItem(QString::number(i));
     indexItem->setEditable(false);
     auto* nameItem = new QStandardItem(row.Name);
-    auto* markItem = new QStandardItem(row.Mark);
     auto* cellsItem = new QStandardItem(QString::number(countCompactIds(row.CellIds)));
     cellsItem->setEditable(false);
     cellsItem->setData(row.CellIds, Qt::UserRole);
-    this->Model->appendRow({ indexItem, nameItem, markItem, cellsItem });
+    this->Model->appendRow({ indexItem, nameItem, cellsItem });
   }
 }
 
@@ -499,7 +497,6 @@ QList<pqSHYXSelectionPatchTableWidget::PatchRow> pqSHYXSelectionPatchTableWidget
   {
     PatchRow row;
     row.Name = this->Model->item(r, kColName) ? this->Model->item(r, kColName)->text() : QString();
-    row.Mark = this->Model->item(r, kColMark) ? this->Model->item(r, kColMark)->text() : QString();
     if (auto* cells = this->Model->item(r, kColCells))
     {
       row.CellIds = cells->data(Qt::UserRole).toString();
@@ -514,27 +511,19 @@ void pqSHYXSelectionPatchTableWidget::writeBackProperty()
   QScopedValueRollback<bool> guard(this->UpdatingFromUI, true);
   const QList<PatchRow> rows = this->collectRows();
   QStringList names;
-  QStringList marks;
   QStringList ids;
   names.reserve(rows.size());
-  marks.reserve(rows.size());
   ids.reserve(rows.size());
   for (const PatchRow& row : rows)
   {
     names << row.Name;
-    marks << row.Mark;
     ids << row.CellIds;
   }
   const QString nameText = names.join(QLatin1Char('\n'));
-  const QString markText = marks.join(QLatin1Char('\n'));
   const QString idText = ids.join(QLatin1Char('\n'));
   if (!this->NamesPropertyName.isEmpty())
   {
     this->setProperty(this->NamesPropertyName.toUtf8().constData(), nameText);
-  }
-  if (!this->MarksPropertyName.isEmpty())
-  {
-    this->setProperty(this->MarksPropertyName.toUtf8().constData(), markText);
   }
   if (!this->CellIdsPropertyName.isEmpty())
   {
