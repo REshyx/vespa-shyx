@@ -1852,7 +1852,15 @@ const ShyxExtra kShyxExtra[] = {
     "Vascular step 7. Call get_blocks on the PDC first. Port0 collection, port1 assignment debug." },
   { "SHYXPartitionedCollectionBoundaryFields", "Adds boundary field arrays on an assigned PDC." },
   { "SHYXSelectionExtrudeFilter", "Needs an active 3D selection of cells." },
-  { "SHYXDeleteSelectedCellsFilter", "Needs an active cell selection." },
+  { "SHYXSelectionAppendPatches",
+    "Add from selection snapshots the 3D-view cell selection into the Patches table (Part_N); "
+    "Copy Active Selection is not required. Rename + Mark; Apply ExtractSelection-appends each "
+    "row as a PDC block. Overlaps allowed; unselected cells are not kept. Not the IOSS "
+    "DataSetToPartitionedCollection path." },
+  { "SHYXDeleteSelectedCellsFilter",
+    "Needs an active cell selection. Creating the filter copies the Input's "
+    "active selection into the Selection widget (Extract Selection-style); "
+    "Copy Active Selection is only needed if the selection changes afterwards." },
   { "SHYXFlipSelectedCellsWindingFilter", "Needs an active cell selection." },
   { "SHYXSelectionFillAlphaReunionFilter", "Selection -> fill / alpha wrap / union (CGAL>=5.5)." },
   { "SHYXPointCloudSurfaceSDF", "Point cloud to surface SDF (VTK). Not CGAL vtkCGALSignedDistanceFunction." },

@@ -106,6 +106,12 @@ paraview_plugin_add_property_widget(
   SOURCES shyx_partitioned_block_names_sources)
 paraview_plugin_add_property_widget(
   KIND GROUP_WIDGET
+  TYPE "shyx_selection_patch_table"
+  CLASS_NAME pqSHYXSelectionPatchTableWidget
+  INTERFACES shyx_selection_patch_table_interfaces
+  SOURCES shyx_selection_patch_table_sources)
+paraview_plugin_add_property_widget(
+  KIND GROUP_WIDGET
   TYPE "shyx_boundary_assignment_info"
   CLASS_NAME pqSHYXBoundaryAssignmentInfoWidget
   INTERFACES shyx_boundary_assignment_info_interfaces
@@ -129,6 +135,9 @@ list(APPEND vespa_endpoint_stent_sources
 list(APPEND shyx_partitioned_block_names_sources
   pqSHYXPartitionedBlockNamesWidget.cxx
   pqSHYXPartitionedBlockNamesWidget.h)
+list(APPEND shyx_selection_patch_table_sources
+  pqSHYXSelectionPatchTableWidget.cxx
+  pqSHYXSelectionPatchTableWidget.h)
 list(APPEND shyx_boundary_assignment_info_sources
   pqSHYXBoundaryAssignmentInfoWidget.cxx
   pqSHYXBoundaryAssignmentInfoWidget.h)
@@ -299,6 +308,7 @@ paraview_add_plugin(VESPAPlugin
     "SHYXEnhancedRuler.xml"
     "SHYXRadiusNeighborCount.xml"
     "SHYXSelectionExtrude.xml"
+    "SHYXSelectionAppendPatches.xml"
     "SHYXSelectionPlaneClipper.xml"
     "SHYXPointExtrude.xml"
     "SHYXDisconnectedRegionFuse.xml"
@@ -327,8 +337,8 @@ paraview_add_plugin(VESPAPlugin
      ${ADAPTIVE_REMESHING_SERVER_MANAGER_XML}
      ${VMTK_CENTERLINES_SERVER_MANAGER_XML}
      ${SNAPPYHEXMESH_SERVER_MANAGER_XML}
-  UI_INTERFACES ${acm_interfaces} ${vespa_obb_box_interfaces} ${vespa_endclipper_plane_interfaces} ${shyx_selection_plane_clipper_interfaces} ${vespa_stent_cylinder_interfaces} ${vespa_enhanced_ruler_interfaces} ${vespa_endpoint_stent_interfaces} ${shyx_partitioned_block_names_interfaces} ${shyx_boundary_assignment_info_interfaces} ${shyx_remesh_uncapped_histogram_interfaces} ${shyx_openings_table_interfaces} ${shyx_snappy_inside_points_interfaces} ${shyx_snappy_case_folder_interfaces} ${shyx_ai_assistant_interfaces} ${vespa_plugin_qt_auto_interfaces}
-  SOURCES ${acm_sources} ${vespa_obb_box_sources} ${vespa_endclipper_plane_sources} ${shyx_selection_plane_clipper_sources} ${vespa_stent_cylinder_sources} ${vespa_enhanced_ruler_sources} ${vespa_endpoint_stent_sources} ${shyx_partitioned_block_names_sources} ${shyx_boundary_assignment_info_sources} ${shyx_remesh_uncapped_histogram_sources} ${shyx_openings_table_sources} ${shyx_snappy_inside_points_sources} ${shyx_snappy_case_folder_sources} ${shyx_ai_assistant_sources}
+  UI_INTERFACES ${acm_interfaces} ${vespa_obb_box_interfaces} ${vespa_endclipper_plane_interfaces} ${shyx_selection_plane_clipper_interfaces} ${vespa_stent_cylinder_interfaces} ${vespa_enhanced_ruler_interfaces} ${vespa_endpoint_stent_interfaces} ${shyx_partitioned_block_names_interfaces} ${shyx_selection_patch_table_interfaces} ${shyx_boundary_assignment_info_interfaces} ${shyx_remesh_uncapped_histogram_interfaces} ${shyx_openings_table_interfaces} ${shyx_snappy_inside_points_interfaces} ${shyx_snappy_case_folder_interfaces} ${shyx_ai_assistant_interfaces} ${vespa_plugin_qt_auto_interfaces}
+  SOURCES ${acm_sources} ${vespa_obb_box_sources} ${vespa_endclipper_plane_sources} ${shyx_selection_plane_clipper_sources} ${vespa_stent_cylinder_sources} ${vespa_enhanced_ruler_sources} ${vespa_endpoint_stent_sources} ${shyx_partitioned_block_names_sources} ${shyx_selection_patch_table_sources} ${shyx_boundary_assignment_info_sources} ${shyx_remesh_uncapped_histogram_sources} ${shyx_openings_table_sources} ${shyx_snappy_inside_points_sources} ${shyx_snappy_case_folder_sources} ${shyx_ai_assistant_sources}
     TransferCurve/pqArrayCurveMapperPanel.cxx
     TransferCurve/pqArrayCurveMapperPanel.h
     TransferCurve/pqSHYXTransferCurveWidget.cxx

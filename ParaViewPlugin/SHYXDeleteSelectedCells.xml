@@ -4,7 +4,7 @@
                  class="vtkSHYXDeleteSelectedCellsFilter"
                  label="SHYX Delete Selected Cells">
       <Documentation
-          long_help="Applies to any vtkDataSet; the output is the same concrete type as the input. Cells included in the active selection (vtkSelection on the Selection port) are removed from vtkPolyData (unused points stripped) and vtkUnstructuredGrid (cell subset), using the same resolution rules as SHYX Selection Extrude (vtkExtractSelection: vtkOriginalCellIds on extracted cells, or vtkOriginalPointIds with all incident cells). For vtkStructuredGrid and vtkExplicitStructuredGrid, selected cells are blanked (BlankCell). For vtkImageData, vtkRectilinearGrid, and other vtkDataSet types, selected cells are hidden using the cell ghost HIDDENCELL bit (topology unchanged). With the VESPA ParaView plugin, the Selection port can be filled from the active selection when you open the filter panel. If there is no vtkSelection, set Selection Cell Array Name on cell data of the input. When nothing is selected, the filter passes the input through unchanged."
+          long_help="Applies to any vtkDataSet; the output is the same concrete type as the input. Cells included in the active selection (vtkSelection on the Selection port) are removed from vtkPolyData (unused points stripped) and vtkUnstructuredGrid (cell subset), using the same resolution rules as SHYX Selection Extrude (vtkExtractSelection: vtkOriginalCellIds on extracted cells, or vtkOriginalPointIds with all incident cells). For vtkStructuredGrid and vtkExplicitStructuredGrid, selected cells are blanked (BlankCell). For vtkImageData, vtkRectilinearGrid, and other vtkDataSet types, selected cells are hidden using the cell ghost HIDDENCELL bit (topology unchanged). Creating the filter copies the Input's active selection into the Selection widget (same as Extract Selection); Copy Active Selection is only needed if you change the selection afterwards. If there is no vtkSelection, set Selection Cell Array Name on cell data of the input. When nothing is selected, the filter passes the input through unchanged."
           short_help="SHYX Delete Selected Cells: Delete or hide selected cells on any vtkDataSet (output type matches input)."/>
 
       <InputProperty name="Input" command="SetInputConnection">
@@ -31,6 +31,7 @@
         </DataTypeDomain>
         <Documentation>
           vtkSelection describing cells or points to remove (same convention as SHYX Selection Extrude).
+          Filled at create from the Input's active selection; Copy Active Selection is optional afterwards.
         </Documentation>
         <Hints>
           <SelectionInput/>
@@ -46,6 +47,9 @@
 
       <Hints>
         <ShowInMenu category="SHYX" icon=":/VESPA/SHYX_Delete_Selected_Cells.png"/>
+        <!-- Same as Extract Selection: copy Input's active selection into Selection
+             at proxy create so the widget is populated without Copy Active Selection. -->
+        <InitializationHelper class="vtkSMExtractSelectionProxyInitializationHelper"/>
       </Hints>
     </SourceProxy>
   </ProxyGroup>

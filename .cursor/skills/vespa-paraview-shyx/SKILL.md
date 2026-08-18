@@ -95,6 +95,7 @@ description: >-
 - **忘把 XML 加进 `SERVER_MANAGER_XML`**：算子 C++ 已进 DLL，但 UI 不出现。
 - **vtk.module 少写了依赖**：链接期或 `vtk_header_dep` 类错误。
 - **条件构建**：VMTK/CGAL 6 相关模块被根 CMake 排除后，与 XML 仍引用该 filter 会不一致——改 CMake 或改 XML/文档，避免“一半发布”。
+- **自定义 `panel_widget` 整组 backing 都 `never`**：`pqProxyWidget` 跳过这些属性，**根本不创建**组 widget。至少留一个可见锚点（§8.6.8）。
 - **AI Assistant 没补 describe_proxy**：新功能已经在菜单/Display/标题栏出现，但助手问「有什么 / 参数」时仍只有 filter。**§9 是加功能清单的一部分，不是事后文档。**
 
 完成一次端到端修改后，应用户环境重新配置/编译 ParaView 插件目标（工程里为 `VESPAPVPLUGIN` 相关与 `VESPAPlugin` 产物，以本仓库 CMake 为准）并在 ParaView 中 `Tools → Manage Plugins` 验证加载与菜单项。
@@ -284,6 +285,24 @@ description: >-
 
 仓库内参考：`ParaViewPlugin/SHYXVmtkOpeningCenterlines.xml`（Opening seed points → `Point Label`）；`ParaViewPlugin/SHYXVesselEndClipper.xml`（Clip Planes → `Point Label`）；`ParaViewPlugin/SHYXAutoStreamline.xml`（port 1 种子点 → `Point Gaussian`）。
 
+#### 8.6.8 自定义 `panel_widget`：组里必须有一个**可见锚点**属性
+
+`pqProxyWidget` 按**属性**遍历面板：`panel_visibility="never"` 的属性在碰到 `PropertyGroup` **之前就被 skip**。因此：
+
+- **组里全部 backing 属性都写 `never` → 自定义表/widget 根本不会被创建**（看起来像「widget 没显示」）。
+- **正确**：至少 **一个** 组成员保持默认可见（不要写 `never`），作为锚点；其余可 `never`。组上的 `panel_widget="..."` 会接管锚点，**不会再画出锚点那一行原始文本框**。
+- **错误模式**（反复踩坑）：把 `PatchNames` / `BlockNames` 之类 newline 字符串全标 `never`，以为「只显示自定义表」。
+
+对照：
+
+| XML | 锚点（不能 never） | 其余可 never |
+|-----|-------------------|--------------|
+| `SHYXDataSetToPartitionedCollection.xml` | `BlockNames` | `BoundaryVariables`、`BoundaryWriteNormals` |
+| `SHYXRemeshWithEndpoint.xml` | `UncappedSizeHistPanelAnchor`（注释写明） | — |
+| `SHYXSelectionAppendPatches.xml` | `PatchNames` | `PatchMarks`、`PatchCellIds` |
+
+源码：`Qt/Components/pqProxyWidget.cxx` 里 `skip_property` 对 `never` 直接 `continue`，到不了 `createWidgetForPropertyGroup`。
+
 ### 8.7 `BoundsDomain` 与「自动刷新」（示例：`MinEdgeLength` / `MaxEdgeLength`）
 
 - XML：`BoundsDomain mode="scaled_extent"` + `scale_factor` + `RequiredProperties` 绑定 **`Input`**。
@@ -293,8 +312,13 @@ description: >-
 ### 8.8 其它与面板相关的常见能力
 
 - **`PropertyGroup`**：分节标签、`panel_visibility`、`panel_widget` 自定义整组 UI。
-- **`panel_visibility`**：`default` / `advanced` / `never`。
+- **`panel_visibility`**：`default` / `advanced` / `never`。**`never` 不能用在自定义 `panel_widget` 组的全部成员上**，见 **§8.6.8**。
 - **`Hints`**：`ShowInMenu`、`RepresentationType`（默认表示法，见 **§8.6.7**）、`ArraySelectionWidget`、`SelectionInput`、`panel_widget` 等。
+- **`SelectionInput` 不会在 create 时自动填 widget**。`<SelectionInput/>` 只换专用选择面板（含 Copy Active Selection）。要像 **Extract Selection** 那样在创建 filter 时把 Input 上的当前选择拷进 `Selection` 属性/widget（无需点击），在 **SourceProxy** 的 `<Hints>` 里加：
+  ```xml
+  <InitializationHelper class="vtkSMExtractSelectionProxyInitializationHelper"/>
+  ```
+  该类已在 ParaView 注册；helper 要求属性名恰好是 `Input` 与 `Selection`。对照：`SHYXDeleteSelectedCells.xml`；上游 `extraction_filters.xml` 的 `ExtractSelection`。
 - **输入与数据域**：`InputProperty`、`DataTypeDomain`、`InputArrayDomain`。
 
 ### 8.9 本地对照源码

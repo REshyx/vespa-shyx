@@ -67,6 +67,7 @@
 | SHYX Convex Hull | |
 | SHYX Disconnected Region Fuse | |
 | SHYX Selection Extrude / Point Extrude | |
+| SHYX Selection Append Patches | 选区抽出为可重叠 PDC patch |
 | SHYX Delete Selected Cells / Flip Selected Cells Winding | |
 | SHYX Selection: Fill, Alpha Wrap, Union | CGAL ≥ 5.5 |
 | SHYX Minimum OBB | |
@@ -570,6 +571,14 @@
 
 ---
 
+### 29a. SHYX Selection Append Patches（`vtkSHYXSelectionAppendPatches`）
+
+**功能**：在父网格的 3D 视图里选单元，再点 **Add from selection**（**不需要** Copy Active Selection），把每次选中的单元 **Extract** 成独立 patch，**Apply** 后装进 **`vtkPartitionedDataSetCollection`**。允许重叠；未选中的单元不会自动进任何块；不写 GlobalIds。表里可改 **Name**（默认 `Part_0`…）和常数 **Mark**（写入该块全部单元的 `PatchMark`）。
+
+与 **DataSet To Partitioned Collection** 不同：那条是 IOSS/Exodus 装配；本滤镜只做选区 append。
+
+---
+
 ### 30. SHYX DataSet To Partitioned Collection（`vtkSHYXDataSetToPartitionedCollection`）
 
 **功能**：将 **`vtkDataSet`** 转为 **`vtkPartitionedDataSetCollection`**，便于配合 **vtkIOSSWriter** 等写出带 **IOSS 装配（assembly）** 的 Exodus/IOSS 结构：四面体体网格块、按**表面点标量符号分区**（或回退：特征角 + 连通域）得到的 **side / node** 集合元数据。
@@ -625,6 +634,7 @@
 | **SHYX Remesh With Endpoint** | Vascular 第 4 步；CGAL ≥ 6；与 Adaptive Remesher 同模块 |
 | **SHYX Convex Hull** | 纯 VTK 凸包 |
 | **SHYX Selection / Point Extrude** | 选区挤出 / **全部顶点**沿法线或矢量位移（Point Extrude 无选区端口） |
+| **SHYX Selection Append Patches** | 选区 snapshot 进表，Apply 抽出可重叠 PDC 块；不收未选单元 |
 | **SHYX Delete / Flip Selected Cells** | 删单元 / 翻转绕向 |
 | **SHYX Selection: Fill, Alpha Wrap, Union** | CGAL ≥ 5.5 |
 | **SHYX Minimum OBB** | 最小 OBB；交互 box |

@@ -1,0 +1,84 @@
+<ServerManagerConfiguration>
+  <ProxyGroup name="filters">
+    <SourceProxy name="SHYXSelectionAppendPatches"
+                 class="vtkSHYXSelectionAppendPatches"
+                 label="SHYX Selection Append Patches">
+      <Documentation
+          short_help="SHYX Selection Append Patches: Add overlapping extracted patches into a PartitionedDataSetCollection."
+          long_help="Snapshots cell selections into the patch table (default names Part_0, Part_1, ...). Rename and set a constant Mark per row. Apply runs vtkExtractSelection per row and appends each extract as its own vtkPartitionedDataSet. Patches may overlap; unselected parent cells are not appended; no GlobalIds. Mark is written as a constant cell/field array (Mark Array Name, default PatchMark) on every cell of that patch."/>
+
+      <InputProperty name="Input" command="SetInputConnection">
+        <ProxyGroupDomain name="groups">
+          <Group name="sources"/>
+          <Group name="filters"/>
+        </ProxyGroupDomain>
+        <DataTypeDomain name="input_type">
+          <DataType value="vtkDataSet"/>
+        </DataTypeDomain>
+        <Documentation>Parent mesh. Cell ids in the patch table refer to this dataset.</Documentation>
+      </InputProperty>
+
+      <InputProperty name="Selection" label="Selection"
+                     command="SetSourceConnection"
+                     panel_visibility="never">
+        <ProxyGroupDomain name="groups">
+          <Group name="sources"/>
+          <Group name="filters"/>
+        </ProxyGroupDomain>
+        <DataTypeDomain name="input_type">
+          <DataType value="vtkSelection"/>
+        </DataTypeDomain>
+        <Documentation>
+          Optional live vtkSelection. Hidden from the default panel: Add from selection reads the
+          3D-view selection directly (Copy Active Selection is not required). Used when the patch
+          table is empty (single Part_0) or as an Add fallback / Python SelectionInput.
+        </Documentation>
+        <Hints>
+          <SelectionInput/>
+        </Hints>
+      </InputProperty>
+
+      <StringVectorProperty name="MarkArrayName" label="Mark Array Name"
+          command="SetMarkArrayName" number_of_elements="1" default_values="PatchMark">
+        <Documentation>
+          Name of the constant cell/field array written on each extracted patch.
+        </Documentation>
+      </StringVectorProperty>
+
+      <!-- PatchNames is the group-widget anchor: must NOT be panel_visibility=never.
+           pqProxyWidget skips never properties and never creates the PropertyGroup panel_widget. -->
+      <StringVectorProperty name="PatchNames" label="Patch Names" command="SetPatchNames"
+          number_of_elements="1" default_values="" animateable="0">
+        <Documentation>Newline-separated patch names (table Name column). Shown via the Patches table, not as a raw text box.</Documentation>
+      </StringVectorProperty>
+
+      <StringVectorProperty name="PatchMarks" label="Patch Marks" command="SetPatchMarks"
+          number_of_elements="1" default_values="" animateable="0" panel_visibility="never">
+        <Documentation>Newline-separated mark values aligned with Patch Names.</Documentation>
+      </StringVectorProperty>
+
+      <StringVectorProperty name="PatchCellIds" label="Patch Cell Ids" command="SetPatchCellIds"
+          number_of_elements="1" default_values="" animateable="0" panel_visibility="never">
+        <Documentation>
+          Newline-separated cell-id lists aligned with Patch Names. Comma-separated ids or ranges
+          (0-10,15) on the Input dataset.
+        </Documentation>
+      </StringVectorProperty>
+
+      <PropertyGroup label="Patches"
+                     panel_widget="shyx_selection_patch_table"
+                     panel_visibility="default">
+        <Property function="Names" name="PatchNames"/>
+        <Property function="Marks" name="PatchMarks"/>
+        <Property function="CellIds" name="PatchCellIds"/>
+        <Hints>
+          <WidgetHeight number_of_rows="8"/>
+        </Hints>
+      </PropertyGroup>
+
+      <Hints>
+        <ShowInMenu category="SHYX" icon=":/VESPA/SHYX_Selection_Append_Patches.png"/>
+      </Hints>
+    </SourceProxy>
+  </ProxyGroup>
+</ServerManagerConfiguration>

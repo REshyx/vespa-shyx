@@ -67,6 +67,7 @@ CMake **用户选项**：`VESPA_USE_CGAL`（默认 ON）、`VESPA_USE_VMTK`、`V
 | SHYX Convex Hull | `vtkSHYXConvexHullFilter` | ConvexHullFilter | SHYXConvexHullFilter.xml | 自有 | [有](shyx/ConvexHullFilter/README.md) | VTK |
 | SHYX Disconnected Region Fuse | `vtkSHYXDisconnectedRegionFuse` | DisconnectedRegionFuse | SHYXDisconnectedRegionFuse.xml | 自有 | [有](shyx/DisconnectedRegionFuse/README.md) | VTK |
 | SHYX Selection Extrude | `vtkSHYXSelectionExtrudeFilter` | SelectionExtrude | SHYXSelectionExtrude.xml | 自有 | [有](shyx/SelectionExtrude/README.md) | VTK |
+| SHYX Selection Append Patches | `vtkSHYXSelectionAppendPatches` | SelectionAppendPatches | SHYXSelectionAppendPatches.xml | 自有（复用 Extrude 图） | [有](shyx/SelectionAppendPatches/README.md) | VTK |
 | SHYX Point Extrude | `vtkSHYXPointExtrudeFilter` | PointExtrude | SHYXPointExtrude.xml | 自有 | [有](shyx/PointExtrude/README.md) | VTK |
 | SHYX Delete Selected Cells | `vtkSHYXDeleteSelectedCellsFilter` | DeleteSelectedCells | SHYXDeleteSelectedCells.xml | 自有 | [有](shyx/DeleteSelectedCells/README.md) | VTK |
 | SHYX Flip Selected Cells Winding | `vtkSHYXFlipSelectedCellsWindingFilter` | FlipSelectedCellsWinding | SHYXFlipSelectedCellsWinding.xml | 自有 | [有](shyx/FlipSelectedCellsWinding/README.md) | VTK |

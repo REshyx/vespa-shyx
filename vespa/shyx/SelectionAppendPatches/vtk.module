@@ -1,0 +1,13 @@
+NAME
+  vtkSHYXSelectionAppendPatches
+  DESCRIPTION
+  "Extract selected cells into independent vtkPartitionedDataSetCollection patches (overlaps allowed); rename and stamp a constant mark per patch."
+GROUPS
+  Meshing
+DEPENDS
+  VTK::CommonCore
+  VTK::CommonDataModel
+  VTK::CommonExecutionModel
+  VTK::FiltersCore
+  VTK::FiltersExtraction
+  VTK::FiltersGeometry

@@ -29,6 +29,7 @@
     <file alias="SHYX_Partitioned_Collection_Boundary_Assignment.png">../icon/SHYX_Partitioned_Collection_Boundary_Assignment_fluent.png</file>
     <file alias="SHYX_Remesh_With_Endpoint.png">../icon/SHYX_Remesh_With_Endpoint_fluent.png</file>
     <file alias="SHYX_Repair_Degeneracies.png">../icon/SHYX_Repair_Degeneracies.png</file>
+    <file alias="SHYX_Selection_Append_Patches.png">../icon/SHYX_Selection_Extrude.png</file>
     <file alias="SHYX_Selection_Extrude.png">../icon/SHYX_Selection_Extrude.png</file>
     <file alias="SHYX_Selection_Fill_Alpha_Reunion.png">../icon/SHYX_Selection_Fill_Alpha_Reunion.png</file>
     <file alias="SHYX_Selection_Plane_Clipper.png">../icon/SHYX_Selection_Plane_Clipper_fluent.png</file>
