@@ -169,9 +169,16 @@ TetGen / 约束 Delaunay：指定的 segment 必须出现在网格里（不够�
 
 ## 9. 和本滤镜的对应
 
-见 `ParaViewPlugin/SHYXSnappyHexMesh.xml`。当前默认接近单张 STL → 一个 `geometry` patch，`features` 空，implicit 特征吸附开。要管道入口、体积加密、显式棱：
+见 `ParaViewPlugin/SHYXSnappyHexMesh.xml`。主输入是 **`vtkPartitionedDataSetCollection`**：每个分块写成一张整体 STL（`triSurfaceMesh`），当作 searchable / patch。单张 `vtkPolyData` 仍可接，内部名为 `geometry`。
 
-- 拆 STL / 多 `solid`，或开口对齐背景盒面
-- 封闭包络或盒子进 `refinementRegions`（`inside` / `distance`）
-- 抽出 `.eMesh` 填 `features`，并开 `explicitFeatureSnap`
-- layer 按最终 patch 名写 `nSurfaceLayers`，入口写 0
+**不支持** STL 多 `solid` 的 `regions { firstSolid / secondSolid }`；`addLayers` 也按这个整体 patch 名写，不会生成 `sphere.stl_firstSolid`。
+
+Properties 三张表（Add partition 选上游分块）：
+
+- **Surface patches**（在 Castellated / 细分里，写入 `refinementSurfaces`）：`level (min max)` + `patchInfo { type wall|patch; }`。空表 = 全部分块，用 Default surface level。
+- **Region patches**（同样在 Castellated 里，写入 `refinementRegions`）：`mode inside|outside|distance` + `levels`。空表 = 无体积加密。`inside`/`outside` 需要封闭面。
+- **Layer patches**（Layers 组后，写入 `addLayers`）：按最终 patch 名写 `nSurfaceLayers`（入口可写 0）。空表 = 每个 surface patch 用 Default surface layers。
+
+可选 **Feature edges**：Properties 面板上的 pipeline 下拉（不是创建滤镜时的第二个必选输入）。线网格 → `features.eMesh`，`explicitFeatureSnap true`。选 `(none)` 时 `features ()`，implicit 特征吸附仍可开。
+
+STL 写在 case 的 `constant/triSurface/`，Apply 后在 **Case Folder**（每次一个新的 `%TEMP%/shyx-snappy-*/case`）里打开即可，面板不单独显示 STL 临时路径。

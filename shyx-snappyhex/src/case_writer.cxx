@@ -28,19 +28,245 @@ void headerDict(std::ostream& os, const char* object)
           "}\n";
 }
 
-bool copyFile(const std::string& from, const std::string& to, std::string* err)
+bool samePath(const fs::path& a, const fs::path& b)
 {
     std::error_code ec;
+    if (a.empty() || b.empty())
+    {
+        return false;
+    }
+    if (fs::equivalent(a, b, ec) && !ec)
+    {
+        return true;
+    }
+    return fs::absolute(a, ec) == fs::absolute(b, ec);
+}
+
+bool copyFileIfNeeded(const std::string& from, const std::string& to, std::string* err)
+{
+    if (from.empty())
+    {
+        if (err)
+        {
+            *err = "empty source path for " + to;
+        }
+        return false;
+    }
+    if (samePath(from, to))
+    {
+        return true;
+    }
+    std::error_code ec;
+    fs::create_directories(fs::path(to).parent_path(), ec);
     fs::copy_file(from, to, fs::copy_options::overwrite_existing, ec);
     if (ec)
     {
         if (err)
         {
-            *err = "copy STL failed: " + ec.message();
+            *err = "copy file failed: " + ec.message();
         }
         return false;
     }
     return true;
+}
+
+const char* orDefault(const char* s, const char* fallback)
+{
+    return (s && s[0] != '\0') ? s : fallback;
+}
+
+void writeGeometryBlock(std::ostream& os, const ShyxSnappyParams& p, const std::string& fallbackName)
+{
+    os << "geometry\n{\n";
+    if (p.n_geometries > 0 && p.geometries)
+    {
+        for (int i = 0; i < p.n_geometries; ++i)
+        {
+            const char* name = orDefault(p.geometries[i].name, "geometry");
+            os << "    " << name << ".stl\n"
+                  "    {\n"
+                  "        type triSurfaceMesh;\n"
+                  "        name "
+               << name << ";\n"
+                  "    }\n";
+        }
+    }
+    else
+    {
+        os << "    " << fallbackName
+           << ".stl\n"
+              "    {\n"
+              "        type triSurfaceMesh;\n"
+              "        name "
+           << fallbackName << ";\n"
+              "    }\n";
+    }
+    os << "}\n\n";
+}
+
+void writeFeatures(std::ostream& os, const ShyxSnappyParams& p)
+{
+    if (p.emesh_path && p.emesh_path[0] != '\0')
+    {
+        const int lvl = (p.feature_level > 0) ? p.feature_level : 2;
+        os << "    features\n"
+              "    (\n"
+              "        {\n"
+              "            file \"features.eMesh\";\n"
+              "            level "
+           << lvl
+           << ";\n"
+              "        }\n"
+              "    );\n";
+        return;
+    }
+    os << "    features ();\n";
+}
+
+void writeRefinementSurfaces(std::ostream& os, const ShyxSnappyParams& p, const std::string& fallbackName)
+{
+    os << "    refinementSurfaces\n    {\n";
+    if (p.n_ref_surfaces > 0 && p.ref_surfaces)
+    {
+        for (int i = 0; i < p.n_ref_surfaces; ++i)
+        {
+            const char* name = orDefault(p.ref_surfaces[i].name, fallbackName.c_str());
+            const char* ptype = orDefault(p.ref_surfaces[i].patch_type, "wall");
+            os << "        " << name
+               << "\n"
+                  "        {\n"
+                  "            level ("
+               << p.ref_surfaces[i].level_min << " " << p.ref_surfaces[i].level_max
+               << ");\n"
+                  "            patchInfo\n"
+                  "            {\n"
+                  "                type "
+               << ptype
+               << ";\n"
+                  "            }\n"
+                  "        }\n";
+        }
+    }
+    else if (p.n_geometries > 0 && p.geometries)
+    {
+        for (int i = 0; i < p.n_geometries; ++i)
+        {
+            const char* name = orDefault(p.geometries[i].name, fallbackName.c_str());
+            os << "        " << name
+               << "\n"
+                  "        {\n"
+                  "            level ("
+               << p.refinement_min << " " << p.refinement_max
+               << ");\n"
+                  "            patchInfo\n"
+                  "            {\n"
+                  "                type wall;\n"
+                  "            }\n"
+                  "        }\n";
+        }
+    }
+    else
+    {
+        os << "        " << fallbackName
+           << "\n"
+              "        {\n"
+              "            level ("
+           << p.refinement_min << " " << p.refinement_max
+           << ");\n"
+              "            patchInfo\n"
+              "            {\n"
+              "                type wall;\n"
+              "            }\n"
+              "        }\n";
+    }
+    os << "    }\n";
+}
+
+void writeRefinementRegions(std::ostream& os, const ShyxSnappyParams& p)
+{
+    os << "    refinementRegions\n    {\n";
+    if (p.n_ref_regions > 0 && p.ref_regions)
+    {
+        for (int i = 0; i < p.n_ref_regions; ++i)
+        {
+            const char* name = orDefault(p.ref_regions[i].name, "region");
+            const char* mode = orDefault(p.ref_regions[i].mode, "inside");
+            os << "        " << name
+               << "\n"
+                  "        {\n"
+                  "            mode "
+               << mode << ";\n";
+            if (std::string(mode) == "distance")
+            {
+                os << "            levels ((" << p.ref_regions[i].distance << " "
+                   << p.ref_regions[i].level << "));\n";
+            }
+            else
+            {
+                os << "            levels ((1e15 " << p.ref_regions[i].level << "));\n";
+            }
+            os << "        }\n";
+        }
+    }
+    os << "    }\n";
+}
+
+void writeLayers(std::ostream& os, const ShyxSnappyParams& p, const std::string& fallbackName)
+{
+    os << "    layers\n    {\n";
+    if (p.n_layer_patches > 0 && p.layer_patches)
+    {
+        for (int i = 0; i < p.n_layer_patches; ++i)
+        {
+            const char* name = orDefault(p.layer_patches[i].name, fallbackName.c_str());
+            os << "        " << name
+               << "\n"
+                  "        {\n"
+                  "            nSurfaceLayers "
+               << p.layer_patches[i].n_surface_layers
+               << ";\n"
+                  "        }\n";
+        }
+    }
+    else if (p.n_ref_surfaces > 0 && p.ref_surfaces)
+    {
+        for (int i = 0; i < p.n_ref_surfaces; ++i)
+        {
+            const char* name = orDefault(p.ref_surfaces[i].name, fallbackName.c_str());
+            os << "        " << name
+               << "\n"
+                  "        {\n"
+                  "            nSurfaceLayers "
+               << p.n_surface_layers
+               << ";\n"
+                  "        }\n";
+        }
+    }
+    else if (p.n_geometries > 0 && p.geometries)
+    {
+        for (int i = 0; i < p.n_geometries; ++i)
+        {
+            const char* name = orDefault(p.geometries[i].name, fallbackName.c_str());
+            os << "        " << name
+               << "\n"
+                  "        {\n"
+                  "            nSurfaceLayers "
+               << p.n_surface_layers
+               << ";\n"
+                  "        }\n";
+        }
+    }
+    else
+    {
+        os << "        " << fallbackName
+           << "\n"
+              "        {\n"
+              "            nSurfaceLayers "
+           << p.n_surface_layers
+           << ";\n"
+              "        }\n";
+    }
+    os << "    }\n";
 }
 } // namespace
 
@@ -59,9 +285,50 @@ int shyx_write_foam_case(const std::string& caseDir, const std::string& stlPath,
         }
         return 1;
     }
-    if (!copyFile(stlPath, caseDir + "/constant/triSurface/geometry.stl", err))
+
+    const std::string fallbackName = "geometry";
+    if (p.n_geometries > 0 && p.geometries)
     {
+        for (int i = 0; i < p.n_geometries; ++i)
+        {
+            const char* name = orDefault(p.geometries[i].name, fallbackName.c_str());
+            const char* src = p.geometries[i].stl_path;
+            if (!src || src[0] == '\0')
+            {
+                if (err)
+                {
+                    *err = std::string("empty STL path for geometry ") + name;
+                }
+                return 1;
+            }
+            if (!copyFileIfNeeded(src, caseDir + "/constant/triSurface/" + name + ".stl", err))
+            {
+                return 1;
+            }
+        }
+    }
+    else if (!stlPath.empty())
+    {
+        if (!copyFileIfNeeded(stlPath, caseDir + "/constant/triSurface/" + fallbackName + ".stl", err))
+        {
+            return 1;
+        }
+    }
+    else
+    {
+        if (err)
+        {
+            *err = "no STL geometry to copy";
+        }
         return 1;
+    }
+
+    if (p.emesh_path && p.emesh_path[0] != '\0')
+    {
+        if (!copyFileIfNeeded(p.emesh_path, caseDir + "/constant/triSurface/features.eMesh", err))
+        {
+            return 1;
+        }
     }
 
     const fs::path meshDir = fs::path(caseDir) / "constant" / "polyMesh";
@@ -172,36 +439,24 @@ int shyx_write_foam_case(const std::string& caseDir, const std::string& stlPath,
               "minEdgeLength -1;\n";
     }
 
+    const bool explicitSnap = (p.emesh_path && p.emesh_path[0] != '\0');
+
     std::ofstream os(caseDir + "/system/snappyHexMeshDict");
     headerDict(os, "snappyHexMeshDict");
     os << "castellatedMesh " << (p.castellated ? "true" : "false") << ";\n"
        << "snap            " << (p.snap ? "true" : "false") << ";\n"
-       << "addLayers       " << (p.add_layers ? "true" : "false") << ";\n\n"
-       << "geometry\n{\n"
-          "    geometry.stl\n"
-          "    {\n"
-          "        type triSurfaceMesh;\n"
-          "        name geometry;\n"
-          "    }\n"
-          "}\n\n"
-          "castellatedMeshControls\n{\n"
+       << "addLayers       " << (p.add_layers ? "true" : "false") << ";\n\n";
+    writeGeometryBlock(os, p, fallbackName);
+    os << "castellatedMeshControls\n{\n"
        << "    maxLocalCells 1000000;\n"
        << "    maxGlobalCells " << p.max_global_cells << ";\n"
        << "    minRefinementCells 0;\n"
        << "    maxLoadUnbalance 0.10;\n"
-       << "    nCellsBetweenLevels " << p.n_cells_between_levels << ";\n"
-       << "    features ();\n"
-          "    refinementSurfaces\n"
-          "    {\n"
-          "        geometry\n"
-          "        {\n"
-       << "            level (" << p.refinement_min << " " << p.refinement_max << ");\n"
-          "        }\n"
-          "    }\n"
-          "    resolveFeatureAngle "
-       << p.feature_angle
-       << ";\n"
-          "    refinementRegions {}\n";
+       << "    nCellsBetweenLevels " << p.n_cells_between_levels << ";\n";
+    writeFeatures(os, p);
+    writeRefinementSurfaces(os, p, fallbackName);
+    os << "    resolveFeatureAngle " << p.feature_angle << ";\n";
+    writeRefinementRegions(os, p);
     if (nKeep <= 1)
     {
         const double lx = keepPts[0];
@@ -229,19 +484,13 @@ int shyx_write_foam_case(const std::string& caseDir, const std::string& stlPath,
        << "    nRelaxIter " << p.n_relax_iter << ";\n"
        << "    nFeatureSnapIter 10;\n"
        << "    implicitFeatureSnap " << (p.implicit_feature_snap ? "true" : "false") << ";\n"
-          "    explicitFeatureSnap false;\n"
+       << "    explicitFeatureSnap " << (explicitSnap ? "true" : "false") << ";\n"
           "    multiRegionFeatureSnap false;\n"
           "}\n\n"
           "addLayersControls\n{\n"
-          "    relativeSizes true;\n"
-          "    layers\n"
-          "    {\n"
-          "        geometry\n"
-          "        {\n"
-       << "            nSurfaceLayers " << p.n_surface_layers << ";\n"
-          "        }\n"
-          "    }\n"
-       << "    expansionRatio " << p.expansion_ratio << ";\n"
+          "    relativeSizes true;\n";
+    writeLayers(os, p, fallbackName);
+    os << "    expansionRatio " << p.expansion_ratio << ";\n"
        << "    finalLayerThickness " << p.final_layer_thickness << ";\n"
        << "    minThickness " << p.min_thickness << ";\n"
           "    nGrow 0;\n"

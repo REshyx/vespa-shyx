@@ -89,6 +89,11 @@ void selectBlocks(pqDataRepresentation* repr, const QStringList& selectors)
     return;
   }
 
+  if (auto* selManager = pqPVApplicationCore::instance()->selectionManager())
+  {
+    selManager->clearSelection();
+  }
+
   port->setSelectionInput(appendSelections, 0);
   if (auto* selManager = pqPVApplicationCore::instance()->selectionManager())
   {
@@ -136,7 +141,8 @@ bool pqSHYXSelectBlockContextMenu::contextMenu(QMenu* menu, pqView*, const QPoin
   auto* action = new QAction(
     QIcon(":/pqWidgets/Icons/pqSelectBlock.svg"), tr("Select Block"), menu);
   action->setObjectName("actionSHYXSelectBlock");
-  action->setToolTip(tr("Select all cells in this block"));
+  action->setToolTip(
+    tr("Clear the current selection and select all cells in this block"));
   const QStringList selectors = dataBlockContext;
   QPointer<pqDataRepresentation> reprPtr(repr);
   QObject::connect(action, &QAction::triggered, menu,

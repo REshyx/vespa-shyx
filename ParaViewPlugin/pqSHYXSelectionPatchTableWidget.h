@@ -9,6 +9,7 @@
 
 #include <vtkType.h>
 
+class QCheckBox;
 class QLabel;
 class QStandardItem;
 class QStandardItemModel;
@@ -18,7 +19,8 @@ class vtkSMPropertyGroup;
 /**
  * Simplified Partitioned-block-names table for vtkSHYXSelectionAppendPatches:
  * Add current selection as a row (geo_N), rename only. The table keeps every row. Apply merges
- * same-named rows into one output patch (first-seen mark 0, 1, 2, ...).
+ * same-named rows into one output patch (first-seen mark 0, 1, 2, ...). Apply on Add (default)
+ * runs Apply after each Add or Remove so port 0 (added) and port 1 (Input minus added) refresh.
  */
 class pqSHYXSelectionPatchTableWidget : public pqPropertyWidget
 {
@@ -56,10 +58,12 @@ private:
   QStringList linesFromProperty(const QString& propertyName) const;
   int nextPartIndex() const;
   void setStatus(const QString& text, bool error);
+  void applyOutputsIfChecked();
 
   QStandardItemModel* Model = nullptr;
   pqTreeView* View = nullptr;
   QLabel* Status = nullptr;
+  QCheckBox* ApplyOnAdd = nullptr;
   QString NamesPropertyName;
   QString CellIdsPropertyName;
   bool UpdatingFromProperty = false;

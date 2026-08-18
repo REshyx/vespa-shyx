@@ -26,8 +26,8 @@ description: >-
   - **Pipeline filter / source**：`vespa/shyx/<Feature>/` + `ParaViewPlugin/SHYX*.xml`，`ProxyGroup name="filters"`（或 sources）。
   - **Display 表示**：`PulseGlyphRepresentation` / `AnimatedStreamlineRepresentation` / `PointLabelRepresentation`，挂在 Display 下拉框，不是 pipeline 节点。
   - **RenderView 标题栏选择工具**：`ParaViewPlugin/SphereSelection/`、`GrowSelectionWithSimilar/`，纯客户端 Qt，**没有** SM proxy。
-  - **RenderView block 右键**：`ParaViewPlugin/SelectBlock/`（`pqContextMenuInterface`），在复合数据块菜单里加 **Select Block**，把该 block 的全部 cell 设为当前选择；同样无 SM proxy。
-  - **RenderView 选择右键**：`ParaViewPlugin/SelectSimilar/`，有 cell 选择时加 **Select Similar** 子菜单（现有 **By Normal**）。一次扩到没有相似邻面为止，复用 `GrowSelectionWithSimilar` 的二面角阈值，不是标题栏那种一环一环点。
+  - **RenderView block 右键**：`ParaViewPlugin/SelectBlock/`（`pqContextMenuInterface`），在复合数据块菜单里加 **Select Block**，先清当前选择再选中该 block 的全部 cell；同样无 SM proxy。
+  - **RenderView 选择右键**：`ParaViewPlugin/SelectSimilar/`，有 cell 选择时加 **Select All**（当前选区所在连通区域）、**Invert Selection**（反选）、**Select Similar** 子菜单（现有 **By Normal**）和 **Fill Interior**。By Normal 一次扩到没有相似邻面为止，复用 `GrowSelectionWithSimilar` 的二面角阈值，不是标题栏那种一环一环点。Fill Interior 把被当前选区完全围住的未选面补进选择（开放网格上仍连到开口的区域不填）。
   - **3D widget 表示**：支架/圆柱（`SHYX*WidgetRepresentation.xml`），不是 Display 下拉项。
   - **View 停靠窗**：SHYX AI Assistant（`ParaViewPlugin/pqSHYXAI*`），不是 pipeline filter。
 - **SHYX 实现**：每个 **VTK 算子或表示** 在 `vespa/shyx/<FeatureName>/` 下；至少包含 `vtk.module` 与 `CMakeLists.txt`（`vtk_module_add_module`，`shyx` 里通常带 `FORCE_STATIC`）。标题栏选择工具只有 `ParaViewPlugin/` 下的 `pq*`。AI 面板 UI 是 `pqSHYXAI*`；`vespa/shyx/AIAssistant/` 里仍有遗留 `vtkSHYXAIAssistant`，对应 XML **不要**再写入 `SERVER_MANAGER_XML`。
@@ -352,7 +352,7 @@ description: >-
 - 目录：空查询 `lookup_shyx_docs` + `list_filters`。
 - Filter 参数：`describe_proxy('SHYXMeshChecker')` → Python `Name(Input=..., registrationName='...')`。
 - Display 参数：`describe_proxy('Pulse Glyphs')` → `GetDisplayProperties().Representation = 'Pulse Glyphs'`，属性用 **exposed 名**（`disp.PG_Animate`）。**不要** `PulseGlyphRepresentation()`。
-- 无 proxy 工具：`describe_proxy('sphere')` / `describe_proxy('grow')` / `describe_proxy('select block')` / `describe_proxy('select similar')`；用完 `get_selection_ids`。
+- 无 proxy 工具：`describe_proxy('sphere')` / `describe_proxy('grow')` / `describe_proxy('select block')` / `describe_proxy('select similar')` / `describe_proxy('fill interior')` / `describe_proxy('select all')` / `describe_proxy('invert')`；用完 `get_selection_ids`。
 
 ### 9.3 检查（加完功能后）
 

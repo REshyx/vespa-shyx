@@ -4,8 +4,8 @@
                  label="SHYX SnappyHexMesh"
                  name="SHYXSnappyHexMesh">
       <Documentation
-          short_help="SHYX SnappyHexMesh: Hex-dominant volume mesh from a closed surface."
-          long_help="Takes a closed triangulated surface (vtkPolyData) and generates a hex-dominant volume mesh with snappyHexMesh (castellated, snap, optional layers). The OpenFOAM case is kept with a case.foam marker. The filter output is the internal mesh as read by vtkOpenFOAMReader. File → Open %TEMP%/shyx-snappy-last/case.foam for the full case (patches as blocks)."/>
+          short_help="SHYX SnappyHexMesh: Hex-dominant volume mesh from PDC patches or a surface."
+          long_help="Takes a vtkPartitionedDataSetCollection (each partition is one STL / triSurfaceMesh patch) or a single vtkPolyData (wrapped as geometry). Optional Feature edges are chosen on the Properties panel (pipeline dropdown), not as a second required input, and written as .eMesh. Generates a hex-dominant volume mesh with snappyHexMesh. STL regions / firstSolid / secondSolid are not used. The OpenFOAM case is kept with a case.foam marker. The filter output is the vtkMultiBlockDataSet from vtkOpenFOAMReader (internalMesh plus boundary patches), same tree as File → Open of Case Folder case.foam."/>
 
       <InputProperty name="Input" command="SetInputConnection">
         <ProxyGroupDomain name="groups">
@@ -13,10 +13,51 @@
           <Group name="filters"/>
         </ProxyGroupDomain>
         <DataTypeDomain name="input_type">
+          <DataType value="vtkPartitionedDataSetCollection"/>
           <DataType value="vtkPolyData"/>
         </DataTypeDomain>
-        <Documentation>Closed surface mesh (triangulated, watertight).</Documentation>
+        <Documentation>
+          PartitionedDataSetCollection: each block is one searchable STL patch.
+          vtkPolyData: treated as a single partition named geometry.
+        </Documentation>
       </InputProperty>
+
+      <!-- Optional: panel pipeline dropdown, not a second required input at filter creation. -->
+      <InputProperty name="FeatureEdges" command="SetFeatureEdgesConnection"
+                     label="Feature edges"
+                     panel_widget="input_selector"
+                     null_on_empty="1">
+        <ProxyGroupDomain name="groups">
+          <Group name="sources"/>
+          <Group name="filters"/>
+        </ProxyGroupDomain>
+        <DataTypeDomain name="input_type">
+          <DataType value="vtkPolyData"/>
+        </DataTypeDomain>
+        <Documentation>
+          Optional. Pick a pipeline node of feature lines (VTK_LINE / VTK_POLY_LINE),
+          or leave as (none). Written as constant/triSurface/features.eMesh and listed
+          in castellated features ().
+        </Documentation>
+        <Hints>
+          <Optional/>
+        </Hints>
+      </InputProperty>
+
+      <IntVectorProperty command="SetFeatureLevel" name="FeatureLevel"
+                         label="Feature level" number_of_elements="1" default_values="2">
+        <IntRangeDomain name="range" min="0" max="10"/>
+        <Documentation>Refinement level for cells crossed by the Feature edges .eMesh.</Documentation>
+        <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator" mode="enabled_state"
+                                   property="FeatureEdges" value="null" inverse="1"/>
+        </Hints>
+      </IntVectorProperty>
+      <IntVectorProperty command="SetImplicitFeatureSnap" name="ImplicitFeatureSnap"
+                         label="Implicit feature snap" number_of_elements="1" default_values="1">
+        <BooleanDomain name="bool"/>
+        <Documentation>Detect feature edges from the STL during snap. Explicit snap is on when Feature edges are selected in the panel dropdown.</Documentation>
+      </IntVectorProperty>
 
       <DoubleVectorProperty command="SetBackgroundCellSize" name="BackgroundCellSize"
                             label="Background cell size" number_of_elements="1" default_values="0">
@@ -60,35 +101,50 @@
       <IntVectorProperty command="SetMaxGlobalCells" name="MaxGlobalCells"
                          label="Max global cells" number_of_elements="1" default_values="2000000">
         <IntRangeDomain name="range" min="1000" max="200000000"/>
-        <Hints>
-          <PropertyWidgetDecorator type="GenericDecorator" mode="enabled_state"
-                                   property="CastellatedMesh" value="1"/>
-        </Hints>
       </IntVectorProperty>
       <IntVectorProperty command="SetNCellsBetweenLevels" name="NCellsBetweenLevels"
                          label="Cells between levels" number_of_elements="1" default_values="3">
         <IntRangeDomain name="range" min="1" max="10"/>
-        <Hints>
-          <PropertyWidgetDecorator type="GenericDecorator" mode="enabled_state"
-                                   property="CastellatedMesh" value="1"/>
-        </Hints>
       </IntVectorProperty>
       <IntVectorProperty command="SetRefinementMin" name="RefinementMin"
-                         label="Surface refinement min" number_of_elements="1" default_values="0">
+                         label="Default surface level min" number_of_elements="1" default_values="0">
         <IntRangeDomain name="range" min="0" max="10"/>
-        <Hints>
-          <PropertyWidgetDecorator type="GenericDecorator" mode="enabled_state"
-                                   property="CastellatedMesh" value="1"/>
-        </Hints>
+        <Documentation>Used for new Surface patches rows and when that table is empty.</Documentation>
       </IntVectorProperty>
       <IntVectorProperty command="SetRefinementMax" name="RefinementMax"
-                         label="Surface refinement max" number_of_elements="1" default_values="2">
+                         label="Default surface level max" number_of_elements="1" default_values="2">
         <IntRangeDomain name="range" min="0" max="10"/>
-        <Hints>
-          <PropertyWidgetDecorator type="GenericDecorator" mode="enabled_state"
-                                   property="CastellatedMesh" value="1"/>
-        </Hints>
+        <Documentation>Used for new table rows and when Surface patches is empty.</Documentation>
       </IntVectorProperty>
+
+      <!-- CastellatedMesh is the group-widget anchor: must NOT be panel_visibility=never. -->
+      <StringVectorProperty name="SurfaceNames" label="Surface names" command="SetSurfaceNames"
+          number_of_elements="1" default_values="" animateable="0">
+        <Documentation>Newline-separated Surface patches names. Empty = all Input partitions.</Documentation>
+      </StringVectorProperty>
+      <StringVectorProperty name="SurfaceLevelMin" label="Surface level min" command="SetSurfaceLevelMin"
+          number_of_elements="1" default_values="" animateable="0" panel_visibility="never">
+      </StringVectorProperty>
+      <StringVectorProperty name="SurfaceLevelMax" label="Surface level max" command="SetSurfaceLevelMax"
+          number_of_elements="1" default_values="" animateable="0" panel_visibility="never">
+      </StringVectorProperty>
+      <StringVectorProperty name="SurfacePatchTypes" label="Surface patch types" command="SetSurfacePatchTypes"
+          number_of_elements="1" default_values="" animateable="0" panel_visibility="never">
+      </StringVectorProperty>
+
+      <StringVectorProperty name="RegionNames" label="Region names" command="SetRegionNames"
+          number_of_elements="1" default_values="" animateable="0">
+        <Documentation>Newline-separated Region patches names. Empty = none.</Documentation>
+      </StringVectorProperty>
+      <StringVectorProperty name="RegionModes" label="Region modes" command="SetRegionModes"
+          number_of_elements="1" default_values="" animateable="0" panel_visibility="never">
+      </StringVectorProperty>
+      <StringVectorProperty name="RegionLevels" label="Region levels" command="SetRegionLevels"
+          number_of_elements="1" default_values="" animateable="0" panel_visibility="never">
+      </StringVectorProperty>
+      <StringVectorProperty name="RegionDistances" label="Region distances" command="SetRegionDistances"
+          number_of_elements="1" default_values="" animateable="0" panel_visibility="never">
+      </StringVectorProperty>
 
       <IntVectorProperty command="SetNSmoothPatch" name="NSmoothPatch"
                          label="Snap nSmoothPatch" number_of_elements="1" default_values="3"
@@ -128,8 +184,9 @@
       </IntVectorProperty>
 
       <IntVectorProperty command="SetNSurfaceLayers" name="NSurfaceLayers"
-                         label="Surface layers" number_of_elements="1" default_values="3">
+                         label="Default surface layers" number_of_elements="1" default_values="3">
         <IntRangeDomain name="range" min="0" max="50"/>
+        <Documentation>Used for new layer-table rows and when that table is empty.</Documentation>
         <Hints>
           <PropertyWidgetDecorator type="GenericDecorator" mode="enabled_state"
                                    property="AddLayers" value="1"/>
@@ -165,10 +222,18 @@
                             label="Feature angle" number_of_elements="1" default_values="30">
         <DoubleRangeDomain name="range" min="0" max="180"/>
       </DoubleVectorProperty>
-      <IntVectorProperty command="SetImplicitFeatureSnap" name="ImplicitFeatureSnap"
-                         label="Implicit feature snap" number_of_elements="1" default_values="1">
-        <BooleanDomain name="bool"/>
-      </IntVectorProperty>
+
+      <StringVectorProperty name="LayerNames" label="Layer names" command="SetLayerNames"
+          number_of_elements="1" default_values="" animateable="0">
+        <Documentation>Newline-separated Layer patches names. Empty = every Surface patches entry.</Documentation>
+        <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator" mode="enabled_state"
+                                   property="AddLayers" value="1"/>
+        </Hints>
+      </StringVectorProperty>
+      <StringVectorProperty name="LayerNSurfaceLayers" label="Layer nSurfaceLayers" command="SetLayerNSurfaceLayers"
+          number_of_elements="1" default_values="" animateable="0" panel_visibility="never">
+      </StringVectorProperty>
 
       <DoubleVectorProperty command="SetInsidePoint"
                             name="InsidePoints"
@@ -198,21 +263,37 @@
                             animateable="0"
                             panel_visibility="default">
         <Documentation>
-          After Apply: %TEMP%/shyx-snappy-last (copy of this run's case). Read-only;
-          copy the path or use the folder button to open it.
+          After Apply: a new unique folder under %TEMP%/shyx-snappy-*/case.
+          Read-only; copy the path or use the folder button to open it. Partition
+          STLs are under constant/triSurface/.
         </Documentation>
       </StringVectorProperty>
 
+      <PropertyGroup label="Features">
+        <Property name="FeatureEdges"/>
+        <Property name="FeatureLevel"/>
+        <Property name="ImplicitFeatureSnap"/>
+      </PropertyGroup>
       <PropertyGroup label="Background mesh">
         <Property name="BackgroundCellSize"/>
         <Property name="BoundsMargin"/>
       </PropertyGroup>
-      <PropertyGroup label="Castellated">
+      <PropertyGroup label="Castellated"
+                     panel_widget="shyx_snappy_castellated"
+                     panel_visibility="default">
         <Property name="CastellatedMesh"/>
         <Property name="MaxGlobalCells"/>
         <Property name="NCellsBetweenLevels"/>
         <Property name="RefinementMin"/>
         <Property name="RefinementMax"/>
+        <Property function="SurfaceNames" name="SurfaceNames"/>
+        <Property function="SurfaceLevelMin" name="SurfaceLevelMin"/>
+        <Property function="SurfaceLevelMax" name="SurfaceLevelMax"/>
+        <Property function="SurfacePatchTypes" name="SurfacePatchTypes"/>
+        <Property function="RegionNames" name="RegionNames"/>
+        <Property function="RegionModes" name="RegionModes"/>
+        <Property function="RegionLevels" name="RegionLevels"/>
+        <Property function="RegionDistances" name="RegionDistances"/>
       </PropertyGroup>
       <PropertyGroup label="Inside points" panel_widget="shyx_snappy_inside_points">
         <Property function="Input" name="Input"/>
@@ -224,13 +305,21 @@
         <Property name="SnapTolerance"/>
         <Property name="NSolveIter"/>
         <Property name="NRelaxIter"/>
+        <Property name="FeatureAngle"/>
       </PropertyGroup>
       <PropertyGroup label="Layers">
         <Property name="AddLayers"/>
         <Property name="NSurfaceLayers"/>
         <Property name="ExpansionRatio"/>
-        <Property name="FeatureAngle"/>
-        <Property name="ImplicitFeatureSnap"/>
+      </PropertyGroup>
+      <PropertyGroup label="Layer patches"
+                     panel_widget="shyx_snappy_patch_table"
+                     panel_visibility="default">
+        <Property function="Names" name="LayerNames"/>
+        <Property function="NSurfaceLayers" name="LayerNSurfaceLayers"/>
+        <Hints>
+          <WidgetHeight number_of_rows="5"/>
+        </Hints>
       </PropertyGroup>
       <PropertyGroup label="Case Folder" panel_widget="shyx_snappy_case_folder">
         <Property function="CaseFoamPath" name="CaseFoamPath"/>

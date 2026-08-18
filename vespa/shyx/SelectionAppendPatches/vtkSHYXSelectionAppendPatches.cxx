@@ -7,6 +7,7 @@
 #include <vtkDataArray.h>
 #include <vtkDataAssembly.h>
 #include <vtkDataObject.h>
+#include <vtkDataObjectTypes.h>
 #include <vtkDataSet.h>
 #include <vtkDoubleArray.h>
 #include <vtkExtractSelection.h>
@@ -258,6 +259,119 @@ vtkSmartPointer<vtkDataSet> ExtractCellsAsPatch(vtkDataSet* input, const std::ve
   return out;
 }
 
+vtkSmartPointer<vtkDataSet> ExtractInverseCells(vtkDataSet* input, const std::vector<vtkIdType>& addedIds)
+{
+  if (!input)
+  {
+    return nullptr;
+  }
+  const vtkIdType nCells = input->GetNumberOfCells();
+  auto copyInput = [input]() -> vtkSmartPointer<vtkDataSet> {
+    vtkSmartPointer<vtkDataSet> copy;
+    copy.TakeReference(vtkDataSet::SafeDownCast(input->NewInstance()));
+    copy->DeepCopy(input);
+    return copy;
+  };
+
+  vtkNew<vtkIdTypeArray> list;
+  list->SetNumberOfTuples(static_cast<vtkIdType>(addedIds.size()));
+  vtkIdType nKeep = 0;
+  for (vtkIdType id : addedIds)
+  {
+    if (id >= 0 && id < nCells)
+    {
+      list->SetValue(nKeep++, id);
+    }
+  }
+  if (nKeep == 0)
+  {
+    return copyInput();
+  }
+  list->SetNumberOfTuples(nKeep);
+
+  vtkNew<vtkSelectionNode> node;
+  node->SetFieldType(vtkSelectionNode::CELL);
+  node->SetContentType(vtkSelectionNode::INDICES);
+  node->SetSelectionList(list);
+  node->GetProperties()->Set(vtkSelectionNode::INVERSE(), 1);
+
+  vtkNew<vtkSelection> sel;
+  sel->AddNode(node);
+
+  vtkNew<vtkExtractSelection> extract;
+  extract->SetInputData(0, input);
+  extract->SetInputData(1, sel);
+  extract->Update();
+  vtkDataSet* extracted = vtkDataSet::SafeDownCast(extract->GetOutput());
+  if (!extracted)
+  {
+    return nullptr;
+  }
+  vtkSmartPointer<vtkDataSet> out;
+  out.TakeReference(vtkDataSet::SafeDownCast(extracted->NewInstance()));
+  out->DeepCopy(extracted);
+  return out;
+}
+
+void AssignRemainder(vtkDataSet* remainder, vtkDataSet* remainOut)
+{
+  if (!remainOut)
+  {
+    return;
+  }
+  if (!remainder || remainder->GetNumberOfCells() == 0)
+  {
+    remainOut->Initialize();
+    return;
+  }
+  if (remainOut->GetDataObjectType() == remainder->GetDataObjectType())
+  {
+    remainOut->DeepCopy(remainder);
+  }
+  else if (vtkPolyData::SafeDownCast(remainOut))
+  {
+    if (auto* pd = vtkPolyData::SafeDownCast(remainder))
+    {
+      remainOut->DeepCopy(pd);
+    }
+    else
+    {
+      vtkNew<vtkGeometryFilter> geom;
+      geom->SetInputData(remainder);
+      geom->Update();
+      vtkPolyData* surface = geom->GetOutput();
+      if (surface && surface->GetNumberOfCells() > 0)
+      {
+        remainOut->DeepCopy(surface);
+      }
+      else
+      {
+        remainOut->Initialize();
+        return;
+      }
+    }
+  }
+  else
+  {
+    remainOut->Initialize();
+    return;
+  }
+
+  if (remainOut->GetCellData()->GetArray("vtkOriginalCellIds"))
+  {
+    return;
+  }
+  auto* orig =
+    vtkIdTypeArray::SafeDownCast(remainder->GetCellData()->GetArray("vtkOriginalCellIds"));
+  if (orig && orig->GetNumberOfTuples() == remainOut->GetNumberOfCells())
+  {
+    vtkNew<vtkIdTypeArray> copy;
+    copy->DeepCopy(orig);
+    copy->SetName("vtkOriginalCellIds");
+    remainOut->GetCellData()->AddArray(copy);
+  }
+}
+
 std::vector<vtkIdType> CellsFromLiveSelection(vtkDataSet* input, vtkSelection* selection)
 {
   std::vector<vtkIdType> ids;
@@ -297,7 +411,7 @@ std::vector<vtkIdType> CellsFromLiveSelection(vtkDataSet* input, vtkSelection* s
 vtkSHYXSelectionAppendPatches::vtkSHYXSelectionAppendPatches()
 {
   this->SetNumberOfInputPorts(2);
-  this->SetNumberOfOutputPorts(1);
+  this->SetNumberOfOutputPorts(2);
   this->SetMarkArrayName("PatchMark");
 }
 
@@ -349,7 +463,41 @@ int vtkSHYXSelectionAppendPatches::FillOutputPortInformation(int port, vtkInform
     info->Set(vtkDataObject::DATA_TYPE_NAME(), "vtkPartitionedDataSetCollection");
     return 1;
   }
+  if (port == 1)
+  {
+    info->Set(vtkDataObject::DATA_TYPE_NAME(), "vtkDataSet");
+    return 1;
+  }
   return 0;
+}
+
+//------------------------------------------------------------------------------
+int vtkSHYXSelectionAppendPatches::RequestDataObject(
+  vtkInformation*, vtkInformationVector** inputVector, vtkInformationVector* outputVector)
+{
+  vtkInformation* out0 = outputVector->GetInformationObject(0);
+  vtkDataObjectAlgorithm::SetOutputDataObject(VTK_PARTITIONED_DATA_SET_COLLECTION, out0, true);
+
+  vtkDataSet* input = vtkDataSet::GetData(inputVector[0], 0);
+  vtkInformation* out1 = outputVector->GetInformationObject(1);
+  vtkDataObject* cur1 = out1->Get(vtkDataObject::DATA_OBJECT());
+  if (input)
+  {
+    if (!cur1 || !cur1->IsA(input->GetClassName()))
+    {
+      vtkSmartPointer<vtkDataObject> created;
+      created.TakeReference(input->NewInstance());
+      out1->Set(vtkDataObject::DATA_OBJECT(), created);
+      out1->Set(vtkDataObject::DATA_EXTENT_TYPE(), created->GetExtentType());
+    }
+  }
+  else if (!vtkPolyData::SafeDownCast(cur1))
+  {
+    vtkNew<vtkPolyData> pd;
+    out1->Set(vtkDataObject::DATA_OBJECT(), pd);
+    out1->Set(vtkDataObject::DATA_EXTENT_TYPE(), pd->GetExtentType());
+  }
+  return 1;
 }
 
 //------------------------------------------------------------------------------
@@ -359,9 +507,10 @@ int vtkSHYXSelectionAppendPatches::RequestData(vtkInformation*, vtkInformationVe
   vtkDataSet* input = vtkDataSet::GetData(inputVector[0], 0);
   vtkPartitionedDataSetCollection* output =
     vtkPartitionedDataSetCollection::GetData(outputVector, 0);
-  if (!input || !output)
+  vtkDataSet* remainOut = vtkDataSet::GetData(outputVector, 1);
+  if (!input || !output || !remainOut)
   {
-    vtkErrorMacro("Missing input vtkDataSet or output vtkPartitionedDataSetCollection.");
+    vtkErrorMacro("Missing input vtkDataSet, added-patches output, or remainder output.");
     return 0;
   }
   output->Initialize();
@@ -451,6 +600,15 @@ int vtkSHYXSelectionAppendPatches::RequestData(vtkInformation*, vtkInformationVe
   {
     output->SetDataAssembly(assembly);
   }
+
+  std::vector<vtkIdType> allAdded;
+  for (const auto& patch : patches)
+  {
+    allAdded.insert(allAdded.end(), patch.second.begin(), patch.second.end());
+  }
+  std::sort(allAdded.begin(), allAdded.end());
+  allAdded.erase(std::unique(allAdded.begin(), allAdded.end()), allAdded.end());
+  AssignRemainder(ExtractInverseCells(input, allAdded), remainOut);
   return 1;
 }
 

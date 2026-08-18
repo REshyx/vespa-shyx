@@ -8,7 +8,9 @@
 #include "pqTreeView.h"
 
 #include "vtkAlgorithm.h"
+#include "vtkCellData.h"
 #include "vtkConvertSelection.h"
+#include "vtkDataArray.h"
 #include "vtkDataSet.h"
 #include "vtkIdTypeArray.h"
 #include "vtkNew.h"
@@ -22,6 +24,7 @@
 #include "vtkSelection.h"
 
 #include <QAbstractItemView>
+#include <QCheckBox>
 #include <QDynamicPropertyChangeEvent>
 #include <QEvent>
 #include <QHBoxLayout>
@@ -32,6 +35,7 @@
 #include <QScopedValueRollback>
 #include <QStandardItem>
 #include <QStandardItemModel>
+#include <QTimer>
 #include <QVBoxLayout>
 
 #include <algorithm>
@@ -168,6 +172,51 @@ vtkDataSet* clientInputDataSet(vtkSMProxy* filter)
   return vtkDataSet::SafeDownCast(alg->GetOutputDataObject(static_cast<int>(port)));
 }
 
+vtkDataSet* clientSelectedDataSet(pqOutputPort* port)
+{
+  if (!port)
+  {
+    return nullptr;
+  }
+  pqPipelineSource* src = port->getSource();
+  vtkSMProxy* sm = src ? src->getProxy() : nullptr;
+  auto* alg = sm ? vtkAlgorithm::SafeDownCast(sm->GetClientSideObject()) : nullptr;
+  if (!alg)
+  {
+    return nullptr;
+  }
+  return vtkDataSet::SafeDownCast(alg->GetOutputDataObject(port->getPortNumber()));
+}
+
+void appendMappedCellIds(vtkIdTypeArray* selected, vtkDataSet* convertTarget, vtkDataSet* inputDs,
+  std::vector<vtkIdType>& ids)
+{
+  if (!selected || !inputDs)
+  {
+    return;
+  }
+  const vtkIdType n = selected->GetNumberOfTuples();
+  const vtkIdType nMesh = inputDs->GetNumberOfCells();
+  vtkIdTypeArray* origIds = nullptr;
+  if (convertTarget)
+  {
+    origIds = vtkIdTypeArray::SafeDownCast(convertTarget->GetCellData()->GetArray("vtkOriginalCellIds"));
+  }
+  ids.reserve(ids.size() + static_cast<size_t>(n));
+  for (vtkIdType i = 0; i < n; ++i)
+  {
+    vtkIdType cid = selected->GetValue(i);
+    if (origIds && cid >= 0 && cid < origIds->GetNumberOfTuples())
+    {
+      cid = origIds->GetValue(cid);
+    }
+    if (cid >= 0 && cid < nMesh)
+    {
+      ids.push_back(cid);
+    }
+  }
+}
+
 bool collectActiveCellIds(vtkDataSet* inputDs, std::vector<vtkIdType>& ids, QString& error)
 {
   ids.clear();
@@ -200,18 +249,16 @@ bool collectActiveCellIds(vtkDataSet* inputDs, std::vector<vtkIdType>& ids, QStr
     return false;
   }
 
+  vtkDataSet* selectedDs = clientSelectedDataSet(port);
+  vtkDataSet* convertTarget = selectedDs ? selectedDs : inputDs;
   vtkNew<vtkIdTypeArray> selected;
-  vtkConvertSelection::GetSelectedCells(selection, inputDs, selected);
-  const vtkIdType n = selected->GetNumberOfTuples();
-  ids.reserve(static_cast<size_t>(n));
-  const vtkIdType nMesh = inputDs->GetNumberOfCells();
-  for (vtkIdType i = 0; i < n; ++i)
+  vtkConvertSelection::GetSelectedCells(selection, convertTarget, selected);
+  appendMappedCellIds(selected, convertTarget, inputDs, ids);
+  if (ids.empty() && selectedDs && selectedDs != inputDs)
   {
-    const vtkIdType cid = selected->GetValue(i);
-    if (cid >= 0 && cid < nMesh)
-    {
-      ids.push_back(cid);
-    }
+    selected->Initialize();
+    vtkConvertSelection::GetSelectedCells(selection, inputDs, selected);
+    appendMappedCellIds(selected, inputDs, inputDs, ids);
   }
   std::sort(ids.begin(), ids.end());
   ids.erase(std::unique(ids.begin(), ids.end()), ids.end());
@@ -233,10 +280,12 @@ pqSHYXSelectionPatchTableWidget::pqSHYXSelectionPatchTableWidget(
   vbox->setSpacing(4);
 
   auto* tip = new QLabel(
-    tr("Select cells on the Input in the 3D view, then Add (Copy Active Selection is not needed). "
-       "Rename only (any name). The table keeps every row. Apply merges same names into one "
-       "output patch and keeps the earlier mark. Unique names are marked 0, 1, 2, ... in table "
-       "order. Overlaps are allowed. Unselected cells are not appended."),
+    tr("Select cells in the 3D view, then Add (Copy Active Selection is not needed). "
+       "Port 0 is all added patches; port 1 is Input minus added cells. Apply on Add "
+       "(default) Applies after each Add or Remove so both ports refresh — pick on Remaining "
+       "cells to avoid re-selecting added cells, or to re-add after Remove. Uncheck it to "
+       "skip Apply and allow overlapping picks. Rename only (any name). The table keeps "
+       "every row; Apply merges same names."),
     this);
   tip->setWordWrap(true);
   tip->setStyleSheet(QStringLiteral("color: gray; font-size: 11px;"));
@@ -275,9 +324,16 @@ pqSHYXSelectionPatchTableWidget::pqSHYXSelectionPatchTableWidget(
   auto* addBtn = new QPushButton(tr("Add from selection"), this);
   addBtn->setToolTip(tr("Snapshot the current cell selection as a new geo_N row."));
   auto* removeBtn = new QPushButton(tr("Remove selected"), this);
+  this->ApplyOnAdd = new QCheckBox(tr("Apply on Add/Remove"), this);
+  this->ApplyOnAdd->setChecked(true);
+  this->ApplyOnAdd->setToolTip(
+    tr("When checked (default), Add and Remove also Apply so Added patches and Remaining cells "
+       "refresh. After Remove, dropped cells reappear on Remaining cells and can be added again. "
+       "Uncheck to leave outputs stale so already-added cells can be selected again."));
   buttons->addWidget(addBtn);
   buttons->addWidget(removeBtn);
   buttons->addStretch(1);
+  buttons->addWidget(this->ApplyOnAdd);
   vbox->addLayout(buttons);
 
   this->Status = new QLabel(this);
@@ -404,9 +460,33 @@ void pqSHYXSelectionPatchTableWidget::onAddFromSelection()
   rows.push_back(row);
   this->rebuildRows(rows);
   this->writeBackProperty();
-  this->setStatus(
-    tr("Added %1 (%2 cells). Same names merge on Apply.").arg(row.Name).arg(ids.size()),
-    false);
+  if (this->ApplyOnAdd && this->ApplyOnAdd->isChecked())
+  {
+    this->setStatus(
+      tr("Added %1 (%2 cells). Applying to refresh added and remaining ports.")
+        .arg(row.Name)
+        .arg(ids.size()),
+      false);
+    this->applyOutputsIfChecked();
+  }
+  else
+  {
+    this->setStatus(
+      tr("Added %1 (%2 cells). Remaining port not refreshed; overlaps allowed until Apply.")
+        .arg(row.Name)
+        .arg(ids.size()),
+      false);
+  }
+}
+
+void pqSHYXSelectionPatchTableWidget::applyOutputsIfChecked()
+{
+  QTimer::singleShot(0, this, []() {
+    if (auto* core = pqPVApplicationCore::instance())
+    {
+      Q_EMIT core->triggerApply();
+    }
+  });
 }
 
 void pqSHYXSelectionPatchTableWidget::onRemoveSelected()
@@ -430,7 +510,18 @@ void pqSHYXSelectionPatchTableWidget::onRemoveSelected()
     this->Model->removeRow(r);
   }
   this->writeBackProperty();
-  this->setStatus(tr("Removed %1 row(s).").arg(rows.size()), false);
+  if (this->ApplyOnAdd && this->ApplyOnAdd->isChecked())
+  {
+    this->setStatus(
+      tr("Removed %1 row(s). Applying so remaining cells can be added again.").arg(rows.size()),
+      false);
+    this->applyOutputsIfChecked();
+  }
+  else
+  {
+    this->setStatus(
+      tr("Removed %1 row(s). Remaining port not refreshed until Apply.").arg(rows.size()), false);
+  }
 }
 
 QStringList pqSHYXSelectionPatchTableWidget::linesFromProperty(const QString& propertyName) const

@@ -29,7 +29,7 @@ SHYX 是本仓库里 **一个作者命名空间**（[`vespa/shyx/`](.)），不�
 * [**DataSet To Partitioned Collection**](./DataSetToPartitionedCollection/README.md) — **Vascular**
 * [**Partitioned Collection Boundary Assignment**](./PartitionedCollectionBoundaryAssignment/README.md) — **Vascular**
 * [**Surface To Volume Mesh**](./SurfaceToVolumeMesh/README.md) — SHYX only（CGAL Mesh_3）
-* [**SnappyHexMesh**](./SnappyHexMesh/README.md) — 需 `VESPA_USE_SNAPPYHEXMESH`；SHYX only
+* [**SnappyHexMesh**](./SnappyHexMesh/README.md) — 需 `VESPA_USE_SNAPPYHEXMESH`；PDC 分块当 STL patch；SHYX only
 * [**Tet Mesh Region Partition**](./TetMeshRegionPartition/README.md)
 * [**Partitioned Collection Boundary Fields**](./PartitionedCollectionBoundaryFields/README.md)
 * [**Partitioned Collection WSL Simulation**](./PartitionedCollectionWslSimulation/README.md)
@@ -58,8 +58,11 @@ SHYX 是本仓库里 **一个作者命名空间**（[`vespa/shyx/`](.)），不�
 ## 工具
 
 * [**AI Assistant**](./AIAssistant/README.md) — **View → SHYX AI Assistant** 可勾选停靠窗口；Send / Run script 跑 ParaView Python（需 ParaView 开启 Python）
-* **Select Block** — 3D 视图右键复合 block（如 `Part_1`）全选该块 cell；`ParaViewPlugin/SelectBlock/`
+* **Select Block** — 3D 视图右键复合 block（如 `Part_1`）先清当前选择再全选该块 cell；`ParaViewPlugin/SelectBlock/`
 * **Select Similar** — 有 cell 选择时右键 **Select Similar → By Normal**，按法向一次 Grow 完；`ParaViewPlugin/SelectSimilar/`（阈值与标题栏 Grow 共用）
+* **Fill Interior** — 有 cell 选择时右键 **Fill Interior**，把被当前选区完全围住的未选面补进选择（开放网格上仍连到开口的区域不填）
+* **Select All** — 有 cell 选择时右键 **Select All**，全选当前选区所在边连通区域（不相接的其它壳不选）
+* **Invert Selection** — 有 cell 选择时右键 **Invert Selection**，反选当前数据集上的 cell
 
 ## 表示
 

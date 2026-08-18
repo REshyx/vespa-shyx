@@ -77,7 +77,7 @@
 | SHYX Selection Plane Clipper | **Vascular** |
 | SHYX Surface to Volume Mesh | CGAL Mesh_3 |
 | SHYX TetGen / TetGen Mesh Optimize | **TetGen** 在 Vascular |
-| SHYX SnappyHexMesh | 需 `VESPA_USE_SNAPPYHEXMESH`；**Filters → SHYX** |
+| SHYX SnappyHexMesh | 需 `VESPA_USE_SNAPPYHEXMESH`；**Filters → SHYX**；PDC 分块当 STL |
 | SHYX Tet Mesh Region Partition | |
 | SHYX DataSet To Partitioned Collection | **Vascular** |
 | SHYX Partitioned Collection Boundary Assignment | **Vascular** |
@@ -109,7 +109,7 @@
 | **Animated Streamline**（`AnimatedStreamlineRepresentation`） | 基于 `SurfaceRepresentation` 的流线类网格 GPU 动画表示。 |
 | **Point Label**（`PointLabelRepresentation`） | 表面表示上叠加点数据文本标签。 |
 
-视图工具：球选（Sphere Selection）、按属性扩张选区（Grow Selection With Similar）为客户端 Qt，无独立 VTK 模块。复合数据（如 PDC 的 `Part_1`）在 3D 视图右键菜单中有 **Select Block**，用于选中该 block 的全部 cell。有 cell 选择时右键还有 **Select Similar → By Normal**，按法向一次 Grow 完（与标题栏 Grow 共用二面角阈值）。**SHYX AI Assistant** 在 **View** 菜单中作为可勾选停靠窗口（OpenAI 兼容；**Run script** 执行代码框）。
+视图工具：球选（Sphere Selection）、按属性扩张选区（Grow Selection With Similar）为客户端 Qt，无独立 VTK 模块。复合数据（如 PDC 的 `Part_1`）在 3D 视图右键菜单中有 **Select Block**，会先清除当前选择再选中该 block 的全部 cell。有 cell 选择时右键还有 **Select All**（全选当前连通区域）、**Invert Selection**（反选）、**Select Similar → By Normal**（按法向一次 Grow 完，与标题栏 Grow 共用二面角阈值）和 **Fill Interior**（把被当前选区完全围住的未选面补进选择）。**SHYX AI Assistant** 在 **View** 菜单中作为可勾选停靠窗口（OpenAI 兼容；**Run script** 执行代码框）。
 
 ---
 
@@ -573,7 +573,9 @@
 
 ### 29a. SHYX Selection Append Patches（`vtkSHYXSelectionAppendPatches`）
 
-**功能**：在父网格的 3D 视图里选单元，再点 **Add from selection**（**不需要** Copy Active Selection）。表里只改 **Name**（默认 `geo_0`…，任意字符串即可）；**表中同名行保持多条，不合并**。**Apply** 时才按名称把同名合成一块并沿用第一次的标记，按表中首次出现顺序给唯一名称打 `0, 1, 2, …`，装进 **`vtkPartitionedDataSetCollection`**。允许重叠；未选中的单元不会自动进任何块；不写 GlobalIds。常数 Mark 写入该块全部单元的 `PatchMark`。
+**功能**：在父网格的 3D 视图里选单元，再点 **Add from selection**（**不需要** Copy Active Selection）。表里只改 **Name**（默认 `geo_0`…，任意字符串即可）；**表中同名行保持多条，不合并**。**Apply** 时才按名称把同名合成一块并沿用第一次的标记，按表中首次出现顺序给唯一名称打 `0, 1, 2, …`。
+
+**输出**：端口 0 **Added patches** 为已 Add 的 **`vtkPartitionedDataSetCollection`**；端口 1 **Remaining cells** 为 **Input 减去所有已 Add 的 cell**。勾选 **Apply on Add**（默认开）时，每次 **Add** 或 **Remove** 都会立刻 Apply，刷新两个端口：可在端口 1 上选未 Add 区域以免 cell 重复选中；Remove 后那些单元会回到端口 1，方便再选回去。取消勾选则不 Apply，端口 1 仍是旧结果，可再选已经 Add 过的单元故意重叠。未选中的单元不会自动进端口 0 的任何块；不写 GlobalIds。常数 Mark 写入该块全部单元的 `PatchMark`。
 
 与 **DataSet To Partitioned Collection** 不同：那条是 IOSS/Exodus 装配；本滤镜只做选区 append。
 
@@ -641,7 +643,7 @@
 | **SHYX Enhanced Ruler** | 交互测距 |
 | **SHYX Selection Plane Clipper** | Vascular 第 3 步 |
 | **SHYX TetGen Mesh Optimize** | 与 TetGen 同模块 |
-| **SHYX SnappyHexMesh** | 需 `VESPA_USE_SNAPPYHEXMESH` |
+| **SHYX SnappyHexMesh** | 需 `VESPA_USE_SNAPPYHEXMESH`；PDC 分块当 STL patch
 | **SHYX Tet Mesh Region Partition** | 体网格分区 |
 | **SHYX Boundary Assignment / Fields / WSL Simulation** | PDC 管线 |
 | **SHYX VMTK Centerlines / Opening Centerlines** | 需 `VESPA_USE_VMTK` |

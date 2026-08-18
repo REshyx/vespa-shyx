@@ -52,11 +52,6 @@ Note
 
 #include <cstring>
 
-#ifdef __cplusplus
-extern "C"
-#endif
-void shyx_load_log(const char* msg);
-
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
 namespace Foam
@@ -161,17 +156,14 @@ Foam::dictionary& Foam::debug::controlDict()
 {
     if (!controlDictPtr_)
     {
-        shyx_load_log("controlDict: begin");
         // Pointer first so re-entry from fileName::debug is safe.
         // Do not call subDictOrAdd (FatalIOError) or findEtcFiles here.
         // findEtcFiles -> home() -> USERPROFILE, which is often a disconnected
         // network share on other PCs and hangs inside LoadLibrary.
         controlDictPtr_ = new dictionary();
-        shyx_load_log("controlDict: skip findEtcFiles/home during LoadLibrary");
 
         // Needed by UPstream / IOobject / fundamentalConstants statics.
         // Missing keys used to FatalIOError into a GUI with no console (hang).
-        shyx_load_log("controlDict: merge in-memory SI defaults");
         {
             IStringStream is
             (
@@ -231,11 +223,9 @@ Foam::dictionary& Foam::debug::controlDict()
         string controlDictString(Foam::getEnv("FOAM_CONTROLDICT"));
         if (!controlDictString.empty())
         {
-            shyx_load_log("controlDict: merge FOAM_CONTROLDICT");
             IStringStream is(controlDictString);
             controlDictPtr_->merge(dictionary(is));
         }
-        shyx_load_log("controlDict: end");
     }
 
     return *controlDictPtr_;

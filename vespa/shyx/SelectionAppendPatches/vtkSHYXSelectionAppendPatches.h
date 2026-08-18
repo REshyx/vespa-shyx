@@ -8,6 +8,9 @@
  * cells are not appended; patches do not share points or GlobalIds. Apply rebuilds the collection
  * from PatchNames / PatchCellIds. The optional Selection port is used only when those lists are
  * empty (single geo_0).
+ *
+ * Output port 0 is the added patches (vtkPartitionedDataSetCollection). Output port 1 is the Input
+ * minus the union of all added cell ids (same concrete type as Input when possible).
  */
 
 #ifndef vtkSHYXSelectionAppendPatches_h
@@ -54,6 +57,7 @@ protected:
 
   int FillInputPortInformation(int port, vtkInformation* info) override;
   int FillOutputPortInformation(int port, vtkInformation* info) override;
+  int RequestDataObject(vtkInformation*, vtkInformationVector**, vtkInformationVector*) override;
   int RequestData(vtkInformation*, vtkInformationVector**, vtkInformationVector*) override;
 
   char* PatchNames = nullptr;

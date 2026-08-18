@@ -150,6 +150,9 @@ Vascular 顺序（[`VESPAVascularCategory.xml`](../ParaViewPlugin/VESPAVascularC
 | Grow Selection With Similar | `ParaViewPlugin/GrowSelectionWithSimilar/` | `SHYX_Grow_Selection_With_Similar.svg` |
 | Select Block（3D 视图 block 右键） | `ParaViewPlugin/SelectBlock/` | ParaView `pqSelectBlock.svg` |
 | Select Similar（选择右键，By Normal 一次 Grow 完） | `ParaViewPlugin/SelectSimilar/` | 复用 Grow 图标 |
+| Fill Interior（选择右键，填充被选区围住的未选面） | `ParaViewPlugin/SelectSimilar/` + Grow controller | （无独立图标） |
+| Select All（选择右键，全选当前连通区域） | `ParaViewPlugin/SelectSimilar/` + Grow controller | （无独立图标） |
+| Invert Selection（选择右键，反选） | `ParaViewPlugin/SelectSimilar/` + Grow controller | （无独立图标） |
 | Vascular 菜单/工具条 | `pqSHYXVascularCategoryAutoStart` + VESPAVascularCategory.xml | （各滤镜 fluent 图标） |
 
 ---

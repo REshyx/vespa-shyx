@@ -105,6 +105,24 @@ set_property(TARGET SHYXSnappyHex::SHYXSnappyHex PROPERTY
 
 include("${_shyx_src}/cmake/SHYXSnappyHexWholeArchive.cmake")
 
+# ExternalProject otherwise never reruns BUILD after the first success, so
+# vtkSHYXSnappyHexMesh can relink against a stale SHYXSnappyHex.lib.
+file(GLOB _shyx_ep_rebuild_files CONFIGURE_DEPENDS
+  "${_shyx_src}/CMakeLists.txt"
+  "${_shyx_src}/include/*.h"
+  "${_shyx_src}/src/*.cxx"
+  "${_shyx_src}/src/*.h"
+  "${_shyx_src}/adapter/*.cxx"
+  "${_shyx_src}/adapter/*.h"
+  "${_shyx_src}/cmake/*.cmake"
+  "${_shyx_src}/scripts/vespa-ep.ps1")
+if(_shyx_ep_rebuild_files)
+  ExternalProject_Add_StepDependencies(shyx_snappyhex_ep build ${_shyx_ep_rebuild_files})
+endif()
+ExternalProject_Add_StepDependencies(shyx_snappyhex_ep configure
+  "${_shyx_src}/CMakeLists.txt"
+  "${_shyx_ep_ps1}")
+
 set(SHYX_SNAPPYHEX_READY TRUE)
 message(STATUS "VESPA: SnappyHexMesh in-tree "
   "(FOAM_SOURCE_DIR=${FOAM_SOURCE_DIR}, OpenFOAM=${SHYX_OPENFOAM_VERSION})")

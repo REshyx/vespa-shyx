@@ -5,7 +5,10 @@
                  label="SHYX Selection Append Patches">
       <Documentation
           short_help="SHYX Selection Append Patches: Add overlapping extracted patches into a PartitionedDataSetCollection."
-          long_help="Snapshots cell selections into the patch table (default names geo_0, geo_1, ...). Rename only; names need not end with _N. The table keeps every row. Apply merges rows with the same name into one output patch and reuses the earlier mark. Unique names are marked 0, 1, 2, ... in table order (constant cell/field array Mark Array Name, default PatchMark). Apply runs vtkExtractSelection per unique name. Patches may overlap; unselected parent cells are not appended; no GlobalIds."/>
+          long_help="Snapshots cell selections into the patch table (default names geo_0, geo_1, ...). Rename only; names need not end with _N. The table keeps every row. Apply merges rows with the same name into one output patch and reuses the earlier mark. Unique names are marked 0, 1, 2, ... in table order (constant cell/field array Mark Array Name, default PatchMark). Apply runs vtkExtractSelection per unique name. Port 0 is the added patches; port 1 is Input minus the union of added cells. With Apply on Add (default), each Add or Remove applies so both ports refresh — select on port 1 to avoid re-picking added cells, or to re-add cells after Remove. Uncheck Apply on Add to skip Apply and allow overlapping picks from stale remainder or the original Input."/>
+
+      <OutputPort name="Added patches" index="0" id="port0"/>
+      <OutputPort name="Remaining cells" index="1" id="port1"/>
 
       <InputProperty name="Input" command="SetInputConnection">
         <ProxyGroupDomain name="groups">

@@ -63,6 +63,31 @@ public:
   static GrowToCompletionResult GrowUntilCompleteByNormal(
     pqDataRepresentation* hintRepresentation = nullptr);
 
+  /**
+   * Add unselected faces that form holes completely enclosed by the current
+   * cell selection (context-menu "Fill Interior"). On an open surface, any
+   * unselected component that still touches a mesh-boundary edge is left
+   * unselected. On a closed surface, the largest enclosed complement is
+   * treated as the exterior unless it is no larger than the current selection.
+   */
+  static GrowToCompletionResult FillUnselectedInterior(
+    pqDataRepresentation* hintRepresentation = nullptr);
+
+  /**
+   * Select every face in the edge-connected component(s) that contain the
+   * current cell selection (context-menu "Select All"). Disconnected shells
+   * that do not touch the selection are left unselected.
+   */
+  static GrowToCompletionResult SelectConnectedRegion(
+    pqDataRepresentation* hintRepresentation = nullptr);
+
+  /**
+   * Replace the current cell selection with its complement on the active
+   * dataset (context-menu "Invert Selection").
+   */
+  static GrowToCompletionResult InvertSelection(
+    pqDataRepresentation* hintRepresentation = nullptr);
+
 protected:
   bool eventFilter(QObject* watched, QEvent* event) override;
 

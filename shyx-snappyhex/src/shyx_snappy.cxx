@@ -3,6 +3,7 @@
 #include "case_writer.h"
 
 #include <algorithm>
+#include <cstddef>
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
@@ -36,6 +37,75 @@ void setErr(char* err, int err_len, const std::string& msg)
     const size_t m = msg.size() < n ? msg.size() : n;
     std::memcpy(err, msg.c_str(), m);
     err[m] = '\0';
+}
+
+void appendRunDiag(const char* case_dir, const std::string& text)
+{
+    if (!case_dir || case_dir[0] == '\0')
+    {
+        return;
+    }
+    std::error_code ec;
+    std::filesystem::create_directories(case_dir, ec);
+    std::ofstream os(std::filesystem::path(case_dir) / "run-diag.txt", std::ios::app);
+    if (os)
+    {
+        os << text;
+        os.flush();
+    }
+}
+
+std::string describeSnappyCall(const char* stl_path, const char* case_dir, const ShyxSnappyParams* p)
+{
+    std::ostringstream os;
+    os << "=== shyx_snappy_run (lib) ===\n";
+    os << "ABI=" << SHYX_SNAPPY_PARAMS_ABI
+       << " sizeof(ShyxSnappyParams)=" << sizeof(ShyxSnappyParams) << "\n";
+    os << "offset n_locations=" << offsetof(ShyxSnappyParams, n_locations)
+       << " locations=" << offsetof(ShyxSnappyParams, locations)
+       << " n_geometries=" << offsetof(ShyxSnappyParams, n_geometries)
+       << " geometries=" << offsetof(ShyxSnappyParams, geometries) << "\n";
+    os << "stl_path=" << (stl_path && stl_path[0] ? stl_path : "(null/empty)") << "\n";
+    os << "case_dir=" << (case_dir && case_dir[0] ? case_dir : "(null/empty)") << "\n";
+    if (!p)
+    {
+        os << "p=(null)\n";
+        return os.str();
+    }
+    os << "p=" << static_cast<const void*>(p) << "\n";
+    os << "castellated=" << p->castellated << " snap=" << p->snap
+       << " add_layers=" << p->add_layers << "\n";
+    os << "n_locations=" << p->n_locations
+       << " locations=" << static_cast<const void*>(p->locations) << "\n";
+    os << "n_geometries=" << p->n_geometries
+       << " geometries=" << static_cast<const void*>(p->geometries) << "\n";
+    os << "n_ref_surfaces=" << p->n_ref_surfaces
+       << " n_ref_regions=" << p->n_ref_regions
+       << " n_layer_patches=" << p->n_layer_patches << "\n";
+    const bool hasMulti = p->n_geometries > 0 && p->geometries;
+    os << "hasMulti=" << (hasMulti ? 1 : 0) << "\n";
+    const int n = p->n_geometries;
+    if (n < 0 || n > 64)
+    {
+        os << "n_geometries out of range (ABI mismatch?)\n";
+        return os.str();
+    }
+    if (p->geometries && n > 0)
+    {
+        const int nShow = n > 16 ? 16 : n;
+        for (int i = 0; i < nShow; ++i)
+        {
+            const char* nm = p->geometries[i].name;
+            const char* sp = p->geometries[i].stl_path;
+            os << "  geo[" << i << "] name=" << (nm && nm[0] ? nm : "(null)")
+               << " stl=" << (sp && sp[0] ? sp : "(null)") << "\n";
+        }
+        if (n > nShow)
+        {
+            os << "  ... (" << n << " total)\n";
+        }
+    }
+    return os.str();
 }
 
 bool readStlBounds(const std::string& path, double b[6], std::string* err)
@@ -219,7 +289,6 @@ static bool shyx_materialize_temp_foam(std::string* outDir)
     }
     if (tmp.empty())
     {
-        shyx_load_log("materialize %TEMP%/shyx-openfoam: TEMP unset");
         return false;
     }
     const std::string root = std::string(tmp) + "/shyx-openfoam";
@@ -228,13 +297,11 @@ static bool shyx_materialize_temp_foam(std::string* outDir)
     std::filesystem::create_directories(etc, ec);
     if (ec)
     {
-        shyx_load_log("materialize %TEMP%/shyx-openfoam: mkdir failed");
         return false;
     }
     if (!shyx_write_text_file(etc + "/controlDict", kMinEtcControlDict)
         || !shyx_write_text_file(etc + "/cellModels", kShyxEmbeddedCellModels))
     {
-        shyx_load_log("materialize %TEMP%/shyx-openfoam: write failed");
         return false;
     }
     if (!shyx_foam_etc_exists(root))
@@ -242,11 +309,9 @@ static bool shyx_materialize_temp_foam(std::string* outDir)
         return false;
     }
     *outDir = root;
-    shyx_load_log("materialize %TEMP%/shyx-openfoam: ok");
     return true;
 #else
     (void)outDir;
-    shyx_load_log("materialize %TEMP%/shyx-openfoam: no embedded cellModels");
     return false;
 #endif
 }
@@ -256,11 +321,9 @@ static bool shyx_set_runtime_foam_dir()
     std::string tempFoam;
     if (!shyx_materialize_temp_foam(&tempFoam))
     {
-        shyx_load_log("runtime foam dir: none");
         return false;
     }
     shyx_apply_foam_project_dir(tempFoam);
-    shyx_load_log("runtime foam dir: %TEMP%/shyx-openfoam");
     return true;
 }
 #endif
@@ -275,20 +338,16 @@ extern "C" int shyx_snappy_mesh_only(const char* case_dir, char* err, int err_le
     }
     try
     {
-        shyx_load_log("shyx_snappy_mesh_only begin");
         if (!shyx_set_runtime_foam_dir())
         {
             setErr(err, err_len, "failed to write %TEMP%/shyx-openfoam/etc");
             return 1;
         }
-        shyx_load_log("shyx_snappy_mesh_only after foam dir");
         shyx_force_foam_rts();
-        shyx_load_log("shyx_snappy_mesh_only after RTS");
         Foam::FatalError.throwExceptions();
         Foam::FatalIOError.throwExceptions();
         std::string caseDir(case_dir);
         FoamStdoutRedirect foamIo(caseDir + "/snappyHexMesh.log");
-        shyx_load_log("shyx_snappy_mesh_only calling snappyHexMesh_main");
         std::vector<std::string> args = { "snappyHexMesh", "-case", caseDir, "-overwrite" };
         std::vector<char*> argv;
         argv.reserve(args.size() + 1);
@@ -298,7 +357,6 @@ extern "C" int shyx_snappy_mesh_only(const char* case_dir, char* err, int err_le
         }
         argv.push_back(nullptr);
         const int rc = shyx_snappyHexMesh_main(static_cast<int>(args.size()), argv.data());
-        shyx_load_log("shyx_snappy_mesh_only snappyHexMesh_main returned");
         if (rc != 0)
         {
             setErr(err, err_len, "snappyHexMesh failed");
@@ -333,6 +391,11 @@ extern "C" int shyx_snappy_mesh_only(const char* case_dir, char* err, int err_le
 #endif
 }
 
+extern "C" int shyx_snappy_params_abi(void)
+{
+    return SHYX_SNAPPY_PARAMS_ABI;
+}
+
 extern "C" void shyx_snappy_params_default(ShyxSnappyParams* p)
 {
     if (!p)
@@ -360,23 +423,97 @@ extern "C" void shyx_snappy_params_default(ShyxSnappyParams* p)
     p->min_thickness = 0.1;
     p->feature_angle = 30.0;
     p->implicit_feature_snap = 1;
+    p->n_geometries = 0;
+    p->geometries = nullptr;
+    p->n_ref_surfaces = 0;
+    p->ref_surfaces = nullptr;
+    p->n_ref_regions = 0;
+    p->ref_regions = nullptr;
+    p->n_layer_patches = 0;
+    p->layer_patches = nullptr;
+    p->emesh_path = nullptr;
+    p->feature_level = 2;
 }
 
 extern "C" int shyx_snappy_run(const char* stl_path, const char* case_dir, const ShyxSnappyParams* p,
     char* err, int err_len)
 {
-    shyx_load_log("shyx_snappy_run begin");
-    if (!stl_path || !case_dir || !p)
+    const std::string diag = describeSnappyCall(stl_path, case_dir, p);
+    appendRunDiag(case_dir, diag);
+    if (!case_dir || case_dir[0] == '\0')
     {
-        setErr(err, err_len, "null argument");
+        setErr(err, err_len, "null/empty case_dir");
+        return 1;
+    }
+    if (!p)
+    {
+        setErr(err, err_len, "null ShyxSnappyParams");
+        return 1;
+    }
+    const bool hasMulti = p->n_geometries > 0 && p->geometries;
+    if (!hasMulti && (!stl_path || stl_path[0] == '\0'))
+    {
+        std::ostringstream os;
+        os << "no STL: stl_path is null/empty and n_geometries=" << p->n_geometries
+           << " geometries=" << static_cast<const void*>(p->geometries)
+           << " sizeof(ShyxSnappyParams)=" << sizeof(ShyxSnappyParams)
+           << " ABI=" << SHYX_SNAPPY_PARAMS_ABI
+           << " (see case/run-diag.txt; if VTK ABI/sizeof differs, rebuild SHYXSnappyHex+plugin)";
+        setErr(err, err_len, os.str());
         return 1;
     }
     ShyxSnappyParams params = *p;
     std::string msg;
     double bb[6];
-    if (!readStlBounds(stl_path, bb, &msg))
+    bool haveBb = false;
+    auto accBounds = [&](const double b[6]) {
+        if (!haveBb)
+        {
+            for (int i = 0; i < 6; ++i)
+            {
+                bb[i] = b[i];
+            }
+            haveBb = true;
+            return;
+        }
+        bb[0] = std::min(bb[0], b[0]);
+        bb[1] = std::max(bb[1], b[1]);
+        bb[2] = std::min(bb[2], b[2]);
+        bb[3] = std::max(bb[3], b[3]);
+        bb[4] = std::min(bb[4], b[4]);
+        bb[5] = std::max(bb[5], b[5]);
+    };
+    if (hasMulti)
+    {
+        for (int i = 0; i < params.n_geometries; ++i)
+        {
+            const char* path = params.geometries[i].stl_path;
+            if (!path || path[0] == '\0')
+            {
+                setErr(err, err_len, "empty STL path in geometries");
+                return 2;
+            }
+            double one[6];
+            if (!readStlBounds(path, one, &msg))
+            {
+                setErr(err, err_len, msg);
+                return 2;
+            }
+            accBounds(one);
+        }
+    }
+    else if (!readStlBounds(stl_path, bb, &msg))
     {
         setErr(err, err_len, msg);
+        return 2;
+    }
+    else
+    {
+        haveBb = true;
+    }
+    if (!haveBb)
+    {
+        setErr(err, err_len, "no STL bounds");
         return 2;
     }
     const double dx = bb[1] - bb[0];
@@ -390,13 +527,11 @@ extern "C" int shyx_snappy_run(const char* stl_path, const char* case_dir, const
     const double zmin = bb[4] - m * dz;
     const double zmax = bb[5] + m * dz;
 
-    if (shyx_write_foam_case(case_dir, stl_path, params, xmin, ymin, zmin, xmax, ymax, zmax, &msg) != 0)
+    if (shyx_write_foam_case(case_dir, stl_path ? stl_path : "", params, xmin, ymin, zmin, xmax, ymax, zmax, &msg) != 0)
     {
         setErr(err, err_len, msg);
-        shyx_load_log("shyx_snappy_run write case failed");
         return 3;
     }
-    shyx_load_log("shyx_snappy_run case written");
 
     // Background hex is already in constant/polyMesh. Running snappyHexMesh with
     // all stages off still loads the STL, builds intersections, and can abort()

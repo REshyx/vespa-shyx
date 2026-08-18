@@ -1,13 +1,14 @@
 NAME
   vtkSHYXSnappyHexMesh
 DESCRIPTION
-  "Hex-dominant volume mesh from a closed surface using snappyHexMesh."
+  "Hex-dominant volume mesh from a PartitionedDataSetCollection (or PolyData) using snappyHexMesh; output is vtkOpenFOAMReader MultiBlockDataSet."
 GROUPS
   Vascular
 DEPENDS
-  VTK::FiltersCore
-PRIVATE_DEPENDS
   VTK::CommonCore
   VTK::CommonDataModel
   VTK::CommonExecutionModel
+  VTK::FiltersCore
+  VTK::FiltersGeometry
+PRIVATE_DEPENDS
   VTK::IOGeometry

@@ -163,6 +163,10 @@ set(shyx_snappy_inside_points_interfaces)
 set(shyx_snappy_inside_points_sources)
 set(shyx_snappy_case_folder_interfaces)
 set(shyx_snappy_case_folder_sources)
+set(shyx_snappy_patch_table_interfaces)
+set(shyx_snappy_patch_table_sources)
+set(shyx_snappy_castellated_interfaces)
+set(shyx_snappy_castellated_sources)
 if (VESPA_USE_SNAPPYHEXMESH)
   paraview_plugin_add_property_widget(
     KIND GROUP_WIDGET
@@ -182,6 +186,24 @@ if (VESPA_USE_SNAPPYHEXMESH)
   list(APPEND shyx_snappy_case_folder_sources
     pqSHYXSnappyCaseFolderWidget.cxx
     pqSHYXSnappyCaseFolderWidget.h)
+  paraview_plugin_add_property_widget(
+    KIND GROUP_WIDGET
+    TYPE "shyx_snappy_patch_table"
+    CLASS_NAME pqSHYXSnappyPatchTableWidget
+    INTERFACES shyx_snappy_patch_table_interfaces
+    SOURCES shyx_snappy_patch_table_sources)
+  list(APPEND shyx_snappy_patch_table_sources
+    pqSHYXSnappyPatchTableWidget.cxx
+    pqSHYXSnappyPatchTableWidget.h)
+  paraview_plugin_add_property_widget(
+    KIND GROUP_WIDGET
+    TYPE "shyx_snappy_castellated"
+    CLASS_NAME pqSHYXSnappyCastellatedWidget
+    INTERFACES shyx_snappy_castellated_interfaces
+    SOURCES shyx_snappy_castellated_sources)
+  list(APPEND shyx_snappy_castellated_sources
+    pqSHYXSnappyCastellatedWidget.cxx
+    pqSHYXSnappyCastellatedWidget.h)
 endif()
 
 set(vespa_plugin_qt_auto_interfaces)
@@ -347,8 +369,8 @@ paraview_add_plugin(VESPAPlugin
      ${ADAPTIVE_REMESHING_SERVER_MANAGER_XML}
      ${VMTK_CENTERLINES_SERVER_MANAGER_XML}
      ${SNAPPYHEXMESH_SERVER_MANAGER_XML}
-  UI_INTERFACES ${acm_interfaces} ${vespa_obb_box_interfaces} ${vespa_endclipper_plane_interfaces} ${shyx_selection_plane_clipper_interfaces} ${vespa_stent_cylinder_interfaces} ${vespa_enhanced_ruler_interfaces} ${vespa_endpoint_stent_interfaces} ${shyx_partitioned_block_names_interfaces} ${shyx_selection_patch_table_interfaces} ${shyx_boundary_assignment_info_interfaces} ${shyx_remesh_uncapped_histogram_interfaces} ${shyx_openings_table_interfaces} ${shyx_snappy_inside_points_interfaces} ${shyx_snappy_case_folder_interfaces} ${shyx_ai_assistant_interfaces} ${vespa_plugin_qt_auto_interfaces}
-  SOURCES ${acm_sources} ${vespa_obb_box_sources} ${vespa_endclipper_plane_sources} ${shyx_selection_plane_clipper_sources} ${vespa_stent_cylinder_sources} ${vespa_enhanced_ruler_sources} ${vespa_endpoint_stent_sources} ${shyx_partitioned_block_names_sources} ${shyx_selection_patch_table_sources} ${shyx_boundary_assignment_info_sources} ${shyx_remesh_uncapped_histogram_sources} ${shyx_openings_table_sources} ${shyx_snappy_inside_points_sources} ${shyx_snappy_case_folder_sources} ${shyx_ai_assistant_sources}
+  UI_INTERFACES ${acm_interfaces} ${vespa_obb_box_interfaces} ${vespa_endclipper_plane_interfaces} ${shyx_selection_plane_clipper_interfaces} ${vespa_stent_cylinder_interfaces} ${vespa_enhanced_ruler_interfaces} ${vespa_endpoint_stent_interfaces} ${shyx_partitioned_block_names_interfaces} ${shyx_selection_patch_table_interfaces} ${shyx_boundary_assignment_info_interfaces} ${shyx_remesh_uncapped_histogram_interfaces} ${shyx_openings_table_interfaces} ${shyx_snappy_inside_points_interfaces} ${shyx_snappy_case_folder_interfaces} ${shyx_snappy_patch_table_interfaces} ${shyx_snappy_castellated_interfaces} ${shyx_ai_assistant_interfaces} ${vespa_plugin_qt_auto_interfaces}
+  SOURCES ${acm_sources} ${vespa_obb_box_sources} ${vespa_endclipper_plane_sources} ${shyx_selection_plane_clipper_sources} ${vespa_stent_cylinder_sources} ${vespa_enhanced_ruler_sources} ${vespa_endpoint_stent_sources} ${shyx_partitioned_block_names_sources} ${shyx_selection_patch_table_sources} ${shyx_boundary_assignment_info_sources} ${shyx_remesh_uncapped_histogram_sources} ${shyx_openings_table_sources} ${shyx_snappy_inside_points_sources} ${shyx_snappy_case_folder_sources} ${shyx_snappy_patch_table_sources} ${shyx_snappy_castellated_sources} ${shyx_ai_assistant_sources}
     TransferCurve/pqArrayCurveMapperPanel.cxx
     TransferCurve/pqArrayCurveMapperPanel.h
     TransferCurve/pqSHYXTransferCurveWidget.cxx

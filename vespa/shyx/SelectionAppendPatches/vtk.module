@@ -1,7 +1,7 @@
 NAME
   vtkSHYXSelectionAppendPatches
   DESCRIPTION
-  "Extract selected cells into independent vtkPartitionedDataSetCollection patches (overlaps allowed); rename and stamp a constant mark per patch."
+  "Extract selected cells into independent vtkPartitionedDataSetCollection patches (overlaps allowed); second port is Input minus added cells; rename and stamp a constant mark per patch."
 GROUPS
   Meshing
 DEPENDS

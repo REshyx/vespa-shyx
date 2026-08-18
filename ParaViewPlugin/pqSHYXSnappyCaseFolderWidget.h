@@ -14,7 +14,7 @@ class vtkSMStringVectorProperty;
 
 /**
  * One-line read-only case folder plus a button that opens it in the file manager.
- * Re-pulls CaseFoamPath after dataUpdated so the path matches the last Apply.
+ * Re-pulls CaseFoamPath after dataUpdated so the path matches this Apply.
  */
 class pqSHYXSnappyCaseFolderWidget : public pqPropertyWidget
 {

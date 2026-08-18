@@ -1344,7 +1344,10 @@ QString listFilters(const QString& queryRaw)
     out += QStringLiteral(
       "RenderView title-bar tools are not proxies: Sphere cell selection; "
       "Grow selection with similar normals. Block context menu: Select Block. "
-      "Selection context menu: Select Similar → By Normal (grow to completion). "
+      "Selection context menu: Select All (connected region); "
+      "Invert Selection; "
+      "Select Similar → By Normal (grow to completion); "
+      "Fill Interior (enclosed unselected faces). "
       "See lookup_shyx_docs. After the user uses them, call get_selection_ids.\n");
   }
   return out;
@@ -1552,6 +1555,17 @@ QString describeClientTool(const QString& query)
     ql.contains(QLatin1String("select block")) ||
     ql.contains(QLatin1String("select entire block")) ||
     ql.contains(QLatin1String("shyxselectblock"));
+  const bool fillInterior = ql.contains(QLatin1String("fill interior")) ||
+    ql.contains(QLatin1String("fillinterior")) ||
+    ql.contains(QLatin1String("shyxfillinterior")) ||
+    ql.contains(QLatin1String("select interior"));
+  const bool selectAll = ql.contains(QLatin1String("select all")) ||
+    ql.contains(QLatin1String("selectall")) ||
+    ql.contains(QLatin1String("shyxselectall")) ||
+    ql.contains(QLatin1String("select connected")) ||
+    ql.contains(QLatin1String("connected region"));
+  const bool invertSel = ql.contains(QLatin1String("invert")) ||
+    ql.contains(QLatin1String("shyxinvert"));
   if (sphere && !grow)
   {
     return QStringLiteral(
@@ -1586,6 +1600,42 @@ QString describeClientTool(const QString& query)
       "  Select Similar → By Normal: grow ALL similar rings in one action (not one click per ring)\n")
       .arg(deg, 0, 'g', 4);
   }
+  if (fillInterior && !sphere && !grow && !selectBlock && !selectAll && !invertSel)
+  {
+    return QStringLiteral(
+      "SHYX Fill Interior (RenderView selection context menu; not a Server Manager proxy)\n"
+      "No Python constructor and no SM properties. After the user uses it, call get_selection_ids.\n"
+      "Interaction:\n"
+      "  Right-click in the 3D view when a cell selection is active → Fill Interior\n"
+      "  Adds unselected faces that form holes completely enclosed by the current selection\n"
+      "  Requires vtkPolyData. Needs a closed loop of selected faces around the interior\n"
+      "  On an open surface, unselected regions that still reach a mesh opening are left unselected\n"
+      "  On a closed surface, the largest enclosed complement is treated as the exterior "
+      "unless it is no larger than the current selection\n");
+  }
+  if (selectAll && !sphere && !grow && !selectBlock && !invertSel)
+  {
+    return QStringLiteral(
+      "SHYX Select All (RenderView selection context menu; not a Server Manager proxy)\n"
+      "No Python constructor and no SM properties. After the user uses it, call get_selection_ids.\n"
+      "Interaction:\n"
+      "  Right-click in the 3D view when a cell selection is active → Select All\n"
+      "  Selects every face in the edge-connected region(s) that contain the current selection\n"
+      "  Requires vtkPolyData. No dihedral threshold (unlike Select Similar / By Normal)\n"
+      "  Disconnected shells that do not touch the selection are left unselected\n"
+      "  If the mesh is a single connected component, this selects the whole surface\n");
+  }
+  if (invertSel && !sphere && !grow && !selectBlock)
+  {
+    return QStringLiteral(
+      "SHYX Invert Selection (RenderView selection context menu; not a Server Manager proxy)\n"
+      "No Python constructor and no SM properties. After the user uses it, call get_selection_ids.\n"
+      "Interaction:\n"
+      "  Right-click in the 3D view when a cell selection is active → Invert Selection\n"
+      "  Selects currently unselected cells and deselects the current selection\n"
+      "  Operates on the active dataset (not only vtkPolyData). Complement of all cells\n"
+      "  If every cell was selected, the result is an empty selection\n");
+  }
   if (selectBlock && !sphere && !grow)
   {
     return QStringLiteral(
@@ -1593,8 +1643,10 @@ QString describeClientTool(const QString& query)
       "No Python constructor and no SM properties. After the user uses it, call get_selection_ids.\n"
       "Interaction:\n"
       "  Right-click a composite block in the 3D view (menu titled Block 'Part_1')\n"
-      "  Choose Select Block to select every cell in that block (BLOCK_SELECTORS, CELL)\n"
-      "  Replaces the current selection; then use Extract Selection / SHYX selection filters\n");
+      "  Choose Select Block to clear the current selection and select every cell "
+      "in that block (BLOCK_SELECTORS, CELL)\n"
+      "  Works with or without an existing cell selection; then use Extract Selection / "
+      "SHYX selection filters\n");
   }
   return {};
 }
@@ -1877,9 +1929,13 @@ const ShyxExtra kShyxExtra[] = {
     "Add from selection snapshots the 3D-view cell selection into the Patches table (geo_N); "
     "Copy Active Selection is not required. Rename only (any name); the table keeps every row. "
     "Apply merges same names into one patch and reuses the earlier mark. Unique names are marked "
-    "0, 1, 2, ... in table order. Apply ExtractSelection-appends each unique name as a PDC "
-    "block. Overlaps allowed; unselected cells are not kept. Not the IOSS "
-    "DataSetToPartitionedCollection path." },
+    "0, 1, 2, ... in table order. Port 0 = added patches (PDC); port 1 = Input minus the union of "
+    "added cells. Apply on Add (default checkbox) Applies after each Add or Remove so both "
+    "ports refresh; after Remove, dropped cells reappear on port 1 and can be added again; "
+    "select remaining cells on port 1 to avoid re-picking added cells. Uncheck it to skip Apply "
+    "and allow overlapping picks from a stale remainder or the original Input. Apply "
+    "ExtractSelection-appends each unique name as a PDC block. Unselected cells are not kept on "
+    "port 0. Not the IOSS DataSetToPartitionedCollection path." },
   { "SHYXDeleteSelectedCellsFilter",
     "Needs an active cell selection. Creating the filter copies the Input's "
     "active selection into the Selection widget (Extract Selection-style); "
@@ -1888,6 +1944,16 @@ const ShyxExtra kShyxExtra[] = {
   { "SHYXSelectionFillAlphaReunionFilter", "Selection -> fill / alpha wrap / union (CGAL>=5.5)." },
   { "SHYXPointCloudSurfaceSDF", "Point cloud to surface SDF (VTK). Not CGAL vtkCGALSignedDistanceFunction." },
   { "SHYXSurfaceToVolumeMesh", "CGAL Mesh_3 tets from closed surface (alternative to TetGen)." },
+  { "SHYXSnappyHexMesh",
+    "Hex-dominant volume mesh. Input is vtkPartitionedDataSetCollection (each partition = one STL "
+    "triSurfaceMesh / patch, no firstSolid/secondSolid) or a single vtkPolyData (wrapped as "
+    "geometry). Optional FeatureEdges is a Properties-panel pipeline dropdown (not a second "
+    "required input); polydata lines become features.eMesh. "
+    "Add partitions in Surface patches / Region patches (inside Castellated) and Layer patches "
+    "(level, patchInfo type, region mode). Empty surfaces table = all partitions at Default surface level. "
+    "Case is a unique %TEMP%/shyx-snappy-*/case folder each Apply (STLs in constant/triSurface). "
+    "Output is vtkOpenFOAMReader's vtkMultiBlockDataSet (internalMesh plus patches), not a "
+    "standalone unstructured grid. Requires VESPA_USE_SNAPPYHEXMESH." },
   { "PulseGlyphRepresentation",
     "Display representation, not a filter. Display dropdown 'Pulse Glyphs'. "
     "Python: GetDisplayProperties().Representation = 'Pulse Glyphs'. Never call PulseGlyphRepresentation(). "
@@ -1910,9 +1976,22 @@ const ShyxExtra kShyxExtra[] = {
     "Not a filter and not a proxy. RenderView right-click when a cell selection is active: "
     "Select Similar → By Normal grows all similar-normal rings in one shot (same dihedral threshold as Grow). "
     "Call describe_proxy('select similar'). After use, call get_selection_ids." },
+  { "SHYXFillInterior",
+    "Not a filter and not a proxy. RenderView right-click when a cell selection is active: "
+    "Fill Interior adds unselected faces enclosed by the current selection (holes inside a closed loop). "
+    "Call describe_proxy('fill interior'). After use, call get_selection_ids." },
+  { "SHYXSelectAll",
+    "Not a filter and not a proxy. RenderView right-click when a cell selection is active: "
+    "Select All selects every face in the connected region(s) that contain the current selection. "
+    "Call describe_proxy('select all'). After use, call get_selection_ids." },
+  { "SHYXInvertSelection",
+    "Not a filter and not a proxy. RenderView right-click when a cell selection is active: "
+    "Invert Selection selects currently unselected cells and deselects the current selection. "
+    "Call describe_proxy('invert'). After use, call get_selection_ids." },
   { "SHYXSelectBlock",
     "Not a filter and not a proxy. RenderView right-click on a composite block (Block 'Part_1' menu). "
-    "Select Block selects all cells in that block (BLOCK_SELECTORS). Call describe_proxy('select block'). "
+    "Select Block clears the current selection then selects all cells in that block (BLOCK_SELECTORS). "
+    "Call describe_proxy('select block'). "
     "After use, call get_selection_ids." },
   { "SHYXAIAssistant",
     "Deprecated. The assistant is View → SHYX AI Assistant, not a pipeline filter. Do not create this node." },
@@ -1942,16 +2021,21 @@ QString lookupShyxDocs(const QString& queryRaw)
       "3) RenderView title-bar selection tools (client Qt; no SM proxy / no Python constructor):\n"
       "   Sphere cell selection; Grow selection with similar normals. "
       "After the user uses them, call get_selection_ids.\n"
-      "   Also: right-click a composite block → Select Block (select all cells in that part).\n"
-      "   Also: right-click an active cell selection → Select Similar → By Normal "
-      "(grow all similar-normal rings in one shot).\n"
+      "   Also: right-click a composite block → Select Block "
+      "(clear current selection, then select all cells in that part).\n"
+      "   Also: right-click an active cell selection → Select All "
+      "(whole connected region); Invert Selection; Select Similar → By Normal "
+      "(grow all similar-normal rings in one shot); Fill Interior "
+      "(add unselected faces enclosed by the current selection).\n"
       "4) Widget representations (stent placement 3D widgets, not Display dropdown): "
       "SHYXImplicitCylinderWidgetRepresentation, SHYXEndpointStentWidgetRepresentation.\n"
       "5) View → SHYX AI Assistant: this dock, not a pipeline filter.\n"
       "Pass a name/topic (remesh, clip, representation, selection, sphere, glyph, ...) to filter notes.\n"
       "For parameter names/defaults: describe_proxy('Pulse Glyphs'), describe_proxy('Animated Streamline'), "
       "describe_proxy('Point Label'), describe_proxy('sphere'), describe_proxy('grow'), "
-      "describe_proxy('select block'), describe_proxy('select similar').\n");
+      "describe_proxy('select block'), describe_proxy('select similar'), "
+      "describe_proxy('fill interior'), describe_proxy('select all'), "
+      "describe_proxy('invert').\n");
   }
 
   for (const ShyxExtra& e : kShyxExtra)
@@ -2029,7 +2113,7 @@ QString lookupShyxDocs(const QString& queryRaw)
     }
   }
   out += QStringLiteral("For property names/enums/defaults call describe_proxy with the XML/python name "
-                        "or display type (Pulse Glyphs, sphere, grow, select block, select similar).\n");
+                        "or display type (Pulse Glyphs, sphere, grow, select block, select similar, fill interior, select all, invert).\n");
   if (!query.isEmpty())
   {
     const QString client = describeClientTool(query);
@@ -2413,8 +2497,11 @@ QJsonArray pqSHYXAIAgentTools::schema()
     "(returns exposed Python names PG_*/AS_*/PL_*). "
     "For title-bar tools pass 'sphere' or 'grow' (no SM proxy). "
     "For the block context-menu action pass 'select block'. "
-    "For Select Similar / By Normal pass 'select similar'.",
-    QJsonObject{ { QStringLiteral("name"), strArg("XML name, display type (Pulse Glyphs), sphere/grow, select block, or select similar.") } },
+    "For Select Similar / By Normal pass 'select similar'. "
+    "For Fill Interior pass 'fill interior'. "
+    "For Select All (connected region) pass 'select all'. "
+    "For Invert Selection pass 'invert'.",
+    QJsonObject{ { QStringLiteral("name"), strArg("XML name, display type (Pulse Glyphs), sphere/grow, select block, select similar, fill interior, select all, or invert.") } },
     QJsonArray{ QStringLiteral("name") }));
   tools.append(fn("lookup_shyx_docs",
     "SHYX/VESPA usage notes: capability catalog (filters + Display representations + "

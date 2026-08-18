@@ -775,3 +775,388 @@ pqSHYXGrowSelectionWithSimilarController::GrowUntilCompleteByNormal(
   reportToOutputWindow(result.message);
   return result;
 }
+
+//-----------------------------------------------------------------------------
+pqSHYXGrowSelectionWithSimilarController::GrowToCompletionResult
+pqSHYXGrowSelectionWithSimilarController::FillUnselectedInterior(
+  pqDataRepresentation* hintRepresentation)
+{
+  GrowToCompletionResult result;
+
+  pqOutputPort* port = nullptr;
+  vtkDataSet* ds = nullptr;
+  if (!resolveActiveSelection(port, ds, hintRepresentation, nullptr))
+  {
+    result.message = tr("SHYX Fill Interior: no active cell selection.");
+    reportToOutputWindow(result.message);
+    return result;
+  }
+
+  auto* pd = vtkPolyData::SafeDownCast(ds);
+  if (!pd)
+  {
+    result.message = tr("SHYX Fill Interior: active data is not vtkPolyData "
+                        "(surface mesh required).");
+    reportToOutputWindow(result.message);
+    return result;
+  }
+
+  std::vector<vtkIdType> seed;
+  if (!collectSelectedCellIds(port, ds, seed))
+  {
+    result.message = tr("SHYX Fill Interior: could not resolve selected cell IDs "
+                        "(need a cell selection).");
+    reportToOutputWindow(result.message);
+    return result;
+  }
+
+  pd->BuildLinks();
+  const vtkIdType nCells = pd->GetNumberOfCells();
+  if (nCells <= 0)
+  {
+    result.message = tr("SHYX Fill Interior: mesh has no cells.");
+    reportToOutputWindow(result.message);
+    return result;
+  }
+
+  std::vector<char> isSelected(static_cast<size_t>(nCells), 0);
+  for (vtkIdType id : seed)
+  {
+    if (id >= 0 && id < nCells)
+    {
+      isSelected[static_cast<size_t>(id)] = 1;
+    }
+  }
+
+  std::vector<int> compOf(static_cast<size_t>(nCells), -1);
+  std::vector<vtkIdType> compSize;
+  std::vector<char> compTouchesBoundary;
+
+  vtkNew<vtkIdList> ptIds;
+  vtkNew<vtkIdList> neighbors;
+
+  for (vtkIdType c = 0; c < nCells; ++c)
+  {
+    if (isSelected[static_cast<size_t>(c)] || compOf[static_cast<size_t>(c)] >= 0)
+    {
+      continue;
+    }
+
+    const int comp = static_cast<int>(compSize.size());
+    std::vector<vtkIdType> stack;
+    stack.push_back(c);
+    compOf[static_cast<size_t>(c)] = comp;
+    vtkIdType size = 0;
+    bool boundary = false;
+
+    while (!stack.empty())
+    {
+      const vtkIdType cell = stack.back();
+      stack.pop_back();
+      ++size;
+
+      pd->GetCellPoints(cell, ptIds);
+      const vtkIdType npts = ptIds->GetNumberOfIds();
+      if (npts < 3)
+      {
+        boundary = true;
+        continue;
+      }
+      for (vtkIdType e = 0; e < npts; ++e)
+      {
+        const vtkIdType p0 = ptIds->GetId(e);
+        const vtkIdType p1 = ptIds->GetId((e + 1) % npts);
+        neighbors->Reset();
+        pd->GetCellEdgeNeighbors(cell, p0, p1, neighbors);
+        const vtkIdType nNb = neighbors->GetNumberOfIds();
+        if (nNb == 0)
+        {
+          boundary = true;
+        }
+        for (vtkIdType i = 0; i < nNb; ++i)
+        {
+          const vtkIdType nid = neighbors->GetId(i);
+          if (nid < 0 || nid >= nCells || isSelected[static_cast<size_t>(nid)])
+          {
+            continue;
+          }
+          if (compOf[static_cast<size_t>(nid)] < 0)
+          {
+            compOf[static_cast<size_t>(nid)] = comp;
+            stack.push_back(nid);
+          }
+        }
+      }
+    }
+
+    compSize.push_back(size);
+    compTouchesBoundary.push_back(boundary ? 1 : 0);
+  }
+
+  const int nComp = static_cast<int>(compSize.size());
+  result.ok = true;
+  if (nComp == 0)
+  {
+    result.message = tr("SHYX Fill Interior: no unselected faces to fill.");
+    reportToOutputWindow(result.message);
+    return result;
+  }
+
+  std::vector<char> fillComp(static_cast<size_t>(nComp), 0);
+  int nEnclosed = 0;
+  int nOpen = 0;
+  int largestEnclosed = -1;
+  vtkIdType largestEnclosedSize = -1;
+  for (int i = 0; i < nComp; ++i)
+  {
+    if (compTouchesBoundary[static_cast<size_t>(i)])
+    {
+      ++nOpen;
+      continue;
+    }
+    ++nEnclosed;
+    fillComp[static_cast<size_t>(i)] = 1;
+    if (compSize[static_cast<size_t>(i)] > largestEnclosedSize)
+    {
+      largestEnclosedSize = compSize[static_cast<size_t>(i)];
+      largestEnclosed = i;
+    }
+  }
+
+  // Open meshes: only enclosed pockets (no mesh-boundary edge) are interior.
+  // Closed meshes have no open complement; skip the largest pocket unless it is
+  // a hole no larger than the current selection.
+  if (nOpen == 0 && nEnclosed >= 1 && largestEnclosed >= 0)
+  {
+    if (nEnclosed >= 2)
+    {
+      fillComp[static_cast<size_t>(largestEnclosed)] = 0;
+    }
+    else if (largestEnclosedSize > static_cast<vtkIdType>(seed.size()))
+    {
+      fillComp[static_cast<size_t>(largestEnclosed)] = 0;
+    }
+  }
+
+  std::vector<vtkIdType> grown = seed;
+  vtkIdType added = 0;
+  for (vtkIdType c = 0; c < nCells; ++c)
+  {
+    const int comp = compOf[static_cast<size_t>(c)];
+    if (comp >= 0 && fillComp[static_cast<size_t>(comp)])
+    {
+      grown.push_back(c);
+      ++added;
+    }
+  }
+
+  result.added = added;
+  result.total = static_cast<vtkIdType>(seed.size()) + added;
+  if (added == 0)
+  {
+    result.message =
+      tr("SHYX Fill Interior: no enclosed unselected faces "
+         "(need a closed loop of selected faces around an interior region).");
+    reportToOutputWindow(result.message);
+    return result;
+  }
+
+  std::sort(grown.begin(), grown.end());
+  grown.erase(std::unique(grown.begin(), grown.end()), grown.end());
+  applyCellSelection(port, grown);
+
+  result.grew = true;
+  result.total = static_cast<vtkIdType>(grown.size());
+  result.message =
+    tr("SHYX Fill Interior: added %1 enclosed unselected face(s) (total %2).")
+      .arg(added)
+      .arg(result.total);
+  reportToOutputWindow(result.message);
+  return result;
+}
+
+//-----------------------------------------------------------------------------
+pqSHYXGrowSelectionWithSimilarController::GrowToCompletionResult
+pqSHYXGrowSelectionWithSimilarController::SelectConnectedRegion(
+  pqDataRepresentation* hintRepresentation)
+{
+  GrowToCompletionResult result;
+
+  pqOutputPort* port = nullptr;
+  vtkDataSet* ds = nullptr;
+  if (!resolveActiveSelection(port, ds, hintRepresentation, nullptr))
+  {
+    result.message = tr("SHYX Select All: no active cell selection.");
+    reportToOutputWindow(result.message);
+    return result;
+  }
+
+  auto* pd = vtkPolyData::SafeDownCast(ds);
+  if (!pd)
+  {
+    result.message = tr("SHYX Select All: active data is not vtkPolyData "
+                        "(surface mesh required).");
+    reportToOutputWindow(result.message);
+    return result;
+  }
+
+  std::vector<vtkIdType> seed;
+  if (!collectSelectedCellIds(port, ds, seed))
+  {
+    result.message = tr("SHYX Select All: could not resolve selected cell IDs "
+                        "(need a cell selection).");
+    reportToOutputWindow(result.message);
+    return result;
+  }
+
+  pd->BuildLinks();
+  const vtkIdType nCells = pd->GetNumberOfCells();
+  std::vector<char> reached(static_cast<size_t>(nCells), 0);
+  std::vector<vtkIdType> stack;
+  stack.reserve(seed.size());
+  for (vtkIdType id : seed)
+  {
+    if (id >= 0 && id < nCells && !reached[static_cast<size_t>(id)])
+    {
+      reached[static_cast<size_t>(id)] = 1;
+      stack.push_back(id);
+    }
+  }
+
+  vtkNew<vtkIdList> ptIds;
+  vtkNew<vtkIdList> neighbors;
+  vtkIdType nReached = static_cast<vtkIdType>(stack.size());
+  const vtkIdType nSeed = nReached;
+
+  while (!stack.empty())
+  {
+    const vtkIdType cell = stack.back();
+    stack.pop_back();
+
+    pd->GetCellPoints(cell, ptIds);
+    const vtkIdType npts = ptIds->GetNumberOfIds();
+    if (npts < 3)
+    {
+      continue;
+    }
+    for (vtkIdType e = 0; e < npts; ++e)
+    {
+      const vtkIdType p0 = ptIds->GetId(e);
+      const vtkIdType p1 = ptIds->GetId((e + 1) % npts);
+      neighbors->Reset();
+      pd->GetCellEdgeNeighbors(cell, p0, p1, neighbors);
+      const vtkIdType nNb = neighbors->GetNumberOfIds();
+      for (vtkIdType i = 0; i < nNb; ++i)
+      {
+        const vtkIdType nid = neighbors->GetId(i);
+        if (nid < 0 || nid >= nCells || reached[static_cast<size_t>(nid)])
+        {
+          continue;
+        }
+        reached[static_cast<size_t>(nid)] = 1;
+        stack.push_back(nid);
+        ++nReached;
+      }
+    }
+  }
+
+  result.ok = true;
+  result.total = nReached;
+  const vtkIdType added = nReached - nSeed;
+  result.added = added;
+  if (added <= 0)
+  {
+    result.message = tr("SHYX Select All: selection already covers the connected region "
+                        "(%1 face(s)).")
+                       .arg(nReached);
+    reportToOutputWindow(result.message);
+    return result;
+  }
+
+  std::vector<vtkIdType> grown;
+  grown.reserve(static_cast<size_t>(nReached));
+  for (vtkIdType c = 0; c < nCells; ++c)
+  {
+    if (reached[static_cast<size_t>(c)])
+    {
+      grown.push_back(c);
+    }
+  }
+  applyCellSelection(port, grown);
+
+  result.grew = true;
+  result.message =
+    tr("SHYX Select All: selected connected region (%1 added, total %2).")
+      .arg(added)
+      .arg(nReached);
+  reportToOutputWindow(result.message);
+  return result;
+}
+
+//-----------------------------------------------------------------------------
+pqSHYXGrowSelectionWithSimilarController::GrowToCompletionResult
+pqSHYXGrowSelectionWithSimilarController::InvertSelection(
+  pqDataRepresentation* hintRepresentation)
+{
+  GrowToCompletionResult result;
+
+  pqOutputPort* port = nullptr;
+  vtkDataSet* ds = nullptr;
+  if (!resolveActiveSelection(port, ds, hintRepresentation, nullptr))
+  {
+    result.message = tr("SHYX Invert Selection: no active cell selection.");
+    reportToOutputWindow(result.message);
+    return result;
+  }
+
+  std::vector<vtkIdType> seed;
+  if (!collectSelectedCellIds(port, ds, seed))
+  {
+    result.message = tr("SHYX Invert Selection: could not resolve selected cell IDs "
+                        "(need a cell selection).");
+    reportToOutputWindow(result.message);
+    return result;
+  }
+
+  const vtkIdType nCells = ds->GetNumberOfCells();
+  if (nCells <= 0)
+  {
+    result.message = tr("SHYX Invert Selection: mesh has no cells.");
+    reportToOutputWindow(result.message);
+    return result;
+  }
+
+  std::vector<char> isSelected(static_cast<size_t>(nCells), 0);
+  vtkIdType nSeed = 0;
+  for (vtkIdType id : seed)
+  {
+    if (id >= 0 && id < nCells && !isSelected[static_cast<size_t>(id)])
+    {
+      isSelected[static_cast<size_t>(id)] = 1;
+      ++nSeed;
+    }
+  }
+
+  std::vector<vtkIdType> inverted;
+  inverted.reserve(static_cast<size_t>(nCells - nSeed));
+  for (vtkIdType c = 0; c < nCells; ++c)
+  {
+    if (!isSelected[static_cast<size_t>(c)])
+    {
+      inverted.push_back(c);
+    }
+  }
+
+  applyCellSelection(port, inverted);
+
+  result.ok = true;
+  result.grew = true;
+  result.added = static_cast<vtkIdType>(inverted.size());
+  result.total = result.added;
+  result.message =
+    tr("SHYX Invert Selection: %1 selected → %2 selected.")
+      .arg(nSeed)
+      .arg(result.total);
+  reportToOutputWindow(result.message);
+  return result;
+}

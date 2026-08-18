@@ -1,7 +1,8 @@
 /*--------------------------------*- C++ -*----------------------------------*\
 | SHYX SnappyHexMesh example — matches the filter defaults                    |
 | Copy to <case>/system/snappyHexMeshDict                                     |
-| STL must be at constant/triSurface/geometry.stl                             |
+| Each Input partition is one STL at constant/triSurface/<name>.stl           |
+| (no STL solid regions / firstSolid / secondSolid)                           |
 \*---------------------------------------------------------------------------*/
 FoamFile
 {
@@ -24,12 +25,11 @@ geometry
         name geometry;          // patch name after meshing
     }
 
-    // Optional extra closed surface for volumetric refinement:
-    // refineBox
+    // Extra partition from a PDC (closed shell for volumetric refinement):
+    // refineBox.stl
     // {
-    //     type searchableBox;
-    //     min  (-10 -200 -560);
-    //     max  ( 10 -180 -530);
+    //     type triSurfaceMesh;
+    //     name refineBox;
     // }
 }
 
@@ -41,19 +41,23 @@ castellatedMeshControls
     maxLoadUnbalance    0.10;
     nCellsBetweenLevels 3;      // buffer cells between refinement levels
 
-    features ();                // explicit .eMesh feature edges; unused here
+    // Optional Feature edges input -> constant/triSurface/features.eMesh
+    features ();
+    // features
+    // (
+    //     { file "features.eMesh"; level 2; }
+    // );
 
     refinementSurfaces
     {
         geometry
         {
             level (0 2);        // (min max) surface refinement
-
-            // Optional region marking (not written by the filter today):
-            // patchInfo { type wall; }
-            // faceZone  wallInterface;
-            // cellZone  lumen;
-            // cellZoneInside inside;
+            patchInfo
+            {
+                type wall;
+            }
+            // No regions { firstSolid / secondSolid } — each STL is one patch.
         }
     }
 
@@ -65,6 +69,11 @@ castellatedMeshControls
         // {
         //     mode inside;
         //     levels ((1e15 2));
+        // }
+        // wall
+        // {
+        //     mode distance;
+        //     levels ((0.01 3));
         // }
     }
 
@@ -91,7 +100,7 @@ snapControls
     nRelaxIter         5;
     nFeatureSnapIter   10;
     implicitFeatureSnap true;   // detect feature edges from the STL
-    explicitFeatureSnap false;  // would use features () / .eMesh
+    explicitFeatureSnap false;  // true when Feature edges / features.eMesh is used
     multiRegionFeatureSnap false;
 }
 
@@ -104,6 +113,7 @@ addLayersControls
         {
             nSurfaceLayers 3;
         }
+        // inlet { nSurfaceLayers 0; }
     }
     expansionRatio      1.2;
     finalLayerThickness 0.3;

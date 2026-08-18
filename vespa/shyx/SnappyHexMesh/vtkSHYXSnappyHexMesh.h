@@ -1,25 +1,33 @@
 /**
  * @class   vtkSHYXSnappyHexMesh
- * @brief   Hex-dominant volume mesh from a closed surface via snappyHexMesh.
+ * @brief   Hex-dominant volume mesh from a surface collection via snappyHexMesh.
  *
- * Input vtkPolyData (closed triangulated surface). Writes an OpenFOAM case,
- * then reads it back with vtkOpenFOAMReader into vtkUnstructuredGrid.
+ * Input is a vtkPartitionedDataSetCollection (each partition becomes one STL /
+ * triSurfaceMesh patch) or a single vtkPolyData (wrapped as partition "geometry").
+ * Optional feature-edge vtkPolyData (VTK port 1, Properties pipeline dropdown)
+ * is written as .eMesh. The OpenFOAM case is kept; the filter output is the
+ * vtkMultiBlockDataSet from vtkOpenFOAMReader (internalMesh plus patches).
  */
 
 #ifndef vtkSHYXSnappyHexMesh_h
 #define vtkSHYXSnappyHexMesh_h
 
 #include "vtkSHYXSnappyHexMeshModule.h"
-#include "vtkDataSetAlgorithm.h"
+#include "vtkDataObjectAlgorithm.h"
 
 #include <vector>
 
-class VTKSHYXSNAPPYHEXMESH_EXPORT vtkSHYXSnappyHexMesh : public vtkDataSetAlgorithm
+class vtkAlgorithmOutput;
+
+class VTKSHYXSNAPPYHEXMESH_EXPORT vtkSHYXSnappyHexMesh : public vtkDataObjectAlgorithm
 {
 public:
   static vtkSHYXSnappyHexMesh* New();
-  vtkTypeMacro(vtkSHYXSnappyHexMesh, vtkDataSetAlgorithm);
+  vtkTypeMacro(vtkSHYXSnappyHexMesh, vtkDataObjectAlgorithm);
   void PrintSelf(ostream& os, vtkIndent indent) override;
+
+  /** Optional feature-edge polydata (port 1). Null / empty is allowed. */
+  void SetFeatureEdgesConnection(vtkAlgorithmOutput* algOutput);
 
   vtkGetMacro(CastellatedMesh, bool);
   vtkSetMacro(CastellatedMesh, bool);
@@ -82,8 +90,37 @@ public:
   vtkSetMacro(ImplicitFeatureSnap, bool);
   vtkBooleanMacro(ImplicitFeatureSnap, bool);
 
-  /** Last Apply's case directory (%TEMP%/shyx-snappy-last). Read-only in Properties. */
+  vtkGetMacro(FeatureLevel, int);
+  vtkSetClampMacro(FeatureLevel, int, 0, 10);
+
+  /** This Apply's unique case directory under %TEMP%/shyx-snappy-<id>-<mtime>/case. */
   vtkGetStringMacro(CaseFoamPath);
+
+  /** Newline-separated refinementSurfaces names (table order). Empty = all partitions. */
+  vtkSetStringMacro(SurfaceNames);
+  vtkGetStringMacro(SurfaceNames);
+  vtkSetStringMacro(SurfaceLevelMin);
+  vtkGetStringMacro(SurfaceLevelMin);
+  vtkSetStringMacro(SurfaceLevelMax);
+  vtkGetStringMacro(SurfaceLevelMax);
+  vtkSetStringMacro(SurfacePatchTypes);
+  vtkGetStringMacro(SurfacePatchTypes);
+
+  /** Newline-separated refinementRegions rows. Empty = none. */
+  vtkSetStringMacro(RegionNames);
+  vtkGetStringMacro(RegionNames);
+  vtkSetStringMacro(RegionModes);
+  vtkGetStringMacro(RegionModes);
+  vtkSetStringMacro(RegionLevels);
+  vtkGetStringMacro(RegionLevels);
+  vtkSetStringMacro(RegionDistances);
+  vtkGetStringMacro(RegionDistances);
+
+  /** Newline-separated addLayers patch rows. Empty = all surface patches. */
+  vtkSetStringMacro(LayerNames);
+  vtkGetStringMacro(LayerNames);
+  vtkSetStringMacro(LayerNSurfaceLayers);
+  vtkGetStringMacro(LayerNSurfaceLayers);
 
   /** Keep-mesh points (OpenFOAM locationInMesh / locationsInMesh). Empty = AABB centre. */
   void SetNumberOfInsidePoints(int n);
@@ -102,6 +139,7 @@ protected:
 
   int FillInputPortInformation(int port, vtkInformation* info) override;
   int FillOutputPortInformation(int port, vtkInformation* info) override;
+  int RequestDataObject(vtkInformation*, vtkInformationVector**, vtkInformationVector*) override;
   int RequestData(vtkInformation*, vtkInformationVector**, vtkInformationVector*) override;
 
   bool CastellatedMesh = true;
@@ -123,7 +161,18 @@ protected:
   double MinThickness = 0.1;
   double FeatureAngle = 30.0;
   bool ImplicitFeatureSnap = true;
+  int FeatureLevel = 2;
   char* CaseFoamPath = nullptr;
+  char* SurfaceNames = nullptr;
+  char* SurfaceLevelMin = nullptr;
+  char* SurfaceLevelMax = nullptr;
+  char* SurfacePatchTypes = nullptr;
+  char* RegionNames = nullptr;
+  char* RegionModes = nullptr;
+  char* RegionLevels = nullptr;
+  char* RegionDistances = nullptr;
+  char* LayerNames = nullptr;
+  char* LayerNSurfaceLayers = nullptr;
   std::vector<double> InsidePoints;
 
 private:

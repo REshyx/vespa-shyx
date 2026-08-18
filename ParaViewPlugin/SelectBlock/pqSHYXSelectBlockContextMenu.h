@@ -7,7 +7,8 @@
 
 /**
  * Adds "Select Block" to the RenderView block context menu so a right-click
- * on a composite part (e.g. Part_1) selects every cell in that block.
+ * on a composite part (e.g. Part_1) clears the current selection and then
+ * selects every cell in that block.
  */
 class pqSHYXSelectBlockContextMenu
   : public QObject
