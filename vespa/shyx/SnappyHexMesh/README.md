@@ -10,7 +10,7 @@ cmake --install <shyx-snappyhex>/build-msvc --prefix <shyx-snappyhex>/install
 
 vespa 配置加 `-DVESPA_USE_SNAPPYHEXMESH=ON`，`SHYXSnappyHex_DIR` 指向 `install/lib/cmake/SHYXSnappyHex`。MSVC 下 `VESPAPlugin.dll` 必须 `/WHOLEARCHIVE` 该 `.lib`（插件 CMake 已接）。不要用 WSL/MinGW 的 `.a`。滤镜在进程内调用静态库，不需要旁边再放 `snappy_cli.exe`。
 
-运行时仍读取编译期写入的 `WM_PROJECT_DIR`（OpenFOAM `etc/`，在 shyx-snappyhex 的 `third_party/openfoam-v2412`）。源树不要挪走。
+插件 LoadLibrary 跟踪写在 `%TEMP%\vespa-snappy-load.log`（每行 flush）。卡死时看最后一行。加载时用内存中的 `controlDict`，不读磁盘 etc。真正跑 snappy 时把内嵌 `cellModels` 写到 `%TEMP%\shyx-openfoam\etc`。
 
 关掉 castellated / snap / layers 时，用输入表面 AABB（加 Bounds margin）直接生成笛卡尔 `VTK_HEXAHEDRON` 背景盒，不写 OpenFOAM ASCII、不调用 snappyHexMesh。格子尺寸：`Background cell size > 0` 用该值，否则取加 margin 后最长边的 1/16。
 

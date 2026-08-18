@@ -31,6 +31,16 @@ vtkStandardNewMacro(vtkSHYXSnappyHexMesh);
 
 namespace
 {
+// Pull foam_env_early.obj (init_seg lib) so FOAM_SIGFPE/FOAM_ABORT are set
+// before OpenFOAM static constructors.
+const void* const kShyxFoamEnvAnchor = reinterpret_cast<const void*>(&shyx_touch_foam_env);
+
+struct ShyxVtkLoadLog
+{
+  ShyxVtkLoadLog() { shyx_load_log("vtkSHYXSnappyHexMesh.cxx static ctor"); }
+};
+const ShyxVtkLoadLog kShyxVtkLoadLog;
+
 namespace fs = std::filesystem;
 
 struct RemoveTree
@@ -389,6 +399,7 @@ int vtkSHYXSnappyHexMesh::FillOutputPortInformation(int port, vtkInformation* in
 int vtkSHYXSnappyHexMesh::RequestData(
   vtkInformation*, vtkInformationVector** inputVector, vtkInformationVector* outputVector)
 {
+  shyx_load_log("RequestData begin");
   this->SetCaseFoamPathNoModified(nullptr);
   vtkPolyData* input = vtkPolyData::GetData(inputVector[0]);
   vtkUnstructuredGrid* output = vtkUnstructuredGrid::GetData(outputVector);
@@ -545,7 +556,9 @@ int vtkSHYXSnappyHexMesh::RequestData(
 
   char err[2048];
   err[0] = '\0';
+  shyx_load_log("RequestData calling shyx_snappy_run");
   const int rc = shyx_snappy_run(stlPath.c_str(), caseDir.c_str(), &p, err, 2048);
+  shyx_load_log("RequestData shyx_snappy_run returned");
   PersistSnappyCase(caseDir);
   const fs::path logPath = LastLogDir() / "snappyHexMesh.log";
   const fs::path foamPath = fs::path(caseDir) / "case.foam";
