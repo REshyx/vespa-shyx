@@ -33,7 +33,7 @@ description: >-
 - **注册入口**：`ParaViewPlugin/paraview.plugin` 只描述插件名；`paraview_plugin_build` 与主工程里的 `VESPA_BUILD_PV_PLUGIN` 一起驱动构建。
 - **与 CGAL 的边界**：只有真正调用 CGAL 的算子才依赖 `vtkCGALAlgorithm` / `vtkCGALPolyDataAlgorithm`；纯 VTK / TetGen / VMTK 算子只写自己的 `DEPENDS`。根 `CMakeLists.txt` 在扫完 `vtk.module` 后，仅当仍有模块声明 `vtkCGALAlgorithm` 或 `CGAL::CGAL` 且 `VESPA_USE_CGAL=ON` 时才 `find_package(CGAL)`。
 
-**构建注意**：`VESPA_BUILD_PV_PLUGIN=ON` 时，工程会 **关闭** 共享库以便 vespa 模块以静态方式链进 `VESPAPlugin.dll`；根 `CMakeLists.txt` 中有说明。新增模块后不需要单独为 shyx 配置 PATH 安装 DLL，除非改动了插件/VTK 的加载方式。
+**构建注意**：`VESPA_BUILD_PV_PLUGIN=ON` 时，工程会 **关闭** 共享库以便 vespa 模块以静态方式链进 `VESPAPlugin.dll`；根 `CMakeLists.txt` 中有说明。新增模块后不需要单独为 shyx 配置 PATH 安装 DLL，除非改动了插件/VTK 的加载方式。SnappyHexMesh 的 OpenFOAM 适配器在仓库根 `shyx-snappyhex/`（不改官方源码）；`FOAM_SOURCE_DIR` 指向仓外只读树，由 vespa CMake 用 clang-cl/Ninja ExternalProject 编进来。
 
 ## 2. 调查“当前”代码时应看的文件
 

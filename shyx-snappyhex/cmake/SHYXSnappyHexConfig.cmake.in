@@ -1,0 +1,8 @@
+@PACKAGE_INIT@
+
+include("${CMAKE_CURRENT_LIST_DIR}/SHYXSnappyHexTargets.cmake")
+include("${CMAKE_CURRENT_LIST_DIR}/SHYXSnappyHexWholeArchive.cmake")
+set(SHYXSnappyHex_NEEDS_WHOLE_ARCHIVE TRUE)
+set(SHYXSnappyHex_CLI "${PACKAGE_PREFIX_DIR}/bin/snappy_cli.exe")
+
+check_required_components(SHYXSnappyHex)

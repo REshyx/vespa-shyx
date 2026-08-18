@@ -476,6 +476,9 @@ if (VESPA_USE_SNAPPYHEXMESH)
       "/WHOLEARCHIVE:$<TARGET_FILE:SHYXSnappyHex::SHYXSnappyHex>"
       "/OPT:NOICF")
   endif ()
+  if (TARGET shyx_snappyhex_ep)
+    add_dependencies(VESPAPlugin shyx_snappyhex_ep)
+  endif ()
 endif ()
 
 if (BUILD_TESTING AND BUILD_SHARED_LIBS)

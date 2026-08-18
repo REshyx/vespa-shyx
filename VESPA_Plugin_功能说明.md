@@ -13,7 +13,7 @@
 | **`VESPA_BUILD_PV_PLUGIN`** | 默认 ON；关闭则不构建 ParaView 插件。 |
 | **`VESPA_USE_CGAL`** | 为 ON（默认）时才编译依赖 CGAL 的模块，并 `find_package(CGAL)`。OFF 时跳过原版 VESPA 与所有 `DEPENDS vtkCGALAlgorithm` / `CGAL::CGAL` 的 SHYX 滤镜。 |
 | **`VESPA_USE_VMTK`** | ON 时编 VMTK 中心线两个滤镜并注册对应 XML。 |
-| **`VESPA_USE_SNAPPYHEXMESH`** | ON 时编 SnappyHexMesh（需 `SHYXSnappyHex_DIR`）。 |
+| **`VESPA_USE_SNAPPYHEXMESH`** | ON 时编 SnappyHexMesh（仓库内 `shyx-snappyhex/` adapter + `FOAM_SOURCE_DIR` 官方源码）。 |
 | **`USE_CERES`** | 找到 Ceres 且为 ON 时才编 **VESPA Mesh Smoothing**（内部变量 `VESPA_MESH_SMOOTHING`）。 |
 | **`VESPA_USE_MKL`** | 构建含 MKL 时，**SHYX Clebsch Map Filter** 中可选用 MKL 直接法求解器。 |
 | **`VESPA_USE_SMP`** | 部分滤镜内部并行（Density Sampler、Array Probability Point Cull、Clebsch、Bidirectional Streamline Merge、Disconnected Region Fuse、Tet Mesh Region Partition）。**SHYX Radius Neighbor Count** 使用 VTK 自带的 **vtkSMPTools**，不依赖此开关。 |

@@ -10,7 +10,7 @@
 - **GROUPS**（`vtk.module`）：`Core` / `Meshing` / `Vascular` / `Flow` / `PointCloud`；表示层保持 `ParaView`。
 - **后端**：模块 `vtk.module` 实际依赖，不是类名里的 `CGAL` 字样。
 
-CMake **用户选项**：`VESPA_USE_CGAL`（默认 ON）、`VESPA_USE_VMTK`、`VESPA_USE_SNAPPYHEXMESH`、`USE_CERES`（Mesh Smoothing）、`VESPA_BUILD_PV_PLUGIN`、`VESPA_USE_SMP`、`VESPA_USE_MKL`。  
+CMake **用户选项**：`VESPA_USE_CGAL`（默认 ON）、`VESPA_USE_VMTK`、`VESPA_USE_SNAPPYHEXMESH`（需 `FOAM_SOURCE_DIR`）、`USE_CERES`（Mesh Smoothing）、`VESPA_BUILD_PV_PLUGIN`、`VESPA_USE_SMP`、`VESPA_USE_MKL`。  
 **内部状态**（`CACHE INTERNAL`，由 CGAL 版本 / Ceres 自动 FORCE，不要当 cmake-gui 开关）：`VESPA_ALPHA_WRAPPING`（CGAL ≥ 5.5）、`VESPA_MESH_SMOOTHING`（`USE_CERES`）、`VESPA_ADAPTIVE_REMESHING`（CGAL ≥ 6）。
 
 ---
@@ -87,7 +87,7 @@ Vascular 顺序（[`VESPAVascularCategory.xml`](../ParaViewPlugin/VESPAVascularC
 | SHYX Surface to Volume Mesh | `vtkCGALSurfaceToVolumeMesh` | SurfaceToVolumeMesh | SHYXSurfaceToVolumeMesh.xml | 自有 | [有](shyx/SurfaceToVolumeMesh/README.md) | CGAL | |
 | SHYX TetGen | `vtkSHYXTetGen` | TetGen | SHYXTetGen.xml | fluent | [有](shyx/TetGen/README.md) | TetGen | 5 |
 | SHYX TetGen Mesh Optimize | `vtkSHYXTetGenMeshOptimize` | 同上模块 | SHYXTetGenMeshOptimize.xml | 自有 | （同 TetGen README） | TetGen | |
-| SHYX SnappyHexMesh | `vtkSHYXSnappyHexMesh` | SnappyHexMesh | SHYXSnappyHexMesh.xml | 自有 | [有](shyx/SnappyHexMesh/README.md) | 可选 `VESPA_USE_SNAPPYHEXMESH` | |
+| SHYX SnappyHexMesh | `vtkSHYXSnappyHexMesh` | SnappyHexMesh | SHYXSnappyHexMesh.xml | 自有 | [有](shyx/SnappyHexMesh/README.md) | 可选 `VESPA_USE_SNAPPYHEXMESH` + `FOAM_SOURCE_DIR` | |
 | SHYX Tet Mesh Region Partition | `vtkSHYXTetMeshRegionPartition` | TetMeshRegionPartition | SHYXTetMeshRegionPartition.xml | 自有 | [有](shyx/TetMeshRegionPartition/README.md) | VTK | |
 | SHYX DataSet To Partitioned Collection | `vtkSHYXDataSetToPartitionedCollection` | DataSetToPartitionedCollection | SHYXDataSetToPartitionedCollection.xml | fluent | [有](shyx/DataSetToPartitionedCollection/README.md) | VTK | 6 |
 | SHYX Partitioned Collection Boundary Assignment | `vtkSHYXPartitionedCollectionBoundaryAssignment` | PartitionedCollectionBoundaryAssignment | SHYXPartitionedCollectionBoundaryAssignment.xml | fluent | [有](shyx/PartitionedCollectionBoundaryAssignment/README.md) | VTK | 7 |

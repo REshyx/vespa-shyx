@@ -46,9 +46,7 @@ option(VESPA_USE_SMP "Use VTK SMP in DensityBasedSampler (disable if plugin cras
 
 option(VESPA_USE_CGAL "Build CGAL-backed modules (vespa/vespa, Algorithm helpers, SHYX filters that DEPENDS CGAL)" ON)
 option(VESPA_USE_VMTK "Build SHYX VMTK centerline filter (VMTK must match ParaView VTK)" ON)
-option(VESPA_USE_SNAPPYHEXMESH "Build SHYX SnappyHexMesh filter (needs SHYXSnappyHex_DIR)" ON)
-set(SHYXSnappyHex_DIR "C:/Users/18490/Documents/Github/shyx-snappyhex/install/lib/cmake/SHYXSnappyHex" CACHE PATH
-  "Directory containing SHYXSnappyHexConfig.cmake (install prefix /lib/cmake/SHYXSnappyHex)")
+option(VESPA_USE_SNAPPYHEXMESH "Build SHYX SnappyHexMesh filter (in-tree shyx-snappyhex + FOAM_SOURCE_DIR)" ON)
 set(VMTK_DIR "C:/SoftWare/vmtk-install" CACHE PATH
   "VMTK install prefix: include/vmtk and lib (e.g. vtkvmtk*.lib) live beneath this directory")
 
@@ -166,11 +164,15 @@ if(NOT VESPA_USE_VMTK)
   list(FILTER vespa_module_files EXCLUDE REGEX "VmtkPolyDataCenterlines")
   list(FILTER vespa_module_files EXCLUDE REGEX "VmtkOpeningCenterlines")
 endif()
+set(SHYX_SNAPPYHEX_READY FALSE)
 if(VESPA_USE_SNAPPYHEXMESH)
-  find_package(SHYXSnappyHex REQUIRED CONFIG)
-  message(STATUS "VESPA: SnappyHexMesh enabled (SHYXSnappyHex_DIR=${SHYXSnappyHex_DIR})")
-else()
+  include("${CMAKE_CURRENT_SOURCE_DIR}/CMake/SHYXSnappyHexInTree.cmake")
+endif()
+if(NOT VESPA_USE_SNAPPYHEXMESH OR NOT SHYX_SNAPPYHEX_READY)
   list(FILTER vespa_module_files EXCLUDE REGEX "SnappyHexMesh")
+  if(VESPA_USE_SNAPPYHEXMESH AND NOT SHYX_SNAPPYHEX_READY)
+    set(VESPA_USE_SNAPPYHEXMESH OFF)
+  endif()
 endif()
 if(VESPA_USE_VMTK)
   message(STATUS "VESPA: VMTK centerlines enabled (VMTK_DIR=${VMTK_DIR})")
@@ -244,6 +246,10 @@ vtk_module_build(
   INSTALL_HEADERS ON
   CMAKE_DESTINATION   "${CMAKE_INSTALL_LIBDIR}/cmake/vespa"
   HEADERS_DESTINATION "include")
+
+if (TARGET vtkSHYXSnappyHexMesh AND TARGET shyx_snappyhex_ep)
+  add_dependencies(vtkSHYXSnappyHexMesh shyx_snappyhex_ep)
+endif()
 
 ## Install
 set(vespaExport ${vespa_provided_modules})

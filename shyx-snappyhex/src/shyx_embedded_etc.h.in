@@ -1,0 +1,5 @@
+#pragma once
+
+// Generated from OpenFOAM etc/cellModels. Written to %TEMP%/shyx-openfoam/etc
+// when snappy runs (LoadLibrary must not write files).
+static const char kShyxEmbeddedCellModels[] = R"SHYXETC(@SHYX_EMBEDDED_CELL_MODELS@)SHYXETC";
