@@ -1,18 +1,22 @@
 #include "pqSHYXVascularCategoryAutoStart.h"
 
+#include "pqApplicationCore.h"
 #include "pqProxyCategory.h"
 #include "pqProxyGroupMenuManager.h"
 #include "pqProxyInfo.h"
 
 #include "vtkNew.h"
+#include "vtkPVXMLElement.h"
 #include "vtkPVXMLParser.h"
 
 #include <QApplication>
 #include <QMainWindow>
 #include <QMenu>
-#include <QTimer>
+#include <QStringList>
 #include <QToolBar>
 #include <QWidget>
+
+#include <cstring>
 
 namespace
 {
@@ -41,6 +45,14 @@ constexpr const char* kVascularFiltersXml = R"xml(
 )xml";
 
 constexpr auto kVascular = "Vascular";
+
+QStringList expectedVascularProxyNames()
+{
+  return { QStringLiteral("SHYXSkeletonExtraction"), QStringLiteral("SHYXVesselEndClipper"),
+    QStringLiteral("SHYXSelectionPlaneClipper"), QStringLiteral("SHYXRemeshWithEndpoint"),
+    QStringLiteral("SHYXTetGen"), QStringLiteral("SHYXDataSetToPartitionedCollection"),
+    QStringLiteral("SHYXPartitionedCollectionBoundaryAssignment") };
+}
 
 bool isParaViewFiltersMenuManager(pqProxyGroupMenuManager* mgr)
 {
@@ -106,29 +118,78 @@ void dropVascularCategory(pqProxyCategory* root)
   }
 }
 
-/** Always replace Filters→Vascular from the plugin XML (no merge of leftovers). */
-void ensureApplicationVascular(pqProxyGroupMenuManager* mgr)
+vtkPVXMLElement* parseVascularFiltersXml(vtkPVXMLParser* parser)
 {
-  pqProxyCategory* appRoot = mgr->getApplicationCategory();
-  if (!appRoot)
+  if (!parser || !parser->Parse(kVascularFiltersXml))
+  {
+    return nullptr;
+  }
+  vtkPVXMLElement* root = parser->GetRootElement();
+  if (!root || !root->GetName())
+  {
+    return nullptr;
+  }
+  if (strcmp(root->GetName(), "ParaViewFilters") == 0)
+  {
+    return root;
+  }
+  return root->FindNestedElementByName("ParaViewFilters");
+}
+
+/**
+ * Replace Filters→Vascular from the plugin XML (no merge of leftovers).
+ * Parses directly onto the category tree — do not use loadConfiguration(), which
+ * can merge into settings and writeCategoryToSettings() (QMap order, not XML).
+ */
+void replaceVascularFromPluginXml(pqProxyCategory* root)
+{
+  if (!root)
   {
     return;
   }
-
-  // Application + settings/menu roots both merge on parseXML; drop first.
-  dropVascularCategory(appRoot);
-  pqProxyCategory* menuRoot = mgr->getMenuCategory();
-  if (menuRoot && menuRoot != appRoot)
-  {
-    dropVascularCategory(menuRoot);
-  }
+  dropVascularCategory(root);
 
   vtkNew<vtkPVXMLParser> parser;
-  if (!parser->Parse(kVascularFiltersXml))
+  vtkPVXMLElement* filters = parseVascularFiltersXml(parser);
+  if (!filters)
   {
     return;
   }
-  mgr->loadConfiguration(parser->GetRootElement());
+  root->parseXML(filters);
+
+  if (pqProxyCategory* vascular = root->findSubCategory(kVascular))
+  {
+    vascular->setShowInToolbar(true);
+  }
+}
+
+bool vascularMatchesPlugin(pqProxyCategory* root)
+{
+  if (!root)
+  {
+    return false;
+  }
+  pqProxyCategory* vascular = root->findSubCategory(kVascular);
+  if (!vascular || !vascular->preserveOrder() || !vascular->showInToolbar())
+  {
+    return false;
+  }
+  return vascular->getOrderedRootProxiesNames() == expectedVascularProxyNames();
+}
+
+bool managerVascularMatchesPlugin(pqProxyGroupMenuManager* mgr)
+{
+  pqProxyCategory* appRoot = mgr->getApplicationCategory();
+  pqProxyCategory* menuRoot = mgr->getMenuCategory();
+  if (!vascularMatchesPlugin(appRoot))
+  {
+    return false;
+  }
+  if (menuRoot && menuRoot != appRoot && !vascularMatchesPlugin(menuRoot))
+  {
+    return false;
+  }
+  return true;
 }
 
 /** Show filters.Vascular even if a prior session hid it via View → Toolbars. */
@@ -185,11 +246,13 @@ pqSHYXVascularCategoryAutoStart::~pqSHYXVascularCategoryAutoStart()
 //-----------------------------------------------------------------------------
 void pqSHYXVascularCategoryAutoStart::onStartup()
 {
-  // Plugin SM XML / category toolbars may finish after auto_start; refresh on
-  // every load so settings residuals cannot stick around.
-  QTimer::singleShot(0, this, [this]() { this->enforceVascularOrder(); });
-  QTimer::singleShot(200, this, [this]() { this->enforceVascularOrder(); });
-  QTimer::singleShot(1000, this, [this]() { this->enforceVascularOrder(); });
+  if (pqApplicationCore* core = pqApplicationCore::instance())
+  {
+    // After MainWindow restoreState and plugin XML/category merge.
+    QObject::connect(core, &pqApplicationCore::clientEnvironmentDone, this,
+      &pqSHYXVascularCategoryAutoStart::enforceVascularOrder, Qt::UniqueConnection);
+  }
+  this->enforceVascularOrder();
 }
 
 //-----------------------------------------------------------------------------
@@ -198,37 +261,41 @@ void pqSHYXVascularCategoryAutoStart::onShutdown() {}
 //-----------------------------------------------------------------------------
 void pqSHYXVascularCategoryAutoStart::enforceVascularOrder()
 {
+  if (this->Enforcing)
+  {
+    return;
+  }
+  this->Enforcing = true;
+
+  const auto queuedUnique =
+    static_cast<Qt::ConnectionType>(Qt::QueuedConnection | Qt::UniqueConnection);
+
   for (pqProxyGroupMenuManager* mgr : ::findFiltersMenuManagers())
   {
-    ::ensureApplicationVascular(mgr);
+    QObject::connect(mgr, &pqProxyGroupMenuManager::categoriesUpdated, this,
+      &pqSHYXVascularCategoryAutoStart::enforceVascularOrder, queuedUnique);
+    QObject::connect(mgr, &pqProxyGroupMenuManager::menuPopulated, this,
+      &pqSHYXVascularCategoryAutoStart::enforceVascularOrder, Qt::UniqueConnection);
 
     pqProxyCategory* appRoot = mgr->getApplicationCategory();
-    pqProxyCategory* menuRoot = mgr->getMenuCategory();
-    if (!appRoot || !menuRoot)
+    if (!appRoot)
     {
       continue;
     }
 
-    pqProxyCategory* appVascular = appRoot->findSubCategory(kVascular);
-    if (!appVascular)
+    if (!::managerVascularMatchesPlugin(mgr))
     {
-      continue;
-    }
-    // Always keep the plugin definition's toolbar flag on.
-    appVascular->setShowInToolbar(true);
-
-    if (menuRoot != appRoot)
-    {
-      // Force settings/menu Vascular to match plugin list and persist it.
-      ::dropVascularCategory(menuRoot);
-      auto* vascular = new pqProxyCategory(nullptr);
-      vascular->deepCopy(appVascular);
-      vascular->setShowInToolbar(true);
-      menuRoot->addCategory(vascular);
-      mgr->writeCategoryToSettings();
+      ::replaceVascularFromPluginXml(appRoot);
+      pqProxyCategory* menuRoot = mgr->getMenuCategory();
+      if (menuRoot && menuRoot != appRoot)
+      {
+        ::replaceVascularFromPluginXml(menuRoot);
+      }
+      mgr->populateMenu();
     }
 
-    mgr->populateMenu();
     ::showVascularToolbar(mgr);
   }
+
+  this->Enforcing = false;
 }

@@ -4,14 +4,17 @@
 #include <QObject>
 
 /**
- * On every plugin load (and delayed retries):
- * 1. Drop any residual Filters → Vascular (settings / prior session) and reload
- *    the curated proxy list from the plugin definition (preserve_order)
- * 2. Force show_in_toolbar (Configure Categories "Use as toolbar")
- * 3. Persist the cleaned category to settings and make filters.Vascular visible
+ * Keep Filters → Vascular (menu + toolbar) in the plugin XML order.
  *
- * Needed because ParaView merges category XML/settings (does not replace), so
- * stale proxies survive reload unless we remove + rewrite on each load.
+ * ParaView merges category XML/settings instead of replacing, and
+ * pqProxyCategory::convertToXML writes proxies from a QMap (name order) instead
+ * of OrderedProxies. This class re-injects the curated list in memory whenever
+ * categories or the Filters menu are rebuilt — it does not write settings.
+ *
+ * Hooks (no wall-clock retries):
+ * - plugin auto_start
+ * - pqApplicationCore::clientEnvironmentDone (UI finished, after MainWindow restoreState)
+ * - pqProxyGroupMenuManager::categoriesUpdated / menuPopulated
  */
 class pqSHYXVascularCategoryAutoStart : public QObject
 {
@@ -27,6 +30,8 @@ public:
 
 private:
   void enforceVascularOrder();
+
+  bool Enforcing = false;
 
   Q_DISABLE_COPY(pqSHYXVascularCategoryAutoStart)
 };
