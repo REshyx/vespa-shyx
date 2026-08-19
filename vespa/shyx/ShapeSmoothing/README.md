@@ -4,4 +4,4 @@
 
 顶层 `SmoothingMethod` 默认 0（Shape MCF）；`NumberOfIterations` 默认 1（Fair 忽略该参数）。端口 0：平滑后表面；端口 1：特征边诊断（线 + 约束顶点）。
 
-详见 `ParaViewPlugin/SHYXShapeSmoothing.xml`。
+详见同目录 `SHYXShapeSmoothing.xml`。

@@ -17,7 +17,7 @@ ParaView **View → SHYX AI Assistant**：可勾选的停靠窗口（默认停�
 
 HTTPS 走静态链进 `VESPAPlugin.dll` 的 **libcurl**（Windows 上 TLS 为系统 Schannel）。不依赖 Qt Network，也不需要旁边的 `qschannelbackend.dll`。
 
-实现都在 `ParaViewPlugin/pqSHYXAI*` 与 `pqSHYXCurlRequest`（dock + agent tools + HTTP）。`vespa/shyx/AIAssistant/` 仍有遗留 VTK 模块 `vtkSHYXAIAssistant`；`SHYXAIAssistant.xml` **未**注册，不要创建该 pipeline 节点。
+实现都在 `ParaViewPlugin/AIAssistant/`（`pqSHYXAIAssistantPanel`、`pqSHYXAIAgentTools`、`pqSHYXCurlRequest` 等）。本目录只有说明文档，没有 VTK 模块、也没有 SM XML。不要创建 `SHYXAIAssistant()` pipeline 节点。
 
 ## Agent 工具（`pqSHYXAIAgentTools.cxx`）
 

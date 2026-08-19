@@ -4,4 +4,4 @@
 
 输入 `vtkDataSet`（必要时先 GeometryFilter）。可选 **Selection**（port 1，`SelectionInput`）可先挖掉一块再补洞。`FairingContinuity` 默认 1（0–2）。**不**把属性插值到新补的三角面上（`SetUpdateAttributes` 是 no-op）。
 
-详见 `ParaViewPlugin/SHYXHoleFillFilter.xml`。
+详见同目录 `SHYXHoleFillFilter.xml`。

@@ -16,4 +16,4 @@ Python：`GetDisplayProperties().Representation = 'Point Label'`，属性用 **e
 | `PL_LabelColor` | 0.9 0.9 0.95 | |
 | `PL_DepthOffset` | -4 | |
 
-XML：`ParaViewPlugin/PointLabelRepresentation.xml`。
+XML：同目录 `PointLabelRepresentation.xml`。

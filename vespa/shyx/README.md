@@ -2,7 +2,7 @@
 
 SHYX 是本仓库里 **一个作者命名空间**（[`vespa/shyx/`](.)），不是整个工程的中心。仓库布局见 [`../README.md`](../README.md)。**模块 ↔ 类 ↔ XML ↔ 菜单 ↔ 图标** 的完整对照以 [`../INVENTORY.md`](../INVENTORY.md) 为准。
 
-每个子目录通常是独立 VTK 模块（自有 `vtk.module` / `DEPENDS` / **`SHYX*.xml`**，由 `vespa_plugin_xml()` 注册）。例外：[**AI Assistant**](./AIAssistant/README.md) 的**用户界面**是 View dock（`ParaViewPlugin/AIAssistant/pqSHYXAI*`）。不要为遗留 `SHYXAIAssistant.xml` 调用 `vespa_plugin_xml`，Filters 菜单不应出现该节点，不要 `SHYXAIAssistant()`。需要 CGAL 的才依赖 `vtkCGALAlgorithm`；TetGen / VMTK / 纯 VTK 不要走 CGAL 基类。纯 VTK 的 Density Sampler / 点云 SDF 类名是 `vtkSHYX*`。骨架、切端、Surface-to-Volume 的 **vtk.module NAME** 是 `vtkSHYX*`，**C++ / XML `class=`** 仍是 `vtkCGAL*`。
+每个子目录通常是独立 VTK 模块（自有 `vtk.module` / `DEPENDS` / **`SHYX*.xml`**，由 `vespa_plugin_xml()` 注册）。例外：[**AI Assistant**](./AIAssistant/README.md) 的**用户界面**是 View dock（`ParaViewPlugin/AIAssistant/pqSHYXAI*`），本目录只有文档，没有 VTK 模块或 SM XML；不要 `SHYXAIAssistant()`。需要 CGAL 的才依赖 `vtkCGALAlgorithm`；TetGen / VMTK / 纯 VTK 不要走 CGAL 基类。纯 VTK 的 Density Sampler / 点云 SDF 类名是 `vtkSHYX*`。骨架、切端、Surface-to-Volume 的 **vtk.module NAME** 是 `vtkSHYX*`，**C++ / XML `class=`** 仍是 `vtkCGAL*`。
 
 `vtk.module` 的 **GROUPS**：`Meshing` / `Vascular` / `Flow` / `PointCloud`（表示层为 `ParaView`）。
 

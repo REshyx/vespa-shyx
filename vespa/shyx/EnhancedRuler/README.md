@@ -2,4 +2,4 @@
 
 交互测距尺（客户端 Qt widget `pqSHYXEnhancedRulerWidget`）。纯 VTK 测距逻辑。
 
-参数见 `ParaViewPlugin/SHYXEnhancedRuler.xml`。
+参数见同目录 `SHYXEnhancedRuler.xml`。

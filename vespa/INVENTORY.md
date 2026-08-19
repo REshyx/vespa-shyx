@@ -108,7 +108,7 @@ Vascular 顺序（[`VESPAVascularCategory.xml`](../ParaViewPlugin/smxml/VESPAVas
 
 | 界面标签 | 类 | 目录 | XML | 图标 | README | 后端 |
 |----------|----|------|-----|------|--------|------|
-| SHYX AI Assistant | `pqSHYXAIAssistantPanel` | AIAssistant | —（View dock，`ParaViewPlugin/AIAssistant/`） | — | [有](shyx/AIAssistant/README.md) | 客户端 Qt（OpenAI 兼容 HTTP）。遗留 `SHYXAIAssistant.xml` **不要** `vespa_plugin_xml`；不要 `SHYXAIAssistant()` |
+| SHYX AI Assistant | `pqSHYXAIAssistantPanel` | AIAssistant | —（View dock，`ParaViewPlugin/AIAssistant/`） | — | [有](shyx/AIAssistant/README.md) | 客户端 Qt（OpenAI 兼容 HTTP）。无 SM XML / 无 VTK 模块；不要 `SHYXAIAssistant()` |
 
 ---
 

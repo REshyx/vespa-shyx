@@ -4,4 +4,4 @@
 
 两个 `vtkPolyData` 输入：**Input** 与 **Source**（Tool mesh）。`OperationType`：0 Difference（默认）、1 Intersection、2 Union。`ThrowOnSelfIntersection` 默认关。
 
-详见 `ParaViewPlugin/SHYXBooleanOperationFilter.xml`。
+详见同目录 `SHYXBooleanOperationFilter.xml`。

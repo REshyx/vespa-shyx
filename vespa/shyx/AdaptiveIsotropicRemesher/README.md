@@ -27,10 +27,12 @@
 | **`MaxEdgeLength`** | `double` | `0`（未设） | **最大边长**。Domain 建议约最长边的 **10%**（`scale_factor=0.1`）。 |
 | **`AdaptiveTolerance`** | `double` | `0.01` | **ICC sizing 容差**。必须 > 0。**值越小**对曲率越敏感，在 Min/Max 范围内更密。 |
 | **`ProtectAngle`** | `double` | `70.0` | **特征边保护角度（度）**。相邻面法线夹角大于此阈值时保护该边。 |
-| **`NumberOfIterations`** | `int` | `3` | CGAL 各向同性重网格循环次数。必须 `>= 1`。 |
-| **`NumberOfRelaxationSteps`** | `int` | `3` | 每轮切向松弛步数（CGAL 文档默认常为 1；本滤镜默认 3）。 |
+| **`NumberOfIterations`** | `int` | `3` | CGAL 各向同性重网格循环次数。必须 `>= 1`。面板标签 **Remesh iterations**。 |
+| **`NumberOfRelaxationSteps`** | `int` | `3` | 每轮切向松弛步数（CGAL 文档默认常为 1；本滤镜默认 3）。面板标签 **Relaxation steps**。 |
 
 **输出端口**：0 remeshed `vtkPolyData`；1 特征线；2 mask patch；3 sizing/ICC preview。可选 Selection（port 1）或标量范围只重网格一部分；空选区 = 整张表面。
+
+面板其余项（Expansion ratio、Scale to range、Detect feature edges、Feature mask、Remesh constraints 等）见同目录 `SHYXAdaptiveIsotropicRemesher.xml`；同模块还有 Vascular 用的 `SHYXRemeshWithEndpoint.xml`。
 
 ---
 

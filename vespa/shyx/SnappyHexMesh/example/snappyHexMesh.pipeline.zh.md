@@ -169,7 +169,7 @@ TetGen / 约束 Delaunay：指定的 segment 必须出现在网格里（不够�
 
 ## 9. 和本滤镜的对应
 
-见 `ParaViewPlugin/SHYXSnappyHexMesh.xml`。主输入是 **`vtkPartitionedDataSetCollection`**：每个分块写成一张整体 STL（`triSurfaceMesh`），当作 searchable / patch。单张 `vtkPolyData` 仍可接，内部名为 `geometry`。上游 **SHYX Selection Append Patches** 的 selection / pipeline / box / sphere 行都是普通分块；封闭 box、sphere 或管线封闭面加进 Append Patches 后，在本滤镜 **Region patches** 里按名引用即可做 `refinementRegions`。
+见同模块 `vespa/shyx/SnappyHexMesh/SHYXSnappyHexMesh.xml`。主输入是 **`vtkPartitionedDataSetCollection`**：每个分块写成一张整体 STL（`triSurfaceMesh`），当作 searchable / patch。单张 `vtkPolyData` 仍可接，内部名为 `geometry`。上游 **SHYX Selection Append Patches** 的 selection / pipeline / box / sphere 行都是普通分块；封闭 box、sphere 或管线封闭面加进 Append Patches 后，在本滤镜 **Region patches** 里按名引用即可做 `refinementRegions`。
 
 **不支持** STL 多 `solid` 的 `regions { firstSolid / secondSolid }`；`addLayers` 也按这个整体 patch 名写，不会生成 `sphere.stl_firstSolid`。
 

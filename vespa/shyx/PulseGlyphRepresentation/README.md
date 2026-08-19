@@ -13,32 +13,32 @@ Display 下拉 **`Pulse Glyphs`**。不要 `PulseGlyphRepresentation()`。Python
 
 ### 工作原理与算法
 动态表现的底层逻辑基于一套相位包络 (Phase Envelope) 算法：
-1. **动画驱动器**: 借助 `ParaViewPlugin/pqPulseGlyphAnimationManager` 统筹管理，当视图中包含开启了 `PG_Animate` 的脉冲图元时，管理器将连续触发视图重绘 (`view->render()`)，以生成连续的动画帧。
-2. **混合相位计算 (Mix Value)**: 读取 `AnimationCoordinateArray`（找不到则用到原点的点半径）× `IntegrationScale`，再加 **renderFrame × TimeScale**（不是墙钟时间）。
-3. **包络函数 (Envelope)**: 相位小数部分经 `Trunc` 钳制到 `[0, 1]`，再 `1.0 - pow(clamped, Pow)`。
+1. **动画驱动器**: 借助 `ParaViewPlugin/Representations/pqPulseGlyphAnimationManager` 统筹管理，当视图中包含开启了 `PG_Animate` 的脉冲图元时，管理器将连续触发视图重绘 (`view->render()`)，以生成连续的动画帧。
+2. **混合相位计算 (Mix Value)**: 读取 `PG_AnimationCoordinateArray`（找不到则用到原点的点半径）× `PG_IntegrationScale`，再加 **renderFrame × PG_TimeScale**（不是墙钟时间）。
+3. **包络函数 (Envelope)**: 相位小数部分经 `PG_Trunc` 钳制到 `[0, 1]`，再 `1.0 - pow(clamped, PG_Pow)`。
 4. **变换映射**:
-   - **缩放**: 受 `PulseAffectsScale` 门控；可叠加 ExtraScaleArray。
-   - **旋转**: 包络 × `RotationSweep`。`Shuffle` 用 `std::minstd_rand`，种子来自 mixValue。
+   - **缩放**: 受 `PG_PulseAffectsScale` 门控；可叠加 `PG_ExtraScaleArray`。
+   - **旋转**: 包络 × `PG_RotationSweep`。`PG_Shuffle` 用 `std::minstd_rand`，种子来自 mixValue。
 
 ---
 
 ## 2. 参数列表及其效果和含义 🎛️
 
-本表示模块提供的核心配置参数如下：
+Python 用 Display 上的 **exposed 名**（`disp.PG_*`）。XML 内部属性名不同（如 `PulseOverallScale` → `PG_OverallScale`）。默认值与同目录 `PulseGlyphRepresentation.xml` 一致：
 
-| 参数名称 | 类型 | 含义与效果 |
-| :--- | :---: | :--- |
-| **PG_Animate** | `bool` | **动画总开关**。 |
-| **TimeScale** | `double` | **时间缩放系数**。控制脉冲动画随时间演化的频率与速度。 |
-| **IntegrationScale** | `double` | **空间频响**。作为空间坐标或目标数组的乘数，控制脉冲状态在空间分布上的密集度与变化率。 |
-| **Trunc** | `double` | **截断因子**。决定脉冲包络的波形截断占比，控制图元处于极值状态的时长比例。 |
-| **Pow** | `double` | **衰减指数**。控制脉动强度衰减曲线的平滑度（线性或指数级衰减）。 |
-| **PulseOverallScale** | `double` | **全局缩放系数**。图元计算得出的最终动态缩放量都将乘以该全局系数。 |
-| **AnimationCoordinateArray**| `string` | **相位源数组**。指定用于驱动空间相位的点数据数组名称（默认值为 `IntegrationTime`）。若未找到，算法将默认使用空间坐标计算。 |
-| **ExtraScaleArray** | `string` | **附加缩放数组**。指定另一个数据数组，其数值大小将额外作用于图元的基准缩放。 |
-| **ArrayAffectScale** | `bool` | **附加缩放使能**。是否允许 `ExtraScaleArray` 参与最终的缩放计算。 |
-| **ArrayAffectScaleRatio** | `double` | **附加缩放比率**。定义额外数组的幅值影响基础缩放的权重系数。 |
-| **PulseAffectsScale** | `bool` | **缩放脉动使能**。设置时间脉冲包络是否作用于图元的尺寸变化。 |
-| **PulseAffectsRotation** | `bool` | **旋转脉动使能**。设置时间脉冲包络是否作用于图元的姿态旋转。 |
-| **Shuffle** | `bool` | **随机离散模式**。开启后，将引入伪随机偏差以打破统一的同步演化，使每个图元呈现独立的脉动和旋转状态。 |
-| **RotationSweep** | `double[3]`| **最大旋转欧拉角**。定义脉冲作用在 X, Y, Z 三轴上允许达到的最大旋转角度范围。 |
+| 参数名称 | 类型 | 默认 | 含义与效果 |
+| :--- | :---: | :---: | :--- |
+| **PG_Animate** | `bool` | 1 | **动画总开关**。 |
+| **PG_TimeScale** | `double` | 0.4 | **时间缩放系数**。控制脉冲动画随时间演化的频率与速度。 |
+| **PG_IntegrationScale** | `double` | 50 | **空间频响**。作为空间坐标或目标数组的乘数，控制脉冲状态在空间分布上的密集度与变化率。 |
+| **PG_Trunc** | `double` | 2 | **截断因子**。决定脉冲包络的波形截断占比，控制图元处于极值状态的时长比例。 |
+| **PG_Pow** | `double` | 1 | **衰减指数**。控制脉动强度衰减曲线的平滑度（线性或指数级衰减）。 |
+| **PG_OverallScale** | `double` | 1 | **全局缩放系数**（XML `PulseOverallScale`）。最终 PulseGlyphScale 乘以该系数。 |
+| **PG_AnimationCoordinateArray** | `string` | `IntegrationTime` | **相位源数组**。找不到则用到原点的点半径。 |
+| **PG_ExtraScaleArray** | `string` | `None` | **附加缩放数组**。其幅值可叠加到包络项。 |
+| **PG_ArrayAffectScale** | `bool` | 1 | **附加缩放使能**。是否让 `PG_ExtraScaleArray` 参与缩放。 |
+| **PG_ArrayAffectScaleRatio** | `double` | 1 | **附加缩放比率**。数组幅值乘到包络项之前的权重。 |
+| **PG_PulseAffectsScale** | `bool` | 1 | **缩放脉动使能**。时间脉冲包络是否作用于尺寸。 |
+| **PG_PulseAffectsRotation** | `bool` | 0 | **旋转脉动使能**。时间脉冲包络是否作用于姿态。 |
+| **PG_Shuffle** | `bool` | 0 | **随机离散模式**。用 `std::minstd_rand`（种子来自 mixValue）打破同步脉动。 |
+| **PG_RotationSweep** | `double[3]` | 360 360 360 | **最大旋转欧拉角**（度）。包络映射到各轴 0–该分量。 |

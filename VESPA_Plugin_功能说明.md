@@ -614,14 +614,19 @@
 
 **输出**：端口 0 remeshed；1 sharp features；2 mask patch；3 ICC sizing preview。
 
-| 参数 | 类型 | 默认值 | 说明 |
-|------|------|--------|------|
-| **Min Edge Length** | double | 0 | XML 默认未设。`RequestData` 要求 **0 < Min < Max**。ParaView BoundsDomain 建议约 AABB 最长边的 **0.1%**；点 Scale/Reset 才写入。非 ParaView 调用必须显式设正值。 |
-| **Max Edge Length** | double | 0 | 同上；Domain 建议约最长边的 **10%**（`scale_factor=0.1`）。 |
-| **Adaptive Tolerance (tol)** | double | **0.01** | Vespa ICC sizing 容差；更小往往更细。 |
-| **Number Of Iterations** | int | 3 | 重网格迭代次数。 |
-| **Protection Angle**（高级） | double | **70** | 特征边二面角阈值（度）。 |
-| **Interpolate attributes**（高级） | bool | true | 是否将点/单元数据插值到新网格。 |
+面板标签与 `vespa/shyx/AdaptiveIsotropicRemesher/SHYXAdaptiveIsotropicRemesher.xml` 一致：
+
+| 参数（界面标签） | XML `name` | 类型 | 默认值 | 说明 |
+|------------------|------------|------|--------|------|
+| **Min edge length** | `MinEdgeLength` | double | 0 | XML 默认未设。`RequestData` 要求 **0 < Min < Max**。ParaView BoundsDomain 建议约 AABB 最长边的 **0.1%**；点 Scale/Reset 才写入。非 ParaView 调用必须显式设正值。 |
+| **Max edge length** | `MaxEdgeLength` | double | 0 | 同上；Domain 建议约最长边的 **10%**（`scale_factor=0.1`）。 |
+| **Adaptive tolerance** | `AdaptiveTolerance` | double | **0.01** | Vespa ICC sizing 容差；更小往往更细。 |
+| **Expansion ratio** | `AdaptiveSizingNeighborMaxRatio` | double | **1.6** | 限制相邻顶点 ICC 目标边长跳变；`≤ 1` 关闭。 |
+| **Scale to range** | `ScaleToRange` | bool | false | ON 时把 ICC 目标线性拉到 [Min, Max]。 |
+| **Remesh iterations** | `NumberOfIterations` | int | 3 | CGAL `isotropic_remeshing` 迭代次数。 |
+| **Relaxation steps** | `NumberOfRelaxationSteps` | int | 3 | 每轮切向松弛步数。 |
+| **Protection angle** | `ProtectAngle` | double | **70** | 特征边二面角阈值（度）；依赖 **Detect feature edges**。 |
+| **Interpolate attributes** | `UseUpdateAttributes` | bool | true | 是否将点/单元数据插值到新网格。 |
 
 **说明**：CGAL 低于 6.0 时该滤镜不会出现（内部 `VESPA_ADAPTIVE_REMESHING`）。与 **VESPA Isotropic Remesher**（固定目标边长）相比，本滤镜为曲率自适应且通过 Min/Max 约束边长范围。
 
@@ -629,7 +634,7 @@
 
 ### 32. 其余 SHYX 滤镜（参数以 XML 为准）
 
-下列滤镜的面板字段以对应 `ParaViewPlugin/SHYX*.xml` 为准；此处只记用途，避免与 INVENTORY 重复维护长表。
+下列滤镜的面板字段以对应模块目录里的 `SHYX*.xml`（`vespa/shyx/<Feature>/`）为准；此处只记用途，避免与 INVENTORY 重复维护长表。
 
 | 滤镜 | 要点 |
 |------|------|
@@ -645,7 +650,7 @@
 | **SHYX Selection Append Patches** | 选区 / 管线几何 / box·sphere 进 PDC；不收未选父网格单元 |
 | **SHYX Delete / Flip Selected Cells** | 删单元 / 翻转绕向 |
 | **SHYX Selection: Fill, Alpha Wrap, Union** | CGAL ≥ 5.5 |
-| **SHYX Minimum OBB** | 最小 OBB；交互 box |
+| **SHYX Minimum OBB** | 最小体积 OBB / PCA / AABB；交互 box |
 | **SHYX Enhanced Ruler** | 交互测距 |
 | **SHYX Selection Plane Clipper** | Vascular 第 3 步 |
 | **SHYX TetGen Mesh Optimize** | 与 TetGen 同模块 |
@@ -694,4 +699,4 @@
 - **SHYX DataSet To Partitioned Collection** 面向 **IOSS/Exodus** 写出：从含四面体的体网格提取体块与边界表面分区，并维护 **GlobalIds** / **element_side** 等；若仅需可视化拆分表面，也可在普通网格上试用，但设计目标是 Writer 侧装配与集合语义。
 - **SHYX Adaptive Isotropic Remesher**（CGAL ≥ 6.0）适合需要在**曲率大处加密**、同时用 Min/Max 控制尺度的情况；均匀尺度需求可继续用 **VESPA Isotropic Remesher**。网格诊断优先 **SHYX Mesh Checker**；开放网格布尔用 **SHYX Boolean (relaxed)**。完整对照见 [`vespa/INVENTORY.md`](vespa/INVENTORY.md)。
 
-以上参数与行为基于当前 VESPA 源码与 `ParaViewPlugin` 下 Server Manager XML 整理，若与界面标签略有差异以 ParaView 界面为准；更底层算法说明见 [CGAL 文档](https://doc.cgal.org/) 与对应 VTK 类文档。
+以上参数与行为基于当前源码与各模块 `vespa/shyx/<Feature>/SHYX*.xml`（上游 VESPA 见 `ParaViewPlugin/smxml/` 与 `vespa/vespa/`）整理，界面标签以 XML `label` 为准；更底层算法说明见 [CGAL 文档](https://doc.cgal.org/) 与对应 VTK 类文档。
