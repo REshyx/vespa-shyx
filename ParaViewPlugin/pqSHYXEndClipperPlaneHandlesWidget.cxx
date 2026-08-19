@@ -197,6 +197,7 @@ void pqSHYXEndClipperPlaneHandlesWidget::onPlaneInteraction()
             wdg->UpdateVTKObjects();
         }
     }
+    this->alignPickCenterToVisiblePlane();
     Q_EMIT this->changeAvailable();
     if (pqView* v = this->view())
     {
@@ -216,6 +217,7 @@ void pqSHYXEndClipperPlaneHandlesWidget::onPlaneEndInteraction()
         }
     }
     this->pushPackedFromWidgetsToFilter();
+    this->alignPickCenterToVisiblePlane();
     Q_EMIT this->changeFinished();
     if (pqView* v = this->view())
     {
@@ -371,9 +373,31 @@ void pqSHYXEndClipperPlaneHandlesWidget::updatePlaneWidgetsVisibility()
         vtkSMPropertyHelper(wdg, "Enabled", true).Set(showOne ? 1 : 0);
         wdg->UpdateVTKObjects();
     }
+    this->alignPickCenterToVisiblePlane();
     if (pqView* v = this->view())
     {
         v->render();
+    }
+}
+
+//-----------------------------------------------------------------------------
+void pqSHYXEndClipperPlaneHandlesWidget::alignPickCenterToVisiblePlane()
+{
+    auto* rv = qobject_cast<pqRenderView*>(this->view());
+    if (!rv)
+    {
+        return;
+    }
+    for (const auto& wdg : this->PlaneWidgets)
+    {
+        if (!wdg || vtkSMPropertyHelper(wdg, "Visibility", true).GetAsInt() == 0)
+        {
+            continue;
+        }
+        double origin[3] = { 0.0, 0.0, 0.0 };
+        vtkSMPropertyHelper(wdg, "Origin", true).Get(origin, 3);
+        rv->setCenterOfRotation(origin);
+        return;
     }
 }
 

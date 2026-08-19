@@ -59,6 +59,8 @@ private:
     void attachPlaneWidgetsToView();
     void detachPlaneWidgetsFromView();
     void updatePlaneWidgetsVisibility();
+    /// Move pick / rotation center to the visible plane origin; camera pose is unchanged.
+    void alignPickCenterToVisiblePlane();
     void placePlaneBounds(vtkSMNewWidgetRepresentationProxy* wdg, const double bounds[6]);
     void syncWidgetsFromFilterState();
     void pushPackedFromWidgetsToFilter();
