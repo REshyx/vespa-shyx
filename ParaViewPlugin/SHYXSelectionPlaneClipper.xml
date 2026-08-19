@@ -5,8 +5,10 @@
                  label="SHYX Selection Plane Clipper">
       <Documentation short_help="SHYX Selection Plane Clipper: Clip mesh with a plane from selection centroid and average normal.">
         Port 0 input is the full triangulated surface; port 0 output is the clipped mesh. Port 1 is a vtkSelection (same convention as SHYX Selection
-        Extrude and VESPA Region Fairing): use Copy Active Selection in the Properties panel—no separate
-        Extract Selection filter is required. The filter runs vtkExtractSelection internally, computes an
+        Extrude and VESPA Region Fairing). Creating the filter copies the Input's active selection into the Selection
+        widget (same as Extract Selection / SHYX Delete Selected Cells); Copy Active Selection is only needed if you
+        change the selection afterwards. No separate Extract Selection filter is required. The filter runs
+        vtkExtractSelection internally, computes an
         area-weighted centroid and average face normal on the selected triangles, then clips the full mesh.
         With Tip connectivity (default), clipping follows the same strategy as SHYX Vessel End Clipper.
         Optional Selection Cell Array Name selects triangles on port 0 when no selection is provided.
@@ -41,7 +43,8 @@
           <DataType value="vtkSelection"/>
         </DataTypeDomain>
         <Documentation>
-          Active selection (cells or points on Input). Use Copy Active Selection in the panel.
+          vtkSelection describing cells or points on Input (same convention as SHYX Selection Extrude).
+          Filled at create from the Input's active selection; Copy Active Selection is optional afterwards.
         </Documentation>
         <Hints>
           <SelectionInput/>
@@ -196,6 +199,10 @@
 
       <Hints>
         <ShowInMenu category="SHYX" icon=":/VESPA/SHYX_Selection_Plane_Clipper.png"/>
+        <!-- Same as Extract Selection / SHYXDeleteSelectedCells: copy Input's active
+             selection into Selection at proxy create so the widget is populated
+             without Copy Active Selection. -->
+        <InitializationHelper class="vtkSMExtractSelectionProxyInitializationHelper"/>
       </Hints>
     </SourceProxy>
   </ProxyGroup>

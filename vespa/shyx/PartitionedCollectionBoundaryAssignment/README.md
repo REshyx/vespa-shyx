@@ -21,21 +21,21 @@
 
 其中 `-inlet_*` / `-num_outlet` 由本 filter 填入；其余路径等保持模板默认，可导出后手工改。
 
-面板可改三个导出文件名。默认从顶层 reader 的 `FileName`/`FileNames` 解析病例号，并去掉尾部 `_plaque` / `_aorta`：
+面板可改四个导出文件名。默认从顶层 reader 的 `FileName`/`FileNames` 解析病例号，并去掉尾部 `_plaque` / `_aorta`：
 
-| 源文件示例 | 模式 | Exodus | Options（无后缀） | Nodeset（无后缀） |
-|-----------|------|--------|-------------------|-------------------|
-| `K2-1_plaque.stl` | Single inlet (PV) | `PV_K2-1.exo` | `options_PV_K2-1` | `Nodeset_PV_K2-1` |
-| `K2-1_aorta.stl` | Single outlet (HV) | `HV_K2-1.exo` | `options_HV_K2-1` | `Nodeset_HV_K2-1` |
+| 源文件示例 | 模式 | Exodus | Options（无后缀） | Nodeset（无后缀） | State |
+|-----------|------|--------|-------------------|-------------------|-------|
+| `K2-1_plaque.stl` | Single inlet (PV) | `PV_K2-1.exo` | `options_PV_K2-1` | `Nodeset_PV_K2-1` | `PV_K2-1.pvsm` |
+| `K2-1_aorta.stl` | Single outlet (HV) | `HV_K2-1.exo` | `options_HV_K2-1` | `Nodeset_HV_K2-1` | `HV_K2-1.pvsm` |
 
-找不到上游文件时回退为 `PV_0.exo` / `HV_0.exo`、`options_PV_0` / `options_HV_0`、`Nodeset_PV_0` / `Nodeset_HV_0`。
+找不到上游文件时回退为 `PV_0.exo` / `HV_0.exo`、`options_PV_0` / `options_HV_0`、`Nodeset_PV_0` / `Nodeset_HV_0`、`PV_0.pvsm` / `HV_0.pvsm`。
 
 **Flow Boundary Mode 自动选择**（按上游文件 basename，大小写不敏感；仅在上游路径变化时重设，之后可手动改）：
 - 文件名含 `plaque` → **Single inlet**（PV）
 - 文件名含 `aorta` → **Single outlet**（HV）
 - 同时含两者或都不含 → 不改动
 
-按钮 **Export port 0 (.exo) + options + Nodeset**：选目录后按上述名称写出三份文件（options / Nodeset 不加扩展名）。
+按钮 **Export port 0 (.exo) + options + Nodeset + .pvsm**：选目录后按上述名称写出四份文件（options / Nodeset 不加扩展名；`.pvsm` 为当前 ParaView 管线/视图状态）。
 
 ## 典型管线
 

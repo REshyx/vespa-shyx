@@ -193,6 +193,12 @@ QString pqSHYXBoundaryAssignmentInfoWidget::defaultNodesetName(
   return QStringLiteral("Nodeset_%1_%2").arg(tag, caseId);
 }
 
+QString pqSHYXBoundaryAssignmentInfoWidget::defaultPvsmName(
+  const QString& tag, const QString& caseId)
+{
+  return QStringLiteral("%1_%2.pvsm").arg(tag, caseId);
+}
+
 void pqSHYXBoundaryAssignmentInfoWidget::splitExportKey(
   const QString& key, QString& tag, QString& caseId)
 {
@@ -364,9 +370,11 @@ pqSHYXBoundaryAssignmentInfoWidget::pqSHYXBoundaryAssignmentInfoWidget(
   this->ExoNameEdit = new QLineEdit(namesHost);
   this->OptNameEdit = new QLineEdit(namesHost);
   this->BcNameEdit = new QLineEdit(namesHost);
+  this->PvsmNameEdit = new QLineEdit(namesHost);
   this->ExoNameEdit->setPlaceholderText(QStringLiteral("PV_K2-1.exo / HV_K2-1.exo"));
   this->OptNameEdit->setPlaceholderText(QStringLiteral("options_PV_K2-1 / options_HV_K2-1"));
   this->BcNameEdit->setPlaceholderText(QStringLiteral("Nodeset_PV_K2-1 / Nodeset_HV_K2-1"));
+  this->PvsmNameEdit->setPlaceholderText(QStringLiteral("PV_K2-1.pvsm / HV_K2-1.pvsm"));
   this->ExoNameEdit->setToolTip(tr(
     "Exodus output basename. Default PV_<case>.exo or HV_<case>.exo from the top-level "
     "source (e.g. K2-1_plaque.stl → PV_K2-1.exo). Falls back to PV_0.exo / HV_0.exo."));
@@ -375,9 +383,13 @@ pqSHYXBoundaryAssignmentInfoWidget::pqSHYXBoundaryAssignmentInfoWidget(
   this->BcNameEdit->setToolTip(tr(
     "Boundary assignment / nodeset basename (no extension). "
     "Default Nodeset_PV_<case> / Nodeset_HV_<case>."));
+  this->PvsmNameEdit->setToolTip(tr(
+    "ParaView state basename. Default PV_<case>.pvsm or HV_<case>.pvsm. "
+    "Written beside the Exodus file; captures the current pipeline / views."));
   namesForm->addRow(tr("Exodus (.exo)"), this->ExoNameEdit);
   namesForm->addRow(tr("Options (no ext)"), this->OptNameEdit);
   namesForm->addRow(tr("Nodeset (no ext)"), this->BcNameEdit);
+  namesForm->addRow(tr("State (.pvsm)"), this->PvsmNameEdit);
   vbox->addWidget(namesHost);
 
   // Filename hint before wiring mode Modified → avoids a redundant name sync mid-setup.
@@ -390,6 +402,7 @@ pqSHYXBoundaryAssignmentInfoWidget::pqSHYXBoundaryAssignmentInfoWidget(
     this->ExoNameEdit->setText(defaultExoName(tag, caseId));
     this->OptNameEdit->setText(defaultOptName(tag, caseId));
     this->BcNameEdit->setText(defaultNodesetName(tag, caseId));
+    this->PvsmNameEdit->setText(defaultPvsmName(tag, caseId));
   }
 
   if (vtkSMProperty* modeProp = smproxy->GetProperty("FlowBoundaryMode"))
@@ -407,10 +420,11 @@ pqSHYXBoundaryAssignmentInfoWidget::pqSHYXBoundaryAssignmentInfoWidget(
   }
 
   auto* exportBtn =
-    new QPushButton(tr("Export port 0 (.exo) + options + Nodeset"), this);
+    new QPushButton(tr("Export port 0 (.exo) + options + Nodeset + .pvsm"), this);
   exportBtn->setToolTip(tr(
     "Choose a folder via the .exo save dialog (suggested name from the box above). "
-    "Writes the Exodus file plus extensionless options and Nodeset files beside it."));
+    "Writes the Exodus file plus extensionless options, Nodeset, and the current "
+    "ParaView state (.pvsm) beside it."));
   vbox->addWidget(exportBtn);
   QObject::connect(exportBtn, &QPushButton::clicked, this,
     &pqSHYXBoundaryAssignmentInfoWidget::onExportClicked);
@@ -512,9 +526,11 @@ void pqSHYXBoundaryAssignmentInfoWidget::syncExportNameDefaults()
   const QString oldExo = defaultExoName(oldTag, oldCaseId);
   const QString oldOpt = defaultOptName(oldTag, oldCaseId);
   const QString oldBc = defaultNodesetName(oldTag, oldCaseId);
+  const QString oldPvsm = defaultPvsmName(oldTag, oldCaseId);
   const QString newExo = defaultExoName(newTag, newCaseId);
   const QString newOpt = defaultOptName(newTag, newCaseId);
   const QString newBc = defaultNodesetName(newTag, newCaseId);
+  const QString newPvsm = defaultPvsmName(newTag, newCaseId);
 
   // Preserve manual edits: only rewrite boxes that still hold the previous auto default.
   if (this->ExoNameEdit && this->ExoNameEdit->text().trimmed() == oldExo)
@@ -528,6 +544,10 @@ void pqSHYXBoundaryAssignmentInfoWidget::syncExportNameDefaults()
   if (this->BcNameEdit && this->BcNameEdit->text().trimmed() == oldBc)
   {
     this->BcNameEdit->setText(newBc);
+  }
+  if (this->PvsmNameEdit && this->PvsmNameEdit->text().trimmed() == oldPvsm)
+  {
+    this->PvsmNameEdit->setText(newPvsm);
   }
   this->LastAutoKey = key;
 }
@@ -665,6 +685,8 @@ void pqSHYXBoundaryAssignmentInfoWidget::onExportClicked()
   // Options / Nodeset intentionally have no extension.
   QString optName = this->OptNameEdit ? this->OptNameEdit->text().trimmed() : QString();
   QString bcName = this->BcNameEdit ? this->BcNameEdit->text().trimmed() : QString();
+  QString pvsmName = ensureExtension(
+    this->PvsmNameEdit ? this->PvsmNameEdit->text() : QString(), QStringLiteral(".pvsm"));
   if (exoName.isEmpty())
   {
     exoName = defaultExoName(tag, caseId);
@@ -677,9 +699,14 @@ void pqSHYXBoundaryAssignmentInfoWidget::onExportClicked()
   {
     bcName = defaultNodesetName(tag, caseId);
   }
+  if (pvsmName.isEmpty())
+  {
+    pvsmName = defaultPvsmName(tag, caseId);
+  }
 
   const QString exoPath = QFileDialog::getSaveFileName(pqCoreUtilities::mainWidget(),
-    tr("Export Exodus + options + Nodeset"), exoName, tr("Exodus (*.exo);;All files (*)"));
+    tr("Export Exodus + options + Nodeset + .pvsm"), exoName,
+    tr("Exodus (*.exo);;All files (*)"));
   if (exoPath.isEmpty())
   {
     return;
@@ -689,6 +716,8 @@ void pqSHYXBoundaryAssignmentInfoWidget::onExportClicked()
   const QString outDir = QFileInfo(exoFile).absolutePath();
   const QString optPath = outDir + QLatin1Char('/') + QFileInfo(optName).fileName();
   const QString bcPath = outDir + QLatin1Char('/') + QFileInfo(bcName).fileName();
+  const QString pvsmPath =
+    outDir + QLatin1Char('/') + QFileInfo(ensureExtension(pvsmName, QStringLiteral(".pvsm"))).fileName();
 
   // Keep the exo line edit in sync with the path the user actually chose.
   if (this->ExoNameEdit)
@@ -724,6 +753,15 @@ void pqSHYXBoundaryAssignmentInfoWidget::onExportClicked()
     return;
   }
 
+  auto* core = pqApplicationCore::instance();
+  if (!core || !core->saveState(pvsmPath))
+  {
+    QMessageBox::critical(this, tr("Export"),
+      tr("Wrote Exodus / options / Nodeset, but failed to save ParaView state:\n%1")
+        .arg(pvsmPath));
+    return;
+  }
+
   QMessageBox::information(this, tr("Export"),
-    tr("Wrote:\n%1\n%2\n%3").arg(exoFile, optPath, bcPath));
+    tr("Wrote:\n%1\n%2\n%3\n%4").arg(exoFile, optPath, bcPath, pvsmPath));
 }

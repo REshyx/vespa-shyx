@@ -4,8 +4,8 @@
                  class="vtkSHYXSelectionAppendPatches"
                  label="SHYX Selection Append Patches">
       <Documentation
-          short_help="SHYX Selection Append Patches: Add overlapping extracted patches into a PartitionedDataSetCollection."
-          long_help="Snapshots cell selections into the patch table (default names geo_0, geo_1, ...). Rename only; names need not end with _N. The table keeps every row. Apply merges rows with the same name into one output patch and reuses the earlier mark. Unique names are marked 0, 1, 2, ... in table order (constant cell/field array Mark Array Name, default PatchMark). Apply runs vtkExtractSelection per unique name. Port 0 is the added patches; port 1 is Input minus the union of added cells. With Apply on Add (default), each Add or Remove applies so both ports refresh — select on port 1 to avoid re-picking added cells, or to re-add cells after Remove. Uncheck Apply on Add to skip Apply and allow overlapping picks from stale remainder or the original Input."/>
+          short_help="SHYX Selection Append Patches: Add extracted, pipeline, and shape patches into a PartitionedDataSetCollection."
+          long_help="Snapshots cell selections, pipeline geometry, or parametric box/sphere shapes into the patch table (default names geo_N). Rename only; names need not end with _N. The table keeps every row. Apply merges rows with the same name into one output patch and reuses the earlier mark. Unique names are marked 0, 1, 2, ... in table order (constant cell/field array Mark Array Name, default PatchMark). Selection rows run vtkExtractSelection. Pipeline / box / sphere rows become extra geometry partitions (for SnappyHexMesh regions or any other consumer). Port 0 is the added patches; port 1 is Input minus the union of selection-row cells. With Apply on Add (default), each Add or Remove applies so both ports refresh. Uncheck Apply on Add to skip Apply and allow overlapping picks. Select a box/sphere row's widget in the 3D view to move and resize it."/>
 
       <OutputPort name="Added patches" index="0" id="port0"/>
       <OutputPort name="Remaining cells" index="1" id="port1"/>
@@ -41,6 +41,31 @@
         </Hints>
       </InputProperty>
 
+      <!-- Repeatable extra geometries aligned with pipeline rows. Hidden: the Patches table
+           Add from pipeline dropdown manages connections. -->
+      <InputProperty name="CustomPatches" command="AddCustomPatchConnection"
+                     clean_command="RemoveAllCustomPatchConnections"
+                     repeatable="1" multiple_input="1"
+                     panel_visibility="never">
+        <ProxyGroupDomain name="groups">
+          <Group name="sources"/>
+          <Group name="filters"/>
+        </ProxyGroupDomain>
+        <DataTypeDomain name="input_type" composite_data_supported="1">
+          <DataType value="vtkDataSet"/>
+          <DataType value="vtkPolyData"/>
+          <DataType value="vtkPartitionedDataSetCollection"/>
+        </DataTypeDomain>
+        <Documentation>
+          Extra pipeline geometries added as patches (one connection per pipeline table row,
+          in table order). Managed by Add from pipeline; not shown as a separate input widget.
+        </Documentation>
+        <Hints>
+          <Optional/>
+          <NoDefault/>
+        </Hints>
+      </InputProperty>
+
       <StringVectorProperty name="MarkArrayName" label="Mark Array Name"
           command="SetMarkArrayName" number_of_elements="1" default_values="PatchMark">
         <Documentation>
@@ -64,7 +89,24 @@
           number_of_elements="1" default_values="" animateable="0" panel_visibility="never">
         <Documentation>
           Newline-separated cell-id lists aligned with Patch Names. Comma-separated ids or ranges
-          (0-10,15) on the Input dataset.
+          (0-10,15) on the Input dataset. Used by selection rows.
+        </Documentation>
+      </StringVectorProperty>
+
+      <StringVectorProperty name="PatchKinds" label="Patch Kinds" command="SetPatchKinds"
+          number_of_elements="1" default_values="" animateable="0" panel_visibility="never">
+        <Documentation>
+          Newline-separated kinds aligned with Patch Names: selection (default), pipeline, box,
+          or sphere.
+        </Documentation>
+      </StringVectorProperty>
+
+      <StringVectorProperty name="PatchParams" label="Patch Params" command="SetPatchParams"
+          number_of_elements="1" default_values="" animateable="0" panel_visibility="never">
+        <Documentation>
+          Newline-separated extra data aligned with Patch Names. Box: 16-element unit-cube
+          transform (legacy AABB xmin,xmax,ymin,ymax,zmin,zmax). Sphere: cx,cy,cz,radius.
+          Pipeline: display label. Selection rows leave this empty.
         </Documentation>
       </StringVectorProperty>
 
@@ -73,6 +115,8 @@
                      panel_visibility="default">
         <Property function="Names" name="PatchNames"/>
         <Property function="CellIds" name="PatchCellIds"/>
+        <Property function="Kinds" name="PatchKinds"/>
+        <Property function="Params" name="PatchParams"/>
         <Hints>
           <WidgetHeight number_of_rows="8"/>
         </Hints>

@@ -15,13 +15,14 @@ class vtkSMStringVectorProperty;
 
 /**
  * Read-only multiline texts for Boundary Assignment / full options file, plus one-click
- * export of port 0 (Exodus via vtkIOSSWriter) and the two text snippets.
+ * export of port 0 (Exodus via vtkIOSSWriter), the two text snippets, and the current
+ * ParaView state (.pvsm).
  *
  * Default information_only multi_line widgets refresh before RequestData finishes,
  * so the panel stays one Apply behind. This widget re-pulls after dataUpdated.
  *
  * Export name defaults from top-level reader FileName / FileNames, e.g.
- * K2-1_plaque.stl → PV_K2-1.exo / options_PV_K2-1 / Nodeset_PV_K2-1
+ * K2-1_plaque.stl → PV_K2-1.exo / options_PV_K2-1 / Nodeset_PV_K2-1 / PV_K2-1.pvsm
  * (options and Nodeset have no file extension). Falls back to PV_0 / HV_0.
  *
  * FlowBoundaryMode is auto-picked from the upstream file basename (case-insensitive):
@@ -61,6 +62,7 @@ private:
   static QString defaultExoName(const QString& tag, const QString& caseId);
   static QString defaultOptName(const QString& tag, const QString& caseId);
   static QString defaultNodesetName(const QString& tag, const QString& caseId);
+  static QString defaultPvsmName(const QString& tag, const QString& caseId);
   static void splitExportKey(const QString& key, QString& tag, QString& caseId);
 
   QPointer<pqPipelineSource> PipelineSource;
@@ -69,6 +71,7 @@ private:
   QLineEdit* ExoNameEdit = nullptr;
   QLineEdit* OptNameEdit = nullptr;
   QLineEdit* BcNameEdit = nullptr;
+  QLineEdit* PvsmNameEdit = nullptr;
   vtkSMStringVectorProperty* AssignmentProp = nullptr;
   vtkSMStringVectorProperty* InletOptProp = nullptr;
   QString LastAutoKey;

@@ -1922,20 +1922,24 @@ const ShyxExtra kShyxExtra[] = {
   { "SHYXTetGen", "Vascular step 5. Closed triangle surface -> tetrahedra." },
   { "SHYXDataSetToPartitionedCollection", "Vascular step 6. Convert dataset to PDC; then Boundary Assignment." },
   { "SHYXPartitionedCollectionBoundaryAssignment",
-    "Vascular step 7. Call get_blocks on the PDC first. Port0 collection, port1 assignment debug." },
+    "Vascular step 7. Call get_blocks on the PDC first. Port0 collection, port1 assignment debug. "
+    "Export writes Exodus + options + Nodeset + current .pvsm beside the chosen .exo." },
   { "SHYXPartitionedCollectionBoundaryFields", "Adds boundary field arrays on an assigned PDC." },
   { "SHYXSelectionExtrudeFilter", "Needs an active 3D selection of cells." },
   { "SHYXSelectionAppendPatches",
     "Add from selection snapshots the 3D-view cell selection into the Patches table (geo_N); "
-    "Copy Active Selection is not required. Rename only (any name); the table keeps every row. "
-    "Apply merges same names into one patch and reuses the earlier mark. Unique names are marked "
-    "0, 1, 2, ... in table order. Port 0 = added patches (PDC); port 1 = Input minus the union of "
-    "added cells. Apply on Add (default checkbox) Applies after each Add or Remove so both "
-    "ports refresh; after Remove, dropped cells reappear on port 1 and can be added again; "
-    "select remaining cells on port 1 to avoid re-picking added cells. Uncheck it to skip Apply "
-    "and allow overlapping picks from a stale remainder or the original Input. Apply "
-    "ExtractSelection-appends each unique name as a PDC block. Unselected cells are not kept on "
-    "port 0. Not the IOSS DataSetToPartitionedCollection path." },
+    "Copy Active Selection is not required. Add from pipeline dropdown adds another pipeline "
+    "geometry node as a patch. Add from shape dropdown adds a parametric Box or Sphere with an "
+    "interactive 3D widget (initial size/position match Sphere Selection; Box left-click rotates). "
+    "All rows are the same "
+    "kind of PDC geometry partition — SnappyHexMesh Region patches can name any of them. Rename "
+    "only (any name); the table keeps every row. Apply merges same names into one patch and reuses "
+    "the earlier mark. Unique names are marked 0, 1, 2, ... in table order. Port 0 = added patches "
+    "(PDC); port 1 = Input minus the union of selection-row cells (pipeline/box/sphere do not "
+    "subtract). Apply on Add (default checkbox) Applies after each Add or Remove so both ports "
+    "refresh; after Remove, dropped selection cells reappear on port 1. Uncheck it to skip Apply "
+    "and allow overlapping picks. Unselected parent cells are not kept on port 0. Not the IOSS "
+    "DataSetToPartitionedCollection path." },
   { "SHYXDeleteSelectedCellsFilter",
     "Needs an active cell selection. Creating the filter copies the Input's "
     "active selection into the Selection widget (Extract Selection-style); "

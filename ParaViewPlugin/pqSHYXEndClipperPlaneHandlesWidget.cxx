@@ -42,7 +42,7 @@
 
 namespace
 {
-constexpr int kMaxEndpoints = 64;
+constexpr int kMaxEndpoints = 1024;
 
 void AdjustBounds(vtkBoundingBox& bbox, double scaleFactor)
 {

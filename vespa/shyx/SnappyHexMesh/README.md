@@ -12,7 +12,7 @@ MSVC 下 `VESPAPlugin.dll` 必须 `/WHOLEARCHIVE` 该 `.lib`（插件 CMake 已�
 
 ## 输入
 
-- **Input**：`vtkPartitionedDataSetCollection`（推荐上游 **SHYX Selection Append Patches**）。每个分块写成一张整体 STL（`type triSurfaceMesh`），作为一个 searchable / patch。**不**解析 STL 多 `solid`，也**不**写 `regions { firstSolid / secondSolid }`。
+- **Input**：`vtkPartitionedDataSetCollection`（推荐上游 **SHYX Selection Append Patches**）。每个分块写成一张整体 STL（`type triSurfaceMesh`），作为一个 searchable / patch。**不**解析 STL 多 `solid`，也**不**写 `regions { firstSolid / secondSolid }`。Append Patches 的 selection / pipeline / box / sphere 行在输出里都是同等分块；要做体积加密时把封闭的 box、sphere 或管线封闭面加进 Append Patches，再到本滤镜 **Region patches** 里按名引用（`inside` / `outside` / `distance`）。
 - 单张 **`vtkPolyData`** 仍可直连，内部当成名为 `geometry` 的一块。
 - **Feature edges**（可选，Properties 面板 pipeline 下拉，创建滤镜时不必选）：管线里另一个 `vtkPolyData` 节点，只收 `VTK_LINE` / `VTK_POLY_LINE`，写成 `constant/triSurface/features.eMesh`，并打开 `explicitFeatureSnap`。留空 `(none)` 则不写 `.eMesh`。
 
