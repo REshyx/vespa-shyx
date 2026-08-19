@@ -37,3 +37,5 @@ target_link_libraries(vtkSHYXVmtkOpeningCenterlines PRIVATE "${_vespa_vmtk_nl}")
 if(MSVC)
   target_compile_options(vtkSHYXVmtkOpeningCenterlines PRIVATE /utf-8)
 endif()
+
+vespa_plugin_xml(SHYXVmtkOpeningCenterlines.xml)

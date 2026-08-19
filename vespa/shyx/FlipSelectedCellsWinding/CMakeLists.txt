@@ -4,3 +4,5 @@ vtk_module_add_module(vtkSHYXFlipSelectedCellsWindingFilter
   FORCE_STATIC
   CLASSES ${classes}
 )
+
+vespa_plugin_xml(SHYXFlipSelectedCellsWinding.xml)

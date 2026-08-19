@@ -3,3 +3,5 @@ set(classes
 vtk_module_add_module(vtkSHYXConvexHullFilter
   FORCE_STATIC
   CLASSES ${classes})
+
+vespa_plugin_xml(SHYXConvexHullFilter.xml)

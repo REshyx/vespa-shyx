@@ -5,3 +5,5 @@ vtk_module_add_module(vtkSHYXSkeletonExtraction
   CLASSES ${classes})
 
 vtk_module_link(vtkSHYXSkeletonExtraction PRIVATE CGAL::Eigen3_support)
+
+vespa_plugin_xml(SHYXSkeletonExtraction.xml)

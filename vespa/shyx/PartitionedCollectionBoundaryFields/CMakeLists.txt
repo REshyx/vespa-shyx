@@ -8,3 +8,5 @@ vtk_module_add_module(vtkSHYXPartitionedCollectionBoundaryFields
 if(MSVC)
   target_compile_options(vtkSHYXPartitionedCollectionBoundaryFields PRIVATE /utf-8)
 endif()
+
+vespa_plugin_xml(SHYXPartitionedCollectionBoundaryFields.xml)

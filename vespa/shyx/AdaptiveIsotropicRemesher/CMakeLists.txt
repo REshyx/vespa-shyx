@@ -6,3 +6,7 @@ vtk_module_add_module(vtkSHYXAdaptiveIsotropicRemesher
   CLASSES ${classes})
 
 vtk_module_link(vtkSHYXAdaptiveIsotropicRemesher PRIVATE CGAL::Eigen3_support)
+
+vespa_plugin_xml(
+  SHYXAdaptiveIsotropicRemesher.xml
+  SHYXRemeshWithEndpoint.xml)

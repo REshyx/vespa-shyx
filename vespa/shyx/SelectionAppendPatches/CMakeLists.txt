@@ -8,3 +8,5 @@ vtk_module_add_module(vtkSHYXSelectionAppendPatches
 if(MSVC)
   target_compile_options(vtkSHYXSelectionAppendPatches PRIVATE /utf-8)
 endif()
+
+vespa_plugin_xml(SHYXSelectionAppendPatches.xml)

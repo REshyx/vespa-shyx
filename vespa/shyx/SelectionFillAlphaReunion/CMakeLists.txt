@@ -5,3 +5,5 @@ vtk_module_add_module(vtkSHYXSelectionFillAlphaReunionFilter
   CLASSES ${classes})
 
 vtk_module_link(vtkSHYXSelectionFillAlphaReunionFilter PRIVATE CGAL::Eigen3_support)
+
+vespa_plugin_xml(SHYXSelectionFillAlphaReunionFilter.xml)

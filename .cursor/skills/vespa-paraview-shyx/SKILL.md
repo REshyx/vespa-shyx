@@ -23,15 +23,15 @@ description: >-
   - `vespa/vespa/`：Kitware 原版 VESPA（`vtkCGAL*`）。
   - `vespa/shyx/`：SHYX；新作者应新建 `vespa/<id>/`，不要往 shyx 或 vespa/vespa 里塞。
 - **SHYX 不只是 Filters 菜单**。用户可见能力分几类（清单见 `vespa/INVENTORY.md`；AI 查询约定见 **§9**）：
-  - **Pipeline filter / source**：`vespa/shyx/<Feature>/` + `ParaViewPlugin/SHYX*.xml`，`ProxyGroup name="filters"`（或 sources）。
+  - **Pipeline filter / source**：`vespa/shyx/<Feature>/`（C++ + `SHYX*.xml`），`ProxyGroup name="filters"`（或 sources）。
   - **Display 表示**：`PulseGlyphRepresentation` / `AnimatedStreamlineRepresentation` / `PointLabelRepresentation`，挂在 Display 下拉框，不是 pipeline 节点。
-  - **RenderView 标题栏选择工具**：`ParaViewPlugin/SphereSelection/`、`GrowSelectionWithSimilar/`，纯客户端 Qt，**没有** SM proxy。
-  - **RenderView block 右键**：`ParaViewPlugin/SelectBlock/`（`pqContextMenuInterface`），在复合数据块菜单里加 **Select Block**，先清当前选择再选中该 block 的全部 cell；同样无 SM proxy。
-  - **RenderView 选择右键**：`ParaViewPlugin/SelectSimilar/`，有 cell 选择时加 **Select All**（当前选区所在连通区域）、**Invert Selection**（反选）、**Select Similar** 子菜单（现有 **By Normal**）和 **Fill Interior**。By Normal 一次扩到没有相似邻面为止，复用 `GrowSelectionWithSimilar` 的二面角阈值，不是标题栏那种一环一环点。Fill Interior 把被当前选区完全围住的未选面补进选择（开放网格上仍连到开口的区域不填）。
-  - **3D widget 表示**：支架/圆柱（`SHYX*WidgetRepresentation.xml`），不是 Display 下拉项。
-  - **View 停靠窗**：SHYX AI Assistant（`ParaViewPlugin/pqSHYXAI*`），不是 pipeline filter。
-- **SHYX 实现**：每个 **VTK 算子或表示** 在 `vespa/shyx/<FeatureName>/` 下；至少包含 `vtk.module` 与 `CMakeLists.txt`（`vtk_module_add_module`，`shyx` 里通常带 `FORCE_STATIC`）。标题栏选择工具只有 `ParaViewPlugin/` 下的 `pq*`。AI 面板 UI 是 `pqSHYXAI*`；`vespa/shyx/AIAssistant/` 里仍有遗留 `vtkSHYXAIAssistant`，对应 XML **不要**再写入 `SERVER_MANAGER_XML`。
-- **ParaView 插件包**：`ParaViewPlugin/CMakeLists.txt` 中 `paraview_add_plugin(VESPAPlugin ...)` 的 `SERVER_MANAGER_XML` 列表注册每个 `SHYX*.xml`；**一个 DLL（VESPAPlugin）** 聚合已构建模块，而不是每个算子一个插件目标。
+  - **RenderView 标题栏选择工具**：`ParaViewPlugin/selection/SphereSelection/`、`GrowSelectionWithSimilar/`，纯客户端 Qt，**没有** SM proxy。
+  - **RenderView block 右键**：`ParaViewPlugin/selection/SelectBlock/`（`pqContextMenuInterface`），在复合数据块菜单里加 **Select Block**，先清当前选择再选中该 block 的全部 cell；同样无 SM proxy。
+  - **RenderView 选择右键**：`ParaViewPlugin/selection/SelectSimilar/`，有 cell 选择时加 **Select All**（当前选区所在连通区域）、**Invert Selection**（反选）、**Select Similar** 子菜单（现有 **By Normal**）和 **Fill Interior**。By Normal 一次扩到没有相似邻面为止，复用 `GrowSelectionWithSimilar` 的二面角阈值，不是标题栏那种一环一环点。Fill Interior 把被当前选区完全围住的未选面补进选择（开放网格上仍连到开口的区域不填）。
+  - **3D widget 表示**：支架/圆柱（`SHYX*WidgetRepresentation.xml`，与对应滤镜同目录），不是 Display 下拉项。
+  - **View 停靠窗**：SHYX AI Assistant（`ParaViewPlugin/AIAssistant/pqSHYXAI*`），不是 pipeline filter。
+- **SHYX 实现**：每个 **VTK 算子或表示** 在 `vespa/shyx/<FeatureName>/` 下；至少包含 `vtk.module`、`CMakeLists.txt`（`vtk_module_add_module`，`shyx` 里通常带 `FORCE_STATIC`）和 `SHYX*.xml`（`vespa_plugin_xml(...)`）。标题栏选择工具只有 `ParaViewPlugin/selection/` 下的 `pq*`。AI 面板 UI 是 `ParaViewPlugin/AIAssistant/pqSHYXAI*`；不要为遗留 `SHYXAIAssistant.xml` 调用 `vespa_plugin_xml`。
+- **ParaView 插件包**：`ParaViewPlugin/CMakeLists.txt` 里 `paraview_add_plugin(VESPAPlugin ...)` 的 `SERVER_MANAGER_XML` **自动收集**各模块 `vespa_plugin_xml()` 声明的文件，外加 `ParaViewPlugin/smxml/` 里的上游聚合 XML；**一个 DLL（VESPAPlugin）** 聚合已构建模块，而不是每个算子一个插件目标。
 - **注册入口**：`ParaViewPlugin/paraview.plugin` 只描述插件名；`paraview_plugin_build` 与主工程里的 `VESPA_BUILD_PV_PLUGIN` 一起驱动构建。
 - **与 CGAL 的边界**：只有真正调用 CGAL 的算子才依赖 `vtkCGALAlgorithm` / `vtkCGALPolyDataAlgorithm`；纯 VTK / TetGen / VMTK 算子只写自己的 `DEPENDS`。根 `CMakeLists.txt` 在扫完 `vtk.module` 后，仅当仍有模块声明 `vtkCGALAlgorithm` 或 `CGAL::CGAL` 且 `VESPA_USE_CGAL=ON` 时才 `find_package(CGAL)`。
 
@@ -47,24 +47,24 @@ description: >-
 | 新模块是否进构建、是否被条件排除 | 根 `CMakeLists.txt` 里对 `vespa_module_files` 的 `list(FILTER ... EXCLUDE ...)`：VMTK、CGAL 版本、非 ParaView 下排除 `Representation` 等 |
 | SHYX 实现根 | `vespa/shyx/*/` |
 | 上游 VESPA（CGAL） | `vespa/vespa/*/` |
-| 单模块 CMake 与类列表 | `vespa/shyx/<Name>/CMakeLists.txt`（`set(classes ...)` + `vtk_module_add_module`） |
+| 单模块 CMake 与类列表 | `vespa/shyx/<Name>/CMakeLists.txt`（`set(classes ...)` + `vtk_module_add_module` + `vespa_plugin_xml`） |
 | 模块对外 VTK 依赖 | 同目录 `vtk.module` 的 `NAME` / `DEPENDS` / `PRIVATE_DEPENDS` / `GROUPS`（`Core` `Meshing` `Vascular` `Flow` `PointCloud`；表示层 `ParaView`） |
-| ParaView UI/proxy 定义 | `ParaViewPlugin/SHYX<Name>.xml`（`SourceProxy` 的 `class="vtkSHYX..."` 与属性） |
-| 哪些 XML 已挂进插件 | `ParaViewPlugin/CMakeLists.txt` → `paraview_add_plugin` → `SERVER_MANAGER_XML` 列表 |
+| ParaView UI/proxy 定义 | `vespa/shyx/<Name>/SHYX<Name>.xml`（`SourceProxy` 的 `class="vtkSHYX..."` 与属性） |
+| 哪些 XML 已挂进插件 | 模块 `vespa_plugin_xml(...)` → GLOBAL `VESPA_PLUGIN_SERVER_MANAGER_XML`；插件 `smxml/` 仅上游聚合与 Vascular 菜单 |
 | 菜单/图标 | XML 里 `<Hints><ShowInMenu category="SHYX" .../></Hints>`；资源常挂在 `ParaViewPlugin/VESPAIcons.qrc` |
 | 某输出端口默认表示法（如 Point Gaussian） | `<Hints>` 里 `<RepresentationType view="RenderView" type="..." port="N"/>`；**§8.6.7** |
-| 需要 Qt 的客户端逻辑 | `ParaViewPlugin/` 下的 `pq*`（含 Pulse Glyph / Animated Streamline 动画管理器、Sphere / Grow 选择）；用 `paraview_plugin_add_auto_start` 或 `UI_INTERFACES` / `SOURCES` 列出 |
-| SHYX AI Assistant 能力目录与参数查询 | `ParaViewPlugin/pqSHYXAIAgentTools.cxx`（`list_filters` / `lookup_shyx_docs` / `describe_proxy`）；系统提示 `pqSHYXAIAssistantPanel.cxx` 的 `kSystemPrompt`；**§9** |
-| 上游 VESPA 的聚合 XML | `ParaViewPlugin/VESPAFilters.xml` 只注册 Kitware 原版滤镜；**不要**把 SHYX 代理再塞回去。SHYX 一律 `SHYX*.xml` |
+| 需要 Qt 的客户端逻辑 | `ParaViewPlugin/widgets/`、`selection/`、`AIAssistant/`、`Representations/`；用 `ParaViewPlugin/cmake/PropertyWidgets.cmake` 与 `ClientInterfaces.cmake` |
+| SHYX AI Assistant 能力目录与参数查询 | `ParaViewPlugin/AIAssistant/pqSHYXAIAgentTools.cxx`（`list_filters` / `lookup_shyx_docs` / `describe_proxy`）；系统提示 `pqSHYXAIAssistantPanel.cxx` 的 `kSystemPrompt`；**§9** |
+| 上游 VESPA 的聚合 XML | `ParaViewPlugin/smxml/VESPAFilters.xml` 只注册 Kitware 原版滤镜；**不要**把 SHYX 代理再塞回去。SHYX 一律模块目录里的 `SHYX*.xml` |
 
 **搜索技巧**：在仓库内 `rg "vtkSHYX"`, `rg "SHYX" ParaViewPlugin`, `rg "vtk_module_add_module" vespa/shyx` 可快速定位命名与已接入项。
 
 ## 3. 参考实现（选一类对照）
 
-- **多端口 + CGAL 诊断/修复**：`vespa/shyx/MeshChecker/` + `ParaViewPlugin/SHYXMeshChecker.xml`；类继承自 `vtkCGALPolyDataAlgorithm`，`vtk.module` 依赖 `vtkCGALAlgorithm` / `vtkCGALPMP` 等。
-- **纯 VTK 链**：`vespa/shyx/ConvexHullFilter/` + `SHYXConvexHullFilter.xml`；`vtk.module` 仅 `VTK::FiltersCore` / `Geometry` 等。
-- **CGAL PMP + ProtectAngle/FeatureMask 约束 + 多输出**：`vespa/shyx/AdaptiveIsotropicRemesher/` + `ParaViewPlugin/SHYXAdaptiveIsotropicRemesher.xml`；XML 用多 `PropertyGroup` 分节、`panel_visibility="advanced"` 整组进 Advanced、`enabled_state` + `inverse=1` 做条件灰显。可作为「面板布局」模板。
-- **single proxy / 多算法切换**：`vespa/shyx/ShapeSmoothing/` + `ParaViewPlugin/SHYXShapeSmoothing.xml`；顶层 `SmoothingMethod` 枚举驱动 `smooth_shape` / `angle_and_area_smoothing` / `fair` 三套子参数，每套挂 `GenericDecorator value="N"`，跨算法共享的属性用 `values="0 1"`。详见 **§8.6.5**。
+- **多端口 + CGAL 诊断/修复**：`vespa/shyx/MeshChecker/`（含 `SHYXMeshChecker.xml`）；类继承自 `vtkCGALPolyDataAlgorithm`，`vtk.module` 依赖 `vtkCGALAlgorithm` / `vtkCGALPMP` 等。
+- **纯 VTK 链**：`vespa/shyx/ConvexHullFilter/`（含 `SHYXConvexHullFilter.xml`）；`vtk.module` 仅 `VTK::FiltersCore` / `Geometry` 等。
+- **CGAL PMP + ProtectAngle/FeatureMask 约束 + 多输出**：`vespa/shyx/AdaptiveIsotropicRemesher/`（含 `SHYXAdaptiveIsotropicRemesher.xml`）；XML 用多 `PropertyGroup` 分节、`panel_visibility="advanced"` 整组进 Advanced、`enabled_state` + `inverse=1` 做条件灰显。可作为「面板布局」模板。
+- **single proxy / 多算法切换**：`vespa/shyx/ShapeSmoothing/`（含 `SHYXShapeSmoothing.xml`）；顶层 `SmoothingMethod` 枚举驱动 `smooth_shape` / `angle_and_area_smoothing` / `fair` 三套子参数，每套挂 `GenericDecorator value="N"`，跨算法共享的属性用 `values="0 1"`。详见 **§8.6.5**。
 
 新增功能时，**在 shyx 里找输入/输出类型最相近的已有目录**，复用其 CMake/`vtk.module`/XML 结构，而不是从零猜 ParaView 域名。
 
@@ -74,18 +74,18 @@ description: >-
 
 1. **目录** `vespa/shyx/<YourName>/`：实现 `vtkSHYX<YourName>.h` / `.cxx`（及模块导出头若生成脚本需要）。
 2. **vtk.module**：`NAME` 与 `CMakeLists` 中 `vtk_module_add_module( NAME ...)` 一致；`DEPENDS` 覆盖算法用到的 VTK 模块与 CGAL 封装（若有）。
-3. **CMakeLists.txt**：`set(classes vtkSHYX<YourName>)`，`vtk_module_add_module(... FORCE_STATIC CLASSES ${classes})`；需要 CGAL/TBB/第三方时在目标上 `vtk_module_link` 或 `target_link_libraries`（与旁邻 shyx 目录同风格）。
+3. **CMakeLists.txt**：`set(classes vtkSHYX<YourName>)`，`vtk_module_add_module(... FORCE_STATIC CLASSES ${classes})`，并 `vespa_plugin_xml(SHYX<YourName>.xml)`；需要 CGAL/TBB/第三方时在目标上 `vtk_module_link` 或 `target_link_libraries`（与旁邻 shyx 目录同风格）。
 4. **C++ 约定**：
    - 类名 `vtkSHYX*`；基类与项目内同类算子一致（`vtkImageAlgorithm` / `vtkPolyDataAlgorithm` / `vtkCGALPolyDataAlgorithm` 等）。
    - `Set*` / `Get*` 与 XML 里 `command="Set..."` 一致；多输出端口在 XML 中声明 `<OutputPort ... index="N"/>`。
-5. **Server-manager XML** `ParaViewPlugin/SHYX<YourName>.xml`：`<SourceProxy class="vtkSHYX<YourName>" label="...">`，`Input` / 属性与 Hints 与现有一致风格。布局上按功能切 `<PropertyGroup>` 分节、把整组次要项压到 `panel_visibility="advanced"`、条件性子项用 `GenericDecorator`（`enabled_state` 或 `visibility`，按 §8.6.3 的取舍）。多算法 single-proxy 走 §8.6.5 模板。
-6. **注册 XML**：在 `ParaViewPlugin/CMakeLists.txt` 追加 `"SHYX<YourName>.xml"`。纯 VTK / TetGen 等放无条件 `SERVER_MANAGER_XML` 列表；多数 CGAL 滤镜放 `SHYX_CGAL_SERVER_MANAGER_XML`（随 `VESPA_BUILT_WITH_CGAL`）。CGAL ≥ 6 重网格 → `ADAPTIVE_REMESHING_SERVER_MANAGER_XML`；Alpha Wrap / Selection Fill → 随内部变量 `VESPA_ALPHA_WRAPPING`；VMTK / Snappy → 各自 `if()` 列表。**不要**写入 `VESPAFilters.xml`。
+5. **Server-manager XML** `vespa/shyx/<YourName>/SHYX<YourName>.xml`：`<SourceProxy class="vtkSHYX<YourName>" label="...">`，`Input` / 属性与 Hints 与现有一致风格。布局上按功能切 `<PropertyGroup>` 分节、把整组次要项压到 `panel_visibility="advanced"`、条件性子项用 `GenericDecorator`（`enabled_state` 或 `visibility`，按 §8.6.3 的取舍）。多算法 single-proxy 走 §8.6.5 模板。
+6. **注册 XML**：在该模块 `CMakeLists.txt` 写 `vespa_plugin_xml(SHYX<YourName>.xml)`。模块被根 CMake 排除（CGAL / VMTK / Snappy / 非 ParaView 的 Representation）时 XML 不会注册。**不要**改 `ParaViewPlugin/CMakeLists.txt` 的 `SERVER_MANAGER_XML`，也**不要**写入 `smxml/VESPAFilters.xml`。新的 `pq*` / dock / 无 proxy 工具才改 `ParaViewPlugin/cmake/PropertyWidgets.cmake` 或 `ClientInterfaces.cmake`。
 7. **若需图标**：`VESPAIcons.qrc` 增加资源并在 XML `ShowInMenu` 里引用 `:/...` 路径（对照已有条目）。
 8. **若根 CMake 有条件排除**：如果新目录名命中 `list(FILTER ... EXCLUDE` 的规则，或依赖可选组件（VMTK/CGAL 6），在根 `CMakeLists.txt` 的注释与逻辑中保持一致，并在 README 里说明开启方式。
 9. **AI Assistant（必做，见 §9）**：UI 进插件 ≠ 助手能列出或查出参数。普通 filter 一般能被 `describe_proxy` 扫到；**Display 表示、无 proxy 的客户端工具、以及需要用法备注的 filter 必须在 `pqSHYXAIAgentTools.cxx` 里补上**，并改 `kSystemPrompt`。漏了助手就只看得到 Filters。
 10. **对照表**：`vespa/INVENTORY.md`（及 shyx README / 根目录功能说明，若该功能要出现在文档里）。
 
-**不必改**：`paraview.plugin` 的 NAME/描述在增加普通 filter 时通常不需要动；`vtk_module_find_modules` 会自动发现新 `vtk.module`。
+**不必改**：`paraview.plugin` 的 NAME/描述在增加普通 filter 时通常不需要动；`vtk_module_find_modules` 会自动发现新 `vtk.module`；插件 `SERVER_MANAGER_XML` 长列表也不必再手改。
 
 ## 5. 与“仅 VTK 库/测试”开发模式的差异
 
@@ -94,7 +94,7 @@ description: >-
 ## 6. 常见失败点
 
 - **XML 里 `class` 与 VTK 类名不一致**：ParaView 找不到 `vtkObjectFactory` 注册的类，或在服务端报错。
-- **忘把 XML 加进 `SERVER_MANAGER_XML`**：算子 C++ 已进 DLL，但 UI 不出现。
+- **忘了 `vespa_plugin_xml()`**：算子 C++ 已进 DLL，但 UI 不出现。
 - **vtk.module 少写了依赖**：链接期或 `vtk_header_dep` 类错误。
 - **条件构建**：VMTK/CGAL 6 相关模块被根 CMake 排除后，与 XML 仍引用该 filter 会不一致——改 CMake 或改 XML/文档，避免“一半发布”。
 - **自定义 `panel_widget` 整组 backing 都 `never`**：`pqProxyWidget` 跳过这些属性，**根本不创建**组 widget。至少留一个可见锚点（§8.6.8）。
@@ -106,12 +106,13 @@ description: >-
 
 - 根构建与模块扫描：`CMakeLists.txt`（`vtk_module_find_modules` / `vtk_module_build` / `paraview_plugin_build` 段）；变量名为 `vespa_module_files` / `vespa_provided_modules`
 - 作者目录约定：`vespa/README.md`
-- 插件与 XML 列表：`ParaViewPlugin/CMakeLists.txt`
-- SHYX 实现根：`vespa/shyx/*/`
+- 插件编排：`ParaViewPlugin/CMakeLists.txt`（收集 `vespa_plugin_xml` + `smxml/`）；客户端分段 `ParaViewPlugin/cmake/`
+- XML 注册辅助：`CMake/VespaPluginXml.cmake`（`vespa_plugin_xml`）
+- SHYX 实现根：`vespa/shyx/*/`（含该功能的 `SHYX*.xml`）
 - 上游 VESPA（CGAL）：`vespa/vespa/*/`
 - 公用 CGAL 辅助：`vespa/Algorithm/`
 - 模块对照表：`vespa/INVENTORY.md`（滤镜 / 表示 / 仅客户端 Qt）
-- AI Assistant 工具：`ParaViewPlugin/pqSHYXAIAgentTools.cxx`（**§9**）
+- AI Assistant 工具：`ParaViewPlugin/AIAssistant/pqSHYXAIAgentTools.cxx`（**§9**）
 - **ParaView 上游源码（本地参考）**：`C:\SoftWare\ParaView` — 可对照 Proxy、Server Manager XML、插件 CMake、`paraview_add_plugin` 等与版本一致的实现；本路径为开发机约定，若不存在则以实际安装的 ParaView 源码目录为准。
 
 更细的 **Domain / Decorator** 与常见 Hints 见 **§8**。其余 ParaView SM 细节以**已有 `SHYX*.xml`** 为模板，对照本地 `ParaView` 源码（如 `Remoting/ServerManager`、`Qt/ApplicationComponents`）与官方文档。
@@ -127,7 +128,7 @@ description: >-
 
 ### 8.2 插件能否使用、能否自定义
 
-- **使用**：在 **`ParaViewPlugin/SHYX*.xml`** 里直接写已存在的 Domain 名与 Decorator 的 `type=` 即可（需与所链 ParaView 版本一致）。
+- **使用**：在 **`vespa/shyx/<Feature>/SHYX*.xml`** 里直接写已存在的 Domain 名与 Decorator 的 `type=` 即可（需与所链 ParaView 版本一致）。
 - **自定义 Domain**：通常需 **C++** 子类化 `vtkSMDomain` 并注册；仅 XML 发明新标签名一般不可行。多数 shyx 插件只组合现有 Domain。
 - **自定义 Decorator**：**可以**。上游示例 `ParaView/Examples/Plugins/PropertyWidgets/Plugin/`：继承 `pqPropertyWidgetDecorator`，通过 `pqPropertyWidgetInterface::createWidgetDecorator()` 按 XML `type="..."` 分派；插件注册一个**额外的** `pqPropertyWidgetInterface` 与标准实现并列。若需 server-side 共用逻辑，走 `vtkPropertyDecorator`（如 `vtkGenericPropertyDecorator`）再由 Qt 侧包装。
 
@@ -189,7 +190,7 @@ description: >-
 ```
 含义：「Iterations==0 → 灰显；非 0 → 可编辑」。`value="" inverse="1"` 同理表示「非空字符串才启用」。
 
-仓库内例子：`ParaViewPlugin/SHYXAdaptiveIsotropicRemesher.xml` 的 `ShapeSmoothingTimeStep`。
+仓库内例子：`vespa/shyx/AdaptiveIsotropicRemesher/SHYXAdaptiveIsotropicRemesher.xml` 的 `ShapeSmoothingTimeStep`。
 
 #### 8.6.2 OR 多值用 `values="a b c"`
 
@@ -201,7 +202,7 @@ description: >-
                          values="0 1"/>
 ```
 
-仓库内例子：`ParaViewPlugin/SHYXShapeSmoothing.xml` 的 `NumberOfIterations`。
+仓库内例子：`vespa/shyx/ShapeSmoothing/SHYXShapeSmoothing.xml` 的 `NumberOfIterations`。
 
 #### 8.6.3 `enabled_state` vs `visibility` 的取舍
 
@@ -223,7 +224,7 @@ description: >-
 </PropertyGroup>
 ```
 
-仓库内例子：`ParaViewPlugin/SHYXAdaptiveIsotropicRemesher.xml`「REMESH OPERATIONS」段。
+仓库内例子：`vespa/shyx/AdaptiveIsotropicRemesher/SHYXAdaptiveIsotropicRemesher.xml`「REMESH OPERATIONS」段。
 
 #### 8.6.5 按算法/模式切换整页面板（single proxy, multi algorithm）
 
@@ -267,7 +268,7 @@ description: >-
 
 #### 8.6.7 指定某输出端口在视图中的默认 Representation
 
-在对应 `ParaViewPlugin/SHYX*.xml` 的 `<SourceProxy>` 末尾 `<Hints>` 里写 **`RepresentationType`**（见 [ParaView Proxy Hints：RepresentationType](https://www.paraview.org/paraview-docs/latest/cxx/ProxyHints.html)）：控制**首次把该 filter 的输出显示到视图里时**，representation 子代理上 **「Representation」属性的默认值**（通过 `vtkSMRepresentationProxy::SetRepresentationType()`），不是改「创建哪个 representation 代理」。
+在对应 `vespa/shyx/<Feature>/SHYX*.xml` 的 `<SourceProxy>` 末尾 `<Hints>` 里写 **`RepresentationType`**（见 [ParaView Proxy Hints：RepresentationType](https://www.paraview.org/paraview-docs/latest/cxx/ProxyHints.html)）：控制**首次把该 filter 的输出显示到视图里时**，representation 子代理上 **「Representation」属性的默认值**（通过 `vtkSMRepresentationProxy::SetRepresentationType()`），不是改「创建哪个 representation 代理」。
 
 | 属性 | 说明 |
 |------|------|
@@ -285,7 +286,7 @@ description: >-
 </Hints>
 ```
 
-仓库内参考：`ParaViewPlugin/SHYXVmtkOpeningCenterlines.xml`（Opening seed points → `Point Label`）；`ParaViewPlugin/SHYXVesselEndClipper.xml`（Clip Planes → `Point Label`）；`ParaViewPlugin/SHYXAutoStreamline.xml`（port 1 种子点 → `Point Gaussian`）。
+仓库内参考：`vespa/shyx/VmtkOpeningCenterlines/SHYXVmtkOpeningCenterlines.xml`（Opening seed points → `Point Label`）；`vespa/shyx/VesselEndClipper/SHYXVesselEndClipper.xml`（Clip Planes → `Point Label`）；`vespa/shyx/AutoStreamline/SHYXAutoStreamline.xml`（port 1 种子点 → `Point Gaussian`）。
 
 #### 8.6.8 自定义 `panel_widget`：组里必须有一个**可见锚点**属性
 
@@ -332,7 +333,7 @@ description: >-
 
 ## 9. 加功能时必须接到 AI Assistant（`describe_proxy`）
 
-**漏改助手 = 用户在 UI 里能用，助手却列不出、也查不到参数。** 实现在 `ParaViewPlugin/pqSHYXAIAgentTools.cxx`；系统提示 `pqSHYXAIAssistantPanel.cxx` 的 `kSystemPrompt`。
+**漏改助手 = 用户在 UI 里能用，助手却列不出、也查不到参数。** 实现在 `ParaViewPlugin/AIAssistant/pqSHYXAIAgentTools.cxx`；系统提示 `pqSHYXAIAssistantPanel.cxx` 的 `kSystemPrompt`。
 
 `describe_proxy` / `list_filters` **不会自动覆盖所有 SHYX 能力**。它们默认擅长 SM `filters`/`sources`。新类型若不补代码，助手只能当 filter 查。
 

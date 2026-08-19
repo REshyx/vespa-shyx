@@ -5,3 +5,5 @@ vtk_module_add_module(vtkGeodesicDistanceFilter
   FORCE_STATIC
   CLASSES ${classes}
 )
+
+vespa_plugin_xml(SHYXGeodesicDistance.xml)

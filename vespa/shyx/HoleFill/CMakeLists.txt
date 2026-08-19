@@ -5,3 +5,5 @@ vtk_module_add_module(vtkSHYXHoleFillFilter
   CLASSES ${classes})
 
 vtk_module_link(vtkSHYXHoleFillFilter PRIVATE CGAL::Eigen3_support)
+
+vespa_plugin_xml(SHYXHoleFillFilter.xml)

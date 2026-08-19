@@ -8,3 +8,5 @@ vtk_module_add_module(vtkSHYXDataSetToPartitionedCollection
 if(MSVC)
   target_compile_options(vtkSHYXDataSetToPartitionedCollection PRIVATE /utf-8)
 endif()
+
+vespa_plugin_xml(SHYXDataSetToPartitionedCollection.xml)

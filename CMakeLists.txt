@@ -234,6 +234,8 @@ else()
   set(_vespa_enable_tests "OFF")
 endif()
 
+include("${CMAKE_CURRENT_SOURCE_DIR}/CMake/VespaPluginXml.cmake")
+
 vtk_module_scan(
   MODULE_FILES     ${vespa_module_files}
   PROVIDES_MODULES vespa_provided_modules

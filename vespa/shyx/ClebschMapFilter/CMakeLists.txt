@@ -22,3 +22,5 @@ else()
   message(STATUS "vtkSHYXClebschMapFilter: MKL acceleration disabled")
 endif()
 vtk_module_link(vtkSHYXClebschMapFilter PRIVATE Eigen3::Eigen)
+
+vespa_plugin_xml(SHYXClebschMapFilter.xml)

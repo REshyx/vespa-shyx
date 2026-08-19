@@ -97,7 +97,7 @@
 
 **Filters → Vascular**（工具条顺序）：Skeleton Extraction → Vessel End Clipper → Selection Plane Clipper → Remesh With Endpoint → TetGen → DataSet To Partitioned Collection → Boundary Assignment。
 
-成对滤镜「该用 VESPA 还是 SHYX」见 [`vespa/INVENTORY.md`](vespa/INVENTORY.md) 末节。
+上游 VESPA 只作保留、SHYX 一般为升级版，见 [`vespa/INVENTORY.md`](vespa/INVENTORY.md) 末节。
 
 ### 表示（`representations`）
 

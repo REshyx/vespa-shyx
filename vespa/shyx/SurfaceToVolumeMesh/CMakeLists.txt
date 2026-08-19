@@ -5,3 +5,5 @@ vtk_module_add_module(vtkSHYXSurfaceToVolumeMesh
   CLASSES ${classes})
 
 vtk_module_link(vtkSHYXSurfaceToVolumeMesh PRIVATE CGAL::Eigen3_support)
+
+vespa_plugin_xml(SHYXSurfaceToVolumeMesh.xml)

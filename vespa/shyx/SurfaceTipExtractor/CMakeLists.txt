@@ -5,3 +5,5 @@ vtk_module_add_module(vtkSurfaceTipExtractor
   FORCE_STATIC
   CLASSES ${classes}
 )
+
+vespa_plugin_xml(SHYXSurfaceTipExtractor.xml)

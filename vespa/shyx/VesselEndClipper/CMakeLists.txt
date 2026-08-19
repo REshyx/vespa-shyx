@@ -5,3 +5,5 @@ vtk_module_add_module(vtkSHYXVesselEndClipper
   CLASSES ${classes})
 
 vtk_module_link(vtkSHYXVesselEndClipper PRIVATE CGAL::Eigen3_support)
+
+vespa_plugin_xml(SHYXVesselEndClipper.xml)

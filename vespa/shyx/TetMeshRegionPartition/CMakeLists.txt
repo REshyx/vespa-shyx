@@ -38,3 +38,5 @@ if (VESPA_USE_SMP)
 else()
   message(STATUS "vtkSHYXTetMeshRegionPartition: SMP optimization disabled")
 endif()
+
+vespa_plugin_xml(SHYXTetMeshRegionPartition.xml)

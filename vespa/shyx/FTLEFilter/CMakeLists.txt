@@ -5,3 +5,5 @@ vtk_module_add_module(vtkFTLEFilter
   FORCE_STATIC
   CLASSES ${classes}
 )
+
+vespa_plugin_xml(SHYXFTLEFilter.xml)

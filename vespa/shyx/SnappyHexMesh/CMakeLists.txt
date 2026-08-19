@@ -4,3 +4,5 @@ vtk_module_add_module(vtkSHYXSnappyHexMesh
   CLASSES ${classes})
 
 vtk_module_link(vtkSHYXSnappyHexMesh PRIVATE SHYXSnappyHex::SHYXSnappyHex)
+
+vespa_plugin_xml(SHYXSnappyHexMesh.xml)

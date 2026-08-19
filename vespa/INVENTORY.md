@@ -5,7 +5,7 @@
 
 图例：
 
-- **XML**：上游 VESPA 在 `VESPAFilters.xml`（仅 `VESPA_BUILT_WITH_CGAL` 时注册）；SHYX 各一份 `ParaViewPlugin/SHYX*.xml`。
+- **XML**：上游 VESPA 在 [`smxml/VESPAFilters.xml`](../ParaViewPlugin/smxml/VESPAFilters.xml)（仅 `VESPA_BUILT_WITH_CGAL` 时注册）；SHYX 各一份 `vespa/shyx/<Feature>/SHYX*.xml`，由该模块 `CMakeLists.txt` 的 `vespa_plugin_xml()` 注册。
 - **图标**：`自有` = qrc 有对应 `SHYX_*.png`；`fluent` = Vascular 管线 qrc 指向 `_fluent.png`。
 - **GROUPS**（`vtk.module`）：`Core` / `Meshing` / `Vascular` / `Flow` / `PointCloud`；表示层保持 `ParaView`。
 - **后端**：模块 `vtk.module` 实际依赖，不是类名里的 `CGAL` 字样。
@@ -26,27 +26,7 @@ CMake **用户选项**：`VESPA_USE_CGAL`（默认 ON）、`VESPA_USE_VMTK`、`V
 
 ## 上游 VESPA（`vespa/vespa/`，Filters → VESPA）
 
-全部需 **`VESPA_USE_CGAL`**。XML 均在 [`VESPAFilters.xml`](../ParaViewPlugin/VESPAFilters.xml)，另两份可选 XML 单独列出。
-
-| 界面标签 | 类 | 目录 | XML | 图标 | 备注 |
-|----------|----|------|-----|------|------|
-| CGAL Point Cloud Reader | `vtkCGALXYZReader` | PointSetProcessing | VESPAFilters.xml | —（Reader） | sources |
-| VESPA Delaunay 2D | `vtkCGALDelaunay2` | Delaunay | VESPAFilters.xml | 自有 | |
-| VESPA Boolean Operation | `vtkCGALBooleanOperation` | PolygonMeshProcessing | VESPAFilters.xml | 自有 | 要求封闭网格；见成对表 |
-| VESPA Isotropic Remesher | `vtkCGALIsotropicRemesher` | PolygonMeshProcessing | VESPAFilters.xml | 自有 | 固定目标边长 |
-| VESPA Mesh Checker | `vtkCGALMeshChecker` | PolygonMeshProcessing | VESPAFilters.xml | 自有 | 诊断为主；见成对表 |
-| VESPA Mesh Deformation | `vtkCGALMeshDeformation` | PolygonMeshProcessing | VESPAFilters.xml | 自有 | |
-| VESPA Mesh Subdivision | `vtkCGALMeshSubdivision` | PolygonMeshProcessing | VESPAFilters.xml | 自有 | |
-| VESPA Hole Filling | `vtkCGALPatchFilling` | PolygonMeshProcessing | VESPAFilters.xml | 自有 | 见成对表 |
-| VESPA Region Fairing | `vtkCGALRegionFairing` | PolygonMeshProcessing | VESPAFilters.xml | 自有 | |
-| VESPA Shape Smoothing | `vtkCGALShapeSmoothing` | PolygonMeshProcessing | VESPAFilters.xml | 自有 | 见成对表 |
-| VESPA Poisson Surface Reconstruction Delaunay | `vtkCGALPoissonSurfaceReconstructionDelaunay` | ShapeReconstruction | VESPAFilters.xml | 自有 | |
-| VESPA Advancing Front Surface Reconstruction | `vtkCGALAdvancingFrontSurfaceReconstruction` | ShapeReconstruction | VESPAFilters.xml | 自有 | |
-| VESPA PCA Estimate Normals | `vtkCGALPCAEstimateNormals` | PointSetProcessing | VESPAFilters.xml | 自有 | |
-| VESPA Alpha Wrapping | `vtkCGALAlphaWrapping` | PolygonMeshProcessing | VESPAAlphaWrapping.xml | 自有 | CGAL ≥ 5.5 |
-| VESPA Mesh Smoothing | `vtkCGALMeshSmoothing` | PolygonMeshProcessing | VESPAMeshSmoothingFilter.xml | 自有 | 需 Ceres |
-
-无菜单的 PMP 类：`vtkCGALSignedDistanceFunction`（体素 SDF，勿与 SHYX 点云 SDF 混淆）。
+Kitware 原版 CGAL 滤镜，全部需 **`VESPA_USE_CGAL`**，只作保留（对照与测试），本清单不逐条列出。菜单由 [`VESPAFilters.xml`](../ParaViewPlugin/smxml/VESPAFilters.xml) 注册（仅 `VESPA_BUILT_WITH_CGAL`）；Alpha Wrapping、Mesh Smoothing 另有 XML（[`vespa/vespa/PolygonMeshProcessing/`](vespa/PolygonMeshProcessing/)），分别依赖 CGAL ≥ 5.5 与 Ceres。无菜单的 PMP 类 `vtkCGALSignedDistanceFunction` 是规则网格上的封闭表面 SDF，勿与 SHYX 点云 SDF 混淆。日常管线用下方 SHYX。
 
 ---
 
@@ -77,7 +57,7 @@ CMake **用户选项**：`VESPA_USE_CGAL`（默认 ON）、`VESPA_USE_VMTK`、`V
 
 ### 血管 / 体积网格（含 Vascular 工具条）
 
-Vascular 顺序（[`VESPAVascularCategory.xml`](../ParaViewPlugin/VESPAVascularCategory.xml)）：骨架 → 切端 → 平面裁 → 端点重网格 → TetGen → PDC → 边界分配。
+Vascular 顺序（[`VESPAVascularCategory.xml`](../ParaViewPlugin/smxml/VESPAVascularCategory.xml)）：骨架 → 切端 → 平面裁 → 端点重网格 → TetGen → PDC → 边界分配。
 
 | 界面标签 | 类 | 目录 | XML | 图标 | README | 后端 | Vascular |
 |----------|----|------|-----|------|--------|------|----------|
@@ -99,7 +79,7 @@ Vascular 顺序（[`VESPAVascularCategory.xml`](../ParaViewPlugin/VESPAVascularC
 | SHYX Vascular Stent Placement | `vtkSHYXVascularStentPlacement` | VascularStentPlacement | SHYXVascularStentPlacement.xml | 自有 | [有](shyx/VascularStentPlacement/README.md) | VTK | |
 | SHYX Endpoint Stent Placement | `vtkSHYXEndpointStentPlacement` | EndpointStentPlacement | SHYXEndpointStentPlacement.xml | 自有 | [有](shyx/EndpointStentPlacement/README.md) | VTK | |
 
-支架/圆柱 **widget representation** XML：`SHYXImplicitCylinderWidgetRepresentation.xml`、`SHYXEndpointStentWidgetRepresentation.xml`（非 Filters 菜单）。
+支架/圆柱 **widget representation** XML：与对应滤镜同目录的 `SHYXImplicitCylinderWidgetRepresentation.xml`、`SHYXEndpointStentWidgetRepresentation.xml`（非 Filters 菜单）。
 
 ### 流场
 
@@ -128,7 +108,7 @@ Vascular 顺序（[`VESPAVascularCategory.xml`](../ParaViewPlugin/VESPAVascularC
 
 | 界面标签 | 类 | 目录 | XML | 图标 | README | 后端 |
 |----------|----|------|-----|------|--------|------|
-| SHYX AI Assistant | `pqSHYXAIAssistantPanel` | AIAssistant | —（View dock） | — | [有](shyx/AIAssistant/README.md) | 客户端 Qt（OpenAI 兼容 HTTP）。遗留 VTK 模块 `vtkSHYXAIAssistant` + `SHYXAIAssistant.xml` **不要再注册**；不要 `SHYXAIAssistant()` |
+| SHYX AI Assistant | `pqSHYXAIAssistantPanel` | AIAssistant | —（View dock，`ParaViewPlugin/AIAssistant/`） | — | [有](shyx/AIAssistant/README.md) | 客户端 Qt（OpenAI 兼容 HTTP）。遗留 `SHYXAIAssistant.xml` **不要** `vespa_plugin_xml`；不要 `SHYXAIAssistant()` |
 
 ---
 
@@ -146,27 +126,17 @@ Vascular 顺序（[`VESPAVascularCategory.xml`](../ParaViewPlugin/VESPAVascularC
 
 | 功能 | 代码 | 图标 |
 |------|------|------|
-| Sphere Selection | `ParaViewPlugin/SphereSelection/` | `SHYX_Sphere_Selection.svg` |
-| Grow Selection With Similar | `ParaViewPlugin/GrowSelectionWithSimilar/` | `SHYX_Grow_Selection_With_Similar.svg` |
-| Select Block（3D 视图 block 右键） | `ParaViewPlugin/SelectBlock/` | ParaView `pqSelectBlock.svg` |
-| Select Similar（选择右键，By Normal 一次 Grow 完） | `ParaViewPlugin/SelectSimilar/` | 复用 Grow 图标 |
-| Fill Interior（选择右键，填充被选区围住的未选面） | `ParaViewPlugin/SelectSimilar/` + Grow controller | （无独立图标） |
-| Select All（选择右键，全选当前连通区域） | `ParaViewPlugin/SelectSimilar/` + Grow controller | （无独立图标） |
-| Invert Selection（选择右键，反选） | `ParaViewPlugin/SelectSimilar/` + Grow controller | （无独立图标） |
-| Vascular 菜单/工具条 | `pqSHYXVascularCategoryAutoStart` + VESPAVascularCategory.xml | （各滤镜 fluent 图标） |
+| Sphere Selection | `ParaViewPlugin/selection/SphereSelection/` | `SHYX_Sphere_Selection.svg` |
+| Grow Selection With Similar | `ParaViewPlugin/selection/GrowSelectionWithSimilar/` | `SHYX_Grow_Selection_With_Similar.svg` |
+| Select Block（3D 视图 block 右键） | `ParaViewPlugin/selection/SelectBlock/` | ParaView `pqSelectBlock.svg` |
+| Select Similar（选择右键，By Normal 一次 Grow 完） | `ParaViewPlugin/selection/SelectSimilar/` | 复用 Grow 图标 |
+| Fill Interior（选择右键，填充被选区围住的未选面） | `ParaViewPlugin/selection/SelectSimilar/` + Grow controller | （无独立图标） |
+| Select All（选择右键，全选当前连通区域） | `ParaViewPlugin/selection/SelectSimilar/` + Grow controller | （无独立图标） |
+| Invert Selection（选择右键，反选） | `ParaViewPlugin/selection/SelectSimilar/` + Grow controller | （无独立图标） |
+| Vascular 菜单/工具条 | `ParaViewPlugin/VascularCategory/` + [`smxml/VESPAVascularCategory.xml`](../ParaViewPlugin/smxml/VESPAVascularCategory.xml) | （各滤镜 fluent 图标） |
 
 ---
 
-## VESPA 与 SHYX 成对滤镜（该用哪个）
+## 上游 VESPA 与 SHYX
 
-| 任务 | 用 VESPA（上游） | 用 SHYX | 不要混用的原因 |
-|------|------------------|---------|----------------|
-| 网格诊断 | `VESPA Mesh Checker`：水密/自交等开关，偏经典 PMP | **`SHYX Mesh Checker`**：汤边、边界环、自交三角；port 1 诊断几何；可选 autorefine 修复 | SHYX 版信息更多，血管管线优先 SHYX |
-| 布尔 | `VESPA Boolean Operation`：封闭网格、严格自交策略 | **`SHYX Boolean (relaxed)`**：不要求封闭 | 开放网格用 SHYX |
-| 补洞 | `VESPA Hole Filling`（Patch Filling） | **`SHYX Hole Fill`**：同类 CGAL hole fill，面板独立 | 功能接近；新管线用 SHYX |
-| 形状平滑 | `VESPA Shape Smoothing`：单一 MCF | **`SHYX Shape Smoothing`**：MCF / Angle&Area / Fair 三算法 | 需要多算法或 Fair 用 SHYX |
-| 各向同性重网格 | `VESPA Isotropic Remesher`：固定目标边长 | **`SHYX Adaptive Isotropic Remesher`**：曲率自适应（CGAL ≥ 6）；端点管线用 **Remesh With Endpoint** | 均匀尺度用 VESPA；血管壁用 SHYX |
-| 点云/表面距离 | PMP `vtkCGALSignedDistanceFunction`：规则网格上的封闭表面 SDF | **`SHYX Point Cloud Surface SDF`**：点云到参考面（纯 VTK） | 输入类型不同 |
-| 体积网格 | （无上游等价） | **TetGen** / **Surface to Volume Mesh (CGAL Mesh_3)** / **SnappyHexMesh** | 按单元类型选 |
-
-上游 VESPA 滤镜保留，供 Kitware 行为与测试对照；血管 CFD 主路径走 **Filters → Vascular**。
+**Filters → VESPA** 是 Kitware 原版滤镜，只作保留（对照上游行为与测试）；同类任务一般用 **SHYX**，多为升级版（诊断更细、开放网格布尔、多算法平滑、曲率自适应重网格等）。体积网格、流场、点云、选择工具等只有 SHYX。血管 CFD 主路径走 **Filters → Vascular**。

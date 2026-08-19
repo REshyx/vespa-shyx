@@ -11,3 +11,5 @@ if (TARGET TBB::tbb)
   target_compile_definitions(vtkSHYXMeshChecker PRIVATE VTKSHYXMESHCHECKER_HAVE_TBB)
   vtk_module_link(vtkSHYXMeshChecker PRIVATE TBB::tbb)
 endif ()
+
+vespa_plugin_xml(SHYXMeshChecker.xml)

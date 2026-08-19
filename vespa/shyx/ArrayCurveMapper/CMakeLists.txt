@@ -4,3 +4,5 @@ vtk_module_add_module(vtkArrayCurveMapper
   FORCE_STATIC
   CLASSES ${classes}
 )
+
+vespa_plugin_xml(SHYXArrayCurveMapper.xml)

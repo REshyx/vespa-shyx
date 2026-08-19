@@ -4,3 +4,7 @@ set(classes
 vtk_module_add_module(vtkSHYXEndpointStentPlacement
   FORCE_STATIC
   CLASSES ${classes})
+
+vespa_plugin_xml(
+  SHYXEndpointStentPlacement.xml
+  SHYXEndpointStentWidgetRepresentation.xml)

@@ -10,3 +10,5 @@ if (VESPA_USE_SMP)
 else()
   message(STATUS "vtkSHYXArrayProbabilityPointCull: SMP optimization disabled")
 endif()
+
+vespa_plugin_xml(SHYXArrayProbabilityPointCull.xml)

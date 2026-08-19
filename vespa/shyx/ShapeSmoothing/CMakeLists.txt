@@ -13,3 +13,5 @@ if (TARGET Ceres::ceres)
   target_compile_definitions(vtkSHYXShapeSmoothing PRIVATE CGAL_PMP_USE_CERES_SOLVER)
   vtk_module_link(vtkSHYXShapeSmoothing PRIVATE Ceres::ceres)
 endif ()
+
+vespa_plugin_xml(SHYXShapeSmoothing.xml)

@@ -14,3 +14,5 @@ if (VESPA_USE_SMP)
 else()
   message(STATUS "vtkSHYXDisconnectedRegionFuse: SMP optimization disabled")
 endif()
+
+vespa_plugin_xml(SHYXDisconnectedRegionFuse.xml)

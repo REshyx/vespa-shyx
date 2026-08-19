@@ -8,3 +8,5 @@ vtk_module_add_module(vtkSHYXPartitionedCollectionWslSimulation
 if(MSVC)
   target_compile_options(vtkSHYXPartitionedCollectionWslSimulation PRIVATE /utf-8)
 endif()
+
+vespa_plugin_xml(SHYXPartitionedCollectionWslSimulation.xml)
