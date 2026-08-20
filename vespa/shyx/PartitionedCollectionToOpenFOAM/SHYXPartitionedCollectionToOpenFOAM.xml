@@ -1,0 +1,73 @@
+<ServerManagerConfiguration>
+  <ProxyGroup name="filters">
+    <SourceProxy class="vtkSHYXPartitionedCollectionToOpenFOAM"
+                 label="SHYX Partitioned Collection To OpenFOAM"
+                 name="SHYXPartitionedCollectionToOpenFOAM">
+      <Documentation
+          short_help="SHYX Partitioned Collection To OpenFOAM: Write polyMesh from volume + side sets."
+          long_help="Takes a vtkPartitionedDataSetCollection with an IOSS-style volume block (element_blocks) and side sets. Writes constant/polyMesh (points/faces/owner/neighbour/boundary) plus case.foam. Side sets become OpenFOAM patches using volume-point GlobalIds (and element_side as fallback). Node sets are ignored. A volume mesh is required; SHYX Selection Append Patches cannot be written as polyMesh. Output is vtkOpenFOAMReader's vtkMultiBlockDataSet (internalMesh plus patches)."/>
+
+      <OutputPort name="OpenFOAM case" index="0"/>
+
+      <InputProperty name="Input" command="SetInputConnection">
+        <ProxyGroupDomain name="groups">
+          <Group name="sources"/>
+          <Group name="filters"/>
+        </ProxyGroupDomain>
+        <DataTypeDomain name="input_type">
+          <DataType value="vtkPartitionedDataSetCollection"/>
+        </DataTypeDomain>
+        <Documentation>
+          vtkPartitionedDataSetCollection from SHYX DataSet To Partitioned Collection
+          (volume UnstructuredGrid + side sets). Selection Append Patches is not supported.
+        </Documentation>
+      </InputProperty>
+
+      <StringVectorProperty name="CaseDirectory" command="SetCaseDirectory"
+                            label="Case Directory" number_of_elements="1"
+                            default_values="" animateable="0">
+        <FileListDomain name="files"/>
+        <Documentation>
+          Root of the OpenFOAM case to write. Creates constant/polyMesh, system/controlDict,
+          and case.foam in this folder.
+        </Documentation>
+        <Hints>
+          <UseDirectoryName/>
+        </Hints>
+      </StringVectorProperty>
+
+      <IntVectorProperty name="AllowDefaultFaces" command="SetAllowDefaultFaces"
+                         label="Allow Default Faces" number_of_elements="1"
+                         default_values="0" panel_visibility="advanced">
+        <BooleanDomain name="bool"/>
+        <Documentation>
+          If enabled, volume boundary faces not claimed by any side set are written as
+          Default Faces Name (type wall). Default off: Apply fails when any exterior face
+          is unassigned.
+        </Documentation>
+      </IntVectorProperty>
+
+      <StringVectorProperty name="DefaultFacesName" command="SetDefaultFacesName"
+                            label="Default Faces Name" number_of_elements="1"
+                            default_values="defaultFaces" panel_visibility="advanced">
+        <Documentation>Patch name for leftover boundary faces when Allow Default Faces is on.</Documentation>
+        <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator" mode="enabled_state"
+                                   property="AllowDefaultFaces" value="0" inverse="1"/>
+        </Hints>
+      </StringVectorProperty>
+
+      <PropertyGroup label="Case">
+        <Property name="CaseDirectory"/>
+      </PropertyGroup>
+      <PropertyGroup label="Unassigned faces" panel_visibility="advanced">
+        <Property name="AllowDefaultFaces"/>
+        <Property name="DefaultFacesName"/>
+      </PropertyGroup>
+
+      <Hints>
+        <ShowInMenu category="SHYX" icon=":/VESPA/SHYX_SnappyHexMesh.png"/>
+      </Hints>
+    </SourceProxy>
+  </ProxyGroup>
+</ServerManagerConfiguration>

@@ -1925,6 +1925,13 @@ const ShyxExtra kShyxExtra[] = {
     "Vascular step 7. Call get_blocks on the PDC first. Port0 collection, port1 assignment debug. "
     "Export writes Exodus + options + Nodeset + current .pvsm beside the chosen .exo." },
   { "SHYXPartitionedCollectionBoundaryFields", "Adds boundary field arrays on an assigned PDC." },
+  { "SHYXPartitionedCollectionToOpenFOAM",
+    "Write an OpenFOAM case (constant/polyMesh + case.foam) from an IOSS PDC that has a volume "
+    "UnstructuredGrid (TetGen -> DataSet To Partitioned Collection). Side sets become patches via "
+    "volume-point GlobalIds / element_side. Node sets are ignored. Selection Append Patches has no "
+    "volume and is rejected. Unmatched/floating sides are skipped with an error naming the side; "
+    "overlapping sides fail. Unassigned volume boundary faces fail unless AllowDefaultFaces. "
+    "Output is vtkOpenFOAMReader MultiBlock (internalMesh + patches). Set CaseDirectory first." },
   { "SHYXSelectionExtrudeFilter", "Needs an active 3D selection of cells." },
   { "SHYXSelectionAppendPatches",
     "Add from selection snapshots the 3D-view cell selection into the Patches table (geo_N); "

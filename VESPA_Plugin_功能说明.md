@@ -83,6 +83,7 @@
 | SHYX Partitioned Collection Boundary Assignment | **Vascular** |
 | SHYX Partitioned Collection Boundary Fields | |
 | SHYX Partitioned Collection WSL Simulation | |
+| SHYX Partitioned Collection To OpenFOAM | 体网格 PDC → `polyMesh`；**Filters → SHYX** |
 | SHYX VMTK Centerlines / Opening Centerlines | 需 `VESPA_USE_VMTK` |
 | SHYX Vascular Stent Placement / Endpoint Stent Placement | |
 | SHYX Density-Based Volume Sampler | 纯 VTK |
@@ -657,6 +658,7 @@
 | **SHYX SnappyHexMesh** | 需 `VESPA_USE_SNAPPYHEXMESH`；PDC 分块当 STL patch
 | **SHYX Tet Mesh Region Partition** | 体网格分区 |
 | **SHYX Boundary Assignment / Fields / WSL Simulation** | PDC 管线 |
+| **SHYX Partitioned Collection To OpenFOAM** | 体网格 PDC → OpenFOAM `polyMesh` |
 | **SHYX VMTK Centerlines / Opening Centerlines** | 需 `VESPA_USE_VMTK` |
 | **SHYX Vascular / Endpoint Stent Placement** | 交互圆柱/端点支架 |
 | **SHYX Auto Streamline** | 自动布种流线 |
@@ -696,7 +698,7 @@
 - **SHYX Disconnected Region Fuse** 用于将多个不连通表面（如断裂的网格）通过近距离顶点融合合并为一个整体；需根据模型尺度调整 Fuse Threshold。
 - **SHYX Point Cloud Surface SDF** 在**点云**上写 **SDF**；若要在**规则体素网格**上对**封闭**三角网格求有符号距离场（`vtkImageData`），应使用 CGAL 管线中的 **`vtkCGALSignedDistanceFunction`**（见 CGAL / PMP 模块文档或源码），二者勿混淆。
 - **SHYX Radius Neighbor Count** 用于点云或网格顶点上的**局部密度/邻域规模**分析；半径需与点间距尺度匹配。并行行为由 VTK SMP 后端决定（如与 ParaView 一同构建的 TBB 等）。
-- **SHYX DataSet To Partitioned Collection** 面向 **IOSS/Exodus** 写出：从含四面体的体网格提取体块与边界表面分区，并维护 **GlobalIds** / **element_side** 等；若仅需可视化拆分表面，也可在普通网格上试用，但设计目标是 Writer 侧装配与集合语义。
+- **SHYX DataSet To Partitioned Collection** 面向 **IOSS/Exodus** 写出：从含四面体的体网格提取体块与边界表面分区，并维护 **GlobalIds** / **element_side** 等；若仅需可视化拆分表面，也可在普通网格上试用，但设计目标是 Writer 侧装配与集合语义。OpenFOAM 体网格出口用 **SHYX Partitioned Collection To OpenFOAM**（必须有体块；side → patch；node 忽略；Selection Append Patches 不能写 polyMesh）。
 - **SHYX Adaptive Isotropic Remesher**（CGAL ≥ 6.0）适合需要在**曲率大处加密**、同时用 Min/Max 控制尺度的情况；均匀尺度需求可继续用 **VESPA Isotropic Remesher**。网格诊断优先 **SHYX Mesh Checker**；开放网格布尔用 **SHYX Boolean (relaxed)**。完整对照见 [`vespa/INVENTORY.md`](vespa/INVENTORY.md)。
 
 以上参数与行为基于当前源码与各模块 `vespa/shyx/<Feature>/SHYX*.xml`（上游 VESPA 见 `ParaViewPlugin/smxml/` 与 `vespa/vespa/`）整理，界面标签以 XML `label` 为准；更底层算法说明见 [CGAL 文档](https://doc.cgal.org/) 与对应 VTK 类文档。

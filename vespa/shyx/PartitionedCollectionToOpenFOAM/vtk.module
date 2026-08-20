@@ -1,0 +1,13 @@
+NAME
+  vtkSHYXPartitionedCollectionToOpenFOAM
+DESCRIPTION
+  "Write an OpenFOAM case (constant/polyMesh) from an IOSS-style vtkPartitionedDataSetCollection with a volume block and side sets."
+GROUPS
+  Vascular
+DEPENDS
+  VTK::CommonCore
+  VTK::CommonDataModel
+  VTK::CommonExecutionModel
+  VTK::FiltersCore
+PRIVATE_DEPENDS
+  VTK::IOGeometry

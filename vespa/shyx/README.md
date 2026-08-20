@@ -33,6 +33,7 @@ SHYX 是本仓库里 **一个作者命名空间**（[`vespa/shyx/`](.)），不�
 * [**Tet Mesh Region Partition**](./TetMeshRegionPartition/README.md)
 * [**Partitioned Collection Boundary Fields**](./PartitionedCollectionBoundaryFields/README.md)
 * [**Partitioned Collection WSL Simulation**](./PartitionedCollectionWslSimulation/README.md)
+* [**Partitioned Collection To OpenFOAM**](./PartitionedCollectionToOpenFOAM/README.md) — 体网格 PDC → `polyMesh`；SHYX only
 * [**VMTK Centerlines**](./VmtkPolyDataCenterlines/README.md) / [**Opening Centerlines**](./VmtkOpeningCenterlines/README.md) — 需 `VESPA_USE_VMTK`
 * [**Vascular Stent Placement**](./VascularStentPlacement/README.md) / [**Endpoint Stent Placement**](./EndpointStentPlacement/README.md)
 
