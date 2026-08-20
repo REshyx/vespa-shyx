@@ -1,4 +1,5 @@
 #include "vtkSHYXAdaptiveIsotropicRemesher.h"
+#include "vtkSHYXRemeshProgressState.h"
 
 #include "vtkCGALHelper.h"
 
@@ -212,6 +213,8 @@ int vtkSHYXAdaptiveIsotropicRemesher::RequestData(
     vtkErrorMacro("Missing input or output.");
     return 0;
   }
+
+  vtkSHYXSaveRemeshProgressState(this);
 
   if (this->AdaptiveTolerance <= 0.0)
   {

@@ -1,4 +1,5 @@
 #include "vtkSHYXRemeshWithEndpoint.h"
+#include "vtkSHYXRemeshProgressState.h"
 
 #include "vtkCGALHelper.h"
 
@@ -639,6 +640,11 @@ int vtkSHYXRemeshWithEndpoint::RequestData(
     {
         vtkErrorMacro("Missing input or output.");
         return 0;
+    }
+
+    if (this->EnableWallRemesh || this->EnableCapRemesh)
+    {
+        vtkSHYXSaveRemeshProgressState(this);
     }
 
     this->ClearUncappedSizeHistogram();

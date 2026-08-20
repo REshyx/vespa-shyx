@@ -34,6 +34,8 @@
 
 面板其余项（Expansion ratio、Scale to range、Detect feature edges、Feature mask、Remesh constraints 等）见同目录 `SHYXAdaptiveIsotropicRemesher.xml`；同模块还有 Vascular 用的 `SHYXRemeshWithEndpoint.xml`。
 
+**卡死恢复：** `RequestData` 进入 CGAL remesh 之前会覆盖 `%TEMP%/shyx_remesh_pre_apply.pvsm`（非 Windows 为 `$TMPDIR` 或 `/tmp`）。ParaView File → Load State 可找回 Apply 前的管线。直方图预览（wall/cap remesh 都关）不写该文件。
+
 ---
 
 ## 3. 多轮 remesh + `collect_garbage`（踩坑记录）
