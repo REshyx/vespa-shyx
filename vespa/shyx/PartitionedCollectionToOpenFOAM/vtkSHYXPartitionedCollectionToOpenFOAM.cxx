@@ -6,9 +6,11 @@
 #include <vtkCellType.h>
 #include <vtkCompositeDataSet.h>
 #include <vtkDataArray.h>
+#include <vtkDataArraySelection.h>
 #include <vtkDataAssembly.h>
 #include <vtkDataObject.h>
 #include <vtkDataSet.h>
+#include <vtkFieldData.h>
 #include <vtkGenericCell.h>
 #include <vtkIdList.h>
 #include <vtkIdTypeArray.h>
@@ -25,14 +27,17 @@
 #include <vtkPointData.h>
 #include <vtkPoints.h>
 #include <vtkPolyData.h>
-#include <vtkSmartPointer.h>
 #include <vtkUnstructuredGrid.h>
 
 #include <algorithm>
 #include <cctype>
+#include <cmath>
+#include <cstdint>
+#include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <iomanip>
+#include <set>
 #include <sstream>
 #include <string>
 #include <system_error>
@@ -215,6 +220,42 @@ bool IsVolumeUnstructuredGrid(vtkDataSet* ds)
 {
   auto* ug = vtkUnstructuredGrid::SafeDownCast(ds);
   return ug && ug->GetNumberOfCells() > 0 && ug->GetNumberOfPoints() > 0;
+}
+
+vtkUnstructuredGrid* FindVolumeGrid(vtkPartitionedDataSetCollection* input)
+{
+  if (!input)
+  {
+    return nullptr;
+  }
+  PdcLayout layout;
+  ParseIossLayout(input->GetDataAssembly(), &layout);
+  if (!layout.HasIossAssembly)
+  {
+    layout = PdcLayout{};
+    const unsigned int n = input->GetNumberOfPartitionedDataSets();
+    std::vector<unsigned int> volumes;
+    for (unsigned int i = 0; i < n; ++i)
+    {
+      vtkDataSet* ds = GetDataSetFromPdcBlock(input, i);
+      if (IsVolumeUnstructuredGrid(ds))
+      {
+        volumes.push_back(i);
+      }
+    }
+    if (volumes.size() == 1)
+    {
+      layout.HasElementBlock = true;
+      layout.ElementBlockPdcIndex = volumes.front();
+    }
+  }
+  if (!layout.HasElementBlock)
+  {
+    return nullptr;
+  }
+  vtkUnstructuredGrid* volume = vtkUnstructuredGrid::SafeDownCast(
+    GetDataSetFromPdcBlock(input, layout.ElementBlockPdcIndex));
+  return IsVolumeUnstructuredGrid(volume) ? volume : nullptr;
 }
 
 bool IsSideSurface(vtkDataSet* ds)
@@ -550,13 +591,72 @@ bool EnsureDir(const fs::path& path, std::string* err)
   return true;
 }
 
+constexpr const char* kTempRunPrefix = "shyx-pdc-of-";
+
+bool SameDirectory(const fs::path& a, const fs::path& b)
+{
+  std::error_code ec;
+  const fs::path ca = fs::weakly_canonical(a, ec);
+  if (ec)
+  {
+    return false;
+  }
+  const fs::path cb = fs::weakly_canonical(b, ec);
+  if (ec)
+  {
+    return false;
+  }
+  return ca == cb;
+}
+
+bool CaseDirectoryEmpty(const char* p)
+{
+  if (!p || p[0] == '\0')
+  {
+    return true;
+  }
+  for (const char* c = p; *c; ++c)
+  {
+    if (!std::isspace(static_cast<unsigned char>(*c)))
+    {
+      return false;
+    }
+  }
+  return true;
+}
+
+// Delete a previous unique run tree. Only under %TEMP%/shyx-pdc-of-<id>-<mtime>/case.
+void RemoveOwnedTempCase(const char* caseFoamPath)
+{
+  if (!caseFoamPath || caseFoamPath[0] == '\0')
+  {
+    return;
+  }
+  std::error_code ec;
+  const fs::path tempRoot = fs::temp_directory_path(ec);
+  if (ec || tempRoot.empty())
+  {
+    return;
+  }
+  const fs::path caseDir = fs::absolute(fs::path(caseFoamPath), ec);
+  if (ec || caseDir.filename() != "case")
+  {
+    return;
+  }
+  const fs::path runRoot = caseDir.parent_path();
+  const std::string runName = runRoot.filename().string();
+  if (runName.rfind(kTempRunPrefix, 0) == 0 && SameDirectory(runRoot.parent_path(), tempRoot))
+  {
+    fs::remove_all(runRoot, ec);
+  }
+}
+
 bool WritePolyMesh(const fs::path& caseDir, vtkUnstructuredGrid* ug, const std::vector<UniqueFace>& faces,
   const std::vector<int>& writeOrder, vtkIdType nInternal, const std::vector<PatchInfo>& patches,
   std::string* err)
 {
   const fs::path meshDir = caseDir / "constant" / "polyMesh";
-  const fs::path sysDir = caseDir / "system";
-  if (!EnsureDir(meshDir, err) || !EnsureDir(sysDir, err))
+  if (!EnsureDir(meshDir, err))
   {
     return false;
   }
@@ -686,26 +786,654 @@ bool WritePolyMesh(const fs::path& caseDir, vtkUnstructuredGrid* ug, const std::
   }
 
   {
-    std::ofstream os((sysDir / "controlDict").string());
-    if (os)
-    {
-      WriteFoamHeader(os, "dictionary", "controlDict", "system");
-      os << "application     checkMesh;\n"
-            "startFrom       startTime;\n"
-            "startTime       0;\n"
-            "stopAt          endTime;\n"
-            "endTime         1;\n"
-            "deltaT          1;\n"
-            "writeControl    timeStep;\n"
-            "writeInterval   1;\n";
-    }
-  }
-
-  {
     std::ofstream os((caseDir / "case.foam").string());
     if (os)
     {
       os << "// ParaView OpenFOAM reader marker. File -> Open this file.\n";
+    }
+  }
+  return true;
+}
+
+double FiniteOrZero(double x, vtkIdType* nanCount)
+{
+  if (!std::isfinite(x))
+  {
+    if (nanCount)
+    {
+      ++(*nanCount);
+    }
+    return 0.0;
+  }
+  return x;
+}
+
+bool SkipVolumeArray(vtkDataArray* arr)
+{
+  if (!arr)
+  {
+    return true;
+  }
+  const char* n = arr->GetName();
+  if (!n || n[0] == '\0')
+  {
+    return true;
+  }
+  if (std::strcmp(n, "GlobalIds") == 0 || std::strcmp(n, "PedigreeIds") == 0)
+  {
+    return true;
+  }
+  if (std::strncmp(n, "vtk", 3) == 0)
+  {
+    return true;
+  }
+  const int nc = arr->GetNumberOfComponents();
+  return !(nc == 1 || nc == 3 || nc == 6 || nc == 9);
+}
+
+void SyncVolumeArraySelection(vtkUnstructuredGrid* volume, vtkDataArraySelection* sel)
+{
+  if (!sel)
+  {
+    return;
+  }
+  std::set<std::string> current;
+  auto consider = [&](vtkFieldData* fd) {
+    if (!fd)
+    {
+      return;
+    }
+    for (int i = 0; i < fd->GetNumberOfArrays(); ++i)
+    {
+      vtkDataArray* arr = vtkDataArray::SafeDownCast(fd->GetAbstractArray(i));
+      if (SkipVolumeArray(arr) || !arr->GetName())
+      {
+        continue;
+      }
+      current.insert(arr->GetName());
+    }
+  };
+  if (volume)
+  {
+    consider(volume->GetCellData());
+    consider(volume->GetPointData());
+  }
+  bool changed = false;
+  for (int j = sel->GetNumberOfArrays() - 1; j >= 0; --j)
+  {
+    const char* existing = sel->GetArrayName(j);
+    if (existing && current.find(existing) == current.end())
+    {
+      sel->RemoveArrayByName(existing);
+      changed = true;
+    }
+  }
+  for (const std::string& nm : current)
+  {
+    if (!sel->ArrayExists(nm.c_str()))
+    {
+      sel->AddArray(nm.c_str(), true);
+      changed = true;
+    }
+  }
+  if (changed)
+  {
+    sel->Modified();
+  }
+}
+
+const char* FoamVolClass(int ncomp)
+{
+  switch (ncomp)
+  {
+    case 1:
+      return "volScalarField";
+    case 3:
+      return "volVectorField";
+    case 6:
+      return "volSymmTensorField";
+    case 9:
+      return "volTensorField";
+    default:
+      return nullptr;
+  }
+}
+
+const char* FoamListType(int ncomp)
+{
+  switch (ncomp)
+  {
+    case 1:
+      return "scalar";
+    case 3:
+      return "vector";
+    case 6:
+      return "symmTensor";
+    case 9:
+      return "tensor";
+    default:
+      return nullptr;
+  }
+}
+
+std::string FoamFieldFileName(const std::string& sanitized)
+{
+  if (sanitized.rfind("shyx_", 0) == 0)
+  {
+    return sanitized;
+  }
+  return "shyx_" + sanitized;
+}
+
+void WriteComponentList(std::ostream& os, const double* v, int ncomp)
+{
+  os << std::setprecision(17);
+  if (ncomp == 1)
+  {
+    os << v[0] << "\n";
+    return;
+  }
+  if (ncomp == 3)
+  {
+    os << "(" << v[0] << " " << v[1] << " " << v[2] << ")\n";
+    return;
+  }
+  if (ncomp == 6)
+  {
+    os << "(" << v[0] << " " << v[3] << " " << v[5] << " " << v[1] << " " << v[4] << " " << v[2]
+       << ")\n";
+    return;
+  }
+  os << "(";
+  for (int c = 0; c < ncomp; ++c)
+  {
+    if (c)
+    {
+      os << " ";
+    }
+    os << v[c];
+  }
+  os << ")\n";
+}
+
+bool TupleAllFinite(vtkDataArray* arr, vtkIdType tuple)
+{
+  if (!arr || tuple < 0 || tuple >= arr->GetNumberOfTuples())
+  {
+    return false;
+  }
+  const int ncomp = arr->GetNumberOfComponents();
+  for (int c = 0; c < ncomp; ++c)
+  {
+    if (!std::isfinite(arr->GetComponent(tuple, c)))
+    {
+      return false;
+    }
+  }
+  return true;
+}
+
+bool CopyFiniteTuple(vtkDataArray* arr, vtkIdType tuple, double* out)
+{
+  if (!TupleAllFinite(arr, tuple))
+  {
+    return false;
+  }
+  const int ncomp = arr->GetNumberOfComponents();
+  for (int c = 0; c < ncomp; ++c)
+  {
+    out[c] = arr->GetComponent(tuple, c);
+  }
+  return true;
+}
+
+void CopyTupleFiniteOrZero(vtkDataArray* arr, vtkIdType tuple, double* out, vtkIdType* nanCount)
+{
+  const int ncomp = arr->GetNumberOfComponents();
+  for (int c = 0; c < ncomp; ++c)
+  {
+    out[c] = FiniteOrZero(arr->GetComponent(tuple, c), nanCount);
+  }
+}
+
+// Average PointData at the given volume point ids only when every vertex is finite.
+// Any NaN (e.g. one of three face corners, or any tet corner) means the sample is
+// undefined: return false so the caller writes 0. This avoids bleeding surface data
+// onto neighbouring faces/cells that only share some valid vertices.
+bool AverageAllFiniteFromPoints(
+  vtkDataArray* pointArr, const vtkIdType* ids, vtkIdType nIds, double* out)
+{
+  if (!pointArr || !ids || nIds <= 0)
+  {
+    return false;
+  }
+  const int ncomp = pointArr->GetNumberOfComponents();
+  const vtkIdType nTuples = pointArr->GetNumberOfTuples();
+  for (int c = 0; c < ncomp; ++c)
+  {
+    out[c] = 0.0;
+  }
+  for (vtkIdType i = 0; i < nIds; ++i)
+  {
+    const vtkIdType pid = ids[i];
+    if (pid < 0 || pid >= nTuples)
+    {
+      return false;
+    }
+    for (int c = 0; c < ncomp; ++c)
+    {
+      if (!std::isfinite(pointArr->GetComponent(pid, c)))
+      {
+        return false;
+      }
+    }
+  }
+  const double inv = 1.0 / static_cast<double>(nIds);
+  for (vtkIdType i = 0; i < nIds; ++i)
+  {
+    for (int c = 0; c < ncomp; ++c)
+    {
+      out[c] += pointArr->GetComponent(ids[i], c);
+    }
+  }
+  for (int c = 0; c < ncomp; ++c)
+  {
+    out[c] *= inv;
+  }
+  return true;
+}
+
+bool FillInternalTuple(vtkUnstructuredGrid* volume, vtkIdType cellId, vtkDataArray* cellArr,
+  vtkDataArray* pointArr, double* out, vtkIdType* nanCount)
+{
+  if (cellArr && CopyFiniteTuple(cellArr, cellId, out))
+  {
+    return true;
+  }
+  if (pointArr)
+  {
+    vtkNew<vtkIdList> pts;
+    volume->GetCellPoints(cellId, pts);
+    if (AverageAllFiniteFromPoints(pointArr, pts->GetPointer(0), pts->GetNumberOfIds(), out))
+    {
+      return true;
+    }
+    const int ncomp = pointArr->GetNumberOfComponents();
+    for (int c = 0; c < ncomp; ++c)
+    {
+      out[c] = 0.0;
+    }
+    return false;
+  }
+  if (cellArr)
+  {
+    CopyTupleFiniteOrZero(cellArr, cellId, out, nanCount);
+    return true;
+  }
+  const int ncomp = pointArr ? pointArr->GetNumberOfComponents() : 1;
+  for (int c = 0; c < ncomp; ++c)
+  {
+    out[c] = 0.0;
+  }
+  return false;
+}
+
+bool FillBoundaryTuple(const UniqueFace& uf, vtkDataArray* cellArr, vtkDataArray* pointArr,
+  double* out, vtkIdType* emptyBoundaryFaces)
+{
+  if (pointArr)
+  {
+    if (AverageAllFiniteFromPoints(pointArr, uf.PointIds.data(),
+          static_cast<vtkIdType>(uf.PointIds.size()), out))
+    {
+      return true;
+    }
+    const int ncomp = pointArr->GetNumberOfComponents();
+    for (int c = 0; c < ncomp; ++c)
+    {
+      out[c] = 0.0;
+    }
+    return false;
+  }
+  if (cellArr && CopyFiniteTuple(cellArr, uf.Owner, out))
+  {
+    return true;
+  }
+  const int ncomp =
+    pointArr ? pointArr->GetNumberOfComponents() : (cellArr ? cellArr->GetNumberOfComponents() : 1);
+  for (int c = 0; c < ncomp; ++c)
+  {
+    out[c] = 0.0;
+  }
+  if (emptyBoundaryFaces)
+  {
+    ++(*emptyBoundaryFaces);
+  }
+  return false;
+}
+
+bool WriteSystemDicts(const fs::path& caseDir, std::string* err)
+{
+  const fs::path sysDir = caseDir / "system";
+  if (!EnsureDir(sysDir, err))
+  {
+    return false;
+  }
+  {
+    std::ofstream os((sysDir / "controlDict").string());
+    if (!os)
+    {
+      *err = "Cannot write system/controlDict";
+      return false;
+    }
+    WriteFoamHeader(os, "dictionary", "controlDict", "system");
+    os << "application     simpleFoam;\n"
+          "startFrom       startTime;\n"
+          "startTime       0;\n"
+          "stopAt          endTime;\n"
+          "endTime         1;\n"
+          "deltaT          1;\n"
+          "writeControl    timeStep;\n"
+          "writeInterval   1;\n"
+          "purgeWrite      0;\n"
+          "writeFormat     ascii;\n"
+          "writePrecision  6;\n"
+          "writeCompression off;\n"
+          "timeFormat      general;\n"
+          "timePrecision   6;\n"
+          "runTimeModifiable true;\n";
+  }
+  {
+    std::ofstream os((sysDir / "fvSchemes").string());
+    if (!os)
+    {
+      *err = "Cannot write system/fvSchemes";
+      return false;
+    }
+    WriteFoamHeader(os, "dictionary", "fvSchemes", "system");
+    os << "ddtSchemes\n{\n    default         Euler;\n}\n\n"
+          "gradSchemes\n{\n    default         Gauss linear;\n}\n\n"
+          "divSchemes\n"
+          "{\n"
+          "    default         none;\n"
+          "    div(phi,U)      Gauss linearUpwind grad(U);\n"
+          "    div((nuEff*dev2(T(grad(U))))) Gauss linear;\n"
+          "}\n\n"
+          "laplacianSchemes\n{\n    default         Gauss linear corrected;\n}\n\n"
+          "interpolationSchemes\n{\n    default         linear;\n}\n\n"
+          "snGradSchemes\n{\n    default         corrected;\n}\n";
+  }
+  {
+    std::ofstream os((sysDir / "fvSolution").string());
+    if (!os)
+    {
+      *err = "Cannot write system/fvSolution";
+      return false;
+    }
+    WriteFoamHeader(os, "dictionary", "fvSolution", "system");
+    os << "solvers\n"
+          "{\n"
+          "    p\n"
+          "    {\n"
+          "        solver          GAMG;\n"
+          "        tolerance       1e-06;\n"
+          "        relTol          0.1;\n"
+          "        smoother        GaussSeidel;\n"
+          "    }\n"
+          "    pFinal\n"
+          "    {\n"
+          "        $p;\n"
+          "        relTol          0;\n"
+          "    }\n"
+          "    U\n"
+          "    {\n"
+          "        solver          smoothSolver;\n"
+          "        smoother        GaussSeidel;\n"
+          "        tolerance       1e-06;\n"
+          "        relTol          0.1;\n"
+          "    }\n"
+          "}\n\n"
+          "SIMPLE\n"
+          "{\n"
+          "    nNonOrthogonalCorrectors 0;\n"
+          "    residualControl\n"
+          "    {\n"
+          "        p               1e-4;\n"
+          "        U               1e-4;\n"
+          "    }\n"
+          "}\n\n"
+          "relaxationFactors\n"
+          "{\n"
+          "    fields\n"
+          "    {\n"
+          "        p               0.3;\n"
+          "    }\n"
+          "    equations\n"
+          "    {\n"
+          "        U               0.7;\n"
+          "    }\n"
+          "}\n";
+  }
+  return true;
+}
+
+void WriteZeroGradientPatches(std::ostream& os, const std::vector<PatchInfo>& patches)
+{
+  os << "boundaryField\n{\n";
+  for (const PatchInfo& p : patches)
+  {
+    os << "    " << p.Name << "\n"
+          "    {\n"
+          "        type            zeroGradient;\n"
+          "    }\n";
+  }
+  os << "}\n";
+}
+
+bool WritePUTemplates(
+  const fs::path& caseDir, const std::vector<PatchInfo>& patches, std::string* err)
+{
+  const fs::path zeroDir = caseDir / "0";
+  if (!EnsureDir(zeroDir, err))
+  {
+    return false;
+  }
+  {
+    std::ofstream os((zeroDir / "p").string());
+    if (!os)
+    {
+      *err = "Cannot write 0/p";
+      return false;
+    }
+    WriteFoamHeader(os, "volScalarField", "p", "0");
+    os << "dimensions      [0 2 -2 0 0 0 0];\n\n"
+          "internalField   uniform 0;\n\n";
+    WriteZeroGradientPatches(os, patches);
+  }
+  {
+    std::ofstream os((zeroDir / "U").string());
+    if (!os)
+    {
+      *err = "Cannot write 0/U";
+      return false;
+    }
+    WriteFoamHeader(os, "volVectorField", "U", "0");
+    os << "dimensions      [0 1 -1 0 0 0 0];\n\n"
+          "internalField   uniform (0 0 0);\n\n";
+    WriteZeroGradientPatches(os, patches);
+  }
+  return true;
+}
+
+bool WriteOneVolField(const fs::path& zeroDir, const std::string& foamName, vtkDataArray* cellArr,
+  vtkDataArray* pointArr, vtkUnstructuredGrid* volume, const std::vector<UniqueFace>& faces,
+  const std::vector<PatchInfo>& patches, vtkIdType* nanCount, vtkIdType* emptyBoundaryFaces,
+  std::string* err)
+{
+  vtkDataArray* ncompSrc = cellArr ? cellArr : pointArr;
+  if (!ncompSrc)
+  {
+    return true;
+  }
+  const int ncomp = ncompSrc->GetNumberOfComponents();
+  if (pointArr && pointArr->GetNumberOfComponents() != ncomp)
+  {
+    pointArr = nullptr;
+  }
+  const char* cls = FoamVolClass(ncomp);
+  const char* listType = FoamListType(ncomp);
+  if (!cls || !listType)
+  {
+    return true;
+  }
+  const vtkIdType nCells = volume->GetNumberOfCells();
+  if (cellArr && cellArr->GetNumberOfTuples() != nCells)
+  {
+    *err = std::string("Array \"") + (cellArr->GetName() ? cellArr->GetName() : "?") +
+      "\" tuple count does not match volume cells.";
+    return false;
+  }
+
+  std::ofstream os((zeroDir / foamName).string());
+  if (!os)
+  {
+    *err = "Cannot write 0/" + foamName;
+    return false;
+  }
+  WriteFoamHeader(os, cls, foamName.c_str(), "0");
+  os << "dimensions      [0 0 0 0 0 0 0];\n\n";
+  os << "internalField   nonuniform List<" << listType << ">\n" << nCells << "\n(\n";
+  os << std::setprecision(17);
+  double buf[9];
+  for (vtkIdType c = 0; c < nCells; ++c)
+  {
+    FillInternalTuple(volume, c, cellArr, pointArr, buf, nanCount);
+    WriteComponentList(os, buf, ncomp);
+  }
+  os << ");\n\nboundaryField\n{\n";
+  for (const PatchInfo& p : patches)
+  {
+    os << "    " << p.Name << "\n"
+          "    {\n"
+          "        type            calculated;\n"
+          "        value           nonuniform List<"
+       << listType << ">\n"
+       << p.FaceIds.size() << "\n(\n";
+    for (int fi : p.FaceIds)
+    {
+      const UniqueFace& uf = faces[static_cast<size_t>(fi)];
+      FillBoundaryTuple(uf, cellArr, pointArr, buf, emptyBoundaryFaces);
+      WriteComponentList(os, buf, ncomp);
+    }
+    os << ");\n    }\n";
+  }
+  os << "}\n";
+  return true;
+}
+
+bool WriteVolumeFields(const fs::path& caseDir, vtkUnstructuredGrid* volume,
+  const std::vector<UniqueFace>& faces, const std::vector<PatchInfo>& patches,
+  vtkDataArraySelection* selection, std::vector<std::string>* warnings, std::string* err)
+{
+  const fs::path zeroDir = caseDir / "0";
+  if (!EnsureDir(zeroDir, err))
+  {
+    return false;
+  }
+
+  vtkCellData* cd = volume->GetCellData();
+  vtkPointData* pd = volume->GetPointData();
+
+  std::vector<std::string> written;
+  auto emitPair = [&](const char* rawName, vtkDataArray* cellArr, vtkDataArray* pointArr) -> bool {
+    if (!rawName || rawName[0] == '\0')
+    {
+      return true;
+    }
+    if (std::strcmp(rawName, "GlobalIds") == 0 || std::strcmp(rawName, "PedigreeIds") == 0 ||
+      std::strncmp(rawName, "vtk", 3) == 0)
+    {
+      return true;
+    }
+    if (selection && !selection->ArrayIsEnabled(rawName))
+    {
+      return true;
+    }
+    vtkDataArray* ncompSrc = cellArr ? cellArr : pointArr;
+    if (!ncompSrc)
+    {
+      return true;
+    }
+    const int ncomp = ncompSrc->GetNumberOfComponents();
+    if (!(ncomp == 1 || ncomp == 3 || ncomp == 6 || ncomp == 9))
+    {
+      warnings->push_back(std::string("Skipped array \"") + rawName + "\": " +
+        std::to_string(ncomp) + " components (need 1, 3, 6, or 9).");
+      return true;
+    }
+    const std::string foamName = FoamFieldFileName(SanitizeFoamName(rawName));
+    for (const std::string& w : written)
+    {
+      if (w == foamName)
+      {
+        return true;
+      }
+    }
+    vtkIdType nanCount = 0;
+    vtkIdType emptyBoundaryFaces = 0;
+    if (!WriteOneVolField(zeroDir, foamName, cellArr, pointArr, volume, faces, patches, &nanCount,
+          &emptyBoundaryFaces, err))
+    {
+      return false;
+    }
+    written.push_back(foamName);
+    if (nanCount > 0)
+    {
+      warnings->push_back("Replaced " + std::to_string(nanCount) +
+        " non-finite CellData values with 0 in 0/" + foamName + ".");
+    }
+    if (emptyBoundaryFaces > 0)
+    {
+      warnings->push_back("Wrote 0 on " + std::to_string(emptyBoundaryFaces) +
+        " patch faces in 0/" + foamName +
+        " (no finite PointData on the face and no finite owner CellData).");
+    }
+    return true;
+  };
+
+  if (cd)
+  {
+    for (int i = 0; i < cd->GetNumberOfArrays(); ++i)
+    {
+      vtkDataArray* arr = vtkDataArray::SafeDownCast(cd->GetAbstractArray(i));
+      if (!arr)
+      {
+        continue;
+      }
+      vtkDataArray* pointArr = pd ? pd->GetArray(arr->GetName()) : nullptr;
+      if (!emitPair(arr->GetName(), arr, pointArr))
+      {
+        return false;
+      }
+    }
+  }
+  if (pd)
+  {
+    for (int i = 0; i < pd->GetNumberOfArrays(); ++i)
+    {
+      vtkDataArray* arr = vtkDataArray::SafeDownCast(pd->GetAbstractArray(i));
+      if (SkipVolumeArray(arr))
+      {
+        continue;
+      }
+      if (cd && cd->GetArray(arr->GetName()))
+      {
+        continue;
+      }
+      if (!emitPair(arr->GetName(), nullptr, arr))
+      {
+        return false;
+      }
     }
   }
   return true;
@@ -761,12 +1489,31 @@ vtkSHYXPartitionedCollectionToOpenFOAM::vtkSHYXPartitionedCollectionToOpenFOAM()
   this->SetNumberOfInputPorts(1);
   this->SetNumberOfOutputPorts(1);
   this->SetDefaultFacesName("defaultFaces");
+  this->VolumeArraySelection = vtkSmartPointer<vtkDataArraySelection>::New();
 }
 
 vtkSHYXPartitionedCollectionToOpenFOAM::~vtkSHYXPartitionedCollectionToOpenFOAM()
 {
   this->SetCaseDirectory(nullptr);
+  this->SetCaseFoamPathNoModified(nullptr);
   this->SetDefaultFacesName(nullptr);
+}
+
+void vtkSHYXPartitionedCollectionToOpenFOAM::SetCaseFoamPathNoModified(const char* path)
+{
+  if ((this->CaseFoamPath == nullptr && (path == nullptr || path[0] == '\0')) ||
+    (this->CaseFoamPath && path && std::strcmp(this->CaseFoamPath, path) == 0))
+  {
+    return;
+  }
+  delete[] this->CaseFoamPath;
+  this->CaseFoamPath = nullptr;
+  if (path && path[0] != '\0')
+  {
+    const size_t n = std::strlen(path) + 1;
+    this->CaseFoamPath = new char[n];
+    std::memcpy(this->CaseFoamPath, path, n);
+  }
 }
 
 void vtkSHYXPartitionedCollectionToOpenFOAM::PrintSelf(ostream& os, vtkIndent indent)
@@ -774,9 +1521,28 @@ void vtkSHYXPartitionedCollectionToOpenFOAM::PrintSelf(ostream& os, vtkIndent in
   this->Superclass::PrintSelf(os, indent);
   os << indent << "CaseDirectory: " << (this->CaseDirectory ? this->CaseDirectory : "(none)")
      << "\n";
+  os << indent << "CaseFoamPath: " << (this->CaseFoamPath ? this->CaseFoamPath : "(none)") << "\n";
   os << indent << "AllowDefaultFaces: " << this->AllowDefaultFaces << "\n";
   os << indent << "DefaultFacesName: "
      << (this->DefaultFacesName ? this->DefaultFacesName : "(none)") << "\n";
+  os << indent << "VolumeArraySelection: "
+     << (this->VolumeArraySelection ? this->VolumeArraySelection->GetNumberOfArraysEnabled() : 0)
+     << " enabled\n";
+}
+
+vtkDataArraySelection* vtkSHYXPartitionedCollectionToOpenFOAM::GetVolumeArraySelection()
+{
+  return this->VolumeArraySelection;
+}
+
+vtkMTimeType vtkSHYXPartitionedCollectionToOpenFOAM::GetMTime()
+{
+  vtkMTimeType t = this->Superclass::GetMTime();
+  if (this->VolumeArraySelection)
+  {
+    t = std::max(t, this->VolumeArraySelection->GetMTime());
+  }
+  return t;
 }
 
 int vtkSHYXPartitionedCollectionToOpenFOAM::FillInputPortInformation(int port, vtkInformation* info)
@@ -811,6 +1577,15 @@ int vtkSHYXPartitionedCollectionToOpenFOAM::RequestDataObject(
   return 1;
 }
 
+int vtkSHYXPartitionedCollectionToOpenFOAM::RequestInformation(
+  vtkInformation*, vtkInformationVector** inputVector, vtkInformationVector*)
+{
+  vtkPartitionedDataSetCollection* input =
+    vtkPartitionedDataSetCollection::GetData(inputVector[0], 0);
+  SyncVolumeArraySelection(FindVolumeGrid(input), this->VolumeArraySelection);
+  return 1;
+}
+
 int vtkSHYXPartitionedCollectionToOpenFOAM::RequestData(
   vtkInformation*, vtkInformationVector** inputVector, vtkInformationVector* outputVector)
 {
@@ -823,12 +1598,6 @@ int vtkSHYXPartitionedCollectionToOpenFOAM::RequestData(
     return 0;
   }
   output->Initialize();
-
-  if (!this->CaseDirectory || this->CaseDirectory[0] == '\0')
-  {
-    vtkErrorMacro(<< "Set Case Directory to the OpenFOAM case root to write.");
-    return 0;
-  }
 
   PdcLayout layout;
   vtkDataAssembly* assembly = input->GetDataAssembly();
@@ -888,6 +1657,7 @@ int vtkSHYXPartitionedCollectionToOpenFOAM::RequestData(
     vtkErrorMacro(<< "Volume block is empty or not vtkUnstructuredGrid.");
     return 0;
   }
+  SyncVolumeArraySelection(volume, this->VolumeArraySelection);
 
   std::vector<UniqueFace> faces;
   FaceKeyMap keyToIndex;
@@ -1062,11 +1832,60 @@ int vtkSHYXPartitionedCollectionToOpenFOAM::RequestData(
     }
   }
 
-  const fs::path caseDir(this->CaseDirectory);
+  const std::string previousCase = this->CaseFoamPath ? this->CaseFoamPath : "";
+  fs::path caseDir;
+  if (CaseDirectoryEmpty(this->CaseDirectory))
+  {
+    std::error_code ec;
+    const fs::path tempRoot = fs::temp_directory_path(ec);
+    if (ec || tempRoot.empty())
+    {
+      vtkErrorMacro(<< "Cannot resolve temp directory: " << ec.message());
+      return 0;
+    }
+    const fs::path tmpRoot =
+      tempRoot /
+      (std::string(kTempRunPrefix) + std::to_string(reinterpret_cast<std::uintptr_t>(this)) + "-" +
+        std::to_string(this->GetMTime()));
+    caseDir = tmpRoot / "case";
+    if (!EnsureDir(caseDir, &err))
+    {
+      vtkErrorMacro(<< err);
+      return 0;
+    }
+    RemoveOwnedTempCase(previousCase.c_str());
+  }
+  else
+  {
+    caseDir = fs::path(this->CaseDirectory);
+  }
+  this->SetCaseFoamPathNoModified(caseDir.string().c_str());
+
   if (!WritePolyMesh(caseDir, volume, faces, writeOrder, nInternal, patches, &err))
   {
     vtkErrorMacro(<< err);
     return 0;
+  }
+  if (!WriteSystemDicts(caseDir, &err))
+  {
+    vtkErrorMacro(<< err);
+    return 0;
+  }
+  if (!WritePUTemplates(caseDir, patches, &err))
+  {
+    vtkErrorMacro(<< err);
+    return 0;
+  }
+  std::vector<std::string> fieldWarnings;
+  if (!WriteVolumeFields(caseDir, volume, faces, patches, this->VolumeArraySelection,
+        &fieldWarnings, &err))
+  {
+    vtkErrorMacro(<< err);
+    return 0;
+  }
+  for (const std::string& w : fieldWarnings)
+  {
+    vtkWarningMacro(<< w);
   }
 
   const std::string foamFile = (caseDir / "case.foam").string();

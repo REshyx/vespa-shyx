@@ -1931,7 +1931,13 @@ const ShyxExtra kShyxExtra[] = {
     "volume-point GlobalIds / element_side. Node sets are ignored. Selection Append Patches has no "
     "volume and is rejected. Unmatched/floating sides are skipped with an error naming the side; "
     "overlapping sides fail. Unassigned volume boundary faces fail unless AllowDefaultFaces. "
-    "Output is vtkOpenFOAMReader MultiBlock (internalMesh + patches). Set CaseDirectory first." },
+    "CaseDirectory may be empty: Apply then writes %TEMP%/shyx-pdc-of-<id>-<mtime>/case; "
+    "the Case row is one optional path (placeholder: leave empty) plus an open-folder button. "
+    "VolumeArrayStatus checkboxes pick which PointData/CellData become 0/shyx_<array>. "
+    "Also writes system/ simpleFoam dicts, 0/p and 0/U (zeroGradient on each PDC patch name), "
+    "and volume PointData/CellData as 0/shyx_<array> (NaN is not written: interior NaNs become 0; "
+    "PointData is averaged only if every vertex is finite; any NaN on a face writes 0 so data "
+    "does not bleed one cell onto neighbours; patch value lists follow polyMesh face order)." },
   { "SHYXSelectionExtrudeFilter", "Needs an active 3D selection of cells." },
   { "SHYXSelectionAppendPatches",
     "Add from selection snapshots the 3D-view cell selection into the Patches table (geo_N); "
@@ -1962,7 +1968,9 @@ const ShyxExtra kShyxExtra[] = {
     "required input); polydata lines become features.eMesh. "
     "Add partitions in Surface patches / Region patches (inside Castellated) and Layer patches "
     "(level, patchInfo type, region mode). Empty surfaces table = all partitions at Default surface level. "
-    "Case is a unique %TEMP%/shyx-snappy-*/case folder each Apply (STLs in constant/triSurface). "
+    "CaseDirectory may be empty (then %TEMP%/shyx-snappy-<id>-<mtime>/case each Apply) or a chosen "
+    "folder; one Case row with placeholder leave-empty plus an open-folder button "
+    "(STLs in constant/triSurface). "
     "Output is vtkOpenFOAMReader's vtkMultiBlockDataSet (internalMesh plus patches), not a "
     "standalone unstructured grid. Requires VESPA_USE_SNAPPYHEXMESH." },
   { "PulseGlyphRepresentation",

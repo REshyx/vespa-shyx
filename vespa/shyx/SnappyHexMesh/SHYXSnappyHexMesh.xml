@@ -255,17 +255,31 @@
         </Hints>
       </DoubleVectorProperty>
 
+      <StringVectorProperty name="CaseDirectory" command="SetCaseDirectory"
+                            label="Case Directory" number_of_elements="1"
+                            default_values="" animateable="0">
+        <FileListDomain name="files"/>
+        <Documentation>
+          Root of the OpenFOAM case. Leave empty to write under
+          %TEMP%/shyx-snappy-&lt;id&gt;-&lt;mtime&gt;/case. Partition STLs go in
+          constant/triSurface/.
+        </Documentation>
+        <Hints>
+          <UseDirectoryName/>
+        </Hints>
+      </StringVectorProperty>
+
       <StringVectorProperty name="CaseFoamPath"
                             command="GetCaseFoamPath"
                             label="Case Folder"
                             number_of_elements="1"
                             information_only="1"
                             animateable="0"
-                            panel_visibility="default">
+                            panel_visibility="never">
         <Documentation>
-          After Apply: a new unique folder under %TEMP%/shyx-snappy-*/case.
-          Read-only; copy the path or use the folder button to open it. Partition
-          STLs are under constant/triSurface/.
+          After Apply: the folder actually written. Empty Case Directory uses a new
+          unique %TEMP%/shyx-snappy-*/case. Read-only; use the folder button to open it.
+          Partition STLs are under constant/triSurface/.
         </Documentation>
       </StringVectorProperty>
 
@@ -321,7 +335,8 @@
           <WidgetHeight number_of_rows="5"/>
         </Hints>
       </PropertyGroup>
-      <PropertyGroup label="Case Folder" panel_widget="shyx_snappy_case_folder">
+      <PropertyGroup label="Case" panel_widget="shyx_snappy_case_folder">
+        <Property function="CaseDirectory" name="CaseDirectory"/>
         <Property function="CaseFoamPath" name="CaseFoamPath"/>
       </PropertyGroup>
 

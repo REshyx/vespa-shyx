@@ -88,6 +88,22 @@ bool SameDirectory(const fs::path& a, const fs::path& b)
   return fs::absolute(a, ec).lexically_normal() == fs::absolute(b, ec).lexically_normal();
 }
 
+bool CaseDirectoryEmpty(const char* p)
+{
+  if (!p || p[0] == '\0')
+  {
+    return true;
+  }
+  for (const char* c = p; *c; ++c)
+  {
+    if (!std::isspace(static_cast<unsigned char>(*c)))
+    {
+      return false;
+    }
+  }
+  return true;
+}
+
 bool PathIsOccupied(const fs::path& p)
 {
 #ifdef _WIN32
@@ -831,6 +847,7 @@ vtkSHYXSnappyHexMesh::vtkSHYXSnappyHexMesh()
 vtkSHYXSnappyHexMesh::~vtkSHYXSnappyHexMesh()
 {
   RemoveOwnedCaseTree(this->CaseFoamPath);
+  this->SetCaseDirectory(nullptr);
   this->SetCaseFoamPathNoModified(nullptr);
   this->SetSurfaceNames(nullptr);
   this->SetSurfaceLevelMin(nullptr);
@@ -874,6 +891,8 @@ void vtkSHYXSnappyHexMesh::PrintSelf(ostream& os, vtkIndent indent)
   os << indent << "AddLayers: " << (this->AddLayers ? "ON" : "OFF") << "\n";
   os << indent << "BackgroundCellSize: " << this->BackgroundCellSize << "\n";
   os << indent << "NumberOfInsidePoints: " << this->GetNumberOfInsidePoints() << "\n";
+  os << indent << "CaseDirectory: " << (this->CaseDirectory ? this->CaseDirectory : "(none)")
+     << "\n";
   os << indent << "CaseFoamPath: " << (this->CaseFoamPath ? this->CaseFoamPath : "(none)") << "\n";
 }
 
@@ -1078,15 +1097,23 @@ int vtkSHYXSnappyHexMesh::RequestData(
   }
 
   std::error_code ec;
-  const fs::path tmpRoot = fs::temp_directory_path(ec) /
-    ("shyx-snappy-" + std::to_string(reinterpret_cast<std::uintptr_t>(this)) + "-" +
-      std::to_string(this->GetMTime()));
-  if (ec)
+  fs::path caseDirPath;
+  if (CaseDirectoryEmpty(this->CaseDirectory))
   {
-    vtkErrorMacro(<< "Cannot resolve temp directory: " << ec.message());
-    return 0;
+    const fs::path tmpRoot = fs::temp_directory_path(ec) /
+      ("shyx-snappy-" + std::to_string(reinterpret_cast<std::uintptr_t>(this)) + "-" +
+        std::to_string(this->GetMTime()));
+    if (ec)
+    {
+      vtkErrorMacro(<< "Cannot resolve temp directory: " << ec.message());
+      return 0;
+    }
+    caseDirPath = tmpRoot / "case";
   }
-  const fs::path caseDirPath = tmpRoot / "case";
+  else
+  {
+    caseDirPath = fs::path(this->CaseDirectory);
+  }
   const fs::path triDir = caseDirPath / "constant" / "triSurface";
   fs::create_directories(triDir, ec);
   if (ec)

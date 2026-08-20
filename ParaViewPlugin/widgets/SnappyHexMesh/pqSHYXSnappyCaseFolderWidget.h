@@ -13,8 +13,8 @@ class vtkSMProxy;
 class vtkSMStringVectorProperty;
 
 /**
- * One-line read-only case folder plus a button that opens it in the file manager.
- * Re-pulls CaseFoamPath after dataUpdated so the path matches this Apply.
+ * Optional Case Directory (leave empty for %TEMP%) plus a button that opens the
+ * folder actually written (CaseFoamPath after Apply, else Case Directory).
  */
 class pqSHYXSnappyCaseFolderWidget : public pqPropertyWidget
 {
@@ -29,15 +29,18 @@ public:
   void setReadOnly(bool readOnly) override;
 
 private Q_SLOTS:
-  void refreshPath();
+  void browseFolder();
+  void refreshOpenButton();
   void openFolder();
 
 private:
-  QString folderPath() const;
+  QString resolvedFolder() const;
 
   QPointer<pqPipelineSource> PipelineSource;
   QLineEdit* PathEdit = nullptr;
+  QPushButton* BrowseButton = nullptr;
   QPushButton* OpenButton = nullptr;
+  vtkSMStringVectorProperty* DirProp = nullptr;
   vtkSMStringVectorProperty* PathProp = nullptr;
 };
 

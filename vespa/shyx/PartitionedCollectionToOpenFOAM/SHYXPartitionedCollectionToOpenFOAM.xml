@@ -5,7 +5,7 @@
                  name="SHYXPartitionedCollectionToOpenFOAM">
       <Documentation
           short_help="SHYX Partitioned Collection To OpenFOAM: Write polyMesh from volume + side sets."
-          long_help="Takes a vtkPartitionedDataSetCollection with an IOSS-style volume block (element_blocks) and side sets. Writes constant/polyMesh (points/faces/owner/neighbour/boundary) plus case.foam. Side sets become OpenFOAM patches using volume-point GlobalIds (and element_side as fallback). Node sets are ignored. A volume mesh is required; SHYX Selection Append Patches cannot be written as polyMesh. Output is vtkOpenFOAMReader's vtkMultiBlockDataSet (internalMesh plus patches)."/>
+          long_help="Takes a vtkPartitionedDataSetCollection with an IOSS-style volume block (element_blocks) and side sets. Writes constant/polyMesh, system/{controlDict,fvSchemes,fvSolution}, 0/p and 0/U (zeroGradient on every PDC side-set name; names are not rewritten to inlet/outlet/wall), plus volume PointData/CellData as 0/shyx_&lt;array&gt; volFields. OpenFOAM cannot store NaN. PointData is averaged only when every vertex is finite; any NaN among a face's vertices writes 0 (no one-cell bleed). Node sets are ignored. Selection Append Patches cannot be written as polyMesh. Output is vtkOpenFOAMReader's vtkMultiBlockDataSet."/>
 
       <OutputPort name="OpenFOAM case" index="0"/>
 
@@ -23,17 +23,59 @@
         </Documentation>
       </InputProperty>
 
+      <StringVectorProperty name="VolumeArrayInfo"
+                            command="GetVolumeArraySelection"
+                            number_of_elements_per_command="2"
+                            information_only="1"
+                            si_class="vtkSIDataArraySelectionProperty"/>
+
+      <StringVectorProperty name="VolumeArrayStatus"
+                            command="GetVolumeArraySelection"
+                            information_property="VolumeArrayInfo"
+                            number_of_elements_per_command="2"
+                            element_types="2 0"
+                            repeat_command="1"
+                            si_class="vtkSIDataArraySelectionProperty"
+                            label="Arrays to write">
+        <ArraySelectionDomain name="array_list">
+          <RequiredProperties>
+            <Property function="ArrayList" name="VolumeArrayInfo"/>
+          </RequiredProperties>
+        </ArraySelectionDomain>
+        <Documentation>
+          Volume PointData and CellData written as 0/shyx_&lt;name&gt;. Uncheck to skip.
+          GlobalIds, PedigreeIds, and vtk* arrays are omitted. Default: all eligible arrays on.
+        </Documentation>
+        <Hints>
+          <WidgetHeight number_of_rows="8"/>
+        </Hints>
+      </StringVectorProperty>
+
       <StringVectorProperty name="CaseDirectory" command="SetCaseDirectory"
                             label="Case Directory" number_of_elements="1"
                             default_values="" animateable="0">
         <FileListDomain name="files"/>
         <Documentation>
-          Root of the OpenFOAM case to write. Creates constant/polyMesh, system/controlDict,
-          and case.foam in this folder.
+          Root of the OpenFOAM case. Leave empty to write under
+          %TEMP%/shyx-pdc-of-&lt;id&gt;-&lt;mtime&gt;/case. Writes constant/polyMesh,
+          system/, 0/, and case.foam.
         </Documentation>
         <Hints>
           <UseDirectoryName/>
         </Hints>
+      </StringVectorProperty>
+
+      <StringVectorProperty name="CaseFoamPath"
+                            command="GetCaseFoamPath"
+                            label="Case Folder"
+                            number_of_elements="1"
+                            information_only="1"
+                            animateable="0"
+                            panel_visibility="never">
+        <Documentation>
+          After Apply: the folder actually written. Empty Case Directory uses a new
+          unique %TEMP%/shyx-pdc-of-*/case. Read-only; use the folder button to open it.
+        </Documentation>
       </StringVectorProperty>
 
       <IntVectorProperty name="AllowDefaultFaces" command="SetAllowDefaultFaces"
@@ -57,8 +99,12 @@
         </Hints>
       </StringVectorProperty>
 
-      <PropertyGroup label="Case">
-        <Property name="CaseDirectory"/>
+      <PropertyGroup label="Case" panel_widget="shyx_snappy_case_folder">
+        <Property function="CaseDirectory" name="CaseDirectory"/>
+        <Property function="CaseFoamPath" name="CaseFoamPath"/>
+      </PropertyGroup>
+      <PropertyGroup label="Volume arrays">
+        <Property name="VolumeArrayStatus"/>
       </PropertyGroup>
       <PropertyGroup label="Unassigned faces" panel_visibility="advanced">
         <Property name="AllowDefaultFaces"/>

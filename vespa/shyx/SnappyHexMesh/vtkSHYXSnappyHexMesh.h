@@ -93,7 +93,11 @@ public:
   vtkGetMacro(FeatureLevel, int);
   vtkSetClampMacro(FeatureLevel, int, 0, 10);
 
-  /** This Apply's unique case directory under %TEMP%/shyx-snappy-<id>-<mtime>/case. */
+  /** Optional OpenFOAM case root. Empty = %TEMP%/shyx-snappy-<id>-<mtime>/case. */
+  vtkSetStringMacro(CaseDirectory);
+  vtkGetStringMacro(CaseDirectory);
+
+  /** Directory actually written this Apply (user Case Directory or auto temp). */
   vtkGetStringMacro(CaseFoamPath);
 
   /** Newline-separated refinementSurfaces names (table order). Empty = all partitions. */
@@ -162,6 +166,7 @@ protected:
   double FeatureAngle = 30.0;
   bool ImplicitFeatureSnap = true;
   int FeatureLevel = 2;
+  char* CaseDirectory = nullptr;
   char* CaseFoamPath = nullptr;
   char* SurfaceNames = nullptr;
   char* SurfaceLevelMin = nullptr;

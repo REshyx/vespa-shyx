@@ -181,4 +181,4 @@ Properties 三张表（Add partition 选上游分块）：
 
 可选 **Feature edges**：Properties 面板上的 pipeline 下拉（不是创建滤镜时的第二个必选输入）。线网格 → `features.eMesh`，`explicitFeatureSnap true`。选 `(none)` 时 `features ()`，implicit 特征吸附仍可开。
 
-STL 写在 case 的 `constant/triSurface/`，Apply 后在 **Case Folder**（每次一个新的 `%TEMP%/shyx-snappy-*/case`）里打开即可，面板不单独显示 STL 临时路径。
+STL 写在 case 的 `constant/triSurface/`。**Case Directory** 可选手动指定；留空则 Apply 后在 **Case Folder**（`%TEMP%/shyx-snappy-*/case`）里打开。面板不单独显示 STL 临时路径。

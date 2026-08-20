@@ -8,7 +8,7 @@
 
 MSVC 下 `VESPAPlugin.dll` 必须 `/WHOLEARCHIVE` 该 `.lib`（插件 CMake 已接）。不要用 WSL/MinGW 的 `.a`。滤镜在进程内调用静态库，不需要旁边再放 `snappy_cli.exe`。
 
-加载时会尽量删除 `%TEMP%\shyx-snappy-*` 残留目录；目录里只要有文件被占用，整棵都不删。每次 Apply 的参数/ABI 诊断写在该次 case 的 `run-diag.txt`（滤镜侧 + 适配器侧各一段；两边 `sizeof`/`offset` 必须一致）。Case Folder 指向 `%TEMP%\shyx-snappy-<id>-<mtime>\case`。若只有滤镜段、错误仍是 `null argument`，说明 `SHYXSnappyHex.lib` 是旧的：先编 `shyx_snappyhex_ep` 再编 `VESPAPlugin`。加载时用 adapter 内存中的 `controlDict`，不读磁盘 etc。真正跑 snappy 时把内嵌 `cellModels` 写到 `%TEMP%\shyx-openfoam\etc`。
+加载时会尽量删除 `%TEMP%\shyx-snappy-*` 残留目录；目录里只要有文件被占用，整棵都不删。每次 Apply 的参数/ABI 诊断写在该次 case 的 `run-diag.txt`（滤镜侧 + 适配器侧各一段；两边 `sizeof`/`offset` 必须一致）。**Case Directory** 可选手动指定 OpenFOAM case 根目录（占位提示可留空）；留空则写到 `%TEMP%\shyx-snappy-<id>-<mtime>\case`。同一行 📂 打开实际写出目录。用户自选目录不会在下次 Apply 时删掉。若只有滤镜段、错误仍是 `null argument`，说明 `SHYXSnappyHex.lib` 是旧的：先编 `shyx_snappyhex_ep` 再编 `VESPAPlugin`。加载时用 adapter 内存中的 `controlDict`，不读磁盘 etc。真正跑 snappy 时把内嵌 `cellModels` 写到 `%TEMP%\shyx-openfoam\etc`。
 
 ## 输入
 
@@ -25,7 +25,7 @@ Properties 三张表（Add partition 从 Input 分块名下拉，不是 3D 选�
 
 关掉 castellated / snap / layers 时，用输入表面 AABB（加 Bounds margin）直接生成笛卡尔 `VTK_HEXAHEDRON` 背景盒，不写 OpenFOAM ASCII、不调用 snappyHexMesh。格子尺寸：`Background cell size > 0` 用该值，否则取加 margin 后最长边的 1/16。
 
-每次跑完（成功或失败）都保留这一次的 Foam case（新的 `%TEMP%\shyx-snappy-<id>-<mtime>\case`），并在 case 根目录写 `case.foam`。下一次 Apply 会另开新目录，并尽量删掉上一轮的目录。滤镜输出用 ParaView 自带的 `vtkOpenFOAMReader` 读整棵 `vtkMultiBlockDataSet`（`internalMesh` 和 boundary patches），与 **File → Open** Case Folder 里的 `case.foam` 相同。关掉 castellated 时背景盒也包成单块 MultiBlock。分块 STL / `.eMesh` 在该 case 的 `constant/triSurface/`，面板只显示 **Case Folder**，不另列 STL 路径。
+每次跑完（成功或失败）都保留这一次的 Foam case，并在 case 根目录写 `case.foam`。**Case Directory 留空**时每次 Apply 另开 `%TEMP%\shyx-snappy-<id>-<mtime>\case`，并尽量删掉上一轮自动创建的目录；指定了文件夹则写进该目录（覆盖），不删用户目录。滤镜输出用 ParaView 自带的 `vtkOpenFOAMReader` 读整棵 `vtkMultiBlockDataSet`（`internalMesh` 和 boundary patches），与 **File → Open** Case Folder 里的 `case.foam` 相同。关掉 castellated 时背景盒也包成单块 MultiBlock。分块 STL / `.eMesh` 在该 case 的 `constant/triSurface/`，面板 **Case Directory** 可选路径，**Case Folder** 显示实际写出位置。
 
 **Inside points** 列表可 Add insidePoint：选中一行后视图里出现可拖动手柄。空列表仍用 AABB 中心；多个点写成 OpenFOAM `locationsInMesh`（zone `none`）。点必须落在要保留的单元格内，不要贴在面上。
 

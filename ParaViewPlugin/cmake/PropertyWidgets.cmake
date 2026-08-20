@@ -119,6 +119,14 @@ if (VESPA_USE_VMTK)
       widgets/pqSHYXOpeningTable.h)
 endif()
 
+# Case-folder path + open button (SnappyHexMesh and Partitioned Collection To OpenFOAM).
+vespa_plugin_group_widget(
+  TYPE "shyx_snappy_case_folder"
+  CLASS_NAME pqSHYXSnappyCaseFolderWidget
+  FILES
+    widgets/SnappyHexMesh/pqSHYXSnappyCaseFolderWidget.cxx
+    widgets/SnappyHexMesh/pqSHYXSnappyCaseFolderWidget.h)
+
 if (VESPA_USE_SNAPPYHEXMESH)
   vespa_plugin_group_widget(
     TYPE "shyx_snappy_inside_points"
@@ -126,12 +134,6 @@ if (VESPA_USE_SNAPPYHEXMESH)
     FILES
       widgets/SnappyHexMesh/pqSHYXSnappyInsidePointsWidget.cxx
       widgets/SnappyHexMesh/pqSHYXSnappyInsidePointsWidget.h)
-  vespa_plugin_group_widget(
-    TYPE "shyx_snappy_case_folder"
-    CLASS_NAME pqSHYXSnappyCaseFolderWidget
-    FILES
-      widgets/SnappyHexMesh/pqSHYXSnappyCaseFolderWidget.cxx
-      widgets/SnappyHexMesh/pqSHYXSnappyCaseFolderWidget.h)
   vespa_plugin_group_widget(
     TYPE "shyx_snappy_patch_table"
     CLASS_NAME pqSHYXSnappyPatchTableWidget
