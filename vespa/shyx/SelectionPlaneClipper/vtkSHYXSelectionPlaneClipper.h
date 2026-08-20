@@ -1,15 +1,14 @@
 /**
  * @class   vtkSHYXSelectionPlaneClipper
- * @brief   Clip a surface mesh using a plane derived from the active selection (centroid + average normal),
- *          with optional interactive plane editing (same packed-string convention as Vessel End Clipper).
- *          The ParaView property UseInteractiveCutPlanes only controls whether the plane widget is shown;
- *          whenever InteractiveCutPackedString parses, it drives the clip plane.
+ * @brief   Clip a surface mesh using a world-space plane. The initial plane comes from selected
+ *          triangles in the scene (any pipeline node) or from InteractiveCutPackedString when set.
+ *          UseInteractiveCutPlanes only controls whether the plane widget is shown.
  *
- * Port 1 accepts vtkSelection (ParaView Selection port with SelectionInput); vtkExtractSelection is run
- * internally. Alternatively set SelectionCellArrayName on port 0 when no selection is connected.
- * After a successful clip, ClipPlaneHintPackedString holds the same six doubles as the interactive
- * packed convention (origin + direction handle) for the client-side plane widget; it is not written
- * to the output vtkPolyData.
+ * Port 1 accepts vtkSelection (ParaView SelectionInput). Those ids are only a fallback against the
+ * Input mesh when InteractiveCutPackedString is empty (e.g. Python / create-time copy from Input).
+ * The ParaView widget computes the initial plane from the active view selection's own dataset.
+ * After a successful clip, ClipPlaneHintPackedString holds origin + direction handle; it is not
+ * written to the output vtkPolyData.
  */
 
 #ifndef vtkSHYXSelectionPlaneClipper_h
@@ -19,6 +18,9 @@
 #include "vtkSHYXSelectionPlaneClipperModule.h"
 
 VTK_ABI_NAMESPACE_BEGIN
+
+class vtkDataSet;
+class vtkSelection;
 
 class VTKSHYXSELECTIONPLANECLIPPER_EXPORT vtkSHYXSelectionPlaneClipper : public vtkPolyDataAlgorithm
 {
@@ -76,6 +78,13 @@ public:
   vtkBooleanMacro(UseInteractiveCutPlanes, int);
 
   /**
+   * Area-weighted centroid and average normal of selected cells on any vtkDataSet (the dataset the
+   * selection was made on). origin is the centroid; ClipOffset / InvertPlane are not applied.
+   */
+  static bool ComputePlaneFromDatasetSelection(
+    vtkDataSet* dataset, vtkSelection* selection, double origin[3], double normal[3]);
+
+  /**
    * When true (default), run vtkFillHolesFilter after clipping to triangulate small boundary loops
    * (typical clip opening). Hole size limit is derived from the clipped mesh bounding diagonal unless
    * FillHolesMaximumSize is set positive.
@@ -120,7 +129,7 @@ protected:
 
   char* InteractiveCutPackedString = nullptr;
   char* ClipPlaneHintPackedString = nullptr;
-  int UseInteractiveCutPlanes = 0;
+  int UseInteractiveCutPlanes = 1;
 
   int FillHoles = 1;
   double FillHolesMaximumSize = 0.0;

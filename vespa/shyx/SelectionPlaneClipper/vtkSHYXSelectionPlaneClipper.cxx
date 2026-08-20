@@ -10,6 +10,7 @@
 #include <vtkDataArray.h>
 #include <vtkDataObject.h>
 #include <vtkDataSet.h>
+#include <vtkDataSetSurfaceFilter.h>
 #include <vtkDoubleArray.h>
 #include <vtkExtractSelection.h>
 #include <vtkFillHolesFilter.h>
@@ -130,6 +131,25 @@ void CollectCellsFromExtracted(vtkPolyData* mesh, vtkDataSet* extracted, std::se
       }
     }
   }
+}
+
+bool ExtractSelectedCells(vtkPolyData* dataset, vtkSelection* inputSel, std::set<vtkIdType>& selected)
+{
+  selected.clear();
+  if (!dataset || !inputSel || dataset->GetNumberOfCells() == 0)
+  {
+    return false;
+  }
+  vtkNew<vtkExtractSelection> extractSelection;
+  extractSelection->SetInputData(0, dataset);
+  extractSelection->SetInputData(1, inputSel);
+  extractSelection->Update();
+  vtkDataSet* extracted = vtkDataSet::SafeDownCast(extractSelection->GetOutputDataObject(0));
+  if (extracted && (extracted->GetNumberOfCells() > 0 || extracted->GetNumberOfPoints() > 0))
+  {
+    CollectCellsFromExtracted(dataset, extracted, selected);
+  }
+  return !selected.empty();
 }
 
 vtkSmartPointer<vtkPolyData> BuildTrianglePatch(vtkPolyData* mesh, const std::set<vtkIdType>& selected)
@@ -400,6 +420,48 @@ bool ComputePatchCentroidAndNormal(vtkPolyData* patch, double centroid[3], doubl
   return true;
 }
 
+bool ComputePlaneFromDatasetSelectionImpl(
+  vtkDataSet* dataset, vtkSelection* selection, double origin[3], double normal[3])
+{
+  origin[0] = origin[1] = origin[2] = 0.0;
+  normal[0] = 0.0;
+  normal[1] = 0.0;
+  normal[2] = 1.0;
+  if (!dataset || !selection)
+  {
+    return false;
+  }
+  vtkNew<vtkExtractSelection> extract;
+  extract->SetInputData(0, dataset);
+  extract->SetInputData(1, selection);
+  extract->Update();
+  vtkDataSet* extracted = vtkDataSet::SafeDownCast(extract->GetOutputDataObject(0));
+  if (!extracted || (extracted->GetNumberOfCells() == 0 && extracted->GetNumberOfPoints() == 0))
+  {
+    return false;
+  }
+  vtkPolyData* pd = vtkPolyData::SafeDownCast(extracted);
+  vtkSmartPointer<vtkPolyData> surface;
+  if (!pd)
+  {
+    vtkNew<vtkDataSetSurfaceFilter> surf;
+    surf->SetInputData(extracted);
+    surf->Update();
+    surface = vtkSmartPointer<vtkPolyData>::New();
+    surface->ShallowCopy(surf->GetOutput());
+    pd = surface;
+  }
+  double centroid[3];
+  if (!ComputePatchCentroidAndNormal(pd, centroid, normal))
+  {
+    return false;
+  }
+  origin[0] = centroid[0];
+  origin[1] = centroid[1];
+  origin[2] = centroid[2];
+  return true;
+}
+
 void FillStampNewCellWithMarker(vtkAbstractArray* postArr, vtkIdType cellIdx, double marker)
 {
   if (!postArr)
@@ -565,6 +627,12 @@ void vtkSHYXSelectionPlaneClipper::SetUseInteractiveCutPlanes(int flag)
   // Intentionally no Modified(): show/hide widget only (see class doc).
 }
 
+bool vtkSHYXSelectionPlaneClipper::ComputePlaneFromDatasetSelection(
+  vtkDataSet* dataset, vtkSelection* selection, double origin[3], double normal[3])
+{
+  return ComputePlaneFromDatasetSelectionImpl(dataset, selection, origin, normal);
+}
+
 void vtkSHYXSelectionPlaneClipper::SetSourceConnection(vtkAlgorithmOutput* algOutput)
 {
   this->SetInputConnection(1, algOutput);
@@ -637,115 +705,117 @@ int vtkSHYXSelectionPlaneClipper::RequestData(
     return 1;
   }
 
-  std::set<vtkIdType> selected;
+  std::vector<double> packed;
+  const bool havePacked = ParseInteractivePacked(this->InteractiveCutPackedString, packed);
 
-  if (this->GetNumberOfInputConnections(1) > 0)
+  double centroid[3] = { 0.0, 0.0, 0.0 };
+  double planeNormal[3] = { 0.0, 0.0, 1.0 };
+  double origin[3] = { 0.0, 0.0, 0.0 };
+  bool havePlane = false;
+
+  if (havePacked)
   {
-    vtkInformation* selInfo = inputVector[1]->GetInformationObject(0);
-    if (selInfo && selInfo->Has(vtkDataObject::DATA_OBJECT()))
+    const double* o = packed.data();
+    const double* d = packed.data() + 3;
+    double nx = d[0] - o[0];
+    double ny = d[1] - o[1];
+    double nz = d[2] - o[2];
+    const double nn = std::sqrt(nx * nx + ny * ny + nz * nz);
+    if (nn > 1e-15)
     {
-      vtkSelection* inputSel = vtkSelection::SafeDownCast(selInfo->Get(vtkDataObject::DATA_OBJECT()));
-      if (inputSel && inputSel->GetNumberOfNodes() > 0)
-      {
-        vtkNew<vtkExtractSelection> extractSelection;
-        extractSelection->SetInputData(0, mesh);
-        extractSelection->SetInputData(1, inputSel);
-        extractSelection->Update();
-        vtkDataSet* extracted = vtkDataSet::SafeDownCast(extractSelection->GetOutputDataObject(0));
-        if (extracted &&
-          (extracted->GetNumberOfCells() > 0 || extracted->GetNumberOfPoints() > 0))
-        {
-          CollectCellsFromExtracted(mesh, extracted, selected);
-        }
-      }
+      origin[0] = o[0];
+      origin[1] = o[1];
+      origin[2] = o[2];
+      planeNormal[0] = nx / nn;
+      planeNormal[1] = ny / nn;
+      planeNormal[2] = nz / nn;
+      centroid[0] = origin[0];
+      centroid[1] = origin[1];
+      centroid[2] = origin[2];
+      havePlane = true;
     }
   }
 
-  if (selected.empty() && this->SelectionCellArrayName && this->SelectionCellArrayName[0] != '\0')
+  if (!havePlane)
   {
-    vtkDataArray* arr = mesh->GetCellData()->GetArray(this->SelectionCellArrayName);
-    if (!arr)
+    std::set<vtkIdType> selected;
+    if (this->GetNumberOfInputConnections(1) > 0)
     {
-      vtkWarningMacro("SelectionCellArrayName \"" << this->SelectionCellArrayName
-                                                  << "\" not found on input cell data.");
-    }
-    else
-    {
-      const vtkIdType nc = mesh->GetNumberOfCells();
-      for (vtkIdType cid = 0; cid < nc; ++cid)
+      vtkInformation* selInfo = inputVector[1]->GetInformationObject(0);
+      if (selInfo && selInfo->Has(vtkDataObject::DATA_OBJECT()))
       {
-        if (mesh->GetCellType(cid) != VTK_TRIANGLE)
+        vtkSelection* inputSel = vtkSelection::SafeDownCast(selInfo->Get(vtkDataObject::DATA_OBJECT()));
+        if (inputSel && inputSel->GetNumberOfNodes() > 0)
         {
-          continue;
-        }
-        bool take = false;
-        if (arr->IsIntegral())
-        {
-          take = (arr->GetTuple1(cid) != 0.0);
-        }
-        else
-        {
-          take = (arr->GetTuple1(cid) > 0.5);
-        }
-        if (take)
-        {
-          selected.insert(cid);
+          ExtractSelectedCells(mesh, inputSel, selected);
         }
       }
     }
+
+    if (selected.empty() && this->SelectionCellArrayName && this->SelectionCellArrayName[0] != '\0')
+    {
+      vtkDataArray* arr = mesh->GetCellData()->GetArray(this->SelectionCellArrayName);
+      if (!arr)
+      {
+        vtkWarningMacro("SelectionCellArrayName \"" << this->SelectionCellArrayName
+                                                    << "\" not found on input cell data.");
+      }
+      else
+      {
+        const vtkIdType nc = mesh->GetNumberOfCells();
+        for (vtkIdType cid = 0; cid < nc; ++cid)
+        {
+          if (mesh->GetCellType(cid) != VTK_TRIANGLE)
+          {
+            continue;
+          }
+          bool take = false;
+          if (arr->IsIntegral())
+          {
+            take = (arr->GetTuple1(cid) != 0.0);
+          }
+          else
+          {
+            take = (arr->GetTuple1(cid) > 0.5);
+          }
+          if (take)
+          {
+            selected.insert(cid);
+          }
+        }
+      }
+    }
+
+    vtkSmartPointer<vtkPolyData> patch = BuildTrianglePatch(mesh, selected);
+    if (!patch || patch->GetNumberOfCells() == 0)
+    {
+      vtkWarningMacro("No selected triangles (use Copy Active Selection on any scene node, "
+                      "or set Selection Cell Array Name). Pass-through input mesh.");
+      output->ShallowCopy(mesh);
+      return 1;
+    }
+    if (!ComputePatchCentroidAndNormal(patch, centroid, planeNormal))
+    {
+      vtkWarningMacro("Could not compute centroid/normal from selection patch.");
+      output->ShallowCopy(mesh);
+      return 1;
+    }
+    if (this->InvertPlane)
+    {
+      planeNormal[0] = -planeNormal[0];
+      planeNormal[1] = -planeNormal[1];
+      planeNormal[2] = -planeNormal[2];
+    }
+    origin[0] = centroid[0] + this->ClipOffset * planeNormal[0];
+    origin[1] = centroid[1] + this->ClipOffset * planeNormal[1];
+    origin[2] = centroid[2] + this->ClipOffset * planeNormal[2];
+    havePlane = true;
   }
 
-  vtkSmartPointer<vtkPolyData> patch = BuildTrianglePatch(mesh, selected);
-  if (!patch || patch->GetNumberOfCells() == 0)
+  if (!havePlane)
   {
-    vtkWarningMacro("No selected triangles (use Copy Active Selection on the Selection port, "
-                    "or set Selection Cell Array Name). Pass-through input mesh.");
     output->ShallowCopy(mesh);
     return 1;
-  }
-
-  double centroid[3];
-  double planeNormal[3];
-  if (!ComputePatchCentroidAndNormal(patch, centroid, planeNormal))
-  {
-    vtkWarningMacro("Could not compute centroid/normal from selection patch.");
-    output->ShallowCopy(mesh);
-    return 1;
-  }
-
-  if (this->InvertPlane)
-  {
-    planeNormal[0] = -planeNormal[0];
-    planeNormal[1] = -planeNormal[1];
-    planeNormal[2] = -planeNormal[2];
-  }
-
-  double origin[3] = { centroid[0] + this->ClipOffset * planeNormal[0],
-    centroid[1] + this->ClipOffset * planeNormal[1], centroid[2] + this->ClipOffset * planeNormal[2] };
-
-  // Interactive plane state is stored in InteractiveCutPackedString (ParaView widget). When it
-  // parses, it always drives the clip plane; UseInteractiveCutPlanes is a client/UI hint to show
-  // the 3D widget, not whether to use the edited plane after Apply.
-  {
-    std::vector<double> packed;
-    if (ParseInteractivePacked(this->InteractiveCutPackedString, packed))
-    {
-      const double* o = packed.data();
-      const double* d = packed.data() + 3;
-      double nx = d[0] - o[0];
-      double ny = d[1] - o[1];
-      double nz = d[2] - o[2];
-      const double nn = std::sqrt(nx * nx + ny * ny + nz * nz);
-      if (nn > 1e-15)
-      {
-        origin[0] = o[0];
-        origin[1] = o[1];
-        origin[2] = o[2];
-        planeNormal[0] = nx / nn;
-        planeNormal[1] = ny / nn;
-        planeNormal[2] = nz / nn;
-      }
-    }
   }
 
   double meshBounds[6];

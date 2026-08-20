@@ -6,11 +6,12 @@
       <Documentation short_help="SHYX Selection Plane Clipper: Clip mesh with a plane from selection centroid and average normal.">
         Port 0 input is the full triangulated surface; port 0 output is the clipped mesh. Port 1 is a vtkSelection (same convention as SHYX Selection
         Extrude and VESPA Region Fairing). Creating the filter copies the Input's active selection into the Selection
-        widget (same as Extract Selection / SHYX Delete Selected Cells); Copy Active Selection is only needed if you
-        change the selection afterwards. No separate Extract Selection filter is required. The filter runs
-        vtkExtractSelection internally, computes an
-        area-weighted centroid and average face normal on the selected triangles, then clips the full mesh.
-        With Tip connectivity (default), clipping follows the same strategy as SHYX Vessel End Clipper.
+        widget. Copy Active Selection stores that view selection (from any pipeline node) in the
+        Selection box as the source of truth. Show Interactive Cut Plane computes a world-space
+        plane from the copied selection and displays the widget; it does not clip and does not
+        clear the view selection. Apply performs the clip. No separate Extract Selection filter is
+        required. With Tip connectivity (default), clipping follows the same strategy as
+        SHYX Vessel End Clipper.
         Optional Selection Cell Array Name selects triangles on port 0 when no selection is provided.
         Fill Holes (default ON) runs vtkFillHolesFilter on the clip boundary using an automatic maximum hole size
         from the result bounds unless you set Fill Holes Maximum Size. Cell data from the clipped surface is
@@ -43,8 +44,10 @@
           <DataType value="vtkSelection"/>
         </DataTypeDomain>
         <Documentation>
-          vtkSelection describing cells or points on Input (same convention as SHYX Selection Extrude).
-          Filled at create from the Input's active selection; Copy Active Selection is optional afterwards.
+          Copied vtkSelection (ParaView SelectionInput). Copy Active Selection from any pipeline
+          node in the view; this copied selection is the source of truth for the initial plane.
+          Show Interactive Cut Plane computes the plane from these ids on the dataset that was
+          copied from. Apply clips the Input mesh with that plane.
         </Documentation>
         <Hints>
           <SelectionInput/>
@@ -171,13 +174,13 @@
                          name="UseInteractiveCutPlanes"
                          label="Show Interactive Cut Plane"
                          number_of_elements="1"
-                         default_values="0">
+                         default_values="1">
         <BooleanDomain name="bool"/>
         <Documentation>
-          When ON, the yellow plane widget is shown so you can edit the cut plane in the view.
-          Turning it OFF only hides the widget; clipping still uses the last plane from the widget
-          (InteractiveCutPacked) when present. Apply once so port 0 is generated, then drag the plane
-          and Apply again to clip.
+          When ON, the yellow plane widget is shown and the plane is computed from the copied
+          Selection (Copy Active Selection first). This does not clip and does not clear the view
+          selection. Turning it OFF only hides the widget. Apply clips using InteractiveCutPacked
+          when present. Drag the plane afterwards if needed.
         </Documentation>
       </IntVectorProperty>
 
