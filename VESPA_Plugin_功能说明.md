@@ -605,7 +605,7 @@
 | **Partition Point Array Name** | string | EndpointIndex | 点标量名：驱动「首分量 ≤0 合并 + ≥1 连通拆分」；清空则始终走特征角路径。 |
 | **Feature angle (deg)** | double | 70.0 | 回退路径：`vtkPolyDataNormals` 二面角阈值。**较大**时更多光滑邻域被合并；**较小**时在尖棱/折边处切分更细。 |
 
-**输出**：端口 0 为 **`vtkPartitionedDataSetCollection`**；端口 1 为分 patch 前的整块边界 **`vtkPolyData`**。块元数据会设置 **NAME** 及与 **vtkIOSSReader** 的 **ENTITY_ID** 等兼容字段（以当前实现为准）。
+**输出**：端口 0 为 **`vtkPartitionedDataSetCollection`**；端口 1 为分 patch 前的整块边界 **`vtkPolyData`**。块元数据会设置 **NAME** 及与 **vtkIOSSReader** 的 **ENTITY_ID** 等兼容字段（以当前实现为准）。**Partitioned block names** 表每行前方的眼睛控制该 block 在当前视图中的显示（与右键 Hide Block 共用表示层 BlockSelectors）；Side / Node 成对联动。
 
 ---
 

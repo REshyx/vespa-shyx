@@ -1920,7 +1920,10 @@ const ShyxExtra kShyxExtra[] = {
   { "SHYXVesselEndClipper", "Vascular step 2. Port0 clipped mesh, port1 clip planes (Point Label)." },
   { "SHYXSelectionPlaneClipper", "Vascular step 3. Uses current selection / interactive plane." },
   { "SHYXTetGen", "Vascular step 5. Closed triangle surface -> tetrahedra." },
-  { "SHYXDataSetToPartitionedCollection", "Vascular step 6. Convert dataset to PDC; then Boundary Assignment." },
+  { "SHYXDataSetToPartitionedCollection",
+    "Vascular step 6. Convert dataset to PDC; then Boundary Assignment. Partitioned block names "
+    "table has a leading eye per row that toggles that block in the active view (same "
+    "BlockSelectors / BlockVisibilities as Hide Block). Side and node rows stay linked." },
   { "SHYXPartitionedCollectionBoundaryAssignment",
     "Vascular step 7. Call get_blocks on the PDC first. Port0 collection, port1 assignment debug. "
     "Export writes Exodus + options + Nodeset + current .pvsm beside the chosen .exo." },

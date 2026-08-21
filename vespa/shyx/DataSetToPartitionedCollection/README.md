@@ -32,3 +32,4 @@
 | **BoundaryRadialNormalFalloffFactor** | `double` | `1.0` | 指数参数 `a`；仅在 `ComputeBoundaryRadialValue` 启用时使用。 |
 | **BoundaryVariables** | `char*` | 空 | 由 `Partitioned block names` 面板的 Side set `Variable1/2/...` 列维护；空/NaN 不写体点。有限值写入四面体体块点数据 `BoundaryVariable1`、`BoundaryVariable2`……（初始化为 NaN）。重复写入同一体点时 warning 并取平均值。 |
 | **BoundaryWriteNormals** | `char*` | 空 | 由 `Partitioned block names` 面板的 Side set `Write Normal` 列维护（0/1，按行对齐）。勾选时将该 side 的 `BoundaryRadialValueNormal` 累加到四面体体块点数据；与 Variable 无关。`BoundaryRadialValue` 不再写入体块。重复写入同一体点时 warning 并取平均值。 |
+| **（面板）Partitioned block names 眼睛** | UI | 开 | 每行最前方的眼睛控制该 block 在当前视图中的显示，写入表示层的 **BlockSelectors / BlockVisibilities**，与 3D 视图右键 **Hide Block / Show Only Block / Show All Blocks** 共用同一状态。点击 Side set 或 Node set 的眼睛会成对联动。 |

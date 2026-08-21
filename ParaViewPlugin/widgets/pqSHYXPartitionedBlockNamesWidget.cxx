@@ -1,18 +1,32 @@
 #include "pqSHYXPartitionedBlockNamesWidget.h"
 
+#include "pqActiveObjects.h"
+#include "pqApplicationCore.h"
+#include "pqDataAssemblyTreeModel.h"
+#include "pqDataRepresentation.h"
+#include "pqPipelineSource.h"
+#include "pqServerManagerModel.h"
+#include "pqUndoStack.h"
+#include "pqView.h"
+
+#include "vtkCommand.h"
 #include "vtkDataAssembly.h"
+#include "vtkEventQtSlotConnect.h"
 #include "vtkPVDataInformation.h"
 #include "vtkSMProperty.h"
 #include "vtkSMPropertyGroup.h"
+#include "vtkSMPropertyHelper.h"
 #include "vtkSMProxy.h"
 #include "vtkSMSourceProxy.h"
 #include "vtkSMStringVectorProperty.h"
+#include "vtkSMTrace.h"
 
 #include <QDynamicPropertyChangeEvent>
 #include <QEvent>
 #include <QAbstractItemView>
 #include <QHeaderView>
 #include <QHBoxLayout>
+#include <QIcon>
 #include <QLabel>
 #include <QList>
 #include <QPushButton>
@@ -27,15 +41,66 @@
 
 #include <algorithm>
 #include <string>
+#include <vector>
 
 namespace
 {
-constexpr int kColIndex = 0;
-constexpr int kColType = 1;
-constexpr int kColName = 2;
-constexpr int kColWriteNormal = 3;
-constexpr int kFirstVariableCol = 4;
+constexpr int kColVisibility = 0;
+constexpr int kColIndex = 1;
+constexpr int kColType = 2;
+constexpr int kColName = 3;
+constexpr int kColWriteNormal = 4;
+constexpr int kFirstVariableCol = 5;
+constexpr int kSelectorPathRole = Qt::UserRole;
+constexpr int kDataSetIndexRole = Qt::UserRole + 1;
+constexpr int kVisibleRole = Qt::UserRole + 2;
 constexpr char kNodeSetNamePrefix[] = "node_";
+
+QIcon eyeIcon(bool visible)
+{
+  return QIcon(visible ? QStringLiteral(":/pqWidgets/Icons/pqEyeball.svg")
+                       : QStringLiteral(":/pqWidgets/Icons/pqEyeballClosed.svg"));
+}
+
+int findNodeByDataSetIndex(vtkDataAssembly* assembly, int parent, unsigned int index)
+{
+  if (!assembly || parent < 0)
+  {
+    return -1;
+  }
+
+  const std::vector<unsigned int> indices =
+    assembly->GetDataSetIndices(parent, /*traverse_subtree=*/false);
+  for (unsigned int value : indices)
+  {
+    if (value == index)
+    {
+      return parent;
+    }
+  }
+
+  const int n = assembly->GetNumberOfChildren(parent);
+  for (int i = 0; i < n; ++i)
+  {
+    const int found = findNodeByDataSetIndex(assembly, assembly->GetChild(parent, i), index);
+    if (found >= 0)
+    {
+      return found;
+    }
+  }
+  return -1;
+}
+
+vtkSMStringVectorProperty* blockVisibilityProperty(vtkSMProxy* reprProxy)
+{
+  if (!reprProxy)
+  {
+    return nullptr;
+  }
+  auto* visibility = vtkSMStringVectorProperty::SafeDownCast(reprProxy->GetProperty("BlockVisibilities"));
+  return visibility ? visibility
+                    : vtkSMStringVectorProperty::SafeDownCast(reprProxy->GetProperty("BlockSelectors"));
+}
 
 vtkSMProperty* propertyFromGroup(
   vtkSMPropertyGroup* group, vtkSMProxy* proxy, const char* function, const char* fallbackName)
@@ -103,7 +168,16 @@ void appendChildren(vtkDataAssembly* assembly, int parent, const QString& type,
   for (int i = 0; i < n; ++i)
   {
     const int child = assembly->GetChild(parent, i);
-    rows.push_back({ type, labelForNode(assembly, child), false, QStringList{ QString() } });
+    pqSHYXPartitionedBlockNamesWidget::BlockRow row;
+    row.Type = type;
+    row.Name = labelForNode(assembly, child);
+    row.WriteNormal = false;
+    row.Variables = QStringList{ QString() };
+    row.SelectorPath = QString::fromStdString(assembly->GetNodePath(child));
+    const std::vector<unsigned int> indices =
+      assembly->GetDataSetIndices(child, /*traverse_subtree=*/false);
+    row.DataSetIndex = indices.empty() ? -1 : static_cast<int>(indices.front());
+    rows.push_back(row);
   }
 }
 }
@@ -118,11 +192,14 @@ pqSHYXPartitionedBlockNamesWidget::pqSHYXPartitionedBlockNamesWidget(
   vbox->setSpacing(4);
 
   auto* tip = new QLabel(
-    tr("Double-click Side set Name cells to edit paired side/node block names. For Side set rows, "
-       "check Write Normal to accumulate BoundaryRadialValueNormal onto tetrahedra volume points; "
-       "edit Variable columns to write BoundaryVariable1/2/... when finite (leave empty / NaN to "
-       "skip). Node set names mirror the matching Side set row with a \"node_\" prefix. Use Refresh "
-       "after the filter has produced output to populate the block list."),
+    tr("Click the eye to show or hide that block in the active view (same as Hide Block). The "
+       "header eye shows or hides every listed block. Side and node rows stay linked. Double-click "
+       "Side set Name cells to edit paired side/node block "
+       "names. For Side set rows, check Write Normal to accumulate BoundaryRadialValueNormal onto "
+       "tetrahedra volume points; edit Variable columns to write BoundaryVariable1/2/... when "
+       "finite (leave empty / NaN to skip). Node set names mirror the matching Side set row with a "
+       "\"node_\" prefix. Use Refresh after the filter has produced output to populate the block "
+       "list."),
     this);
   tip->setWordWrap(true);
   tip->setStyleSheet(QStringLiteral("color: gray; font-size: 11px;"));
@@ -134,6 +211,7 @@ pqSHYXPartitionedBlockNamesWidget::pqSHYXPartitionedBlockNamesWidget(
   this->View = new QTreeView(this);
   this->View->setObjectName("SHYXPartitionedBlockNames");
   this->View->setRootIsDecorated(false);
+  this->View->setIndentation(0);
   this->View->setAlternatingRowColors(true);
   this->View->setAllColumnsShowFocus(true);
   this->View->setUniformRowHeights(true);
@@ -144,6 +222,9 @@ pqSHYXPartitionedBlockNamesWidget::pqSHYXPartitionedBlockNamesWidget(
   this->View->setModel(this->Model);
 
   auto* header = this->View->header();
+  header->setSectionsClickable(true);
+  header->setHighlightSections(false);
+  header->setSectionResizeMode(kColVisibility, QHeaderView::ResizeToContents);
   header->setSectionResizeMode(kColIndex, QHeaderView::ResizeToContents);
   header->setSectionResizeMode(kColType, QHeaderView::ResizeToContents);
   header->setSectionResizeMode(kColName, QHeaderView::Stretch);
@@ -172,6 +253,10 @@ pqSHYXPartitionedBlockNamesWidget::pqSHYXPartitionedBlockNamesWidget(
 
   QObject::connect(this->Model, &QStandardItemModel::itemChanged, this,
     &pqSHYXPartitionedBlockNamesWidget::onItemChanged);
+  QObject::connect(this->View, &QTreeView::clicked, this,
+    &pqSHYXPartitionedBlockNamesWidget::onViewClicked);
+  QObject::connect(this->View->header(), &QHeaderView::sectionClicked, this,
+    &pqSHYXPartitionedBlockNamesWidget::onHeaderSectionClicked);
   QObject::connect(refresh, &QPushButton::clicked, this,
     &pqSHYXPartitionedBlockNamesWidget::onRefreshClicked);
   QObject::connect(addVariable, &QPushButton::clicked, this,
@@ -210,12 +295,57 @@ pqSHYXPartitionedBlockNamesWidget::pqSHYXPartitionedBlockNamesWidget(
       SIGNAL(blockNamesChanged()), writeNormalsProp);
   }
 
+  this->BlockVisibilityVTKConnect = vtkEventQtSlotConnect::New();
+  QObject::connect(&pqActiveObjects::instance(), &pqActiveObjects::viewChanged, this,
+    &pqSHYXPartitionedBlockNamesWidget::onActiveViewOrRepresentationChanged);
+  QObject::connect(&pqActiveObjects::instance(),
+    QOverload<pqDataRepresentation*>::of(&pqActiveObjects::representationChanged), this,
+    &pqSHYXPartitionedBlockNamesWidget::onActiveViewOrRepresentationChanged);
+  if (auto* smm = pqApplicationCore::instance()->getServerManagerModel())
+  {
+    if (auto* src = smm->findItem<pqPipelineSource*>(smproxy))
+    {
+      this->RepresentationConnections.push_back(
+        QObject::connect(src, &pqPipelineSource::representationAdded, this,
+          [this](pqPipelineSource*, pqDataRepresentation*, int)
+          { this->connectBlockVisibilityObserver(); }));
+      this->RepresentationConnections.push_back(
+        QObject::connect(src, &pqPipelineSource::representationRemoved, this,
+          [this](pqPipelineSource*, pqDataRepresentation*, int)
+          { this->connectBlockVisibilityObserver(); }));
+      this->RepresentationConnections.push_back(QObject::connect(
+        src, QOverload<pqPipelineSource*>::of(&pqPipelineSource::dataUpdated), this,
+        [this](pqPipelineSource*) { this->updateEyeIcons(); }));
+    }
+  }
+
   this->setChangeAvailableAsChangeFinished(true);
   this->onRefreshClicked();
+  this->connectBlockVisibilityObserver();
 }
 
 // ---------------------------------------------------------------------------
-pqSHYXPartitionedBlockNamesWidget::~pqSHYXPartitionedBlockNamesWidget() = default;
+pqSHYXPartitionedBlockNamesWidget::~pqSHYXPartitionedBlockNamesWidget()
+{
+  this->disconnectBlockVisibilityObserver();
+  for (const QMetaObject::Connection& c : this->RepresentationConnections)
+  {
+    QObject::disconnect(c);
+  }
+  this->RepresentationConnections.clear();
+  if (this->BlockVisibilityVTKConnect)
+  {
+    this->BlockVisibilityVTKConnect->Delete();
+    this->BlockVisibilityVTKConnect = nullptr;
+  }
+}
+
+// ---------------------------------------------------------------------------
+void pqSHYXPartitionedBlockNamesWidget::setView(pqView* view)
+{
+  this->Superclass::setView(view);
+  this->connectBlockVisibilityObserver();
+}
 
 // ---------------------------------------------------------------------------
 bool pqSHYXPartitionedBlockNamesWidget::event(QEvent* e)
@@ -295,7 +425,10 @@ void pqSHYXPartitionedBlockNamesWidget::onRefreshClicked()
   {
     for (const QString& name : customNames)
     {
-      rows.push_back({ tr("Block"), name, false, QStringList{ QString() } });
+      pqSHYXPartitionedBlockNamesWidget::BlockRow row;
+      row.Type = tr("Block");
+      row.Name = name;
+      rows.push_back(row);
     }
   }
 
@@ -348,40 +481,46 @@ void pqSHYXPartitionedBlockNamesWidget::rebuildFromProperty()
     QList<BlockRow> rows;
     for (int i = 0; i < names.size(); ++i)
     {
-      rows.push_back({ tr("Block"), names[i],
-        i < writeNormals.size() ? writeNormals[i] != 0 : false,
-        i < variables.size() ? variables[i] : QStringList{ QString() } });
+      BlockRow row;
+      row.Type = tr("Block");
+      row.Name = names[i];
+      row.WriteNormal = i < writeNormals.size() ? writeNormals[i] != 0 : false;
+      row.Variables = i < variables.size() ? variables[i] : QStringList{ QString() };
+      rows.push_back(row);
     }
     this->rebuildRows(rows);
     return;
   }
 
-  QSignalBlocker blocker(this->Model);
-  for (int row = 0; row < this->Model->rowCount(); ++row)
   {
-    if (auto* item = this->Model->item(row, kColName))
+    QSignalBlocker blocker(this->Model);
+    for (int row = 0; row < this->Model->rowCount(); ++row)
     {
-      item->setText(row < names.size() ? names[row] : QString());
-    }
-    auto* typeItem = this->Model->item(row, kColType);
-    const bool isSideSet = typeItem && typeItem->text() == tr("Side set");
-    if (auto* writeNormalItem = this->Model->item(row, kColWriteNormal))
-    {
-      const bool checked = isSideSet && row < writeNormals.size() && writeNormals[row] != 0;
-      writeNormalItem->setCheckState(checked ? Qt::Checked : Qt::Unchecked);
-    }
-    for (int c = 0; c < this->VariableColumnCount; ++c)
-    {
-      if (auto* item = this->Model->item(row, kFirstVariableCol + c))
+      if (auto* item = this->Model->item(row, kColName))
       {
-        const QString value = (isSideSet && row < variables.size() && c < variables[row].size())
-          ? variables[row][c]
-          : QString();
-        item->setText(value);
+        item->setText(row < names.size() ? names[row] : QString());
+      }
+      auto* typeItem = this->Model->item(row, kColType);
+      const bool isSideSet = typeItem && typeItem->text() == tr("Side set");
+      if (auto* writeNormalItem = this->Model->item(row, kColWriteNormal))
+      {
+        const bool checked = isSideSet && row < writeNormals.size() && writeNormals[row] != 0;
+        writeNormalItem->setCheckState(checked ? Qt::Checked : Qt::Unchecked);
+      }
+      for (int c = 0; c < this->VariableColumnCount; ++c)
+      {
+        if (auto* item = this->Model->item(row, kFirstVariableCol + c))
+        {
+          const QString value = (isSideSet && row < variables.size() && c < variables[row].size())
+            ? variables[row][c]
+            : QString();
+          item->setText(value);
+        }
       }
     }
+    this->syncNodeRowsFromSideRows();
   }
-  this->syncNodeRowsFromSideRows();
+  this->updateEyeIcons();
 }
 
 // ---------------------------------------------------------------------------
@@ -394,17 +533,27 @@ void pqSHYXPartitionedBlockNamesWidget::rebuildRows(
   }
 
   QScopedValueRollback<bool> guard(this->UpdatingFromProperty, true);
-  QSignalBlocker blocker(this->Model);
-  int nVariables = 1;
-  for (const BlockRow& row : rows)
   {
-    nVariables = std::max(nVariables, static_cast<int>(row.Variables.size()));
-  }
-  this->setVariableColumnCount(nVariables);
-  this->Model->removeRows(0, this->Model->rowCount());
+    QSignalBlocker blocker(this->Model);
+    int nVariables = 1;
+    for (const BlockRow& row : rows)
+    {
+      nVariables = std::max(nVariables, static_cast<int>(row.Variables.size()));
+    }
+    this->setVariableColumnCount(nVariables);
+    this->Model->removeRows(0, this->Model->rowCount());
 
   for (int row = 0; row < rows.size(); ++row)
   {
+    auto* visibilityItem = new QStandardItem();
+    visibilityItem->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable | Qt::ItemNeverHasChildren);
+    visibilityItem->setTextAlignment(Qt::AlignCenter);
+    visibilityItem->setIcon(eyeIcon(true));
+    visibilityItem->setData(rows[row].SelectorPath, kSelectorPathRole);
+    visibilityItem->setData(rows[row].DataSetIndex, kDataSetIndexRole);
+    visibilityItem->setData(true, kVisibleRole);
+    visibilityItem->setToolTip(tr("Show/hide this block in the active view (side/node pairs stay linked)"));
+
     auto* indexItem = new QStandardItem(QString::number(row));
     indexItem->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable | Qt::ItemNeverHasChildren);
     indexItem->setTextAlignment(Qt::AlignCenter);
@@ -438,7 +587,7 @@ void pqSHYXPartitionedBlockNamesWidget::rebuildRows(
       writeNormalItem->setCheckState(Qt::Unchecked);
     }
 
-    QList<QStandardItem*> items = { indexItem, typeItem, nameItem, writeNormalItem };
+    QList<QStandardItem*> items = { visibilityItem, indexItem, typeItem, nameItem, writeNormalItem };
     for (int c = 0; c < this->VariableColumnCount; ++c)
     {
       const QString value = (c < rows[row].Variables.size() && !rows[row].Variables[c].isEmpty())
@@ -460,7 +609,9 @@ void pqSHYXPartitionedBlockNamesWidget::rebuildRows(
 
     this->Model->appendRow(items);
   }
-  this->syncNodeRowsFromSideRows();
+    this->syncNodeRowsFromSideRows();
+  }
+  this->updateEyeIcons();
 }
 
 // ---------------------------------------------------------------------------
@@ -586,16 +737,21 @@ void pqSHYXPartitionedBlockNamesWidget::setVariableColumnCount(int count)
   this->VariableColumnCount = count;
   this->Model->setColumnCount(kFirstVariableCol + count);
 
-  QStringList labels = { tr("#"), tr("Type"), tr("Name"), tr("Write Normal") };
+  QStringList labels = { QString(), tr("#"), tr("Type"), tr("Name"), tr("Write Normal") };
   for (int i = 0; i < count; ++i)
   {
     labels.push_back(tr("Variable%1").arg(i + 1));
   }
   this->Model->setHorizontalHeaderLabels(labels);
+  this->Model->setHeaderData(kColVisibility, Qt::Horizontal, eyeIcon(true), Qt::DecorationRole);
+  this->Model->setHeaderData(kColVisibility, Qt::Horizontal,
+    tr("Show or hide all listed blocks in the active view"), Qt::ToolTipRole);
 
   if (this->View && this->View->header())
   {
     auto* header = this->View->header();
+    header->setSectionsClickable(true);
+    header->setSectionResizeMode(kColVisibility, QHeaderView::ResizeToContents);
     header->setSectionResizeMode(kColIndex, QHeaderView::ResizeToContents);
     header->setSectionResizeMode(kColType, QHeaderView::ResizeToContents);
     header->setSectionResizeMode(kColName, QHeaderView::Stretch);
@@ -753,4 +909,477 @@ pqSHYXPartitionedBlockNamesWidget::collectCurrentOutputNames() const
   appendChildren(assembly, nodeSets, tr("Node set"), rows);
 
   return rows;
+}
+
+// ---------------------------------------------------------------------------
+void pqSHYXPartitionedBlockNamesWidget::onViewClicked(const QModelIndex& index)
+{
+  if (!index.isValid() || index.column() != kColVisibility)
+  {
+    return;
+  }
+  this->toggleRowVisibility(index.row());
+}
+
+// ---------------------------------------------------------------------------
+void pqSHYXPartitionedBlockNamesWidget::onHeaderSectionClicked(int logicalIndex)
+{
+  if (logicalIndex != kColVisibility)
+  {
+    return;
+  }
+  this->toggleAllVisibility();
+}
+
+// ---------------------------------------------------------------------------
+void pqSHYXPartitionedBlockNamesWidget::onBlockVisibilityModified()
+{
+  if (this->UpdatingBlockVisibility)
+  {
+    return;
+  }
+  this->updateEyeIcons();
+}
+
+// ---------------------------------------------------------------------------
+void pqSHYXPartitionedBlockNamesWidget::onActiveViewOrRepresentationChanged()
+{
+  this->connectBlockVisibilityObserver();
+}
+
+// ---------------------------------------------------------------------------
+void pqSHYXPartitionedBlockNamesWidget::disconnectBlockVisibilityObserver()
+{
+  if (this->BlockVisibilityVTKConnect)
+  {
+    this->BlockVisibilityVTKConnect->Disconnect();
+  }
+  this->ObservedRepresentation = nullptr;
+}
+
+// ---------------------------------------------------------------------------
+void pqSHYXPartitionedBlockNamesWidget::connectBlockVisibilityObserver()
+{
+  pqDataRepresentation* repr = this->currentRepresentation();
+  if (repr == this->ObservedRepresentation)
+  {
+    this->updateEyeIcons();
+    return;
+  }
+
+  this->disconnectBlockVisibilityObserver();
+  this->ObservedRepresentation = repr;
+  if (!repr || !this->BlockVisibilityVTKConnect)
+  {
+    this->updateEyeIcons();
+    return;
+  }
+
+  if (vtkSMStringVectorProperty* prop = this->visibilityProperty(repr))
+  {
+    this->BlockVisibilityVTKConnect->Connect(
+      prop, vtkCommand::ModifiedEvent, this, SLOT(onBlockVisibilityModified()));
+  }
+  this->updateEyeIcons();
+}
+
+// ---------------------------------------------------------------------------
+pqDataRepresentation* pqSHYXPartitionedBlockNamesWidget::currentRepresentation() const
+{
+  auto* smm = pqApplicationCore::instance()->getServerManagerModel();
+  auto* src = smm ? smm->findItem<pqPipelineSource*>(this->proxy()) : nullptr;
+  if (!src)
+  {
+    return nullptr;
+  }
+
+  pqView* view = this->view();
+  if (!view)
+  {
+    view = pqActiveObjects::instance().activeView();
+  }
+  if (view)
+  {
+    if (auto* repr = src->getRepresentation(0, view))
+    {
+      return repr;
+    }
+  }
+
+  const QList<pqView*> views = src->getViews();
+  for (pqView* candidate : views)
+  {
+    if (auto* repr = src->getRepresentation(0, candidate))
+    {
+      return repr;
+    }
+  }
+  return nullptr;
+}
+
+// ---------------------------------------------------------------------------
+vtkSMStringVectorProperty* pqSHYXPartitionedBlockNamesWidget::visibilityProperty(
+  pqDataRepresentation* repr) const
+{
+  return blockVisibilityProperty(repr ? repr->getProxy() : nullptr);
+}
+
+// ---------------------------------------------------------------------------
+vtkDataAssembly* pqSHYXPartitionedBlockNamesWidget::activeAssembly(
+  pqDataRepresentation* repr) const
+{
+  if (!repr)
+  {
+    return nullptr;
+  }
+
+  vtkPVDataInformation* info = repr->getInputDataInformation();
+  if (!info)
+  {
+    auto* source = vtkSMSourceProxy::SafeDownCast(this->proxy());
+    info = source ? source->GetDataInformation(0) : nullptr;
+  }
+  if (!info)
+  {
+    return nullptr;
+  }
+
+  vtkSMProxy* reprProxy = repr->getProxy();
+  const char* assemblyName = nullptr;
+  if (reprProxy && reprProxy->GetProperty("Assembly"))
+  {
+    assemblyName = vtkSMPropertyHelper(reprProxy, "Assembly").GetAsString();
+  }
+  if (assemblyName && assemblyName[0] != '\0')
+  {
+    return info->GetDataAssembly(assemblyName);
+  }
+  return info->GetDataAssembly();
+}
+
+// ---------------------------------------------------------------------------
+QString pqSHYXPartitionedBlockNamesWidget::selectorForRow(int row) const
+{
+  if (!this->Model)
+  {
+    return {};
+  }
+  auto* visItem = this->Model->item(row, kColVisibility);
+  const QString stored = visItem ? visItem->data(kSelectorPathRole).toString() : QString();
+  auto* repr = this->currentRepresentation();
+  vtkDataAssembly* assembly = this->activeAssembly(repr);
+  if (!assembly)
+  {
+    return stored;
+  }
+
+  if (!stored.isEmpty() && assembly->GetFirstNodeByPath(stored.toUtf8().constData()) >= 0)
+  {
+    return stored;
+  }
+
+  const int dsIndex = visItem ? visItem->data(kDataSetIndexRole).toInt() : -1;
+  if (dsIndex >= 0)
+  {
+    const int node =
+      findNodeByDataSetIndex(assembly, vtkDataAssembly::GetRootNode(), static_cast<unsigned int>(dsIndex));
+    if (node >= 0)
+    {
+      return QString::fromStdString(assembly->GetNodePath(node));
+    }
+  }
+  return stored;
+}
+
+// ---------------------------------------------------------------------------
+int pqSHYXPartitionedBlockNamesWidget::pairedRow(int row) const
+{
+  if (!this->Model || row < 0 || row >= this->Model->rowCount())
+  {
+    return -1;
+  }
+
+  QList<int> sideRows;
+  QList<int> nodeRows;
+  for (int r = 0; r < this->Model->rowCount(); ++r)
+  {
+    auto* typeItem = this->Model->item(r, kColType);
+    if (!typeItem)
+    {
+      continue;
+    }
+    if (typeItem->text() == tr("Side set"))
+    {
+      sideRows.push_back(r);
+    }
+    else if (typeItem->text() == tr("Node set"))
+    {
+      nodeRows.push_back(r);
+    }
+  }
+
+  const int nPairs = std::min(sideRows.size(), nodeRows.size());
+  for (int i = 0; i < nPairs; ++i)
+  {
+    if (sideRows[i] == row)
+    {
+      return nodeRows[i];
+    }
+    if (nodeRows[i] == row)
+    {
+      return sideRows[i];
+    }
+  }
+  return -1;
+}
+
+// ---------------------------------------------------------------------------
+void pqSHYXPartitionedBlockNamesWidget::updateEyeIcons()
+{
+  if (!this->Model)
+  {
+    return;
+  }
+
+  QScopedValueRollback<bool> guard(this->UpdatingFromProperty, true);
+  auto* repr = this->currentRepresentation();
+  vtkDataAssembly* assembly = this->activeAssembly(repr);
+  vtkSMStringVectorProperty* prop = this->visibilityProperty(repr);
+
+  pqDataAssemblyTreeModel treeModel;
+  bool haveTree = false;
+  if (assembly)
+  {
+    treeModel.setUserCheckable(true);
+    treeModel.setDataAssembly(assembly);
+    QStringList checked;
+    if (!prop)
+    {
+      checked.push_back(QStringLiteral("/"));
+    }
+    else
+    {
+      const std::vector<std::string>& elems = prop->GetElements();
+      const char* root = assembly->GetRootNodeName();
+      const std::string rootName = std::string("/") + (root ? root : "");
+      if (elems.empty())
+      {
+        // No selectors means no blocks are shown.
+      }
+      else if (elems[0] == "/" || elems[0] == rootName)
+      {
+        checked.push_back(QStringLiteral("/"));
+      }
+      else
+      {
+        for (const std::string& elem : elems)
+        {
+          checked.push_back(QString::fromStdString(elem));
+        }
+      }
+    }
+    treeModel.setCheckedNodes(checked);
+    haveTree = true;
+  }
+
+  for (int row = 0; row < this->Model->rowCount(); ++row)
+  {
+    auto* item = this->Model->item(row, kColVisibility);
+    if (!item)
+    {
+      continue;
+    }
+
+    bool visible = true;
+    if (haveTree)
+    {
+      const QString path = this->selectorForRow(row);
+      if (!path.isEmpty())
+      {
+        const std::vector<int> nodes = assembly->SelectNodes({ path.toStdString() });
+        if (!nodes.empty())
+        {
+          const QModelIndex idx = treeModel.index(nodes.front());
+          visible = treeModel.data(idx, Qt::CheckStateRole).toInt() != Qt::Unchecked;
+        }
+      }
+    }
+
+    const QVariant previous = item->data(kVisibleRole);
+    if (previous.isValid() && previous.toBool() == visible && !item->icon().isNull())
+    {
+      continue;
+    }
+
+    item->setIcon(eyeIcon(visible));
+    item->setData(visible, kVisibleRole);
+    item->setToolTip(visible
+        ? tr("Hide this block in the active view (side/node pairs stay linked)")
+        : tr("Show this block in the active view (side/node pairs stay linked)"));
+  }
+
+  if (this->View)
+  {
+    this->View->viewport()->repaint();
+    if (this->View->header())
+    {
+      const bool allOn = this->allRowsVisible();
+      this->Model->setHeaderData(kColVisibility, Qt::Horizontal, eyeIcon(allOn), Qt::DecorationRole);
+      this->Model->setHeaderData(kColVisibility, Qt::Horizontal,
+        allOn ? tr("Hide all listed blocks in the active view")
+              : tr("Show all listed blocks in the active view"),
+        Qt::ToolTipRole);
+      this->View->header()->viewport()->repaint();
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+void pqSHYXPartitionedBlockNamesWidget::toggleRowVisibility(int row)
+{
+  if (!this->Model || row < 0 || row >= this->Model->rowCount())
+  {
+    return;
+  }
+
+  auto* visItem = this->Model->item(row, kColVisibility);
+  const bool currentlyVisible = visItem ? visItem->data(kVisibleRole).toBool() : true;
+  QList<int> rows = { row };
+  const int pair = this->pairedRow(row);
+  if (pair >= 0 && pair != row)
+  {
+    rows.push_back(pair);
+  }
+  this->setBlocksVisible(rows, !currentlyVisible);
+}
+
+// ---------------------------------------------------------------------------
+bool pqSHYXPartitionedBlockNamesWidget::allRowsVisible() const
+{
+  if (!this->Model || this->Model->rowCount() == 0)
+  {
+    return true;
+  }
+  for (int row = 0; row < this->Model->rowCount(); ++row)
+  {
+    auto* item = this->Model->item(row, kColVisibility);
+    if (item && !item->data(kVisibleRole).toBool())
+    {
+      return false;
+    }
+  }
+  return true;
+}
+
+// ---------------------------------------------------------------------------
+void pqSHYXPartitionedBlockNamesWidget::toggleAllVisibility()
+{
+  if (!this->Model || this->Model->rowCount() == 0)
+  {
+    return;
+  }
+
+  if (this->allRowsVisible())
+  {
+    QList<int> rows;
+    rows.reserve(this->Model->rowCount());
+    for (int row = 0; row < this->Model->rowCount(); ++row)
+    {
+      rows.push_back(row);
+    }
+    this->setBlocksVisible(rows, false);
+    return;
+  }
+
+  auto* repr = this->currentRepresentation();
+  vtkSMProxy* reprProxy = repr ? repr->getProxy() : nullptr;
+  vtkSMStringVectorProperty* prop = this->visibilityProperty(repr);
+  if (!repr || !reprProxy || !prop)
+  {
+    return;
+  }
+
+  QScopedValueRollback<bool> guard(this->UpdatingBlockVisibility, true);
+  SM_SCOPED_TRACE(PropertiesModified).arg("proxy", reprProxy);
+  BEGIN_UNDO_SET(tr("Show All Blocks"));
+  prop->SetElements(std::vector<std::string>({ "/" }));
+  reprProxy->UpdateVTKObjects();
+  END_UNDO_SET();
+  repr->renderViewEventually();
+  this->updateEyeIcons();
+}
+
+// ---------------------------------------------------------------------------
+void pqSHYXPartitionedBlockNamesWidget::setBlocksVisible(const QList<int>& rows, bool visible)
+{
+  auto* repr = this->currentRepresentation();
+  vtkSMProxy* reprProxy = repr ? repr->getProxy() : nullptr;
+  vtkSMStringVectorProperty* prop = this->visibilityProperty(repr);
+  vtkDataAssembly* assembly = this->activeAssembly(repr);
+  if (!repr || !reprProxy || !prop || !assembly)
+  {
+    return;
+  }
+
+  QList<int> nodeIds;
+  for (int row : rows)
+  {
+    const QString path = this->selectorForRow(row);
+    if (path.isEmpty())
+    {
+      continue;
+    }
+    const std::vector<int> nodes = assembly->SelectNodes({ path.toStdString() });
+    for (int id : nodes)
+    {
+      nodeIds.push_back(id);
+    }
+  }
+  if (nodeIds.isEmpty())
+  {
+    return;
+  }
+
+  pqDataAssemblyTreeModel treeModel;
+  treeModel.setUserCheckable(true);
+  treeModel.setDataAssembly(assembly);
+
+  const std::vector<std::string>& prevValues = prop->GetElements();
+  const char* root = assembly->GetRootNodeName();
+  const std::string rootName = std::string("/") + (root ? root : "");
+  if (prevValues.empty() || prevValues[0] == "/" || prevValues[0] == rootName)
+  {
+    treeModel.setCheckedNodes({ QStringLiteral("/") });
+  }
+  else
+  {
+    QStringList checked;
+    for (const std::string& elem : prevValues)
+    {
+      checked.push_back(QString::fromStdString(elem));
+    }
+    treeModel.setCheckedNodes(checked);
+  }
+
+  const QModelIndexList indexes = treeModel.index(nodeIds);
+  for (const QModelIndex& idx : indexes)
+  {
+    treeModel.setData(idx, visible ? Qt::Checked : Qt::Unchecked, Qt::CheckStateRole);
+  }
+
+  const QStringList checkedNodes = treeModel.checkedNodes();
+  std::vector<std::string> values(static_cast<size_t>(checkedNodes.size()));
+  for (int i = 0; i < checkedNodes.size(); ++i)
+  {
+    values[static_cast<size_t>(i)] = checkedNodes[i].toStdString();
+  }
+
+  QScopedValueRollback<bool> guard(this->UpdatingBlockVisibility, true);
+  SM_SCOPED_TRACE(PropertiesModified).arg("proxy", reprProxy);
+  BEGIN_UNDO_SET(visible ? tr("Show Block") : tr("Hide Block"));
+  prop->SetElements(values);
+  reprProxy->UpdateVTKObjects();
+  END_UNDO_SET();
+  repr->renderViewEventually();
+  this->updateEyeIcons();
 }

@@ -88,6 +88,9 @@
           Newline-separated names in Partitioned block names panel order: tetrahedra (if present),
           all side sets, then mirrored node sets. Only side-set rows are editable in the custom widget;
           node-set names are refreshed from the corresponding side-set name with a node_ prefix.
+          The leading eye toggles that block in the active view via the representation's
+          BlockSelectors / BlockVisibilities (the same state as Hide Block). Clicking a side or node
+          eye shows or hides the paired row together.
         </Documentation>
       </StringVectorProperty>
 
