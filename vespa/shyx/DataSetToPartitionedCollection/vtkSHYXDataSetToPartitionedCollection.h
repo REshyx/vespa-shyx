@@ -57,10 +57,6 @@ public:
   vtkGetMacro(SortByArea, int);
   vtkBooleanMacro(SortByArea, int);
 
-  vtkSetMacro(CustomPostReorder, int);
-  vtkGetMacro(CustomPostReorder, int);
-  vtkBooleanMacro(CustomPostReorder, int);
-
   /**
    * When non-zero, BoundaryRadialValueNormal uses BoundaryRadialValue * sideNormal. Otherwise it
    * uses sideNormal and BoundaryRadialValue is not computed.
@@ -116,12 +112,6 @@ protected:
   char* PartitionPointArrayName = nullptr;
   /** When non-zero (default), order side / node set patches by total surface area, largest first. */
   int SortByArea = 1;
-  /**
-   * When non-zero (default), after ordering (e.g. by area), move the 3rd patch to the front and
-   * the 1st patch to the end; 2nd stays next, then original 4th...(n-1) in order. No effect if fewer
-   * than three patches.
-   */
-  int CustomPostReorder = 1;
   int ComputeBoundaryRadialValue = 0;
   double BoundaryRadialNormalFalloffFactor = 1.0;
   char* BoundaryVariables = nullptr;

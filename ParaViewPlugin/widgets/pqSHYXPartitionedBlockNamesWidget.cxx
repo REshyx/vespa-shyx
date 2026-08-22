@@ -29,6 +29,8 @@
 #include <QIcon>
 #include <QLabel>
 #include <QList>
+#include <QPainter>
+#include <QPixmap>
 #include <QPushButton>
 #include <QScopedValueRollback>
 #include <QSignalBlocker>
@@ -56,10 +58,66 @@ constexpr int kDataSetIndexRole = Qt::UserRole + 1;
 constexpr int kVisibleRole = Qt::UserRole + 2;
 constexpr char kNodeSetNamePrefix[] = "node_";
 
+QIcon eyeIcon(Qt::CheckState state)
+{
+  if (state == Qt::Unchecked)
+  {
+    return QIcon(QStringLiteral(":/pqWidgets/Icons/pqEyeballClosed.svg"));
+  }
+  if (state == Qt::Checked)
+  {
+    return QIcon(QStringLiteral(":/pqWidgets/Icons/pqEyeball.svg"));
+  }
+
+  const QIcon open(QStringLiteral(":/pqWidgets/Icons/pqEyeball.svg"));
+  QIcon mixed;
+  for (const int dim : { 16, 20, 24, 32 })
+  {
+    const QPixmap src = open.pixmap(dim, dim);
+    QPixmap faded(src.size());
+    faded.fill(Qt::transparent);
+    QPainter painter(&faded);
+    painter.setOpacity(0.4);
+    painter.drawPixmap(0, 0, src);
+    painter.end();
+    mixed.addPixmap(faded);
+  }
+  return mixed;
+}
+
 QIcon eyeIcon(bool visible)
 {
-  return QIcon(visible ? QStringLiteral(":/pqWidgets/Icons/pqEyeball.svg")
-                       : QStringLiteral(":/pqWidgets/Icons/pqEyeballClosed.svg"));
+  return eyeIcon(visible ? Qt::Checked : Qt::Unchecked);
+}
+
+QStringList checkedSelectorsFromProperty(
+  vtkSMStringVectorProperty* prop, vtkDataAssembly* assembly)
+{
+  if (!prop)
+  {
+    return { QStringLiteral("/") };
+  }
+
+  const std::vector<std::string>& elems = prop->GetElements();
+  if (elems.empty())
+  {
+    return {};
+  }
+
+  const char* root = assembly ? assembly->GetRootNodeName() : nullptr;
+  const std::string rootName = std::string("/") + (root ? root : "");
+  if (elems[0] == "/" || elems[0] == rootName)
+  {
+    return { QStringLiteral("/") };
+  }
+
+  QStringList checked;
+  checked.reserve(static_cast<int>(elems.size()));
+  for (const std::string& elem : elems)
+  {
+    checked.push_back(QString::fromStdString(elem));
+  }
+  return checked;
 }
 
 int findNodeByDataSetIndex(vtkDataAssembly* assembly, int parent, unsigned int index)
@@ -1152,33 +1210,7 @@ void pqSHYXPartitionedBlockNamesWidget::updateEyeIcons()
   {
     treeModel.setUserCheckable(true);
     treeModel.setDataAssembly(assembly);
-    QStringList checked;
-    if (!prop)
-    {
-      checked.push_back(QStringLiteral("/"));
-    }
-    else
-    {
-      const std::vector<std::string>& elems = prop->GetElements();
-      const char* root = assembly->GetRootNodeName();
-      const std::string rootName = std::string("/") + (root ? root : "");
-      if (elems.empty())
-      {
-        // No selectors means no blocks are shown.
-      }
-      else if (elems[0] == "/" || elems[0] == rootName)
-      {
-        checked.push_back(QStringLiteral("/"));
-      }
-      else
-      {
-        for (const std::string& elem : elems)
-        {
-          checked.push_back(QString::fromStdString(elem));
-        }
-      }
-    }
-    treeModel.setCheckedNodes(checked);
+    treeModel.setCheckedNodes(checkedSelectorsFromProperty(prop, assembly));
     haveTree = true;
   }
 
@@ -1190,7 +1222,7 @@ void pqSHYXPartitionedBlockNamesWidget::updateEyeIcons()
       continue;
     }
 
-    bool visible = true;
+    bool visible = !haveTree;
     if (haveTree)
     {
       const QString path = this->selectorForRow(row);
@@ -1223,12 +1255,23 @@ void pqSHYXPartitionedBlockNamesWidget::updateEyeIcons()
     this->View->viewport()->repaint();
     if (this->View->header())
     {
-      const bool allOn = this->allRowsVisible();
-      this->Model->setHeaderData(kColVisibility, Qt::Horizontal, eyeIcon(allOn), Qt::DecorationRole);
-      this->Model->setHeaderData(kColVisibility, Qt::Horizontal,
-        allOn ? tr("Hide all listed blocks in the active view")
-              : tr("Show all listed blocks in the active view"),
-        Qt::ToolTipRole);
+      const Qt::CheckState headerState = this->headerVisibilityState();
+      this->Model->setHeaderData(
+        kColVisibility, Qt::Horizontal, eyeIcon(headerState), Qt::DecorationRole);
+      QString tip;
+      switch (headerState)
+      {
+        case Qt::Checked:
+          tip = tr("Hide all listed blocks in the active view");
+          break;
+        case Qt::Unchecked:
+          tip = tr("Show all listed blocks in the active view");
+          break;
+        default:
+          tip = tr("Some blocks are hidden. Click to show all listed blocks");
+          break;
+      }
+      this->Model->setHeaderData(kColVisibility, Qt::Horizontal, tip, Qt::ToolTipRole);
       this->View->header()->viewport()->repaint();
     }
   }
@@ -1254,21 +1297,38 @@ void pqSHYXPartitionedBlockNamesWidget::toggleRowVisibility(int row)
 }
 
 // ---------------------------------------------------------------------------
-bool pqSHYXPartitionedBlockNamesWidget::allRowsVisible() const
+Qt::CheckState pqSHYXPartitionedBlockNamesWidget::headerVisibilityState() const
 {
   if (!this->Model || this->Model->rowCount() == 0)
   {
-    return true;
+    return Qt::Checked;
   }
+
+  int visibleCount = 0;
+  int totalCount = 0;
   for (int row = 0; row < this->Model->rowCount(); ++row)
   {
     auto* item = this->Model->item(row, kColVisibility);
-    if (item && !item->data(kVisibleRole).toBool())
+    if (!item)
     {
-      return false;
+      continue;
+    }
+    ++totalCount;
+    if (item->data(kVisibleRole).toBool())
+    {
+      ++visibleCount;
     }
   }
-  return true;
+
+  if (totalCount == 0 || visibleCount == totalCount)
+  {
+    return Qt::Checked;
+  }
+  if (visibleCount == 0)
+  {
+    return Qt::Unchecked;
+  }
+  return Qt::PartiallyChecked;
 }
 
 // ---------------------------------------------------------------------------
@@ -1279,7 +1339,7 @@ void pqSHYXPartitionedBlockNamesWidget::toggleAllVisibility()
     return;
   }
 
-  if (this->allRowsVisible())
+  if (this->headerVisibilityState() == Qt::Checked)
   {
     QList<int> rows;
     rows.reserve(this->Model->rowCount());
@@ -1343,23 +1403,7 @@ void pqSHYXPartitionedBlockNamesWidget::setBlocksVisible(const QList<int>& rows,
   pqDataAssemblyTreeModel treeModel;
   treeModel.setUserCheckable(true);
   treeModel.setDataAssembly(assembly);
-
-  const std::vector<std::string>& prevValues = prop->GetElements();
-  const char* root = assembly->GetRootNodeName();
-  const std::string rootName = std::string("/") + (root ? root : "");
-  if (prevValues.empty() || prevValues[0] == "/" || prevValues[0] == rootName)
-  {
-    treeModel.setCheckedNodes({ QStringLiteral("/") });
-  }
-  else
-  {
-    QStringList checked;
-    for (const std::string& elem : prevValues)
-    {
-      checked.push_back(QString::fromStdString(elem));
-    }
-    treeModel.setCheckedNodes(checked);
-  }
+  treeModel.setCheckedNodes(checkedSelectorsFromProperty(prop, assembly));
 
   const QModelIndexList indexes = treeModel.index(nodeIds);
   for (const QModelIndex& idx : indexes)

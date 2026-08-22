@@ -553,27 +553,6 @@ void SortSidePiecesByAreaDescending(std::vector<vtkSmartPointer<vtkPolyData>>* p
   *pieces = std::move(sorted);
 }
 
-/** Move 3rd patch to front, 1st patch to end; order between is 2nd then old index 3..n-1. */
-void ApplyCustomPostReorder(std::vector<vtkSmartPointer<vtkPolyData>>* pieces)
-{
-  if (!pieces || pieces->size() < 3)
-  {
-    return;
-  }
-  std::vector<vtkSmartPointer<vtkPolyData>>& v = *pieces;
-  const size_t n = v.size();
-  std::vector<vtkSmartPointer<vtkPolyData>> out;
-  out.reserve(n);
-  out.push_back(v[2]);
-  out.push_back(v[1]);
-  for (size_t i = 3; i < n; ++i)
-  {
-    out.push_back(v[i]);
-  }
-  out.push_back(v[0]);
-  v = std::move(out);
-}
-
 double Cross2D(const double a[2], const double b[2])
 {
   return a[0] * b[1] - a[1] * b[0];
@@ -1805,7 +1784,6 @@ void vtkSHYXDataSetToPartitionedCollection::PrintSelf(ostream& os, vtkIndent ind
   os << indent << "PartitionPointArrayName: "
      << (this->PartitionPointArrayName ? this->PartitionPointArrayName : "(null)") << "\n";
   os << indent << "SortByArea: " << this->SortByArea << "\n";
-  os << indent << "CustomPostReorder: " << this->CustomPostReorder << "\n";
   os << indent << "ComputeBoundaryRadialValue: " << this->ComputeBoundaryRadialValue << "\n";
   os << indent << "BoundaryRadialNormalFalloffFactor: "
      << this->BoundaryRadialNormalFalloffFactor << "\n";
@@ -1983,10 +1961,6 @@ int vtkSHYXDataSetToPartitionedCollection::RequestData(vtkInformation* vtkNotUse
   if (this->SortByArea)
   {
     SortSidePiecesByAreaDescending(&sidePieces);
-  }
-  if (this->CustomPostReorder)
-  {
-    ApplyCustomPostReorder(&sidePieces);
   }
 
   const unsigned int nPairs = static_cast<unsigned int>(sidePieces.size());

@@ -31,8 +31,8 @@ class vtkSMStringVectorProperty;
  *
  * A leading eye icon toggles that block in the active view via the representation's
  * BlockSelectors / BlockVisibilities (the same property as ParaView's Hide Block). The header
- * eye shows or hides every listed block. Side and node rows stay linked: toggling either eye
- * shows or hides the pair together.
+ * eye has three states (all shown, mixed, all hidden) and toggles between show-all and hide-all.
+ * Side and node rows stay linked: toggling either eye shows or hides the pair together.
  */
 class pqSHYXPartitionedBlockNamesWidget : public pqPropertyWidget
 {
@@ -88,7 +88,7 @@ private:
   void updateEyeIcons();
   void toggleRowVisibility(int row);
   void toggleAllVisibility();
-  bool allRowsVisible() const;
+  Qt::CheckState headerVisibilityState() const;
   void setBlocksVisible(const QList<int>& rows, bool visible);
   int pairedRow(int row) const;
   QString selectorForRow(int row) const;
