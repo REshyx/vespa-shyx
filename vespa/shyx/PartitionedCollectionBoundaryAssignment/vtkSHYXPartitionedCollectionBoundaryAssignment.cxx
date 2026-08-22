@@ -250,6 +250,21 @@ void SetIossBlockMeta(
   meta->Set(vtkIOSSReader::ENTITY_ID(), entityId);
 }
 
+void WriteEntityIdToMeta(
+  vtkPartitionedDataSetCollection* coll, unsigned int blockIndex, int entityId)
+{
+  if (!coll)
+  {
+    return;
+  }
+  vtkInformation* meta = coll->GetMetaData(blockIndex);
+  if (!meta)
+  {
+    return;
+  }
+  meta->Set(vtkIOSSReader::ENTITY_ID(), entityId);
+}
+
 void SetPartitionDataSetBlock(
   vtkPartitionedDataSetCollection* coll, unsigned int blockIndex, vtkDataObject* ds)
 {
@@ -678,6 +693,36 @@ void SortSideNodePairsByAreaDescending(
   }
   layout->SideSetPdcIndices = std::move(sortedSides);
   layout->NodeSetPdcIndices = std::move(sortedNodes);
+}
+
+/**
+ * After area-rank order is fixed, rewrite each pair's Exodus ENTITY_IDs from the existing ID
+ * pools (sorted ascending). Rank 0 (largest side) gets the smallest node/side IDs, rank 1 the
+ * next, matching DataSetToPartitionedCollection Sort-By-Area numbering. Geometry and block
+ * names are unchanged; only vtkIOSSReader::ENTITY_ID() on those PDC blocks is updated.
+ */
+void ReassignEntityIdsBySortedRank(
+  vtkPartitionedDataSetCollection* coll, const PartitionedCollectionLayout& layout, unsigned int nPairs)
+{
+  if (!coll || nPairs == 0)
+  {
+    return;
+  }
+
+  std::vector<int> nodeIds(nPairs);
+  std::vector<int> sideIds(nPairs);
+  for (unsigned int i = 0; i < nPairs; ++i)
+  {
+    nodeIds[i] = ReadEntityIdFromMeta(coll, layout.NodeSetPdcIndices[i], static_cast<int>(i + 1));
+    sideIds[i] = ReadEntityIdFromMeta(coll, layout.SideSetPdcIndices[i], static_cast<int>(i + 1));
+  }
+  std::sort(nodeIds.begin(), nodeIds.end());
+  std::sort(sideIds.begin(), sideIds.end());
+  for (unsigned int i = 0; i < nPairs; ++i)
+  {
+    WriteEntityIdToMeta(coll, layout.NodeSetPdcIndices[i], nodeIds[i]);
+    WriteEntityIdToMeta(coll, layout.SideSetPdcIndices[i], sideIds[i]);
+  }
 }
 
 SideBoundaryRole ClassifySideBoundaryRole(
@@ -1432,7 +1477,7 @@ int vtkSHYXPartitionedCollectionBoundaryAssignment::RequestData(
     return 0;
   }
 
-  // Port 0: start from input; may rewrite assembly when merging inlets.
+  // Port 0: start from input; ENTITY_IDs remapped to area rank; may rewrite assembly when merging.
   output->DeepCopy(input);
   debugOutput->Initialize();
 
@@ -1471,10 +1516,11 @@ int vtkSHYXPartitionedCollectionBoundaryAssignment::RequestData(
   const unsigned int nPairs =
     static_cast<unsigned int>(std::min(layout.NodeSetPdcIndices.size(), layout.SideSetPdcIndices.size()));
 
-  // Area-descending order for classification (layout indices only until optional merge).
+  // Area-descending order, then ENTITY_IDs follow that rank (largest -> smallest existing IDs).
   SortSideNodePairsByAreaDescending(output, &layout, nPairs);
   layout.SideSetPdcIndices.resize(nPairs);
   layout.NodeSetPdcIndices.resize(nPairs);
+  ReassignEntityIdsBySortedRank(output, layout, nPairs);
 
   const int flowMode = this->GetFlowBoundaryMode();
 

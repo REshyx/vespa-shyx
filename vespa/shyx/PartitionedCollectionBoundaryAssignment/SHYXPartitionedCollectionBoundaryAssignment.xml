@@ -4,8 +4,8 @@
                  class="vtkSHYXPartitionedCollectionBoundaryAssignment"
                  label="SHYX Partitioned Collection Boundary Assignment">
       <Documentation
-          short_help="SHYX Partitioned Collection Boundary Assignment: Classify wall/inlet/outlet; port 0 = input passthrough, port 1 = inlet OPT debug geometry."
-          long_help="Accepts vtkPartitionedDataSetCollection (e.g. from SHYX DataSet To Partitioned Collection). Sorts side/node pairs by side-set area (descending) for classification, emits Boundary assignment + a full options file (PV template for Single inlet, HV template for Single outlet; inlet_* filled pre-merge). Optional Merge inlets (default on, Single outlet): after per-inlet OPT stats, merges inlet side/node sets into one pair on port 0 — assignment text is post-merge. Port 0 is the (possibly merged) collection with FieldData stamps. Port 1 is drawn from those two texts: Point Label for every sideset id; AABB/normals for inlets only (OPT values, bounds restored by 1/BoundsScale). Does not write BoundaryRadialValue / BoundaryVariable arrays — use SHYX Partitioned Collection Boundary Fields for that."/>
+          short_help="SHYX Partitioned Collection Boundary Assignment: Classify wall/inlet/outlet; rewrite ENTITY_IDs by area rank; port 1 = inlet OPT debug geometry."
+          long_help="Accepts vtkPartitionedDataSetCollection (e.g. from SHYX DataSet To Partitioned Collection). Sorts side/node pairs by side-set area (descending) for classification, then rewrites those pairs' Exodus ENTITY_IDs from the existing ID pools so rank follows numbering (largest patch gets the smallest side/node IDs, like Sort By Area on DataSet To Partitioned Collection). Emits Boundary assignment + a full options file (PV template for Single inlet, HV template for Single outlet; inlet_* filled pre-merge). Optional Merge inlets (default on, Single outlet): after per-inlet OPT stats, merges inlet side/node sets into one pair on port 0 — assignment text is post-merge. Port 0 is the collection (IDs remapped; possibly merged) with FieldData stamps. Port 1 is drawn from those two texts: Point Label for every sideset id; AABB/normals for inlets only (OPT values, bounds restored by 1/BoundsScale). Does not write BoundaryRadialValue / BoundaryVariable arrays — use SHYX Partitioned Collection Boundary Fields for that."/>
 
       <OutputPort name="Partitioned collection" index="0" id="port0"/>
       <OutputPort name="Assignment debug" index="1" id="port1"/>
@@ -28,7 +28,9 @@
           <Entry text="Single outlet (rest inlets) — HV" value="1"/>
         </EnumerationDomain>
         <Documentation>
-          Reorders side/node pairs by side-set area (descending) before classifying. Index 0 is
+          Reorders side/node pairs by side-set area (descending) before classifying, then rewrites
+          their ENTITY_IDs so rank 0 (largest / wall) gets the smallest existing IDs, rank 1 the
+          next (sole inlet or outlet), and remaining openings continue sequentially. Index 0 is
           always wall (largest). Index 1 is the single inlet (mode 0) or single outlet (mode 1);
           remaining openings take the other role. The options file fills inlet_* from classified
           inlets (always computed before any inlet merge).
@@ -78,8 +80,9 @@
           command="GetBoundaryAssignmentText" information_only="1" number_of_elements="1"
           default_values="" animateable="0" panel_visibility="default">
         <Documentation>
-          After Apply (and area-descending reorder), lists side set Exodus ENTITY_ID values:
-          header, a "nodeset: inlet/wall/outlet ..." summary (real ids), then rows "id sidesetId".
+          After Apply, side/node ENTITY_IDs are rewritten to follow area-descending rank (largest
+          → smallest existing IDs). Then lists those side set ids: header, a "nodeset:
+          inlet/wall/outlet ..." summary (real ids after remap), then rows "id sidesetId".
           With Custom adapter on, data-row sideset ids are remapped (wall=3, inlet=1, outlets from 21).
           When Merge inlets is on (Single outlet), this map is post-merge (one inlet sideset id).
           Also stored on output FieldData as SHYXBoundaryAssignmentText.

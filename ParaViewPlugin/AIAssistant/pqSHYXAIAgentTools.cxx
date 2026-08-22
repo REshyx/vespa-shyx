@@ -1925,8 +1925,10 @@ const ShyxExtra kShyxExtra[] = {
     "table has a leading eye per row that toggles that block in the active view (same "
     "BlockSelectors / BlockVisibilities as Hide Block). Side and node rows stay linked." },
   { "SHYXPartitionedCollectionBoundaryAssignment",
-    "Vascular step 7. Call get_blocks on the PDC first. Port0 collection, port1 assignment debug. "
-    "Export writes Exodus + options + Nodeset + current .pvsm beside the chosen .exo." },
+    "Vascular step 7. Call get_blocks on the PDC first. After area sort, side/node ENTITY_IDs are "
+    "rewritten so rank follows numbering (largest -> smallest existing IDs). Port0 collection, "
+    "port1 assignment debug. Export writes Exodus + options + Nodeset + current .pvsm beside the "
+    "chosen .exo." },
   { "SHYXPartitionedCollectionBoundaryFields", "Adds boundary field arrays on an assigned PDC." },
   { "SHYXPartitionedCollectionToOpenFOAM",
     "Write an OpenFOAM case (constant/polyMesh + case.foam) from an IOSS PDC that has a volume "

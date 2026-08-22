@@ -1,6 +1,6 @@
 # vtkSHYXPartitionedCollectionBoundaryAssignment
 
-对 `vtkPartitionedDataSetCollection` 按 side set 面积降序分类 wall / inlet / outlet，输出边界映射文本、入口 OPT 片段，以及由**两段文本驱动**的诊断图元。
+对 `vtkPartitionedDataSetCollection` 按 side set 面积降序分类 wall / inlet / outlet，并按该名次重写各对的 Exodus `ENTITY_ID`（现有 node/side 号池升序赋给名次 0,1,2…，与 DataSet To Partitioned Collection 仅开 Sort By Area 时一致），输出边界映射文本、入口 OPT 片段，以及由**两段文本驱动**的诊断图元。
 
 与 [Partitioned Collection Boundary Fields](../PartitionedCollectionBoundaryFields/README.md) 互补：本 filter **不写** 径向/变量场。
 
@@ -8,8 +8,10 @@
 
 | Port | 内容 |
 |------|------|
-| 0 | 输入 PDC（默认透传；Single outlet + Merge inlets 时把多个入口 side/node 合成一对）+ FieldData 文本戳 |
+| 0 | 输入 PDC（按面积名次重写 side/node 的 `ENTITY_ID`；Single outlet + Merge inlets 时再把多个入口合成一对）+ FieldData 文本戳 |
 | 1 | 解析两段文本绘制：Point Label 标出 **全部** wall/inlet/outlet 的 sideset id（映射/合并后）；**仅入口**画 AABB + 法向（数值来自 options 文件中的 inlet_*，**合并前**各入口，bounds 按 `1/BoundsScale` 还原） |
+
+**面积排序后重写 ENTITY_ID**：现有 node/side 号池按升序赋给面积名次。12 个开口时典型为最大面 side `14`（wall）、第二大 `15`（Single inlet 时的入口）、其余 `16…`。几何与块名不变；Pipeline Browser 里块的先后仍是上游顺序，变的是各块上的 `ENTITY_ID`。
 
 **Custom adapter**（默认开）：前两行（表头 + `nodeset: ...` 真实 ENTITY_ID）不变；数据行 sideset id 重映射为 wall→3、inlet→1、outlet→21 起顺延。
 

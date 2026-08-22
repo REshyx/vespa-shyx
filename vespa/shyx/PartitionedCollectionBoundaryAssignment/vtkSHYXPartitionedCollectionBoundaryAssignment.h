@@ -4,7 +4,8 @@
  *
  * Downstream of vtkSHYXDataSetToPartitionedCollection (or compatible IOSS-style
  * vtkPartitionedDataSetCollection). Sorts side/node pairs by side-set area (descending)
- * for classification via FlowBoundaryMode:
+ * for classification via FlowBoundaryMode, then rewrites each pair's Exodus ENTITY_IDs so they
+ * follow that rank (existing node/side ID pools, smallest IDs on the largest patch):
  * - index 0 (largest): wall
  * - index 1: sole inlet (SINGLE_INLET) or sole outlet (SINGLE_OUTLET)
  * - remaining: the other role
@@ -18,7 +19,8 @@
  * ENTITY_IDs), but remaps data-row sideset ids: wall→3, inlet→1, outlets→21,22,... in row order.
  *
  * Ports:
- * - 0: input vtkPartitionedDataSetCollection (passthrough, or with inlets merged) + FieldData stamps
+ * - 0: input vtkPartitionedDataSetCollection (ENTITY_IDs remapped to area rank; inlets may also
+ *   be merged) + FieldData stamps
  * - 1: debug vtkPolyData built from the two texts — Point Label for all sideset ids;
  *   AABB/normals for inlets only (from Inlet OPT values)
  *
@@ -48,7 +50,8 @@ public:
   };
 
   /**
-   * After side sets are reordered by area (descending): largest is wall; second is the sole
+   * After side sets are reordered by area (descending), ENTITY_IDs are rewritten so rank 0
+   * (largest) receives the smallest existing side/node IDs. Largest is wall; second is the sole
    * inlet or outlet per this mode; remaining openings take the other role.
    */
   vtkSetClampMacro(FlowBoundaryMode, int, SINGLE_INLET, SINGLE_OUTLET);
