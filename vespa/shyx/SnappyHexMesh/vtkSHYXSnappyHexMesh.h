@@ -7,6 +7,11 @@
  * Optional feature-edge vtkPolyData (VTK port 1, Properties pipeline dropdown)
  * is written as .eMesh. The OpenFOAM case is kept; the filter output is the
  * vtkMultiBlockDataSet from vtkOpenFOAMReader (internalMesh plus patches).
+ *
+ * After a successful mesh, BlockNames / BoundaryVariables can add per-block
+ * custom scalars (BoundaryVariable1, ...) written like Partitioned Collection
+ * To OpenFOAM: 0/shyx_<name> volScalarFields (NaN / empty -> 0). Changing only
+ * those properties reuses the existing polyMesh and skips snappyHexMesh.
  */
 
 #ifndef vtkSHYXSnappyHexMesh_h
@@ -15,6 +20,7 @@
 #include "vtkSHYXSnappyHexMeshModule.h"
 #include "vtkDataObjectAlgorithm.h"
 
+#include <string>
 #include <vector>
 
 class vtkAlgorithmOutput;
@@ -134,6 +140,21 @@ public:
   double* GetInsidePoint(int i);
   void GetInsidePoint(int i, double xyz[3]);
 
+  /**
+   * Newline-separated block names from the mesh output (internalMesh then patches).
+   * Used to align BoundaryVariables rows. Names are not rewritten on disk.
+   */
+  vtkSetStringMacro(BlockNames);
+  vtkGetStringMacro(BlockNames);
+
+  /**
+   * Newline-separated rows aligned with BlockNames; tab-separated Variable1, ...
+   * Finite values become 0/shyx_BoundaryVariableN (uniform internalField /
+   * boundaryField). Empty / NaN cells write 0. OpenFOAM cannot store NaN.
+   */
+  vtkSetStringMacro(BoundaryVariables);
+  vtkGetStringMacro(BoundaryVariables);
+
 protected:
   vtkSHYXSnappyHexMesh();
   ~vtkSHYXSnappyHexMesh() override;
@@ -178,9 +199,15 @@ protected:
   char* RegionDistances = nullptr;
   char* LayerNames = nullptr;
   char* LayerNSurfaceLayers = nullptr;
+  char* BlockNames = nullptr;
+  char* BoundaryVariables = nullptr;
   std::vector<double> InsidePoints;
 
+  std::string ComputeMeshFingerprint(vtkMTimeType inputMTime, vtkMTimeType featureMTime) const;
+
 private:
+  std::string LastMeshFingerprint;
+
   vtkSHYXSnappyHexMesh(const vtkSHYXSnappyHexMesh&) = delete;
   void operator=(const vtkSHYXSnappyHexMesh&) = delete;
 };

@@ -181,4 +181,6 @@ Properties 三张表（Add partition 选上游分块）：
 
 可选 **Feature edges**：Properties 面板上的 pipeline 下拉（不是创建滤镜时的第二个必选输入）。线网格 → `features.eMesh`，`explicitFeatureSnap true`。选 `(none)` 时 `features ()`，implicit 特征吸附仍可开。
 
+网格成功后可用 **Block variables**：Refresh 列出 `internalMesh` 与各 patch（名称只读），Add/Delete variable 增删列。有限值写成 `0/shyx_BoundaryVariableN`（写法同 **SHYX Partitioned Collection To OpenFOAM**；空/NaN → 0）。只改这些值时复用上一份 `polyMesh`，不重跑 snappyHexMesh。
+
 STL 写在 case 的 `constant/triSurface/`。**Case Directory** 可选手动指定；留空则 Apply 后在 **Case Folder**（`%TEMP%/shyx-snappy-*/case`）里打开。面板不单独显示 STL 临时路径。

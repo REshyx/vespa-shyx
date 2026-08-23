@@ -77,7 +77,7 @@
 | SHYX Selection Plane Clipper | **Vascular** |
 | SHYX Surface to Volume Mesh | CGAL Mesh_3 |
 | SHYX TetGen / TetGen Mesh Optimize | **TetGen** 在 Vascular |
-| SHYX SnappyHexMesh | 需 `VESPA_USE_SNAPPYHEXMESH`；**Filters → SHYX**；PDC 分块当 STL |
+| SHYX SnappyHexMesh | 需 `VESPA_USE_SNAPPYHEXMESH`；**Filters → SHYX**；PDC 分块当 STL；网格后可按块写 `0/shyx_BoundaryVariableN` |
 | SHYX Tet Mesh Region Partition | |
 | SHYX DataSet To Partitioned Collection | **Vascular** |
 | SHYX Partitioned Collection Boundary Assignment | **Vascular** |
@@ -655,7 +655,7 @@
 | **SHYX Enhanced Ruler** | 交互测距 |
 | **SHYX Selection Plane Clipper** | Vascular 第 3 步 |
 | **SHYX TetGen Mesh Optimize** | 与 TetGen 同模块 |
-| **SHYX SnappyHexMesh** | 需 `VESPA_USE_SNAPPYHEXMESH`；PDC 分块当 STL patch
+| **SHYX SnappyHexMesh** | 需 `VESPA_USE_SNAPPYHEXMESH`；PDC 分块当 STL patch；网格后可按块写 `0/shyx_BoundaryVariableN`
 | **SHYX Tet Mesh Region Partition** | 体网格分区 |
 | **SHYX Boundary Assignment / Fields / WSL Simulation** | PDC 管线 |
 | **SHYX Partitioned Collection To OpenFOAM** | 体网格 PDC → OpenFOAM `polyMesh` |

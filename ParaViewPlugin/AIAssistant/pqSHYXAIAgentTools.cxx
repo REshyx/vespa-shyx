@@ -1977,7 +1977,13 @@ const ShyxExtra kShyxExtra[] = {
     "folder; one Case row with placeholder leave-empty plus an open-folder button "
     "(STLs in constant/triSurface). "
     "Output is vtkOpenFOAMReader's vtkMultiBlockDataSet (internalMesh plus patches), not a "
-    "standalone unstructured grid. Requires VESPA_USE_SNAPPYHEXMESH." },
+    "standalone unstructured grid. After a successful mesh, Block variables lists internalMesh "
+    "and patches (names read-only; Refresh fills from output). Add/Delete Variable columns write "
+    "0/shyx_BoundaryVariableN uniform volScalarFields (same 0/ style as "
+    "SHYXPartitionedCollectionToOpenFOAM; empty/NaN -> 0; internalMesh row = internalField, "
+    "patch rows = that patch). Changing only those values reuses the previous polyMesh and skips "
+    "snappyHexMesh. Castellated off: arrays attach as cell data on the background hex. "
+    "Requires VESPA_USE_SNAPPYHEXMESH." },
   { "PulseGlyphRepresentation",
     "Display representation, not a filter. Display dropdown 'Pulse Glyphs'. "
     "Python: GetDisplayProperties().Representation = 'Pulse Glyphs'. Never call PulseGlyphRepresentation(). "

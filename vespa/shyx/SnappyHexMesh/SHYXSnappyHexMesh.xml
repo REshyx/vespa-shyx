@@ -5,7 +5,7 @@
                  name="SHYXSnappyHexMesh">
       <Documentation
           short_help="SHYX SnappyHexMesh: Hex-dominant volume mesh from PDC patches or a surface."
-          long_help="Takes a vtkPartitionedDataSetCollection (each partition is one STL / triSurfaceMesh patch) or a single vtkPolyData (wrapped as geometry). Optional Feature edges are chosen on the Properties panel (pipeline dropdown), not as a second required input, and written as .eMesh. Generates a hex-dominant volume mesh with snappyHexMesh. STL regions / firstSolid / secondSolid are not used. The OpenFOAM case is kept with a case.foam marker. The filter output is the vtkMultiBlockDataSet from vtkOpenFOAMReader (internalMesh plus boundary patches), same tree as File → Open of Case Folder case.foam."/>
+          long_help="Takes a vtkPartitionedDataSetCollection (each partition is one STL / triSurfaceMesh patch) or a single vtkPolyData (wrapped as geometry). Optional Feature edges are chosen on the Properties panel (pipeline dropdown), not as a second required input, and written as .eMesh. Generates a hex-dominant volume mesh with snappyHexMesh. STL regions / firstSolid / secondSolid are not used. The OpenFOAM case is kept with a case.foam marker. After a successful mesh, Block variables can add/delete custom BoundaryVariable columns per internalMesh/patch; finite values are written to 0/shyx_BoundaryVariableN (same 0/ volField style as SHYX Partitioned Collection To OpenFOAM; NaN/empty -&gt; 0). Changing only those values reuses the previous polyMesh. The filter output is the vtkMultiBlockDataSet from vtkOpenFOAMReader (internalMesh plus boundary patches), same tree as File → Open of Case Folder case.foam."/>
 
       <InputProperty name="Input" command="SetInputConnection">
         <ProxyGroupDomain name="groups">
@@ -283,6 +283,28 @@
         </Documentation>
       </StringVectorProperty>
 
+      <!-- BlockNames is the group-widget anchor: must NOT be panel_visibility=never. -->
+      <StringVectorProperty name="BlockNames" label="Block Names" command="SetBlockNames"
+          number_of_elements="1" default_values="" animateable="0">
+        <Documentation>
+          Newline-separated names in Block variables panel order (internalMesh then patches).
+          Click Refresh after a successful mesh Apply to fill the list from the OpenFOAM
+          output. Names are not rewritten on disk.
+        </Documentation>
+      </StringVectorProperty>
+      <StringVectorProperty name="BoundaryVariables" label="Boundary Variables"
+          command="SetBoundaryVariables" number_of_elements="1" default_values=""
+          animateable="0" panel_visibility="never">
+        <Documentation>
+          Newline-separated rows aligned with Block Names; values in each row are
+          tab-separated Variable1, Variable2, ... entries. Finite values are written
+          to 0/shyx_BoundaryVariableN as uniform volScalarFields (internalMesh sets
+          internalField; patch rows set that patch). Empty / NaN cells write 0.
+          Changing only these values skips snappyHexMesh when the previous polyMesh
+          is still valid.
+        </Documentation>
+      </StringVectorProperty>
+
       <PropertyGroup label="Features">
         <Property name="FeatureEdges"/>
         <Property name="FeatureLevel"/>
@@ -338,6 +360,12 @@
       <PropertyGroup label="Case" panel_widget="shyx_snappy_case_folder">
         <Property function="CaseDirectory" name="CaseDirectory"/>
         <Property function="CaseFoamPath" name="CaseFoamPath"/>
+      </PropertyGroup>
+      <PropertyGroup label="Block variables"
+                     panel_widget="shyx_snappy_block_variables"
+                     panel_visibility="default">
+        <Property function="Names" name="BlockNames"/>
+        <Property function="BoundaryVariables" name="BoundaryVariables"/>
       </PropertyGroup>
 
       <Hints>

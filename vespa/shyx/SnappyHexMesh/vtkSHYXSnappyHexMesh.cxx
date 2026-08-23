@@ -6,15 +6,18 @@
 #include <vtkAlgorithmOutput.h>
 #include <vtkAppendPolyData.h>
 #include <vtkCell.h>
+#include <vtkCellData.h>
 #include <vtkCellType.h>
 #include <vtkCompositeDataIterator.h>
 #include <vtkCompositeDataSet.h>
 #include <vtkDataObject.h>
 #include <vtkDataSet.h>
+#include <vtkDoubleArray.h>
 #include <vtkGeometryFilter.h>
 #include <vtkIdList.h>
 #include <vtkInformation.h>
 #include <vtkInformationVector.h>
+#include <vtkMath.h>
 #include <vtkMultiBlockDataSet.h>
 #include <vtkNew.h>
 #include <vtkObjectFactory.h>
@@ -30,11 +33,15 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <cstdlib>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <iomanip>
+#include <limits>
 #include <map>
 #include <set>
 #include <sstream>
@@ -836,6 +843,465 @@ void UnionBounds(const std::vector<MeshPart>& parts, double bb[6])
   }
 }
 
+const char* Nz(const char* s)
+{
+  return (s && s[0] != '\0') ? s : "";
+}
+
+bool HasPolyMesh(const fs::path& caseDir)
+{
+  std::error_code ec;
+  const fs::path meshDir = caseDir / "constant" / "polyMesh";
+  return fs::exists(meshDir / "faces", ec) && fs::exists(meshDir / "boundary", ec);
+}
+
+std::vector<std::string> ParseBlockNames(const char* names)
+{
+  return SplitLines(names);
+}
+
+std::vector<std::vector<double>> ParseLineDoubleMatrix(const char* values)
+{
+  const double nanv = std::numeric_limits<double>::quiet_NaN();
+  std::vector<std::vector<double>> result;
+  if (!values || values[0] == '\0')
+  {
+    return result;
+  }
+
+  std::stringstream stream(values);
+  std::string line;
+  while (std::getline(stream, line))
+  {
+    if (!line.empty() && line.back() == '\r')
+    {
+      line.pop_back();
+    }
+    std::vector<double> row;
+    size_t start = 0;
+    while (start <= line.size())
+    {
+      const size_t tab = line.find('\t', start);
+      std::string token =
+        tab == std::string::npos ? line.substr(start) : line.substr(start, tab - start);
+      while (!token.empty() && (token.front() == ' ' || token.front() == '\t'))
+      {
+        token.erase(token.begin());
+      }
+      while (!token.empty() && (token.back() == ' ' || token.back() == '\t'))
+      {
+        token.pop_back();
+      }
+
+      if (token.empty())
+      {
+        row.push_back(nanv);
+      }
+      else
+      {
+        char* end = nullptr;
+        const double value = std::strtod(token.c_str(), &end);
+        if (end != token.c_str() && end && *end == '\0' && vtkMath::IsFinite(value))
+        {
+          row.push_back(value);
+        }
+        else
+        {
+          row.push_back(nanv);
+        }
+      }
+      if (tab == std::string::npos)
+      {
+        break;
+      }
+      start = tab + 1;
+    }
+    result.push_back(row);
+  }
+  return result;
+}
+
+size_t CountBoundaryVariables(const std::vector<std::vector<double>>& values)
+{
+  if (values.empty())
+  {
+    return 0;
+  }
+  size_t nVariables = 1;
+  for (const auto& row : values)
+  {
+    nVariables = std::max(nVariables, row.size());
+  }
+  return nVariables;
+}
+
+std::vector<double> ResolveLineDoubles(
+  const std::vector<std::vector<double>>& values, size_t rowIndex, size_t nVariables)
+{
+  std::vector<double> result(nVariables, std::numeric_limits<double>::quiet_NaN());
+  if (rowIndex >= values.size())
+  {
+    return result;
+  }
+  for (size_t i = 0; i < nVariables && i < values[rowIndex].size(); ++i)
+  {
+    result[i] = values[rowIndex][i];
+  }
+  return result;
+}
+
+std::string LowerCopy(std::string s)
+{
+  for (char& c : s)
+  {
+    c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+  }
+  return s;
+}
+
+bool IsInternalMeshName(const std::string& name)
+{
+  const std::string lower = LowerCopy(name);
+  return lower == "internalmesh" || lower.find("internalmesh") != std::string::npos;
+}
+
+double FiniteOrZero(double v)
+{
+  return vtkMath::IsFinite(v) ? v : 0.0;
+}
+
+std::string FoamFieldFileName(const std::string& sanitized)
+{
+  if (sanitized.rfind("shyx_", 0) == 0)
+  {
+    return sanitized;
+  }
+  return "shyx_" + sanitized;
+}
+
+void WriteFoamHeader(std::ostream& os, const char* cls, const char* object, const char* location)
+{
+  os << "/*--------------------------------*- C++ -*----------------------------------*\\\n"
+        "| =========                 |                                                 |\n"
+        "| \\\\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |\n"
+        "|  \\\\    /   O peration     | Version:  v2412                                 |\n"
+        "|   \\\\  /    A nd           | Website:  www.openfoam.com                      |\n"
+        "|    \\\\/     M anipulation  |                                                 |\n"
+        "\\*---------------------------------------------------------------------------*/\n"
+        "FoamFile\n"
+        "{\n"
+        "    version     2.0;\n"
+        "    format      ascii;\n"
+        "    class       "
+     << cls << ";\n"
+     << "    location    \"" << location << "\";\n"
+     << "    object      " << object << ";\n"
+        "}\n"
+        "// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //\n\n";
+}
+
+std::string StripFoamComments(std::string text)
+{
+  std::string out;
+  out.reserve(text.size());
+  for (size_t i = 0; i < text.size();)
+  {
+    if (i + 1 < text.size() && text[i] == '/' && text[i + 1] == '/')
+    {
+      i += 2;
+      while (i < text.size() && text[i] != '\n')
+      {
+        ++i;
+      }
+      continue;
+    }
+    if (i + 1 < text.size() && text[i] == '/' && text[i + 1] == '*')
+    {
+      i += 2;
+      while (i + 1 < text.size() && !(text[i] == '*' && text[i + 1] == '/'))
+      {
+        ++i;
+      }
+      i = std::min(text.size(), i + 2);
+      continue;
+    }
+    out.push_back(text[i++]);
+  }
+  return out;
+}
+
+std::vector<std::string> ParsePolyMeshBoundaryNames(const fs::path& boundaryFile)
+{
+  std::vector<std::string> names;
+  std::ifstream is(boundaryFile.string());
+  if (!is)
+  {
+    return names;
+  }
+  std::ostringstream buf;
+  buf << is.rdbuf();
+  const std::string text = StripFoamComments(buf.str());
+
+  size_t pos = 0;
+  const size_t foam = text.find("FoamFile");
+  if (foam != std::string::npos)
+  {
+    const size_t brace = text.find('{', foam);
+    if (brace != std::string::npos)
+    {
+      int depth = 1;
+      pos = brace + 1;
+      while (pos < text.size() && depth > 0)
+      {
+        if (text[pos] == '{')
+        {
+          ++depth;
+        }
+        else if (text[pos] == '}')
+        {
+          --depth;
+        }
+        ++pos;
+      }
+    }
+  }
+
+  const size_t open = text.find('(', pos);
+  if (open == std::string::npos)
+  {
+    return names;
+  }
+  pos = open + 1;
+  int depth = 1;
+  while (pos < text.size() && depth > 0)
+  {
+    const char c = text[pos];
+    if (c == '(')
+    {
+      ++depth;
+      ++pos;
+      continue;
+    }
+    if (c == ')')
+    {
+      --depth;
+      ++pos;
+      continue;
+    }
+    if (depth == 1 && (std::isalpha(static_cast<unsigned char>(c)) || c == '_'))
+    {
+      const size_t start = pos;
+      while (pos < text.size() &&
+        (std::isalnum(static_cast<unsigned char>(text[pos])) || text[pos] == '_'))
+      {
+        ++pos;
+      }
+      const std::string ident = text.substr(start, pos - start);
+      while (pos < text.size() && std::isspace(static_cast<unsigned char>(text[pos])))
+      {
+        ++pos;
+      }
+      if (pos < text.size() && text[pos] == '{')
+      {
+        names.push_back(ident);
+        int block = 1;
+        ++pos;
+        while (pos < text.size() && block > 0)
+        {
+          if (text[pos] == '{')
+          {
+            ++block;
+          }
+          else if (text[pos] == '}')
+          {
+            --block;
+          }
+          ++pos;
+        }
+        continue;
+      }
+      continue;
+    }
+    ++pos;
+  }
+  return names;
+}
+
+void RemoveStaleShyxVariableFiles(const fs::path& zeroDir)
+{
+  std::error_code ec;
+  if (!fs::exists(zeroDir, ec) || !fs::is_directory(zeroDir, ec))
+  {
+    return;
+  }
+  std::vector<fs::path> stale;
+  for (fs::directory_iterator it(zeroDir, ec); it != fs::directory_iterator() && !ec; it.increment(ec))
+  {
+    const fs::path p = it->path();
+    const std::string name = p.filename().string();
+    if (name.rfind("shyx_BoundaryVariable", 0) == 0)
+    {
+      stale.push_back(p);
+    }
+  }
+  for (const fs::path& p : stale)
+  {
+    fs::remove(p, ec);
+  }
+}
+
+int FindBlockRow(const std::vector<std::string>& names, const std::string& want)
+{
+  for (size_t i = 0; i < names.size(); ++i)
+  {
+    if (names[i] == want)
+    {
+      return static_cast<int>(i);
+    }
+  }
+  const std::string wantLower = LowerCopy(want);
+  for (size_t i = 0; i < names.size(); ++i)
+  {
+    if (LowerCopy(names[i]) == wantLower)
+    {
+      return static_cast<int>(i);
+    }
+  }
+  return -1;
+}
+
+int FindInternalMeshRow(const std::vector<std::string>& names)
+{
+  for (size_t i = 0; i < names.size(); ++i)
+  {
+    if (IsInternalMeshName(names[i]))
+    {
+      return static_cast<int>(i);
+    }
+  }
+  return -1;
+}
+
+bool WriteCustomVolFields(const fs::path& caseDir, const char* blockNames, const char* variables,
+  std::string* err)
+{
+  const std::vector<std::string> names = ParseBlockNames(blockNames);
+  const std::vector<std::vector<double>> matrix = ParseLineDoubleMatrix(variables);
+  const size_t nVars = CountBoundaryVariables(matrix);
+  const fs::path zeroDir = caseDir / "0";
+
+  if (names.empty() || nVars == 0)
+  {
+    RemoveStaleShyxVariableFiles(zeroDir);
+    return true;
+  }
+
+  std::error_code ec;
+  fs::create_directories(zeroDir, ec);
+  if (ec)
+  {
+    if (err)
+    {
+      *err = "Cannot create 0/: " + ec.message();
+    }
+    return false;
+  }
+  RemoveStaleShyxVariableFiles(zeroDir);
+
+  std::vector<std::string> patches = ParsePolyMeshBoundaryNames(caseDir / "constant" / "polyMesh" / "boundary");
+  if (patches.empty())
+  {
+    for (const std::string& n : names)
+    {
+      if (!IsInternalMeshName(n) && !n.empty())
+      {
+        patches.push_back(n);
+      }
+    }
+  }
+
+  const int internalRow = FindInternalMeshRow(names);
+  for (size_t v = 0; v < nVars; ++v)
+  {
+    const std::string arrayName = "BoundaryVariable" + std::to_string(v + 1);
+    const std::string foamName = FoamFieldFileName(FoamIdent(arrayName));
+    const fs::path filePath = zeroDir / foamName;
+    std::ofstream os(filePath.string());
+    if (!os)
+    {
+      if (err)
+      {
+        *err = "Cannot write 0/" + foamName;
+      }
+      return false;
+    }
+    WriteFoamHeader(os, "volScalarField", foamName.c_str(), "0");
+    os << "dimensions      [0 0 0 0 0 0 0];\n\n";
+    double internalVal = 0.0;
+    if (internalRow >= 0)
+    {
+      const std::vector<double> row =
+        ResolveLineDoubles(matrix, static_cast<size_t>(internalRow), nVars);
+      internalVal = FiniteOrZero(row[v]);
+    }
+    os << std::setprecision(17);
+    os << "internalField   uniform " << internalVal << ";\n\nboundaryField\n{\n";
+    for (const std::string& patch : patches)
+    {
+      double val = 0.0;
+      const int rowIndex = FindBlockRow(names, patch);
+      if (rowIndex >= 0)
+      {
+        const std::vector<double> row =
+          ResolveLineDoubles(matrix, static_cast<size_t>(rowIndex), nVars);
+        val = FiniteOrZero(row[v]);
+      }
+      os << "    " << patch << "\n"
+            "    {\n"
+            "        type            calculated;\n"
+            "        value           uniform "
+         << val << ";\n"
+            "    }\n";
+    }
+    os << "}\n";
+  }
+  return true;
+}
+
+void AttachUniformCellArrays(vtkDataSet* ds, const char* blockNames, const char* variables)
+{
+  if (!ds)
+  {
+    return;
+  }
+  const std::vector<std::string> names = ParseBlockNames(blockNames);
+  const std::vector<std::vector<double>> matrix = ParseLineDoubleMatrix(variables);
+  const size_t nVars = CountBoundaryVariables(matrix);
+  if (nVars == 0)
+  {
+    return;
+  }
+  int rowIndex = FindInternalMeshRow(names);
+  if (rowIndex < 0 && !names.empty())
+  {
+    rowIndex = 0;
+  }
+  const std::vector<double> row = ResolveLineDoubles(
+    matrix, rowIndex >= 0 ? static_cast<size_t>(rowIndex) : 0, nVars);
+  const vtkIdType nCells = ds->GetNumberOfCells();
+  for (size_t v = 0; v < nVars; ++v)
+  {
+    const std::string arrayName = FoamFieldFileName("BoundaryVariable" + std::to_string(v + 1));
+    vtkNew<vtkDoubleArray> arr;
+    arr->SetName(arrayName.c_str());
+    arr->SetNumberOfComponents(1);
+    arr->SetNumberOfTuples(nCells);
+    arr->Fill(FiniteOrZero(row[v]));
+    ds->GetCellData()->RemoveArray(arrayName.c_str());
+    ds->GetCellData()->AddArray(arr);
+  }
+}
+
 } // namespace
 
 vtkSHYXSnappyHexMesh::vtkSHYXSnappyHexMesh()
@@ -859,6 +1325,8 @@ vtkSHYXSnappyHexMesh::~vtkSHYXSnappyHexMesh()
   this->SetRegionDistances(nullptr);
   this->SetLayerNames(nullptr);
   this->SetLayerNSurfaceLayers(nullptr);
+  this->SetBlockNames(nullptr);
+  this->SetBoundaryVariables(nullptr);
 }
 
 void vtkSHYXSnappyHexMesh::SetFeatureEdgesConnection(vtkAlgorithmOutput* algOutput)
@@ -894,6 +1362,34 @@ void vtkSHYXSnappyHexMesh::PrintSelf(ostream& os, vtkIndent indent)
   os << indent << "CaseDirectory: " << (this->CaseDirectory ? this->CaseDirectory : "(none)")
      << "\n";
   os << indent << "CaseFoamPath: " << (this->CaseFoamPath ? this->CaseFoamPath : "(none)") << "\n";
+  os << indent << "BlockNames: " << (this->BlockNames ? this->BlockNames : "(none)") << "\n";
+  os << indent << "BoundaryVariables: "
+     << (this->BoundaryVariables ? this->BoundaryVariables : "(none)") << "\n";
+}
+
+std::string vtkSHYXSnappyHexMesh::ComputeMeshFingerprint(
+  vtkMTimeType inputMTime, vtkMTimeType featureMTime) const
+{
+  std::ostringstream os;
+  os << inputMTime << '|' << featureMTime << '|' << (this->CastellatedMesh ? 1 : 0) << '|'
+     << (this->Snap ? 1 : 0) << '|' << (this->AddLayers ? 1 : 0) << '|'
+     << this->BackgroundCellSize << '|' << this->BoundsMargin << '|' << this->MaxGlobalCells << '|'
+     << this->NCellsBetweenLevels << '|' << this->RefinementMin << '|' << this->RefinementMax << '|'
+     << this->NSmoothPatch << '|' << this->SnapTolerance << '|' << this->NSolveIter << '|'
+     << this->NRelaxIter << '|' << this->NSurfaceLayers << '|' << this->ExpansionRatio << '|'
+     << this->FinalLayerThickness << '|' << this->MinThickness << '|' << this->FeatureAngle << '|'
+     << (this->ImplicitFeatureSnap ? 1 : 0) << '|' << this->FeatureLevel << '|'
+     << Nz(this->CaseDirectory) << '|' << Nz(this->SurfaceNames) << '|' << Nz(this->SurfaceLevelMin)
+     << '|' << Nz(this->SurfaceLevelMax) << '|' << Nz(this->SurfacePatchTypes) << '|'
+     << Nz(this->RegionNames) << '|' << Nz(this->RegionModes) << '|' << Nz(this->RegionLevels)
+     << '|' << Nz(this->RegionDistances) << '|' << Nz(this->LayerNames) << '|'
+     << Nz(this->LayerNSurfaceLayers) << '|';
+  os << this->InsidePoints.size();
+  for (double v : this->InsidePoints)
+  {
+    os << ',' << v;
+  }
+  return os.str();
 }
 
 int vtkSHYXSnappyHexMesh::GetNumberOfInsidePoints() const
@@ -1026,6 +1522,9 @@ int vtkSHYXSnappyHexMesh::RequestData(
     return 0;
   }
 
+  const vtkMTimeType featureMTime = featureEdges ? featureEdges->GetMTime() : vtkMTimeType{ 0 };
+  const std::string fingerprint = this->ComputeMeshFingerprint(input->GetMTime(), featureMTime);
+
   auto backgroundDivisions = [&](const double bb[6], int& nx, int& ny, int& nz, double& cell,
                                double bOut[6]) {
     const double dx0 = bb[1] - bb[0];
@@ -1061,6 +1560,7 @@ int vtkSHYXSnappyHexMesh::RequestData(
 
   if (!this->CastellatedMesh)
   {
+    this->LastMeshFingerprint.clear();
     RemoveOwnedCaseTree(previousCase.c_str());
     RemoveLegacyLastDir();
     this->SetCaseFoamPathNoModified(nullptr);
@@ -1092,8 +1592,32 @@ int vtkSHYXSnappyHexMesh::RequestData(
       vtkErrorMacro(<< "Failed to build background hex: " << hexErr);
       return 0;
     }
+    AttachUniformCellArrays(hex, this->BlockNames, this->BoundaryVariables);
     SetSingleBlockMesh(output, hex, "internalMesh");
     return 1;
+  }
+
+  const bool canSkipRemesh = !previousCase.empty() && HasPolyMesh(fs::path(previousCase)) &&
+    !this->LastMeshFingerprint.empty() && fingerprint == this->LastMeshFingerprint;
+  if (canSkipRemesh)
+  {
+    std::string fieldErr;
+    if (!WriteCustomVolFields(
+          fs::path(previousCase), this->BlockNames, this->BoundaryVariables, &fieldErr))
+    {
+      vtkWarningMacro(<< fieldErr << " Reusing previous mesh failed; remeshing.");
+    }
+    else
+    {
+      std::string parseErr;
+      const fs::path foamPath = fs::path(previousCase) / "case.foam";
+      if (ReadCaseWithOpenFOAMReader(foamPath.string(), output, &parseErr))
+      {
+        return 1;
+      }
+      vtkWarningMacro(<< parseErr << " Reusing previous mesh failed; remeshing.");
+    }
+    this->LastMeshFingerprint.clear();
   }
 
   std::error_code ec;
@@ -1411,6 +1935,13 @@ int vtkSHYXSnappyHexMesh::RequestData(
     vtkWarningMacro(<< err);
   }
 
+  std::string fieldErr;
+  if (!WriteCustomVolFields(caseDirPath, this->BlockNames, this->BoundaryVariables, &fieldErr))
+  {
+    vtkErrorMacro(<< fieldErr);
+    return 0;
+  }
+
   std::string parseErr;
   if (!ReadCaseWithOpenFOAMReader(foamPath.string(), output, &parseErr))
   {
@@ -1418,5 +1949,6 @@ int vtkSHYXSnappyHexMesh::RequestData(
                   << "; diag: " << diagPath.string() << ")");
     return 0;
   }
+  this->LastMeshFingerprint = fingerprint;
   return 1;
 }

@@ -146,4 +146,10 @@ if (VESPA_USE_SNAPPYHEXMESH)
     FILES
       widgets/SnappyHexMesh/pqSHYXSnappyCastellatedWidget.cxx
       widgets/SnappyHexMesh/pqSHYXSnappyCastellatedWidget.h)
+  vespa_plugin_group_widget(
+    TYPE "shyx_snappy_block_variables"
+    CLASS_NAME pqSHYXSnappyBlockVariablesWidget
+    FILES
+      widgets/SnappyHexMesh/pqSHYXSnappyBlockVariablesWidget.cxx
+      widgets/SnappyHexMesh/pqSHYXSnappyBlockVariablesWidget.h)
 endif()

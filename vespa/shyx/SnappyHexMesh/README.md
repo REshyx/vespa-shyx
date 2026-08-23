@@ -29,6 +29,12 @@ Properties 三张表（Add partition 从 Input 分块名下拉，不是 3D 选�
 
 **Inside points** 列表可 Add insidePoint：选中一行后视图里出现可拖动手柄。空列表仍用 AABB 中心；多个点写成 OpenFOAM `locationsInMesh`（zone `none`）。点必须落在要保留的单元格内，不要贴在面上。
 
+## Block variables
+
+网格划分成功后，Properties 里的 **Block variables** 表列出输出里的 **internalMesh** 和各 patch（名称只读，点 **Refresh** 从当前输出刷新）。**Add variable / Delete variable** 增删列，写法对齐 **SHYX Partitioned Collection Boundary Fields**。
+
+有限值写成 OpenFOAM `0/shyx_BoundaryVariableN`（`type calculated` 的均匀 `volScalarField`），与 **SHYX Partitioned Collection To OpenFOAM** 的 `0/shyx_<name>` 相同：internalMesh 行写入 `internalField`，patch 行写入该 patch 的 `boundaryField`；空单元格 / NaN 写成 **0**（OpenFOAM 场文件不能含 NaN）。只改这些列时，只要上一份 `constant/polyMesh` 仍匹配网格指纹，就**不会**重跑 snappyHexMesh，也不会另开 `%TEMP%/shyx-snappy-*-<mtime>`。关掉 castellated 时不写 `0/`，而是在背景 hex 的 CellData 上挂同名数组 `shyx_BoundaryVariableN`。
+
 示例 dict 与笔记：
 
 - `example/snappyHexMeshDict`：与当前滤镜默认接近的可跑配置（可含多张 STL）。

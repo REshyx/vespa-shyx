@@ -29,7 +29,7 @@ SHYX 是本仓库里 **一个作者命名空间**（[`vespa/shyx/`](.)），不�
 * [**DataSet To Partitioned Collection**](./DataSetToPartitionedCollection/README.md) — **Vascular**
 * [**Partitioned Collection Boundary Assignment**](./PartitionedCollectionBoundaryAssignment/README.md) — **Vascular**
 * [**Surface To Volume Mesh**](./SurfaceToVolumeMesh/README.md) — SHYX only（CGAL Mesh_3）
-* [**SnappyHexMesh**](./SnappyHexMesh/README.md) — 需 `VESPA_USE_SNAPPYHEXMESH`；PDC 分块当 STL patch；SHYX only
+* [**SnappyHexMesh**](./SnappyHexMesh/README.md) — 需 `VESPA_USE_SNAPPYHEXMESH`；PDC 分块当 STL patch；网格成功后可按块写 `0/shyx_BoundaryVariableN`；SHYX only
 * [**Tet Mesh Region Partition**](./TetMeshRegionPartition/README.md)
 * [**Partitioned Collection Boundary Fields**](./PartitionedCollectionBoundaryFields/README.md)
 * [**Partitioned Collection WSL Simulation**](./PartitionedCollectionWslSimulation/README.md)
