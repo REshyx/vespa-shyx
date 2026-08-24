@@ -51,7 +51,7 @@ pqSHYXSnappyInsidePointsWidget::pqSHYXSnappyInsidePointsWidget(
     auto* tip = new QLabel(
         tr("Keep-mesh points for castellated meshing. Empty list uses the AABB centre. "
            "Add one point per disconnected region; each point must sit in a cell to keep "
-           "(not on a face). Click Show interactive axis, then select a row to drag."),
+           "(not on a face). Show interactive axis is on by default; select a row to drag."),
         this);
     tip->setWordWrap(true);
     tip->setStyleSheet(QStringLiteral("color: gray; font-size: 11px;"));
@@ -60,7 +60,7 @@ pqSHYXSnappyInsidePointsWidget::pqSHYXSnappyInsidePointsWidget(
     this->ShowAxisButton = new QPushButton(tr("Show interactive axis"), this);
     this->ShowAxisButton->setObjectName("SHYXSnappyShowInteractiveAxis");
     this->ShowAxisButton->setCheckable(true);
-    this->ShowAxisButton->setChecked(false);
+    this->ShowAxisButton->setChecked(true);
     this->ShowAxisButton->setToolTip(
         tr("Show a draggable 3D axis at the selected insidePoint. Turn off to hide it."));
     vbox->addWidget(this->ShowAxisButton);
@@ -85,7 +85,7 @@ pqSHYXSnappyInsidePointsWidget::pqSHYXSnappyInsidePointsWidget(
     vbox->addLayout(buttons);
 
     this->styleHandle();
-    this->setWidgetVisible(false);
+    this->setWidgetVisible(true);
 
     QObject::connect(this->ShowAxisButton, &QPushButton::toggled, this,
         &pqSHYXSnappyInsidePointsWidget::onShowInteractiveAxisToggled);

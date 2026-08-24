@@ -1541,8 +1541,6 @@ int vtkSHYXSnappyHexMesh::RequestData(
     backgroundDivisions(unionBb, nx, ny, nz, cell, box);
     const long long nBg = static_cast<long long>(nx) * ny * nz;
     const long long cap = std::max<long long>(1000, this->MaxGlobalCells);
-    vtkWarningMacro(<< "Background hex " << nx << " x " << ny << " x " << nz << " (" << nBg
-                    << " cells), cell size=" << cell);
     if (nBg > cap)
     {
       vtkErrorMacro(<< "background hex would have " << nBg << " cells (" << nx << "x" << ny << "x"
