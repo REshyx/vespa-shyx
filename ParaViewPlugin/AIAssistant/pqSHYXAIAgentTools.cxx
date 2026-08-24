@@ -1961,7 +1961,15 @@ const ShyxExtra kShyxExtra[] = {
   { "SHYXDeleteSelectedCellsFilter",
     "Needs an active cell selection. Creating the filter copies the Input's "
     "active selection into the Selection widget (Extract Selection-style); "
-    "Copy Active Selection is only needed if the selection changes afterwards." },
+    "Copy Active Selection is only needed if the selection changes afterwards. "
+    "InvertSelection (default off) deletes the complement of the selection." },
+  { "SHYXExtractSelectedCellsFilter",
+    "Opposite of SHYX Delete Selected Cells: keeps selected cells. Unlike ParaView "
+    "Extract Selection, PolyData input (or a selection of only vertex/line/polygon/strip "
+    "cells) stays vtkPolyData; otherwise vtkUnstructuredGrid. Creating the filter copies "
+    "the Input's active selection into the Selection widget; Copy Active Selection is only "
+    "needed if the selection changes afterwards. InvertSelection (default off) keeps the "
+    "complement. Empty selection (after invert) yields an empty output." },
   { "SHYXFlipSelectedCellsWindingFilter", "Needs an active cell selection." },
   { "SHYXSelectionFillAlphaReunionFilter", "Selection -> fill / alpha wrap / union (CGAL>=5.5)." },
   { "SHYXPointCloudSurfaceSDF", "Point cloud to surface SDF (VTK). Not CGAL vtkCGALSignedDistanceFunction." },
@@ -1970,7 +1978,9 @@ const ShyxExtra kShyxExtra[] = {
     "Hex-dominant volume mesh. Input is vtkPartitionedDataSetCollection (each partition = one STL "
     "triSurfaceMesh / patch, no firstSolid/secondSolid) or a single vtkPolyData (wrapped as "
     "geometry). Optional FeatureEdges is a Properties-panel pipeline dropdown (not a second "
-    "required input); polydata lines become features.eMesh. "
+    "required input). Prefer SHYXExtendedFeatureEdgeMesh for classified "
+    "extendedFeatureEdgeMesh (FoamExtendedFeatureEdgeMesh field -> "
+    "constant/extendedFeatureEdgeMesh); plain polydata lines still become features.eMesh. "
     "Add partitions in Surface patches / Region patches (inside Castellated) and Layer patches "
     "(level, patchInfo type, region mode). Empty surfaces table = all partitions at Default surface level. "
     "CaseDirectory may be empty (then %TEMP%/shyx-snappy-<id>-<mtime>/case each Apply) or a chosen "
@@ -1984,6 +1994,21 @@ const ShyxExtra kShyxExtra[] = {
     "patch rows = that patch). Changing only those values reuses the previous polyMesh and skips "
     "snappyHexMesh. Castellated off: arrays attach as cell data on the background hex. "
     "Requires VESPA_USE_SNAPPYHEXMESH." },
+  { "SHYXExtendedFeatureEdgeMesh",
+    "OpenFOAM extendedFeatureEdgeMesh (statically linked meshTools), same path as "
+    "surfaceFeatureExtract. Input triangle surface; optional ExtraFeatureEdges lines. "
+    "Output lines have EdgeStatus (external/internal/flat/open/multiple), PointStatus "
+    "(convex/concave/mixed/nonFeature), RegionEdge, FeaturePoint, and field "
+    "FoamExtendedFeatureEdgeMesh. Feed to SHYXSnappyHexMesh FeatureEdges. "
+    "IncludedAngle is OpenFOAM includedAngle (degrees). RegionArrayName is a cell-data "
+    "dropdown (default None = one region). BaffleAllRegions or cell array Baffle sets "
+    "sideVolumeType BOTH. Requires VESPA_USE_SNAPPYHEXMESH." },
+  { "SHYXEMeshReader",
+    "Source/reader, not a filter. File → Open .eMesh / .extendedFeatureEdgeMesh, or "
+    "SHYXEMeshReader(FileName=...). ASCII OpenFOAM featureEdgeMesh and "
+    "extendedFeatureEdgeMesh (ASCII only; gzip/binary Foam not). Extended files get EdgeStatus / "
+    "PointStatus / FoamExtendedFeatureEdgeMesh like SHYXExtendedFeatureEdgeMesh. "
+    "Feed to SHYXSnappyHexMesh FeatureEdges. Does not need VESPA_USE_SNAPPYHEXMESH." },
   { "PulseGlyphRepresentation",
     "Display representation, not a filter. Display dropdown 'Pulse Glyphs'. "
     "Python: GetDisplayProperties().Representation = 'Pulse Glyphs'. Never call PulseGlyphRepresentation(). "

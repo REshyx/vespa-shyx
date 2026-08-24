@@ -1,0 +1,13 @@
+NAME
+  vtkSHYXExtendedFeatureEdgeMesh
+DESCRIPTION
+  "OpenFOAM extendedFeatureEdgeMesh feature extraction (classified edges/points) via statically linked meshTools."
+GROUPS
+  Meshing
+DEPENDS
+  VTK::CommonCore
+  VTK::CommonDataModel
+  VTK::CommonExecutionModel
+  VTK::FiltersCore
+PRIVATE_DEPENDS
+  VTK::FiltersGeometry

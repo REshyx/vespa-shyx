@@ -112,7 +112,9 @@ void writeFeatures(std::ostream& os, const ShyxSnappyParams& p)
         os << "    features\n"
               "    (\n"
               "        {\n"
-              "            file \"features.eMesh\";\n"
+              "            file \""
+           << (p.emesh_is_extended ? "features.extendedFeatureEdgeMesh" : "features.eMesh")
+           << "\";\n"
               "            level "
            << lvl
            << ";\n"
@@ -325,7 +327,10 @@ int shyx_write_foam_case(const std::string& caseDir, const std::string& stlPath,
 
     if (p.emesh_path && p.emesh_path[0] != '\0')
     {
-        if (!copyFileIfNeeded(p.emesh_path, caseDir + "/constant/triSurface/features.eMesh", err))
+        const std::string dest = p.emesh_is_extended
+          ? caseDir + "/constant/extendedFeatureEdgeMesh/features.extendedFeatureEdgeMesh"
+          : caseDir + "/constant/triSurface/features.eMesh";
+        if (!copyFileIfNeeded(p.emesh_path, dest, err))
         {
             return 1;
         }

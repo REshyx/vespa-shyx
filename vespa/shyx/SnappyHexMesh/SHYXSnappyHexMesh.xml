@@ -22,8 +22,12 @@
         </Documentation>
       </InputProperty>
 
-      <!-- Optional: panel pipeline dropdown, not a second required input at filter creation. -->
-      <InputProperty name="FeatureEdges" command="SetFeatureEdgesConnection"
+      <!-- Optional: panel pipeline dropdown. command+port_index is the ParaView
+           second-input pattern (vtkSIProxy::AddInput invokes
+           SetInputConnection(1, port)). composite_data_supported=0 so a PDC
+           Input node cannot be picked — that type mismatch used to abort VTK. -->
+      <InputProperty name="FeatureEdges" command="SetInputConnection"
+                     port_index="1"
                      label="Feature edges"
                      panel_widget="input_selector"
                      null_on_empty="1">
@@ -31,13 +35,16 @@
           <Group name="sources"/>
           <Group name="filters"/>
         </ProxyGroupDomain>
-        <DataTypeDomain name="input_type">
+        <DataTypeDomain name="input_type" composite_data_supported="0">
           <DataType value="vtkPolyData"/>
         </DataTypeDomain>
         <Documentation>
-          Optional. Pick a pipeline node of feature lines (VTK_LINE / VTK_POLY_LINE),
-          or leave as (none). Written as constant/triSurface/features.eMesh and listed
-          in castellated features ().
+          Optional. Pick SHYX Extended Feature Edge Mesh (classified
+          extendedFeatureEdgeMesh) or a pipeline node of feature lines
+          (VTK_LINE / VTK_POLY_LINE), or leave as (none). Classified output is
+          written as constant/extendedFeatureEdgeMesh/features.extendedFeatureEdgeMesh;
+          plain lines become constant/triSurface/features.eMesh. Listed in
+          castellated features ().
         </Documentation>
         <Hints>
           <Optional/>

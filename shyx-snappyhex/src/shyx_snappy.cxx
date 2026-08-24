@@ -3,9 +3,7 @@
 #include "case_writer.h"
 
 #include <algorithm>
-#include <cstddef>
 #include <cstdint>
-#include <cstdlib>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
@@ -37,75 +35,6 @@ void setErr(char* err, int err_len, const std::string& msg)
     const size_t m = msg.size() < n ? msg.size() : n;
     std::memcpy(err, msg.c_str(), m);
     err[m] = '\0';
-}
-
-void appendRunDiag(const char* case_dir, const std::string& text)
-{
-    if (!case_dir || case_dir[0] == '\0')
-    {
-        return;
-    }
-    std::error_code ec;
-    std::filesystem::create_directories(case_dir, ec);
-    std::ofstream os(std::filesystem::path(case_dir) / "run-diag.txt", std::ios::app);
-    if (os)
-    {
-        os << text;
-        os.flush();
-    }
-}
-
-std::string describeSnappyCall(const char* stl_path, const char* case_dir, const ShyxSnappyParams* p)
-{
-    std::ostringstream os;
-    os << "=== shyx_snappy_run (lib) ===\n";
-    os << "ABI=" << SHYX_SNAPPY_PARAMS_ABI
-       << " sizeof(ShyxSnappyParams)=" << sizeof(ShyxSnappyParams) << "\n";
-    os << "offset n_locations=" << offsetof(ShyxSnappyParams, n_locations)
-       << " locations=" << offsetof(ShyxSnappyParams, locations)
-       << " n_geometries=" << offsetof(ShyxSnappyParams, n_geometries)
-       << " geometries=" << offsetof(ShyxSnappyParams, geometries) << "\n";
-    os << "stl_path=" << (stl_path && stl_path[0] ? stl_path : "(null/empty)") << "\n";
-    os << "case_dir=" << (case_dir && case_dir[0] ? case_dir : "(null/empty)") << "\n";
-    if (!p)
-    {
-        os << "p=(null)\n";
-        return os.str();
-    }
-    os << "p=" << static_cast<const void*>(p) << "\n";
-    os << "castellated=" << p->castellated << " snap=" << p->snap
-       << " add_layers=" << p->add_layers << "\n";
-    os << "n_locations=" << p->n_locations
-       << " locations=" << static_cast<const void*>(p->locations) << "\n";
-    os << "n_geometries=" << p->n_geometries
-       << " geometries=" << static_cast<const void*>(p->geometries) << "\n";
-    os << "n_ref_surfaces=" << p->n_ref_surfaces
-       << " n_ref_regions=" << p->n_ref_regions
-       << " n_layer_patches=" << p->n_layer_patches << "\n";
-    const bool hasMulti = p->n_geometries > 0 && p->geometries;
-    os << "hasMulti=" << (hasMulti ? 1 : 0) << "\n";
-    const int n = p->n_geometries;
-    if (n < 0 || n > 64)
-    {
-        os << "n_geometries out of range (ABI mismatch?)\n";
-        return os.str();
-    }
-    if (p->geometries && n > 0)
-    {
-        const int nShow = n > 16 ? 16 : n;
-        for (int i = 0; i < nShow; ++i)
-        {
-            const char* nm = p->geometries[i].name;
-            const char* sp = p->geometries[i].stl_path;
-            os << "  geo[" << i << "] name=" << (nm && nm[0] ? nm : "(null)")
-               << " stl=" << (sp && sp[0] ? sp : "(null)") << "\n";
-        }
-        if (n > nShow)
-        {
-            os << "  ... (" << n << " total)\n";
-        }
-    }
-    return os.str();
 }
 
 bool readStlBounds(const std::string& path, double b[6], std::string* err)
@@ -244,6 +173,28 @@ struct FoamStdoutRedirect
     FoamStdoutRedirect(const FoamStdoutRedirect&) = delete;
     void operator=(const FoamStdoutRedirect&) = delete;
 };
+
+struct CwdGuard
+{
+    std::filesystem::path prev;
+    explicit CwdGuard(const std::string& dir)
+    {
+        std::error_code ec;
+        prev = std::filesystem::current_path(ec);
+        std::filesystem::current_path(dir, ec);
+    }
+    ~CwdGuard()
+    {
+        if (prev.empty())
+        {
+            return;
+        }
+        std::error_code ec;
+        std::filesystem::current_path(prev, ec);
+    }
+    CwdGuard(const CwdGuard&) = delete;
+    void operator=(const CwdGuard&) = delete;
+};
 }
 #endif
 
@@ -348,6 +299,9 @@ extern "C" int shyx_snappy_mesh_only(const char* case_dir, char* err, int err_le
         Foam::FatalIOError.throwExceptions();
         std::string caseDir(case_dir);
         FoamStdoutRedirect foamIo(caseDir + "/snappyHexMesh.log");
+        CwdGuard cwd(caseDir);
+        Foam::FatalError.throwExceptions();
+        Foam::FatalIOError.throwExceptions();
         std::vector<std::string> args = { "snappyHexMesh", "-case", caseDir, "-overwrite" };
         std::vector<char*> argv;
         argv.reserve(args.size() + 1);
@@ -387,6 +341,25 @@ extern "C" int shyx_snappy_mesh_only(const char* case_dir, char* err, int err_le
 #else
     (void)case_dir;
     setErr(err, err_len, "OpenFOAM snappyHexMesh was not linked");
+    return 5;
+#endif
+}
+
+extern "C" int shyx_foam_prepare(char* err, int err_len)
+{
+#if SHYX_HAS_OPENFOAM
+    shyx_touch_foam_env();
+    if (!shyx_set_runtime_foam_dir())
+    {
+        setErr(err, err_len, "failed to write %TEMP%/shyx-openfoam/etc");
+        return 1;
+    }
+    shyx_force_foam_rts();
+    Foam::FatalError.throwExceptions();
+    Foam::FatalIOError.throwExceptions();
+    return 0;
+#else
+    setErr(err, err_len, "OpenFOAM was not linked");
     return 5;
 #endif
 }
@@ -433,13 +406,12 @@ extern "C" void shyx_snappy_params_default(ShyxSnappyParams* p)
     p->layer_patches = nullptr;
     p->emesh_path = nullptr;
     p->feature_level = 2;
+    p->emesh_is_extended = 0;
 }
 
 extern "C" int shyx_snappy_run(const char* stl_path, const char* case_dir, const ShyxSnappyParams* p,
     char* err, int err_len)
 {
-    const std::string diag = describeSnappyCall(stl_path, case_dir, p);
-    appendRunDiag(case_dir, diag);
     if (!case_dir || case_dir[0] == '\0')
     {
         setErr(err, err_len, "null/empty case_dir");
@@ -454,11 +426,7 @@ extern "C" int shyx_snappy_run(const char* stl_path, const char* case_dir, const
     if (!hasMulti && (!stl_path || stl_path[0] == '\0'))
     {
         std::ostringstream os;
-        os << "no STL: stl_path is null/empty and n_geometries=" << p->n_geometries
-           << " geometries=" << static_cast<const void*>(p->geometries)
-           << " sizeof(ShyxSnappyParams)=" << sizeof(ShyxSnappyParams)
-           << " ABI=" << SHYX_SNAPPY_PARAMS_ABI
-           << " (see case/run-diag.txt; if VTK ABI/sizeof differs, rebuild SHYXSnappyHex+plugin)";
+        os << "no STL: stl_path is null/empty and n_geometries=" << p->n_geometries;
         setErr(err, err_len, os.str());
         return 1;
     }

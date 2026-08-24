@@ -33,6 +33,14 @@ SKIP_BASENAMES = {
     "fieldExprScanner.cc",
 }
 
+# Adapter replacements (basename only: hashed ofsrc/ copies lose the OF path).
+SKIP_ADAPTER_BASENAMES = {
+    "IOobject.C",
+    "edgeMeshFormat.C",
+    "extendedEdgeMeshFormat.C",
+    "refinementFeatures.C",
+}
+
 
 def resolve_existing(path: str) -> str | None:
     path = os.path.normpath(path)
@@ -98,9 +106,7 @@ def parse_make_files(make_files: str, src_dir: str) -> list[str]:
                 if path is None and os.path.isfile(joined):
                     path = joined
                 if path:
-                    npath = path.replace("\\", "/")
-                    if npath.endswith("/db/IOobject/IOobject.C"):
-                        # Replaced by adapter/foam_IOobject.cxx (do not patch OpenFOAM).
+                    if base in SKIP_ADAPTER_BASENAMES:
                         continue
                     srcs.append(path)
 

@@ -13,7 +13,7 @@ SHYX 是本仓库里 **一个作者命名空间**（[`vespa/shyx/`](.)），不�
 * [**Hole Fill**](./HoleFill/README.md) / [**Repair Degeneracies**](./RepairDegeneracies/README.md) / [**Edge Collapse**](./EdgeCollapse/README.md) / [**Boolean (relaxed)**](./BooleanOperation/README.md) / [**Shape Smoothing**](./ShapeSmoothing/README.md) — CGAL PMP
 * [**Convex Hull**](./ConvexHullFilter/README.md)
 * [**Disconnected Region Fuse**](./DisconnectedRegionFuse/README.md)
-* [**Selection Extrude**](./SelectionExtrude/README.md) / [**Selection Append Patches**](./SelectionAppendPatches/README.md) / [**Point Extrude**](./PointExtrude/README.md) / [**Delete Selected Cells**](./DeleteSelectedCells/README.md) / [**Flip Selected Cells Winding**](./FlipSelectedCellsWinding/README.md)
+* [**Selection Extrude**](./SelectionExtrude/README.md) / [**Selection Append Patches**](./SelectionAppendPatches/README.md) / [**Point Extrude**](./PointExtrude/README.md) / [**Delete Selected Cells**](./DeleteSelectedCells/README.md) / [**Extract Selection**](./ExtractSelectedCells/README.md) / [**Flip Selected Cells Winding**](./FlipSelectedCellsWinding/README.md)
 * [**Selection: Fill, Alpha Wrap, Union**](./SelectionFillAlphaReunion/README.md) — CGAL ≥ 5.5
 * [**Minimum OBB**](./MinimumOBB/README.md)
 * [**Enhanced Ruler**](./EnhancedRuler/README.md)
@@ -30,6 +30,8 @@ SHYX 是本仓库里 **一个作者命名空间**（[`vespa/shyx/`](.)），不�
 * [**Partitioned Collection Boundary Assignment**](./PartitionedCollectionBoundaryAssignment/README.md) — **Vascular**
 * [**Surface To Volume Mesh**](./SurfaceToVolumeMesh/README.md) — SHYX only（CGAL Mesh_3）
 * [**SnappyHexMesh**](./SnappyHexMesh/README.md) — 需 `VESPA_USE_SNAPPYHEXMESH`；PDC 分块当 STL patch；网格成功后可按块写 `0/shyx_BoundaryVariableN`；SHYX only
+* [**Extended Feature Edge Mesh**](./ExtendedFeatureEdgeMesh/README.md) — 需 `VESPA_USE_SNAPPYHEXMESH`；OpenFOAM `extendedFeatureEdgeMesh` 分类特征边/点；接到 SnappyHexMesh Feature edges
+* [**OpenFOAM eMesh Reader**](./EMeshReader/README.md) — File → Open / Sources；读 `.eMesh` 与 `extendedFeatureEdgeMesh` ASCII（不支持 gzip）；不依赖 OpenFOAM 运行时
 * [**Tet Mesh Region Partition**](./TetMeshRegionPartition/README.md)
 * [**Partitioned Collection Boundary Fields**](./PartitionedCollectionBoundaryFields/README.md)
 * [**Partitioned Collection WSL Simulation**](./PartitionedCollectionWslSimulation/README.md)

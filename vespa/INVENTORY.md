@@ -50,6 +50,7 @@ Kitware 原版 CGAL 滤镜，全部需 **`VESPA_USE_CGAL`**，只作保留（对
 | SHYX Selection Append Patches | `vtkSHYXSelectionAppendPatches` | SelectionAppendPatches | SHYXSelectionAppendPatches.xml | 自有（复用 Extrude 图） | [有](shyx/SelectionAppendPatches/README.md) | VTK |
 | SHYX Point Extrude | `vtkSHYXPointExtrudeFilter` | PointExtrude | SHYXPointExtrude.xml | 自有 | [有](shyx/PointExtrude/README.md) | VTK |
 | SHYX Delete Selected Cells | `vtkSHYXDeleteSelectedCellsFilter` | DeleteSelectedCells | SHYXDeleteSelectedCells.xml | 自有 | [有](shyx/DeleteSelectedCells/README.md) | VTK |
+| SHYX Extract Selection | `vtkSHYXExtractSelectedCellsFilter` | ExtractSelectedCells | SHYXExtractSelectedCells.xml | 自有 | [有](shyx/ExtractSelectedCells/README.md) | VTK |
 | SHYX Flip Selected Cells Winding | `vtkSHYXFlipSelectedCellsWindingFilter` | FlipSelectedCellsWinding | SHYXFlipSelectedCellsWinding.xml | 自有 | [有](shyx/FlipSelectedCellsWinding/README.md) | VTK |
 | SHYX Selection: Fill, Alpha Wrap, Union | `vtkSHYXSelectionFillAlphaReunionFilter` | SelectionFillAlphaReunion | SHYXSelectionFillAlphaReunionFilter.xml | 自有 | [有](shyx/SelectionFillAlphaReunion/README.md) | CGAL ≥ 5.5 |
 | SHYX Minimum OBB | `vtkSHYXMinimumOBBFilter` | MinimumOBB | SHYXMinimumOBB.xml | 自有 | [有](shyx/MinimumOBB/README.md) | CGAL |
@@ -69,6 +70,8 @@ Vascular 顺序（[`VESPAVascularCategory.xml`](../ParaViewPlugin/smxml/VESPAVas
 | SHYX TetGen | `vtkSHYXTetGen` | TetGen | SHYXTetGen.xml | fluent | [有](shyx/TetGen/README.md) | TetGen | 5 |
 | SHYX TetGen Mesh Optimize | `vtkSHYXTetGenMeshOptimize` | 同上模块 | SHYXTetGenMeshOptimize.xml | 自有 | （同 TetGen README） | TetGen | |
 | SHYX SnappyHexMesh | `vtkSHYXSnappyHexMesh` | SnappyHexMesh | SHYXSnappyHexMesh.xml | 自有 | [有](shyx/SnappyHexMesh/README.md) | 可选 `VESPA_USE_SNAPPYHEXMESH` + `FOAM_SOURCE_DIR` | |
+| SHYX Extended Feature Edge Mesh | `vtkSHYXExtendedFeatureEdgeMesh` | ExtendedFeatureEdgeMesh | SHYXExtendedFeatureEdgeMesh.xml | 复用 Snappy | [有](shyx/ExtendedFeatureEdgeMesh/README.md) | 可选 `VESPA_USE_SNAPPYHEXMESH` + `FOAM_SOURCE_DIR` | |
+| SHYX OpenFOAM eMesh Reader | `vtkSHYXEMeshReader` | EMeshReader | SHYXEMeshReader.xml | 复用 Snappy | [有](shyx/EMeshReader/README.md) | VTK（ASCII FoamFile，无 OpenFOAM 运行时） | |
 | SHYX Tet Mesh Region Partition | `vtkSHYXTetMeshRegionPartition` | TetMeshRegionPartition | SHYXTetMeshRegionPartition.xml | 自有 | [有](shyx/TetMeshRegionPartition/README.md) | VTK | |
 | SHYX DataSet To Partitioned Collection | `vtkSHYXDataSetToPartitionedCollection` | DataSetToPartitionedCollection | SHYXDataSetToPartitionedCollection.xml | fluent | [有](shyx/DataSetToPartitionedCollection/README.md) | VTK | 6 |
 | SHYX Partitioned Collection Boundary Assignment | `vtkSHYXPartitionedCollectionBoundaryAssignment` | PartitionedCollectionBoundaryAssignment | SHYXPartitionedCollectionBoundaryAssignment.xml | fluent | [有](shyx/PartitionedCollectionBoundaryAssignment/README.md) | VTK | 7 |

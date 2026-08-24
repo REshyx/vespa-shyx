@@ -8,13 +8,13 @@
 
 MSVC 下 `VESPAPlugin.dll` 必须 `/WHOLEARCHIVE` 该 `.lib`（插件 CMake 已接）。不要用 WSL/MinGW 的 `.a`。滤镜在进程内调用静态库，不需要旁边再放 `snappy_cli.exe`。
 
-加载时会尽量删除 `%TEMP%\shyx-snappy-*` 残留目录；目录里只要有文件被占用，整棵都不删。每次 Apply 的参数/ABI 诊断写在该次 case 的 `run-diag.txt`（滤镜侧 + 适配器侧各一段；两边 `sizeof`/`offset` 必须一致）。**Case Directory** 可选手动指定 OpenFOAM case 根目录（占位提示可留空）；留空则写到 `%TEMP%\shyx-snappy-<id>-<mtime>\case`。同一行 📂 打开实际写出目录。用户自选目录不会在下次 Apply 时删掉。若只有滤镜段、错误仍是 `null argument`，说明 `SHYXSnappyHex.lib` 是旧的：先编 `shyx_snappyhex_ep` 再编 `VESPAPlugin`。加载时用 adapter 内存中的 `controlDict`，不读磁盘 etc。真正跑 snappy 时把内嵌 `cellModels` 写到 `%TEMP%\shyx-openfoam\etc`。
+加载时会尽量删除 `%TEMP%\shyx-snappy-*` 残留目录；目录里只要有文件被占用，整棵都不删。**Case Directory** 可选手动指定 OpenFOAM case 根目录（占位提示可留空）；留空则写到 `%TEMP%\shyx-snappy-<id>-<mtime>\case`。同一行 📂 打开实际写出目录。用户自选目录不会在下次 Apply 时删掉。加载时用 adapter 内存中的 `controlDict`，不读磁盘 etc。真正跑 snappy 时把内嵌 `cellModels` 写到 `%TEMP%\shyx-openfoam\etc`。
 
 ## 输入
 
 - **Input**：`vtkPartitionedDataSetCollection`（推荐上游 **SHYX Selection Append Patches**）。每个分块写成一张整体 STL（`type triSurfaceMesh`），作为一个 searchable / patch。**不**解析 STL 多 `solid`，也**不**写 `regions { firstSolid / secondSolid }`。Append Patches 的 selection / pipeline / box / sphere 行在输出里都是同等分块；要做体积加密时把封闭的 box、sphere 或管线封闭面加进 Append Patches，再到本滤镜 **Region patches** 里按名引用（`inside` / `outside` / `distance`）。
 - 单张 **`vtkPolyData`** 仍可直连，内部当成名为 `geometry` 的一块。
-- **Feature edges**（可选，Properties 面板 pipeline 下拉，创建滤镜时不必选）：管线里另一个 `vtkPolyData` 节点，只收 `VTK_LINE` / `VTK_POLY_LINE`，写成 `constant/triSurface/features.eMesh`，并打开 `explicitFeatureSnap`。留空 `(none)` 则不写 `.eMesh`。
+- **Feature edges**（可选，Properties 面板 pipeline 下拉，创建滤镜时不必选）：必须是 **`vtkPolyData` 线**（`VTK_LINE` / `VTK_POLY_LINE`），不要选 Input 那个 **PDC** 节点。正确来源：上游三角面 → **SHYX Extended Feature Edge Mesh**（或 VTK **Feature Edges**）→ 把该节点填进本下拉。Extended 输出（`FoamExtendedFeatureEdgeMesh` field）写成 `constant/extendedFeatureEdgeMesh/features.extendedFeatureEdgeMesh`；普通线写成 `constant/triSurface/features.eMesh`。已有 `.eMesh` 时用 **SHYX OpenFOAM eMesh Reader**（File → Open）。都会打开 `explicitFeatureSnap`。留空 `(none)` 则不写特征文件。若开了 Auto Apply，改下拉会立刻重跑整个 snappy。
 
 Properties 三张表（Add partition 从 Input 分块名下拉，不是 3D 选择）：
 

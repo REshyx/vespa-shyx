@@ -4,7 +4,11 @@
 #define main shyx_snappyHexMesh_of_main
 #include SHYX_SNAPPYHEXMESH_C
 
+#include "error.H"
+
 int shyx_snappyHexMesh_main(int argc, char** argv)
 {
+    Foam::FatalError.throwExceptions();
+    Foam::FatalIOError.throwExceptions();
     return shyx_snappyHexMesh_of_main(argc, argv);
 }

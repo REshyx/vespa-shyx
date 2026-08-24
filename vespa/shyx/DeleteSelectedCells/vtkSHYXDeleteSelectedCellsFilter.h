@@ -7,7 +7,8 @@
  * points removed) and from vtkUnstructuredGrid (vtkExtractCells). For vtkStructuredGrid and
  * vtkExplicitStructuredGrid, selected cells are blanked (BlankCell). For vtkImageData,
  * vtkRectilinearGrid, and other vtkDataSet types, selected cells are marked hidden via the
- * cell ghost array (vtkDataSetAttributes::HIDDENCELL). If Selection is empty, optional
+ * cell ghost array (vtkDataSetAttributes::HIDDENCELL). InvertSelection (off by default)
+ * operates on the complement of that set. If Selection is empty, optional
  * SelectionCellArrayName on port 0 selects cells (same rule as SHYX Selection Extrude:
  * scalar &gt; 0.5 or integral non-zero).
  */
@@ -37,6 +38,11 @@ public:
   vtkSetStringMacro(SelectionCellArrayName);
   vtkGetStringMacro(SelectionCellArrayName);
 
+  /** When on, operate on unselected cells (complement). Off by default. */
+  vtkSetMacro(InvertSelection, int);
+  vtkGetMacro(InvertSelection, int);
+  vtkBooleanMacro(InvertSelection, int);
+
 protected:
   vtkSHYXDeleteSelectedCellsFilter();
   ~vtkSHYXDeleteSelectedCellsFilter() override;
@@ -45,6 +51,7 @@ protected:
   int FillInputPortInformation(int port, vtkInformation* info) override;
 
   char* SelectionCellArrayName = nullptr;
+  int InvertSelection = 0;
 
 private:
   vtkSHYXDeleteSelectedCellsFilter(const vtkSHYXDeleteSelectedCellsFilter&) = delete;

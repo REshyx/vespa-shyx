@@ -2,7 +2,7 @@
 #define SHYX_SNAPPY_H
 
 /** Bump when ShyxSnappyParams layout changes. vtk and lib must log the same value. */
-#define SHYX_SNAPPY_PARAMS_ABI 2
+#define SHYX_SNAPPY_PARAMS_ABI 3
 
 #ifdef __cplusplus
 extern "C" {
@@ -73,8 +73,10 @@ typedef struct ShyxSnappyParams
     const ShyxSnappyRefinementRegion* ref_regions;
     int n_layer_patches;
     const ShyxSnappyLayerPatch* layer_patches;
-    const char* emesh_path; /* nullable; copied to constant/triSurface/features.eMesh */
+    const char* emesh_path; /* nullable; copied to constant/triSurface/features.eMesh
+                               or constant/extendedFeatureEdgeMesh/ when emesh_is_extended */
     int feature_level;
+    int emesh_is_extended; /* 1 = Foam::extendedFeatureEdgeMesh (classifications) */
 } ShyxSnappyParams;
 
 void shyx_snappy_params_default(ShyxSnappyParams* p);
@@ -104,6 +106,9 @@ int shyx_snappy_mesh_only(const char* case_dir, char* err, int err_len);
 
 /* Linker anchor: pull foam_env_early.obj (FOAM_SIGFPE/FOAM_ABORT before OpenFOAM ctors). */
 void shyx_touch_foam_env(void);
+
+/** Materialize %TEMP%/shyx-openfoam/etc, RTS, throwExceptions. 0 = ok. */
+int shyx_foam_prepare(char* err, int err_len);
 
 #ifdef __cplusplus
 }

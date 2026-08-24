@@ -170,6 +170,7 @@ if(VESPA_USE_SNAPPYHEXMESH)
 endif()
 if(NOT VESPA_USE_SNAPPYHEXMESH OR NOT SHYX_SNAPPYHEX_READY)
   list(FILTER vespa_module_files EXCLUDE REGEX "SnappyHexMesh")
+  list(FILTER vespa_module_files EXCLUDE REGEX "ExtendedFeatureEdgeMesh")
   if(VESPA_USE_SNAPPYHEXMESH AND NOT SHYX_SNAPPYHEX_READY)
     set(VESPA_USE_SNAPPYHEXMESH OFF)
   endif()
@@ -251,6 +252,9 @@ vtk_module_build(
 
 if (TARGET vtkSHYXSnappyHexMesh AND TARGET shyx_snappyhex_ep)
   add_dependencies(vtkSHYXSnappyHexMesh shyx_snappyhex_ep)
+endif()
+if (TARGET vtkSHYXExtendedFeatureEdgeMesh AND TARGET shyx_snappyhex_ep)
+  add_dependencies(vtkSHYXExtendedFeatureEdgeMesh shyx_snappyhex_ep)
 endif()
 
 ## Install

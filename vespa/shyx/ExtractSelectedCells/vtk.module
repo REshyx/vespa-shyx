@@ -1,0 +1,12 @@
+NAME
+  vtkSHYXExtractSelectedCellsFilter
+DESCRIPTION
+  "Extract selected cells; output is vtkPolyData when the selection is surface-like, otherwise vtkUnstructuredGrid."
+GROUPS
+  Meshing
+DEPENDS
+  VTK::CommonCore
+  VTK::CommonDataModel
+  VTK::CommonExecutionModel
+  VTK::FiltersCore
+  VTK::FiltersExtraction

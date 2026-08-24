@@ -1,0 +1,30 @@
+<ServerManagerConfiguration>
+  <ProxyGroup name="sources">
+    <SourceProxy name="SHYXEMeshReader"
+                 class="vtkSHYXEMeshReader"
+                 label="SHYX OpenFOAM eMesh Reader">
+      <Documentation
+          short_help="Read OpenFOAM .eMesh / extendedFeatureEdgeMesh feature lines."
+          long_help="Reads ASCII OpenFOAM featureEdgeMesh (.eMesh) and extendedFeatureEdgeMesh files as vtkPolyData lines. Gzip and binary Foam format are not supported. Classified extended files get the same EdgeStatus / PointStatus / FoamExtendedFeatureEdgeMesh arrays as SHYX Extended Feature Edge Mesh, so the output can be connected to SHYX SnappyHexMesh Feature edges. File → Open also lists this reader for .eMesh.">
+        Reads OpenFOAM feature-edge ASCII files used by snappyHexMesh (surfaceFeatureExtract /
+        surfaceFeatures output). Simple featureEdgeMesh files become unlabelled lines. Extended
+        files keep OpenFOAM edge/point classification and the original FoamFile blob.
+      </Documentation>
+
+      <StringVectorProperty name="FileName"
+                            command="SetFileName"
+                            number_of_elements="1"
+                            animateable="0">
+        <FileListDomain name="files"/>
+        <Documentation>Path to an OpenFOAM .eMesh or .extendedFeatureEdgeMesh file.</Documentation>
+      </StringVectorProperty>
+
+      <Hints>
+        <ReaderFactory extensions="eMesh extendedFeatureEdgeMesh"
+                       file_description="OpenFOAM feature edge mesh"/>
+        <ShowInMenu category="SHYX" icon=":/VESPA/SHYX_SnappyHexMesh.png"/>
+        <RepresentationType view="RenderView" type="Wireframe"/>
+      </Hints>
+    </SourceProxy>
+  </ProxyGroup>
+</ServerManagerConfiguration>

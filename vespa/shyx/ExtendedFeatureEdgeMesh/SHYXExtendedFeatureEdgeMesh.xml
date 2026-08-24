@@ -1,0 +1,135 @@
+<ServerManagerConfiguration>
+  <ProxyGroup name="filters">
+    <SourceProxy class="vtkSHYXExtendedFeatureEdgeMesh"
+                 label="SHYX Extended Feature Edge Mesh"
+                 name="SHYXExtendedFeatureEdgeMesh">
+      <Documentation
+          short_help="OpenFOAM extendedFeatureEdgeMesh: classified feature edges and points."
+          long_help="Calls Foam::surfaceFeatures and Foam::extendedFeatureEdgeMesh (statically linked meshTools, same path as surfaceFeatureExtract). Input is a triangle surface. Output is feature lines with EdgeStatus (external/internal/flat/open/multiple), PointStatus (convex/concave/mixed/nonFeature), RegionEdge, and a FoamFile blob. Feed the output to SHYX SnappyHexMesh Feature edges to write constant/extendedFeatureEdgeMesh. Optional Extra feature edges are merged. Region array (cell data dropdown, default None) sets triSurface patches; adjacent cells with different ids become region edges. Cell array Baffle or Baffle all regions marks baffle patches (sideVolumeType BOTH)."/>
+
+      <InputProperty name="Input" command="SetInputConnection">
+        <ProxyGroupDomain name="groups">
+          <Group name="sources"/>
+          <Group name="filters"/>
+        </ProxyGroupDomain>
+        <DataTypeDomain name="input_type">
+          <DataType value="vtkPolyData"/>
+        </DataTypeDomain>
+        <InputArrayDomain name="cell_arrays" attribute_type="cell" optional="1"/>
+        <Documentation>Triangle surface used for included-angle feature extraction.</Documentation>
+      </InputProperty>
+
+      <InputProperty name="ExtraFeatureEdges" command="SetInputConnection"
+                     port_index="1"
+                     label="Extra feature edges"
+                     panel_widget="input_selector"
+                     null_on_empty="1">
+        <ProxyGroupDomain name="groups">
+          <Group name="sources"/>
+          <Group name="filters"/>
+        </ProxyGroupDomain>
+        <DataTypeDomain name="input_type" composite_data_supported="0">
+          <DataType value="vtkPolyData"/>
+        </DataTypeDomain>
+        <Documentation>
+          Optional extra polylines (VTK_LINE / VTK_POLY_LINE) merged into the
+          extendedFeatureEdgeMesh. Leave (none) to extract only from the surface.
+        </Documentation>
+        <Hints>
+          <Optional/>
+        </Hints>
+      </InputProperty>
+
+      <DoubleVectorProperty command="SetIncludedAngle" name="IncludedAngle"
+                            label="Included angle" number_of_elements="1" default_values="150">
+        <DoubleRangeDomain name="range" min="0" max="180"/>
+        <Documentation>
+          OpenFOAM includedAngle (degrees). Adjacent faces whose included angle is
+          less than this are feature edges. 0 selects none, 180 selects all.
+        </Documentation>
+      </DoubleVectorProperty>
+      <IntVectorProperty command="SetGeometricTestOnly" name="GeometricTestOnly"
+                         label="Geometric test only" number_of_elements="1" default_values="0">
+        <BooleanDomain name="bool"/>
+        <Documentation>Ignore region (patch-boundary) edges; classify by geometry only.</Documentation>
+      </IntVectorProperty>
+
+      <DoubleVectorProperty command="SetTrimMinLength" name="TrimMinLength"
+                            label="Trim min length" number_of_elements="1" default_values="0"
+                            panel_visibility="advanced">
+        <DoubleRangeDomain name="range" min="0"/>
+        <Documentation>Delete feature strings shorter than this. 0 = off.</Documentation>
+      </DoubleVectorProperty>
+      <IntVectorProperty command="SetTrimMinElements" name="TrimMinElements"
+                         label="Trim min elements" number_of_elements="1" default_values="0"
+                         panel_visibility="advanced">
+        <IntRangeDomain name="range" min="0" max="100000"/>
+        <Documentation>Delete feature strings with fewer edges than this. 0 = off.</Documentation>
+      </IntVectorProperty>
+
+      <IntVectorProperty command="SetKeepOpenEdges" name="KeepOpenEdges"
+                         label="Keep open edges" number_of_elements="1" default_values="1">
+        <BooleanDomain name="bool"/>
+        <Documentation>Keep edges with one connected face (OPEN).</Documentation>
+      </IntVectorProperty>
+      <IntVectorProperty command="SetKeepNonManifoldEdges" name="KeepNonManifoldEdges"
+                         label="Keep non-manifold edges" number_of_elements="1" default_values="1">
+        <BooleanDomain name="bool"/>
+        <Documentation>Keep edges with more than two connected faces (MULTIPLE).</Documentation>
+      </IntVectorProperty>
+      <IntVectorProperty command="SetKeepRegionEdges" name="KeepRegionEdges"
+                         label="Keep region edges" number_of_elements="1" default_values="1">
+        <BooleanDomain name="bool"/>
+        <Documentation>Keep patch-boundary region edges.</Documentation>
+      </IntVectorProperty>
+
+      <IntVectorProperty command="SetBaffleAllRegions" name="BaffleAllRegions"
+                         label="Baffle all regions" number_of_elements="1" default_values="0">
+        <BooleanDomain name="bool"/>
+        <Documentation>
+          Mark every surface patch as a baffle (sideVolumeType BOTH). Per-triangle
+          cell array named Baffle still marks individual regions when this is off.
+        </Documentation>
+      </IntVectorProperty>
+      <StringVectorProperty command="SetRegionArrayName" name="RegionArrayName"
+                            label="Region array" number_of_elements="1"
+                            default_values="" animateable="0">
+        <ArrayListDomain name="array_list" attribute_type="Scalars"
+                         none_string="None"
+                         input_domain_name="cell_arrays">
+          <RequiredProperties>
+            <Property name="Input" function="Input"/>
+          </RequiredProperties>
+        </ArrayListDomain>
+        <Documentation>
+          Cell-data array of patch / region ids (OpenFOAM triSurface regions).
+          Adjacent triangles with different ids become region edges. None: one
+          region (id 0), classify by geometry only (and open / non-manifold).
+        </Documentation>
+        <Hints>
+          <ArraySelectionWidget icon_type="cell"/>
+        </Hints>
+      </StringVectorProperty>
+
+      <PropertyGroup label="Extract">
+        <Property name="IncludedAngle"/>
+        <Property name="GeometricTestOnly"/>
+        <Property name="RegionArrayName"/>
+      </PropertyGroup>
+      <PropertyGroup label="Subset">
+        <Property name="KeepOpenEdges"/>
+        <Property name="KeepNonManifoldEdges"/>
+        <Property name="KeepRegionEdges"/>
+        <Property name="BaffleAllRegions"/>
+      </PropertyGroup>
+      <PropertyGroup label="Extra">
+        <Property name="ExtraFeatureEdges"/>
+      </PropertyGroup>
+
+      <Hints>
+        <ShowInMenu category="SHYX" icon=":/VESPA/SHYX_SnappyHexMesh.png"/>
+        <RepresentationType view="RenderView" type="Wireframe"/>
+      </Hints>
+    </SourceProxy>
+  </ProxyGroup>
+</ServerManagerConfiguration>

@@ -1,0 +1,64 @@
+<ServerManagerConfiguration>
+  <ProxyGroup name="filters">
+    <SourceProxy name="SHYXExtractSelectedCellsFilter"
+                 class="vtkSHYXExtractSelectedCellsFilter"
+                 label="SHYX Extract Selection">
+      <Documentation
+          long_help="Opposite of SHYX Delete Selected Cells: keeps the cells in the active selection (vtkSelection on the Selection port) and drops the rest. Invert Selection (off by default) keeps the complement instead. Unlike ParaView Extract Selection, the output is not forced to vtkUnstructuredGrid. If Input is vtkPolyData, or every kept cell is a PolyData type (vertex, line, polygon, strip), the output is vtkPolyData; otherwise it is vtkUnstructuredGrid. Selection resolution matches SHYX Delete / Extrude (vtkExtractSelection: vtkOriginalCellIds on extracted cells, or vtkOriginalPointIds with all incident cells). Creating the filter copies the Input's active selection into the Selection widget (same as Extract Selection); Copy Active Selection is only needed if you change the selection afterwards. If there is no vtkSelection, set Selection Cell Array Name on cell data of the input. When nothing is selected (after invert), the output is empty."
+          short_help="SHYX Extract Selection: Keep selected cells; PolyData stays PolyData, otherwise UnstructuredGrid."/>
+
+      <InputProperty name="Input" command="SetInputConnection">
+        <ProxyGroupDomain name="groups">
+          <Group name="sources"/>
+          <Group name="filters"/>
+        </ProxyGroupDomain>
+        <DataTypeDomain name="input_type">
+          <DataType value="vtkDataSet"/>
+        </DataTypeDomain>
+        <Documentation>
+          Any vtkDataSet. Surface selections produce vtkPolyData; volume / mixed 3D cells produce vtkUnstructuredGrid.
+        </Documentation>
+      </InputProperty>
+
+      <InputProperty name="Selection" label="Selection"
+                     command="SetSourceConnection">
+        <ProxyGroupDomain name="groups">
+          <Group name="sources"/>
+          <Group name="filters"/>
+        </ProxyGroupDomain>
+        <DataTypeDomain name="input_type">
+          <DataType value="vtkSelection"/>
+        </DataTypeDomain>
+        <Documentation>
+          vtkSelection describing cells or points to keep (same convention as SHYX Delete Selected Cells).
+          Filled at create from the Input's active selection; Copy Active Selection is optional afterwards.
+        </Documentation>
+        <Hints>
+          <SelectionInput/>
+        </Hints>
+      </InputProperty>
+
+      <IntVectorProperty name="InvertSelection" label="Invert Selection"
+          command="SetInvertSelection" number_of_elements="1" default_values="0">
+        <BooleanDomain name="bool"/>
+        <Documentation>
+          When on, keep the unselected cells (complement of the selection). Off by default.
+        </Documentation>
+      </IntVectorProperty>
+
+      <StringVectorProperty name="SelectionCellArrayName" label="Selection Cell Array Name"
+          command="SetSelectionCellArrayName" number_of_elements="1" default_values="">
+        <Documentation>
+          If Selection is empty: name of a cell data array on Input. Cells are kept when value &gt; 0.5 (float) or non-zero (integer types).
+        </Documentation>
+      </StringVectorProperty>
+
+      <Hints>
+        <ShowInMenu category="SHYX" icon=":/VESPA/SHYX_Extract_Selected_Cells.png"/>
+        <!-- Same as Extract Selection: copy Input's active selection into Selection
+             at proxy create so the widget is populated without Copy Active Selection. -->
+        <InitializationHelper class="vtkSMExtractSelectionProxyInitializationHelper"/>
+      </Hints>
+    </SourceProxy>
+  </ProxyGroup>
+</ServerManagerConfiguration>

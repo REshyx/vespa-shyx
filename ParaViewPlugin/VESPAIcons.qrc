@@ -15,6 +15,7 @@
     <file alias="SHYX_Edge_Collapse.png">../icon/SHYX_Edge_Collapse.png</file>
     <file alias="SHYX_Endpoint_Stent_Placement.png">../icon/SHYX_Endpoint_Stent_Placement.png</file>
     <file alias="SHYX_Enhanced_Ruler.png">../icon/SHYX_Enhanced_Ruler.png</file>
+    <file alias="SHYX_Extract_Selected_Cells.png">../icon/SHYX_Extract_Selected_Cells.png</file>
     <file alias="SHYX_FTLE_Filter.png">../icon/SHYX_FTLE_Filter.png</file>
     <file alias="SHYX_Flip_Selected_Cells_Winding.png">../icon/SHYX_Flip_Selected_Cells_Winding.png</file>
     <file alias="SHYX_Geodesic_Distance.png">../icon/SHYX_Geodesic_Distance.png</file>

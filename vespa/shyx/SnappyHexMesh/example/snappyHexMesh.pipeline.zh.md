@@ -179,7 +179,7 @@ Properties 三张表（Add partition 选上游分块）：
 - **Region patches**（同样在 Castellated 里，写入 `refinementRegions`）：`mode inside|outside|distance` + `levels`。空表 = 无体积加密。`inside`/`outside` 需要封闭面。
 - **Layer patches**（Layers 组后，写入 `addLayers`）：按最终 patch 名写 `nSurfaceLayers`（入口可写 0）。空表 = 每个 surface patch 用 Default surface layers。
 
-可选 **Feature edges**：Properties 面板上的 pipeline 下拉（不是创建滤镜时的第二个必选输入）。线网格 → `features.eMesh`，`explicitFeatureSnap true`。选 `(none)` 时 `features ()`，implicit 特征吸附仍可开。
+可选 **Feature edges**：Properties 面板上的 pipeline 下拉（不是创建滤镜时的第二个必选输入）。上游 **SHYX Extended Feature Edge Mesh**（`extendedFeatureEdgeMesh` 分类）→ `constant/extendedFeatureEdgeMesh/`；普通线网格 → `features.eMesh`。都会 `explicitFeatureSnap true`。选 `(none)` 时 `features ()`，implicit 特征吸附仍可开。
 
 网格成功后可用 **Block variables**：Refresh 列出 `internalMesh` 与各 patch（名称只读），Add/Delete variable 增删列。有限值写成 `0/shyx_BoundaryVariableN`（写法同 **SHYX Partitioned Collection To OpenFOAM**；空/NaN → 0）。只改这些值时复用上一份 `polyMesh`，不重跑 snappyHexMesh。
 

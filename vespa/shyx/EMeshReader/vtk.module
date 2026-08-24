@@ -1,0 +1,10 @@
+NAME
+  vtkSHYXEMeshReader
+DESCRIPTION
+  "Read OpenFOAM featureEdgeMesh (.eMesh) and extendedFeatureEdgeMesh ASCII files as vtkPolyData lines."
+GROUPS
+  Meshing
+DEPENDS
+  VTK::CommonCore
+  VTK::CommonDataModel
+  VTK::CommonExecutionModel

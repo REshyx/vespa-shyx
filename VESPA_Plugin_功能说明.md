@@ -68,7 +68,7 @@
 | SHYX Disconnected Region Fuse | |
 | SHYX Selection Extrude / Point Extrude | |
 | SHYX Selection Append Patches | 选区 / 管线 / box·sphere 抽出为 PDC patch |
-| SHYX Delete Selected Cells / Flip Selected Cells Winding | |
+| SHYX Delete Selected Cells / Extract Selection / Flip Selected Cells Winding | Extract 按选区输出 PolyData 或 UnstructuredGrid，不强制 UG；Delete/Extract 均可 Invert Selection |
 | SHYX Selection: Fill, Alpha Wrap, Union | CGAL ≥ 5.5 |
 | SHYX Minimum OBB | |
 | SHYX Enhanced Ruler | |
@@ -78,6 +78,8 @@
 | SHYX Surface to Volume Mesh | CGAL Mesh_3 |
 | SHYX TetGen / TetGen Mesh Optimize | **TetGen** 在 Vascular |
 | SHYX SnappyHexMesh | 需 `VESPA_USE_SNAPPYHEXMESH`；**Filters → SHYX**；PDC 分块当 STL；网格后可按块写 `0/shyx_BoundaryVariableN` |
+| SHYX Extended Feature Edge Mesh | 需 `VESPA_USE_SNAPPYHEXMESH`；OpenFOAM `extendedFeatureEdgeMesh` 分类特征边/点；接到 SnappyHexMesh Feature edges |
+| SHYX OpenFOAM eMesh Reader | **File → Open** / Sources；读 `.eMesh` 与 `extendedFeatureEdgeMesh` ASCII（不支持 gzip）；不依赖 OpenFOAM |
 | SHYX Tet Mesh Region Partition | |
 | SHYX DataSet To Partitioned Collection | **Vascular** |
 | SHYX Partitioned Collection Boundary Assignment | **Vascular** |
@@ -656,6 +658,8 @@
 | **SHYX Selection Plane Clipper** | Vascular 第 3 步 |
 | **SHYX TetGen Mesh Optimize** | 与 TetGen 同模块 |
 | **SHYX SnappyHexMesh** | 需 `VESPA_USE_SNAPPYHEXMESH`；PDC 分块当 STL patch；网格后可按块写 `0/shyx_BoundaryVariableN`
+| **SHYX Extended Feature Edge Mesh** | 需 `VESPA_USE_SNAPPYHEXMESH`；`extendedFeatureEdgeMesh` 分类边/点；接到 SnappyHexMesh Feature edges |
+| **SHYX OpenFOAM eMesh Reader** | File → Open；读 `.eMesh` / `extendedFeatureEdgeMesh` ASCII；可接到 SnappyHexMesh Feature edges |
 | **SHYX Tet Mesh Region Partition** | 体网格分区 |
 | **SHYX Boundary Assignment / Fields / WSL Simulation** | PDC 管线 |
 | **SHYX Partitioned Collection To OpenFOAM** | 体网格 PDC → OpenFOAM `polyMesh` |

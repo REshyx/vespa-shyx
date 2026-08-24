@@ -115,12 +115,14 @@ file(GLOB _shyx_ep_rebuild_files CONFIGURE_DEPENDS
   "${_shyx_src}/adapter/*.cxx"
   "${_shyx_src}/adapter/*.h"
   "${_shyx_src}/cmake/*.cmake"
+  "${_shyx_src}/cmake/*.py"
   "${_shyx_src}/scripts/vespa-ep.ps1")
 if(_shyx_ep_rebuild_files)
   ExternalProject_Add_StepDependencies(shyx_snappyhex_ep build ${_shyx_ep_rebuild_files})
 endif()
 ExternalProject_Add_StepDependencies(shyx_snappyhex_ep configure
   "${_shyx_src}/CMakeLists.txt"
+  "${_shyx_src}/cmake/parse_make_files.py"
   "${_shyx_ep_ps1}")
 
 set(SHYX_SNAPPYHEX_READY TRUE)

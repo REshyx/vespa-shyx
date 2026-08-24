@@ -1,12 +1,12 @@
 # SHYXSnappyHex
 
-vespa 仓库内的 **adapter + CMake**，把官方 OpenFOAM 源码编成静态库，给 `vtkSHYXSnappyHexMesh` 提供 `shyx_snappy_run`。
+vespa 仓库内的 **adapter + CMake**，把官方 OpenFOAM 源码编成静态库，给 `vtkSHYXSnappyHexMesh` 提供 `shyx_snappy_run`，给 `vtkSHYXExtendedFeatureEdgeMesh` 提供 `shyx_extended_feature_extract`。
 
 官方 OpenFOAM 用 **wmake**，**不会**生成 `OpenFOAMConfig.cmake`。能 `find_package` 的是本目录安装出来的 `SHYXSnappyHexConfig.cmake`，不是 `OpenFOAM-v2412` 自己编出来的包。
 
 vespa（MSVC / Visual Studio）把本目录当成 **clang-cl + Ninja ExternalProject**（`CMake/SHYXSnappyHexInTree.cmake`）。`VESPAPlugin.dll` 必须 `/WHOLEARCHIVE` `SHYXSnappyHex.lib`（`shyx_snappyhex_whole_archive`）。不要 WHOLEARCHIVE `OpenFOAM.lib` / `finiteVolume.lib`。`shyx_snappy_run` 在进程内调用。
 
-滤镜说明见 [`vespa/shyx/SnappyHexMesh/README.md`](../vespa/shyx/SnappyHexMesh/README.md)。
+滤镜说明见 [`vespa/shyx/SnappyHexMesh/README.md`](../vespa/shyx/SnappyHexMesh/README.md) 与 [`vespa/shyx/ExtendedFeatureEdgeMesh/README.md`](../vespa/shyx/ExtendedFeatureEdgeMesh/README.md)。
 
 ## 源码与编译边界（不进仓库、不剪子集）
 
@@ -52,6 +52,8 @@ vespa 探测顺序见 `CMake/SHYXSnappyHexInTree.cmake`：先 `../OpenFOAM-v2412
 | `adapter/foam_debug.cxx` | Overlay `lnInclude/debug.C`（`globals.C` include）。LoadLibrary 用内存 `controlDict`，缺 switch 时 fallback，避免 `FatalError`。 |
 | `adapter/foam_error.cxx` / `foam_IOerror.cxx` | Overlay `error.C` / `IOerror.C`。`throwExceptions()` 打开后，`abort()` 也抛异常（官方只对 `exit()` 抛；Windows 上 `abort()` 会 `std::exit` 杀掉 ParaView）。 |
 | `adapter/foam_IOobject.cxx` | 替换 `Make/files` 里那个 TU。`getOrDefault(..., timeStamp)`，静态初始化缺 key 时不 `FatalIOError`。 |
+| `adapter/foam_edgeMeshFormat.cxx` / `foam_extendedEdgeMeshFormat.cxx` | 替换 meshTools 里读 `.eMesh` / `.extendedFeatureEdgeMesh` 的 TU。官方 `Time::New()` dummy Time 会在 snappy 已有 Time 时把 ParaView `abort()` 掉。 |
+| `adapter/foam_refinementFeatures.cxx` | 替换 snappy `refinementFeatures.C`。用现有 Time 的 `extendedFeatureEdgeMesh(IOobject)` 读完整分类 blob，不再走 `extendedEdgeMesh::New(filename)`。 |
 | `src/foam_eval_stubs.cxx` / `foam_stl_flex_stub.cxx` | 跳过的 Flex/Lemon/Ragel TU 的符号。 |
 | `src/foam_env_early.cxx` | Foam 静态构造前设 `FOAM_SIGFPE` / `FOAM_ABORT`。 |
 | `src/foam_force_link.cxx` | MSVC RTS 注册。 |
@@ -63,7 +65,8 @@ vespa 探测顺序见 `CMake/SHYXSnappyHexInTree.cmake`：先 `../OpenFOAM-v2412
 
 ## Layout
 
-- `include/shyx_snappy.h` — C API
+- `include/shyx_snappy.h` — C API（snappyHexMesh）
+- `include/shyx_extended_feature.h` — C API（extendedFeatureEdgeMesh 提取/分类）
 - `adapter/` — OpenFOAM TU 替换（overlay / 跳过官方 TU）
 - `src/` — case writer、C API、Windows spawn、RTS force-link
 - `apps/snappy_cli.cxx` — 可选 CLI（`SHYX_BUILD_CLI`）

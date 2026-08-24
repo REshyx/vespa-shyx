@@ -114,6 +114,14 @@ if(SHYX_BUILD_OPENFOAM)
   foam_add_static_library(fileFormats "${FOAM_SOURCE_DIR}/src/fileFormats" DEPS OpenFOAM)
   foam_add_static_library(surfMesh "${FOAM_SOURCE_DIR}/src/surfMesh" DEPS fileFormats)
   foam_add_static_library(meshTools "${FOAM_SOURCE_DIR}/src/meshTools" DEPS surfMesh)
+  target_include_directories(meshTools PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/adapter")
+  target_sources(meshTools PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}/adapter/foam_edgeMeshFormat.cxx"
+    "${CMAKE_CURRENT_SOURCE_DIR}/adapter/foam_extendedEdgeMeshFormat.cxx")
+  set_source_files_properties(
+    "${CMAKE_CURRENT_SOURCE_DIR}/adapter/foam_edgeMeshFormat.cxx"
+    "${CMAKE_CURRENT_SOURCE_DIR}/adapter/foam_extendedEdgeMeshFormat.cxx"
+    PROPERTIES LANGUAGE CXX)
   foam_add_static_library(blockMesh "${FOAM_SOURCE_DIR}/src/mesh/blockMesh" DEPS meshTools)
   foam_add_static_library(extrudeModel "${FOAM_SOURCE_DIR}/src/mesh/extrudeModel" DEPS meshTools blockMesh)
   foam_add_static_library(finiteVolume "${FOAM_SOURCE_DIR}/src/finiteVolume" DEPS meshTools)
@@ -135,6 +143,11 @@ if(SHYX_BUILD_OPENFOAM)
   foam_add_static_library(snappyHexMesh "${FOAM_SOURCE_DIR}/src/mesh/snappyHexMesh"
     DEPS finiteVolume fileFormats surfMesh meshTools dynamicMesh sampling lagrangian
          fvMotionSolver overset distributed decompositionMethods decompose reconstruct)
+  target_include_directories(snappyHexMesh PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/adapter")
+  target_sources(snappyHexMesh PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}/adapter/foam_refinementFeatures.cxx")
+  set_source_files_properties(
+    "${CMAKE_CURRENT_SOURCE_DIR}/adapter/foam_refinementFeatures.cxx" PROPERTIES LANGUAGE CXX)
 
   set(FOAM_LIBS
     snappyHexMesh overset fvMotionSolver lagrangian sampling finiteVolume
@@ -170,6 +183,7 @@ add_library(SHYXSnappyHex STATIC
   src/background_hex.cxx
   src/case_writer.cxx
   src/shyx_snappy.cxx
+  src/shyx_extended_feature.cxx
   src/snappy_spawn_win.cxx
   src/foam_env_early.cxx
   src/foam_force_link.cxx
@@ -253,7 +267,8 @@ install(TARGETS SHYXSnappyHex ${FOAM_LIBS}
 if(SHYX_BUILD_CLI)
   install(TARGETS snappy_cli RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 endif()
-install(FILES include/shyx_snappy.h DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
+install(FILES include/shyx_snappy.h include/shyx_extended_feature.h
+  DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
 
 install(EXPORT SHYXSnappyHexTargets
   FILE SHYXSnappyHexTargets.cmake

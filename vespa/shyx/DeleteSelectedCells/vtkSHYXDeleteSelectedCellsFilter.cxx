@@ -392,6 +392,7 @@ void vtkSHYXDeleteSelectedCellsFilter::PrintSelf(ostream& os, vtkIndent indent)
   this->Superclass::PrintSelf(os, indent);
   os << indent << "SelectionCellArrayName: "
      << (this->SelectionCellArrayName ? this->SelectionCellArrayName : "(null)") << "\n";
+  os << indent << "InvertSelection: " << this->InvertSelection << "\n";
 }
 
 //------------------------------------------------------------------------------
@@ -487,6 +488,20 @@ int vtkSHYXDeleteSelectedCellsFilter::RequestData(
         }
       }
     }
+  }
+
+  if (this->InvertSelection)
+  {
+    std::set<vtkIdType> inverted;
+    const vtkIdType nAll = input->GetNumberOfCells();
+    for (vtkIdType cid = 0; cid < nAll; ++cid)
+    {
+      if (selected.count(cid) == 0u)
+      {
+        inverted.insert(cid);
+      }
+    }
+    selected.swap(inverted);
   }
 
   if (selected.empty())

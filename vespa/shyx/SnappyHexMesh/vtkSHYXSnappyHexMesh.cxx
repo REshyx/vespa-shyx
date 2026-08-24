@@ -6,6 +6,8 @@
 #include <vtkAlgorithmOutput.h>
 #include <vtkAppendPolyData.h>
 #include <vtkCell.h>
+#include <vtkCellArray.h>
+#include <vtkCellArrayIterator.h>
 #include <vtkCellData.h>
 #include <vtkCellType.h>
 #include <vtkCompositeDataIterator.h>
@@ -13,6 +15,7 @@
 #include <vtkDataObject.h>
 #include <vtkDataSet.h>
 #include <vtkDoubleArray.h>
+#include <vtkFieldData.h>
 #include <vtkGeometryFilter.h>
 #include <vtkIdList.h>
 #include <vtkInformation.h>
@@ -27,6 +30,7 @@
 #include <vtkPoints.h>
 #include <vtkPolyData.h>
 #include <vtkSTLWriter.h>
+#include <vtkStringArray.h>
 #include <vtkSmartPointer.h>
 #include <vtkTriangleFilter.h>
 #include <vtkUnstructuredGrid.h>
@@ -34,9 +38,7 @@
 #include <algorithm>
 #include <cctype>
 #include <cmath>
-#include <cstddef>
 #include <cstdint>
-#include <cstdlib>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
@@ -264,33 +266,6 @@ void RemoveOwnedCaseTree(const char* caseFoamPath)
   {
     RemovePathIfUnoccupied(runRoot);
   }
-}
-
-void WriteRunDiag(const fs::path& caseDir, const std::string& text)
-{
-  std::error_code ec;
-  fs::create_directories(caseDir, ec);
-  std::ofstream os(caseDir / "run-diag.txt", std::ios::trunc);
-  if (os)
-  {
-    os << text;
-    os.flush();
-  }
-}
-
-std::string FileSizeOrMissing(const fs::path& p)
-{
-  std::error_code ec;
-  if (!fs::exists(p, ec))
-  {
-    return "missing";
-  }
-  const auto n = fs::file_size(p, ec);
-  if (ec)
-  {
-    return "exists";
-  }
-  return std::to_string(static_cast<unsigned long long>(n)) + " bytes";
 }
 
 std::string TailFile(const fs::path& path, std::size_t maxBytes)
@@ -577,48 +552,6 @@ struct MeshPart
   vtkSmartPointer<vtkPolyData> surface;
 };
 
-std::string DescribeVtkSnappyCall(vtkDataObject* input, const std::vector<MeshPart>& parts,
-  const std::vector<ShyxSnappyGeometry>& geos, const std::vector<std::string>& geoPaths,
-  const ShyxSnappyParams& p, const fs::path& caseDir, const char* stlArg)
-{
-  std::ostringstream os;
-  os << "=== vtkSHYXSnappyHexMesh RequestData ===\n";
-  os << "ABI=" << SHYX_SNAPPY_PARAMS_ABI
-     << " sizeof(ShyxSnappyParams)=" << sizeof(ShyxSnappyParams)
-     << " lib_abi=" << shyx_snappy_params_abi() << "\n";
-  os << "offset n_locations=" << offsetof(ShyxSnappyParams, n_locations)
-     << " locations=" << offsetof(ShyxSnappyParams, locations)
-     << " n_geometries=" << offsetof(ShyxSnappyParams, n_geometries)
-     << " geometries=" << offsetof(ShyxSnappyParams, geometries) << "\n";
-  os << "input=" << (input ? input->GetClassName() : "(null)") << "\n";
-  os << "case_dir=" << caseDir.string() << "\n";
-  os << "stl_path arg=" << (stlArg && stlArg[0] ? stlArg : "(null)") << "\n";
-  os << "n_parts=" << parts.size() << " n_geos=" << geos.size() << "\n";
-  for (size_t i = 0; i < parts.size(); ++i)
-  {
-    vtkPolyData* s = parts[i].surface;
-    os << "  part[" << i << "] raw=" << parts[i].raw << " foam=" << parts[i].foam
-       << " cells=" << (s ? s->GetNumberOfCells() : 0)
-       << " pts=" << (s ? s->GetNumberOfPoints() : 0) << "\n";
-  }
-  const size_t nShow = geos.size() > 16 ? 16 : geos.size();
-  for (size_t i = 0; i < nShow; ++i)
-  {
-    const fs::path stl = i < geoPaths.size() ? fs::path(geoPaths[i]) : fs::path();
-    os << "  geo[" << i << "] name=" << (geos[i].name ? geos[i].name : "(null)")
-       << " stl=" << (geos[i].stl_path ? geos[i].stl_path : "(null)")
-       << " file=" << FileSizeOrMissing(stl) << "\n";
-  }
-  os << "p.n_geometries=" << p.n_geometries
-     << " p.geometries=" << static_cast<const void*>(p.geometries) << "\n";
-  os << "p.n_ref_surfaces=" << p.n_ref_surfaces << " p.n_ref_regions=" << p.n_ref_regions
-     << " p.n_layer_patches=" << p.n_layer_patches << " p.n_locations=" << p.n_locations
-     << "\n";
-  os << "castellated=" << p.castellated << " snap=" << p.snap << " add_layers=" << p.add_layers
-     << "\n";
-  return os.str();
-}
-
 vtkSmartPointer<vtkPolyData> MergePds(vtkPartitionedDataSet* pds)
 {
   if (!pds)
@@ -734,6 +667,38 @@ bool WriteBinaryStl(vtkPolyData* surface, const std::string& path, std::string* 
   return true;
 }
 
+bool WriteExtendedFeatureBlob(vtkPolyData* pd, const std::string& path, std::string* err)
+{
+  if (!pd || !pd->GetFieldData())
+  {
+    return false;
+  }
+  auto* blob = vtkStringArray::SafeDownCast(
+    pd->GetFieldData()->GetAbstractArray("FoamExtendedFeatureEdgeMesh"));
+  if (!blob || blob->GetNumberOfValues() < 1)
+  {
+    return false;
+  }
+  const std::string ascii = blob->GetValue(0);
+  if (ascii.empty())
+  {
+    return false;
+  }
+  std::error_code ec;
+  fs::create_directories(fs::path(path).parent_path(), ec);
+  std::ofstream os(path);
+  if (!os)
+  {
+    if (err)
+    {
+      *err = "Cannot write " + path;
+    }
+    return false;
+  }
+  os << ascii;
+  return static_cast<bool>(os);
+}
+
 bool WriteFeatureEdgeMesh(vtkPolyData* pd, const std::string& path, std::string* err)
 {
   if (!pd || !pd->GetPoints())
@@ -758,26 +723,27 @@ bool WriteFeatureEdgeMesh(vtkPolyData* pd, const std::string& path, std::string*
     return n;
   };
   std::vector<std::pair<int, int>> edges;
-  for (vtkIdType c = 0; c < pd->GetNumberOfCells(); ++c)
+  vtkCellArray* lineCells = pd->GetLines();
+  if (lineCells && lineCells->GetNumberOfCells() > 0)
   {
-    vtkCell* cell = pd->GetCell(c);
-    if (!cell)
+    vtkSmartPointer<vtkCellArrayIterator> it = vtk::TakeSmartPointer(lineCells->NewIterator());
+    for (it->GoToFirstCell(); !it->IsDoneWithTraversal(); it->GoToNextCell())
     {
-      continue;
-    }
-    const int t = cell->GetCellType();
-    if (t != VTK_LINE && t != VTK_POLY_LINE)
-    {
-      continue;
-    }
-    vtkIdList* ids = cell->GetPointIds();
-    for (int i = 0; i + 1 < ids->GetNumberOfIds(); ++i)
-    {
-      const int a = addPt(ids->GetId(i));
-      const int b = addPt(ids->GetId(i + 1));
-      if (a != b)
+      vtkIdType nPts = 0;
+      const vtkIdType* ids = nullptr;
+      it->GetCurrentCell(nPts, ids);
+      if (!ids || nPts < 2)
       {
-        edges.emplace_back(a, b);
+        continue;
+      }
+      for (vtkIdType i = 0; i + 1 < nPts; ++i)
+      {
+        const int a = addPt(ids[i]);
+        const int b = addPt(ids[i + 1]);
+        if (a != b)
+        {
+          edges.emplace_back(a, b);
+        }
       }
     }
   }
@@ -1836,14 +1802,31 @@ int vtkSHYXSnappyHexMesh::RequestData(
   }
 
   std::string emeshPath;
+  int emeshExtended = 0;
   if (featureEdges && featureEdges->GetNumberOfCells() > 0)
   {
-    emeshPath = (triDir / "features.eMesh").string();
     std::string emeshErr;
-    if (!WriteFeatureEdgeMesh(featureEdges, emeshPath, &emeshErr))
+    const fs::path extPath = triDir / "features.extendedFeatureEdgeMesh";
+    if (WriteExtendedFeatureBlob(featureEdges, extPath.string(), &emeshErr))
     {
-      vtkErrorMacro(<< emeshErr);
-      return 0;
+      emeshPath = extPath.string();
+      emeshExtended = 1;
+    }
+    else
+    {
+      emeshPath = (triDir / "features.eMesh").string();
+      if (!WriteFeatureEdgeMesh(featureEdges, emeshPath, &emeshErr))
+      {
+        vtkWarningMacro(<< emeshErr
+                        << " Feature edges ignored; meshing without explicit snap. "
+                           "Pick VTK Feature Edges or SHYX Extended Feature Edge Mesh "
+                           "(line cells), not a surface/PDC.");
+        emeshPath.clear();
+      }
+      else
+      {
+        emeshExtended = 0;
+      }
     }
   }
 
@@ -1887,17 +1870,14 @@ int vtkSHYXSnappyHexMesh::RequestData(
   p.layer_patches = layerRows.empty() ? nullptr : layerRows.data();
   p.emesh_path = emeshPath.empty() ? nullptr : emeshPath.c_str();
   p.feature_level = this->FeatureLevel;
+  p.emesh_is_extended = emeshExtended;
 
   char err[2048];
   err[0] = '\0';
   const std::string caseDir = caseDirPath.string();
   const char* stlArg = nullptr;
-  const std::string vtkDiag =
-    DescribeVtkSnappyCall(input, parts, geos, geoPaths, p, caseDirPath, stlArg);
-  WriteRunDiag(caseDirPath, vtkDiag);
   const int rc = shyx_snappy_run(stlArg, caseDir.c_str(), &p, err, 2048);
   WriteCaseFoam(caseDirPath);
-  const fs::path diagPath = caseDirPath / "run-diag.txt";
   const fs::path foamPath = caseDirPath / "case.foam";
   const fs::path caseLog = caseDirPath / "snappyHexMesh.log";
   if (rc != 0 && rc != 5)
@@ -1905,15 +1885,7 @@ int vtkSHYXSnappyHexMesh::RequestData(
     std::error_code existEc;
     const bool haveMeshLog = fs::exists(caseLog, existEc);
     std::ostringstream msg;
-    msg << "snappyHexMesh failed (" << rc << "): " << err << "\ndiag: " << diagPath.string()
-        << "\ncase: " << foamPath.string();
-    const std::string errStr = err;
-    const std::string diagText = TailFile(diagPath, 3500);
-    if (errStr == "null argument" || diagText.find("shyx_snappy_run (lib)") == std::string::npos)
-    {
-      msg << "\nSTALE SHYXSnappyHex.lib: plugin was rebuilt but shyx_snappyhex_ep was not. "
-             "Rebuild target shyx_snappyhex_ep then VESPAPlugin.";
-    }
+    msg << "snappyHexMesh failed (" << rc << "): " << err << "\ncase: " << foamPath.string();
     if (haveMeshLog)
     {
       const std::string tail = TailFile(caseLog, 1200);
@@ -1921,11 +1893,6 @@ int vtkSHYXSnappyHexMesh::RequestData(
       {
         msg << "\n--- snappyHexMesh.log tail ---\n" << tail;
       }
-    }
-    else
-    {
-      msg << "\n(no snappyHexMesh.log this run; OpenFOAM did not start)\n--- run-diag ---\n"
-          << diagText;
     }
     vtkErrorMacro(<< msg.str());
     return 0;
@@ -1945,8 +1912,7 @@ int vtkSHYXSnappyHexMesh::RequestData(
   std::string parseErr;
   if (!ReadCaseWithOpenFOAMReader(foamPath.string(), output, &parseErr))
   {
-    vtkErrorMacro(<< parseErr << " (case.foam: " << foamPath.string()
-                  << "; diag: " << diagPath.string() << ")");
+    vtkErrorMacro(<< parseErr << " (case.foam: " << foamPath.string() << ")");
     return 0;
   }
   this->LastMeshFingerprint = fingerprint;

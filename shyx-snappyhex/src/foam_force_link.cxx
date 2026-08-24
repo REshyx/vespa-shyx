@@ -30,6 +30,7 @@
 #include "fixedValueFvsPatchFields.H"
 
 #include "medialAxisMeshMover.H"
+#include "extendedFeatureEdgeMesh.H"
 
 #include "gaussGrad.H"
 #include "gaussLaplacianScheme.H"
@@ -140,5 +141,6 @@ void shyx_force_foam_rts()
     keep = &Foam::wallPointPatch::typeName;
     keep = &Foam::triSurfaceMesh::typeName;
     keep = &Foam::noDecomp::typeName;
+    keep = &Foam::extendedFeatureEdgeMesh::typeName;
     (void)keep;
 }
