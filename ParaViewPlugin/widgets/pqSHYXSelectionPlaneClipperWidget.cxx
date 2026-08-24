@@ -124,10 +124,20 @@ pqSHYXSelectionPlaneClipperWidget::pqSHYXSelectionPlaneClipperWidget(
       pqCoreUtilities::connect(selProp, vtkCommand::ModifiedEvent, this, SLOT(onCopiedSelectionChanged()));
   }
   QTimer::singleShot(0, this, [this]() {
+    this->SuppressSelectionRecompute = true;
     this->connectCopiedSelectionWidget();
+    // Copy widget may expose a different proxy than the SM Selection property; lock identity
+    // after connecting so restore wiring is not treated as a new Copy Active Selection.
+    this->rememberCopiedSelectionIdentity();
+    this->SuppressSelectionRecompute = false;
     if (this->UseInteractiveCheckbox && this->UseInteractiveCheckbox->isChecked())
     {
-      this->computePlaneFromCopiedSelection();
+      // pvsm / panel re-open already has InteractiveCutPacked (the last dragged plane).
+      // Recomputing from Selection here would snap the widget back to the patch centroid.
+      if (!this->hasInteractiveCutPacked())
+      {
+        this->computePlaneFromCopiedSelection();
+      }
       this->rebuildPlaneWidgetsIfNeeded();
     }
   });
@@ -203,9 +213,10 @@ void pqSHYXSelectionPlaneClipperWidget::setView(pqView* view)
 void pqSHYXSelectionPlaneClipperWidget::onUseInteractiveToggled(bool on)
 {
   this->connectCopiedSelectionWidget();
-  if (on && !this->SuppressSelectionRecompute)
+  if (on && !this->SuppressSelectionRecompute && !this->hasInteractiveCutPacked())
   {
-    // View selection is kept after Copy; refresh the producer if it is still active.
+    // Only seed the plane from Selection when packed is empty (first show / new filter).
+    // A saved or dragged InteractiveCutPacked must not be overwritten by toggling the widget.
     this->rememberCopiedGeometryProducerFromView();
     this->computePlaneFromCopiedSelection();
   }
@@ -259,6 +270,13 @@ void pqSHYXSelectionPlaneClipperWidget::onCopiedSelectionChanged()
   const vtkMTimeType mt = sel ? sel->GetMTime() : 0;
   if (sel == this->LastCopiedSelectionProxy.GetPointer() && mt == this->LastCopiedSelectionMTime)
   {
+    return;
+  }
+  // Same IDSelection proxy with a newer MTime is a pipeline/state update, not Copy Active
+  // Selection (that always NewProxy's a clone). Keep a restored/dragged packed plane.
+  if (sel == this->LastCopiedSelectionProxy.GetPointer() && this->hasInteractiveCutPacked())
+  {
+    this->LastCopiedSelectionMTime = mt;
     return;
   }
   this->LastCopiedSelectionProxy = sel;
@@ -506,6 +524,25 @@ bool pqSHYXSelectionPlaneClipperWidget::computePlaneFromCopiedSelection()
   origin[1] += offset * normal[1];
   origin[2] += offset * normal[2];
   return this->writePackedFromOriginNormal(origin, normal);
+}
+
+//-----------------------------------------------------------------------------
+bool pqSHYXSelectionPlaneClipperWidget::hasInteractiveCutPacked() const
+{
+  auto* src = vtkSMSourceProxy::SafeDownCast(this->proxy());
+  if (!src)
+  {
+    return false;
+  }
+  vtkSMProperty* p = src->GetProperty("InteractiveCutPacked");
+  if (!p)
+  {
+    return false;
+  }
+  vtkSMPropertyHelper hp(p);
+  const char* cs = hp.GetAsString(0);
+  std::vector<double> parsed;
+  return ParsePackedDoubles(cs ? QString::fromUtf8(cs) : QString(), parsed);
 }
 
 //-----------------------------------------------------------------------------
@@ -818,6 +855,7 @@ void pqSHYXSelectionPlaneClipperWidget::pushPackedFromWidgetsToFilter()
     vtkSMPropertyHelper hp(p);
     const QByteArray utf = packed.toUtf8();
     hp.Set(0, utf.constData());
+    p->Modified();
   }
 }
 

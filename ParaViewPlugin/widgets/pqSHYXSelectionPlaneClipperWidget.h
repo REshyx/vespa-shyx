@@ -27,9 +27,9 @@ class vtkSMProxy;
 /**
  * Single implicit-plane widget for vtkSHYXSelectionPlaneClipper. Copy Active Selection stores the
  * view selection in the Selection text box (the source of truth) and remembers which pipeline
- * node it came from. Show Interactive Cut Plane computes the world-space plane from that copied
- * selection and displays the widget; it does not clip. Apply performs the clip. View selection
- * is not cleared.
+ * node it came from. Show Interactive Cut Plane displays the widget: from InteractiveCutPacked
+ * when that is already set (drag / Apply / loaded .pvsm), otherwise from the copied selection.
+ * It does not clip. Apply performs the clip. View selection is not cleared.
  */
 class pqSHYXSelectionPlaneClipperWidget : public pqPropertyGroupWidget
 {
@@ -61,6 +61,7 @@ private:
   void rememberCopiedGeometryProducerFromView();
   void rememberCopiedGeometryProducerFromInput();
   bool computePlaneFromCopiedSelection();
+  bool hasInteractiveCutPacked() const;
   bool writePackedFromOriginNormal(const double origin[3], const double normal[3]);
   void fillPlanePlaceBounds(double bounds[6]) const;
   /// Selection from the Copy widget / unchecked SM value (Copy does not Apply).
