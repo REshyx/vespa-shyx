@@ -10,9 +10,11 @@
 #include <vtkDataArray.h>
 #include <vtkDataObject.h>
 #include <vtkDoubleArray.h>
+#include <vtkFieldData.h>
 #include <vtkGeometryFilter.h>
 #include <vtkInformation.h>
 #include <vtkInformationVector.h>
+#include <vtkIntArray.h>
 #include <vtkNew.h>
 #include <vtkObjectFactory.h>
 #include <vtkPointData.h>
@@ -83,6 +85,46 @@ bool ResolveThresholdArray(vtkPolyData* pd, const char* arrayName, int& associat
         return true;
     }
     return false;
+}
+
+/** Cell/point EndpointIndex as vtkIntArray (same type as vtkCGALVesselEndClipper). */
+vtkIntArray* EnsureNamedIntArray(
+    vtkFieldData* fd, const char* name, vtkIdType nTuples, int fillValue)
+{
+    if (!fd || !name || name[0] == '\0' || nTuples < 0)
+    {
+        return nullptr;
+    }
+    if (vtkIntArray* existing = vtkIntArray::SafeDownCast(fd->GetArray(name)))
+    {
+        if (existing->GetNumberOfTuples() == nTuples && existing->GetNumberOfComponents() >= 1)
+        {
+            return existing;
+        }
+    }
+    vtkNew<vtkIntArray> created;
+    created->SetName(name);
+    created->SetNumberOfComponents(1);
+    created->SetNumberOfTuples(nTuples);
+    if (vtkDataArray* old = fd->GetArray(name))
+    {
+        const vtkIdType nCopy = (std::min)(nTuples, old->GetNumberOfTuples());
+        for (vtkIdType i = 0; i < nCopy; ++i)
+        {
+            created->SetValue(i, static_cast<int>(std::lround(old->GetComponent(i, 0))));
+        }
+        for (vtkIdType i = nCopy; i < nTuples; ++i)
+        {
+            created->SetValue(i, fillValue);
+        }
+    }
+    else
+    {
+        created->FillComponent(0, fillValue);
+    }
+    fd->RemoveArray(name);
+    fd->AddArray(created);
+    return created;
 }
 /**
  * Expansion-ratio sizing field for cap remesh.
@@ -210,23 +252,35 @@ public:
     }
 
     /**
-     * Return all current cap faces: faces where at least one vertex is an interior cap
-     * vertex (guaranteed to exclude pure-wall faces since seam edges are constrained).
+     * Return all current cap faces: every vertex is a cap vertex (seam or interior).
+     * Wall faces that only touch the seam still have at least one non-cap vertex, so they
+     * are excluded. This also keeps single-triangle fills that have no Steiner / interior
+     * vertex (those were missed when the test required isInteriorCapMap_).
      */
     std::vector<face_descriptor> collectCapFaces(const CGAL_Surface& mesh) const
     {
         std::vector<face_descriptor> result;
         for (face_descriptor f : mesh.faces())
         {
-            halfedge_descriptor h = mesh.halfedge(f);
-            for (int i = 0; i < 3; ++i)
+            if (f == CGAL_Surface::null_face())
             {
-                if (get(isInteriorCapMap_, mesh.target(h)))
+                continue;
+            }
+            bool allCap = true;
+            bool anyVert = false;
+            for (halfedge_descriptor h :
+                CGAL::halfedges_around_face(mesh.halfedge(f), mesh))
+            {
+                anyVert = true;
+                if (!get(isCapVertMap_, mesh.target(h)))
                 {
-                    result.push_back(f);
+                    allCap = false;
                     break;
                 }
-                h = mesh.next(h);
+            }
+            if (anyVert && allCap)
+            {
+                result.push_back(f);
             }
         }
         return result;
@@ -903,6 +957,10 @@ int vtkSHYXRemeshWithEndpoint::RequestData(
                 {
                     std::vector<CGAL_Surface::Face_index> allCapFaces;
                     std::vector<CGAL_Surface::Vertex_index> allCapVertices;
+                    auto capFaceTagMap = cgalMesh->surface
+                        .add_property_map<CGAL_Surface::Face_index, int>(
+                            "f:vespa_cap_idx", 0)
+                            .first;
 
                     const std::size_t nHoles = holeStarters.size();
                     for (std::size_t hi = 0; hi < nHoles; ++hi)
@@ -922,6 +980,11 @@ int vtkSHYXRemeshWithEndpoint::RequestData(
                             pmp::parameters::fairing_continuity(0u));
                         allCapFaces.insert(allCapFaces.end(), hf.begin(), hf.end());
                         allCapVertices.insert(allCapVertices.end(), hv.begin(), hv.end());
+                        const int holeId = static_cast<int>(hi + 1);
+                        for (CGAL_Surface::Face_index f : hf)
+                        {
+                            put(capFaceTagMap, f, holeId);
+                        }
 
                         if (this->CheckAbort())
                         {
@@ -1021,18 +1084,36 @@ int vtkSHYXRemeshWithEndpoint::RequestData(
 
                         // Tag each disconnected cap patch with ids 1..n (multiple holes),
                         // ordered by total cap area descending (largest patch → 1).
-                        const std::vector<CGAL_Surface::Face_index> capFaceList =
+                        // Union remeshed cap faces with any faces still carrying the
+                        // fill-time hole id (survives when remesh does not replace a face).
+                        std::vector<CGAL_Surface::Face_index> capFaceList =
                             capSizing.collectCapFaces(cgalMesh->surface);
+                        {
+                            std::unordered_set<std::size_t> seen;
+                            seen.reserve(capFaceList.size() + 8);
+                            for (CGAL_Surface::Face_index f : capFaceList)
+                            {
+                                seen.insert(static_cast<std::size_t>(f));
+                            }
+                            for (CGAL_Surface::Face_index f : cgalMesh->surface.faces())
+                            {
+                                if (get(capFaceTagMap, f) <= 0)
+                                {
+                                    continue;
+                                }
+                                const std::size_t fi = static_cast<std::size_t>(f);
+                                if (seen.insert(fi).second)
+                                {
+                                    capFaceList.push_back(f);
+                                }
+                            }
+                        }
                         std::unordered_set<std::size_t> capFaceSetForCC;
                         capFaceSetForCC.reserve(capFaceList.size());
                         for (CGAL_Surface::Face_index f : capFaceList)
                         {
                             capFaceSetForCC.insert(static_cast<std::size_t>(f));
                         }
-                        auto capFaceTagMap = cgalMesh->surface
-                            .add_property_map<CGAL_Surface::Face_index, int>(
-                                "f:vespa_cap_idx", 0)
-                                .first;
                         std::unordered_set<std::size_t> visitedCapFace;
                         visitedCapFace.reserve(capFaceList.size());
                         int componentId = 0;
@@ -1149,103 +1230,84 @@ int vtkSHYXRemeshWithEndpoint::RequestData(
     vtkCGALHelper::toVTK(cgalMesh.get(), output);
     this->interpolateAttributes(patchIn, output);
 
-    // --- Fix up EndpointIndex for cap cells/vertices ----------------------------
-    // interpolateAttributes probes from patchIn (wall-only, all EndpointIndex < 0 when present),
-    // so cap cells receive the wrong negative value.  Correct to positive ids 1..n
-    // (one id per disconnected cap patch; ids ordered by cap area largest→smallest)
-    // using f:vespa_cap_idx. When the endpoint array was cleared (full-input-as-wall), still
-    // write a default "EndpointIndex" so filled caps are tagged for downstream use.
-    // toVTK iterates faces() / vertices() in the same order as here.
+    // Always write cell/point "EndpointIndex" for downstream vascular filters.
+    // Do not reuse EndpointIndexArrayName here: that picker is for INPUT cull only, and
+    // ArrayListDomain often substitutes the first cell array (e.g. STLSolidLabeling) when
+    // EnableEndpointCull is OFF — so the output would never contain an array named EndpointIndex.
+    // interpolateAttributes only copies arrays that already exist on patchIn; a raw wall has none.
     {
-        const char* epOutName = this->GetEndpointIndexArrayName();
+        const char* const epOutName = "EndpointIndex";
         const auto capFaceTagOpt =
             cgalMesh->surface.property_map<CGAL_Surface::Face_index, int>("f:vespa_cap_idx");
         const auto capIntPtOpt = cgalMesh->surface.property_map<CGAL_Surface::Vertex_index, bool>(
             "v:vespa_cap_is_interior");
-        const bool epOutEmpty = (epOutName == nullptr || epOutName[0] == '\0' ||
-            std::strcmp(epOutName, "(None)") == 0 || std::strcmp(epOutName, "None") == 0);
-        if (epOutEmpty && capFaceTagOpt.has_value())
+
+        vtkIntArray* cellArr = EnsureNamedIntArray(
+            output->GetCellData(), epOutName, output->GetNumberOfCells(), -1);
+        vtkIdType nTaggedCells = 0;
+        if (cellArr && capFaceTagOpt.has_value())
         {
-            epOutName = "EndpointIndex";
+            vtkIdType cid = 0;
+            const vtkIdType nCells = cellArr->GetNumberOfTuples();
+            for (CGAL_Surface::Face_index f : cgalMesh->surface.faces())
+            {
+                if (cid >= nCells)
+                {
+                    break;
+                }
+                const int capTag = get(*capFaceTagOpt, f);
+                if (capTag > 0)
+                {
+                    cellArr->SetValue(cid, capTag);
+                    ++nTaggedCells;
+                }
+                ++cid;
+            }
+        }
+        if (capFaceTagOpt.has_value() && nTaggedCells == 0)
+        {
+            vtkWarningMacro("Cap remesh produced no EndpointIndex-tagged fill faces; "
+                "filled patches may be missing from the output array.");
         }
 
-        if (epOutName && epOutName[0] != '\0' && capFaceTagOpt.has_value())
+        // Point data: interior cap only; seam stays -1 / interpolated wall value so wall
+        // triangles that share the loop are not pulled into cap partitions.
+        vtkIntArray* ptArr = EnsureNamedIntArray(
+            output->GetPointData(), epOutName, output->GetNumberOfPoints(), -1);
+        if (ptArr && capFaceTagOpt.has_value() && capIntPtOpt.has_value())
         {
-            // --- Cell data ---
-            vtkDataArray* cellArr = output->GetCellData()->GetArray(epOutName);
-            if (!cellArr)
+            vtkIdType pid = 0;
+            const vtkIdType nPts = ptArr->GetNumberOfTuples();
+            for (CGAL_Surface::Vertex_index v : cgalMesh->surface.vertices())
             {
-                vtkNew<vtkDoubleArray> created;
-                created->SetName(epOutName);
-                created->SetNumberOfComponents(1);
-                created->SetNumberOfTuples(output->GetNumberOfCells());
-                created->FillComponent(0, -1.0);
-                output->GetCellData()->AddArray(created);
-                cellArr = created;
-            }
-            {
-                vtkIdType cid = 0;
-                for (CGAL_Surface::Face_index f : cgalMesh->surface.faces())
+                if (pid >= nPts)
                 {
-                    const int capTag = get(*capFaceTagOpt, f);
+                    break;
+                }
+                if (get(*capIntPtOpt, v))
+                {
+                    int capTag = 0;
+                    for (CGAL_Surface::Halfedge_index h :
+                        CGAL::halfedges_around_target(v, cgalMesh->surface))
+                    {
+                        const CGAL_Surface::Face_index f = cgalMesh->surface.face(h);
+                        if (f == CGAL_Surface::null_face())
+                        {
+                            continue;
+                        }
+                        const int tid = get(*capFaceTagOpt, f);
+                        if (tid > 0)
+                        {
+                            capTag = tid;
+                            break;
+                        }
+                    }
                     if (capTag > 0)
                     {
-                        const double tagVal = static_cast<double>(capTag);
-                        for (int c = 0; c < cellArr->GetNumberOfComponents(); ++c)
-                        {
-                            cellArr->SetComponent(cid, c, tagVal);
-                        }
+                        ptArr->SetValue(pid, capTag);
                     }
-                    ++cid;
                 }
-            }
-
-            // --- Point data (interior cap only; seam stays probed / wall value) ---
-            if (capIntPtOpt.has_value())
-            {
-                vtkDataArray* ptArr = output->GetPointData()->GetArray(epOutName);
-                if (!ptArr)
-                {
-                    vtkNew<vtkDoubleArray> created;
-                    created->SetName(epOutName);
-                    created->SetNumberOfComponents(1);
-                    created->SetNumberOfTuples(output->GetNumberOfPoints());
-                    created->FillComponent(0, -1.0);
-                    output->GetPointData()->AddArray(created);
-                    ptArr = created;
-                }
-                vtkIdType pid = 0;
-                for (CGAL_Surface::Vertex_index v : cgalMesh->surface.vertices())
-                {
-                    if (get(*capIntPtOpt, v))
-                    {
-                        int capTag = 0;
-                        for (CGAL_Surface::Halfedge_index h :
-                            CGAL::halfedges_around_target(v, cgalMesh->surface))
-                        {
-                            const CGAL_Surface::Face_index f = cgalMesh->surface.face(h);
-                            if (f == CGAL_Surface::null_face())
-                            {
-                                continue;
-                            }
-                            const int tid = get(*capFaceTagOpt, f);
-                            if (tid > 0)
-                            {
-                                capTag = tid;
-                                break;
-                            }
-                        }
-                        if (capTag > 0)
-                        {
-                            const double tagVal = static_cast<double>(capTag);
-                            for (int c = 0; c < ptArr->GetNumberOfComponents(); ++c)
-                            {
-                                ptArr->SetComponent(pid, c, tagVal);
-                            }
-                        }
-                    }
-                    ++pid;
-                }
+                ++pid;
             }
         }
     }

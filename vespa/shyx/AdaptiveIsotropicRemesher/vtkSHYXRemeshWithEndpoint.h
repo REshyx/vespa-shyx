@@ -11,6 +11,10 @@
  * wall. CGAL remeshes that surface in full (no patch-on-full-mesh bookkeeping), unless wall remesh
  * is disabled to export the ICC sizing field on vertices only. With wall remesh ON, open boundary
  * loops can still be filled and the filled patches remeshed (EnableCapRemesh).
+ * Filled cap triangles are written back to cell-data \c EndpointIndex (or the cull array
+ * name): wall stays negative / -1, each disconnected fill patch gets a 1-based id ordered
+ * by area (largest → 1). Interior cap vertices get the same id on point data; seam vertices
+ * keep the wall value so shared-loop wall triangles are not pulled into cap partitions.
  * Output port 0 is the remeshed wall (+ optional caps), not a rejoin of a separate vessel+caps
  * pipeline. Same ICC sizing stack as vtkSHYXAdaptiveIsotropicRemesher, without selection, feature
  * detection, or mask logic. CGAL split/collapse/flip follow CGAL defaults (all enabled); only
@@ -51,7 +55,8 @@ public:
     /**
      * When ON (default), extract wall cells via EndpointIndexArrayName (first component &lt; 0)
      * before remesh. If the named array is missing on the input, falls back to treating the whole
-     * surface as wall (no warning). When OFF, skip cull entirely.
+     * surface as wall (no warning). When OFF, skip cull entirely. Output always carries cell-data
+     * \c EndpointIndex regardless of this flag (wall -1, filled caps 1..n when cap remesh runs).
      */
     vtkGetMacro(EnableEndpointCull, bool);
     vtkSetMacro(EnableEndpointCull, bool);
@@ -145,7 +150,8 @@ public:
     /**
      * When ON (default), after wall remesh the open boundary loops are filled with
      * triangulate_refine_and_fair_hole (FairingContinuity = 0, C0), then the filled
-     * cap patch is isotropic-remeshed with a uniform target edge length.
+     * cap patch is isotropic-remeshed. New cap cells receive EndpointIndex 1..n
+     * (largest connected fill patch is 1); wall cells remain negative / -1.
      */
     vtkGetMacro(EnableCapRemesh, bool);
     vtkSetMacro(EnableCapRemesh, bool);

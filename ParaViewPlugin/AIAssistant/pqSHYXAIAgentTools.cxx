@@ -1915,7 +1915,9 @@ const ShyxExtra kShyxExtra[] = {
   { "SHYXAdaptiveIsotropicRemesher",
     "Curvature-adaptive remesh (CGAL>=6). Ports: remeshed, sharp features, mask patch, sizing preview. "
     "Uniform target edge length: VESPA Isotropic Remesher." },
-  { "SHYXRemeshWithEndpoint", "Vascular step 4: optional endpoint cull then ICC remesh / cap." },
+  { "SHYXRemeshWithEndpoint",
+    "Vascular step 4: optional endpoint cull then ICC remesh / cap. Filled caps are retagged on "
+    "cell EndpointIndex (wall -1, patches 1..n by area)." },
   { "SHYXSkeletonExtraction", "Vascular step 1. Input must be watertight triangle mesh." },
   { "SHYXVesselEndClipper", "Vascular step 2. Port0 clipped mesh, port1 clip planes (Point Label)." },
   { "SHYXSelectionPlaneClipper", "Vascular step 3. Uses current selection / interactive plane." },

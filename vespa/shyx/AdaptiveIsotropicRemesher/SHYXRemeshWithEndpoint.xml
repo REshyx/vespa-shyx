@@ -9,6 +9,8 @@
         Vespa ICC sizing. **Enable endpoint cull** is ON by default with array **EndpointIndex**; if
         that array is missing, cull is skipped and the whole surface is treated as wall. With wall
         remesh ON, open boundary loops can be filled and the filled patches remeshed (Enable cap remesh).
+        Filled caps are re-tagged on cell-data **EndpointIndex** (1-based, largest patch first); the wall stays -1.
+        **Enable endpoint cull** only chooses the input wall; the output array is always named EndpointIndex.
       </Documentation>
 
       <OutputPort name="Remeshed surface" index="0" id="port0"/>
@@ -36,7 +38,8 @@
         <Documentation>
           When ON (default), keep cells whose endpoint-array first component is strictly negative
           before remesh. If the chosen array is missing on the input, cull is skipped (whole surface
-          as wall). When OFF, always treat the entire input as wall.
+          as wall). When OFF, always treat the entire input as wall. Output still writes
+          cell-data **EndpointIndex** (does not depend on this toggle).
         </Documentation>
       </IntVectorProperty>
 
@@ -369,6 +372,8 @@
           When ON (default) and **Enable wall remesh** is ON, after wall remesh each open boundary loop is filled with
           **triangulate_refine_and_fair_hole** (FairingContinuity = 0, C0 only), then the
           filled cap patch is isotropic-remeshed with a uniform target edge length.
+          New fill triangles are written to cell-data **EndpointIndex** (or the Endpoint array name):
+          wall = -1, each disconnected cap patch = 1, 2, … ordered by area (largest first).
         </Documentation>
         <Hints>
           <PropertyWidgetDecorator type="GenericDecorator"
