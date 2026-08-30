@@ -1,7 +1,7 @@
 NAME
   vtkSHYXSelectionAppendPatches
   DESCRIPTION
-  "Extract selected cells and extra pipeline/box/sphere geometries into vtkPartitionedDataSetCollection patches; second port is Input minus added selection cells; rename and stamp a constant mark per patch."
+  "Extract selected cells, unique CellData labels, and extra pipeline/box/sphere geometries into vtkPartitionedDataSetCollection patches; second port is Input minus added selection cells; rename and stamp a constant mark per patch."
 GROUPS
   Meshing
 DEPENDS

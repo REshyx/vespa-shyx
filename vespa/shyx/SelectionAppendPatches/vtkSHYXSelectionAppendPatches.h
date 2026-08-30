@@ -3,7 +3,8 @@
  * @brief   Extract named, marked patches from a parent mesh into a vtkPartitionedDataSetCollection.
  *
  * Each stored row is a geometry patch: ExtractSelection from Input, a repeatable CustomPatches
- * input, or a parametric box/sphere. The table keeps duplicate names as separate rows. Apply
+ * input, or a parametric box/sphere. Add from Celldata is a UI helper that writes selection rows
+ * (one unique CellData value per row). The table keeps duplicate names as separate rows. Apply
  * merges rows that share a name into one output patch (union of meshes / cell ids) and keeps the
  * mark of the first occurrence of that name. Unique names are marked 0, 1, 2, ... in table order.
  * Unused parent cells are not appended; patches do not share points or GlobalIds. Apply rebuilds

@@ -4,8 +4,8 @@
                  class="vtkSHYXSelectionAppendPatches"
                  label="SHYX Selection Append Patches">
       <Documentation
-          short_help="SHYX Selection Append Patches: Add extracted, pipeline, and shape patches into a PartitionedDataSetCollection."
-          long_help="Snapshots cell selections, pipeline geometry, or parametric box/sphere shapes into the patch table (default names geo_N). Rename only; names need not end with _N. The table keeps every row. Apply merges rows with the same name into one output patch and reuses the earlier mark. Unique names are marked 0, 1, 2, ... in table order (constant cell/field array Mark Array Name, default PatchMark). Selection rows run vtkExtractSelection. Pipeline / box / sphere rows become extra geometry partitions (for SnappyHexMesh regions or any other consumer). Port 0 is the added patches; port 1 is Input minus the union of selection-row cells. With Apply on Add (default), each Add or Remove applies so both ports refresh. Uncheck Apply on Add to skip Apply and allow overlapping picks. Select a box/sphere row's widget in the 3D view to move and resize it."/>
+          short_help="SHYX Selection Append Patches: Add extracted, pipeline, CellData, and shape patches into a PartitionedDataSetCollection."
+          long_help="Snapshots cell selections, unique values of an Input CellData array, pipeline geometry, or parametric box/sphere shapes into the patch table. Add from Celldata makes one row per unique value (name = the value; first component of vectors). Rename only; names need not end with _N. The table keeps every row. Apply merges rows with the same name into one output patch and reuses the earlier mark. Unique names are marked 0, 1, 2, ... in table order (constant cell/field array Mark Array Name, default PatchMark). A leading eye shows or hides that output patch in the active view (BlockSelectors / BlockVisibilities, same as Hide Block; same-named rows share one block). Selection / CellData rows run vtkExtractSelection. Pipeline / box / sphere rows become extra geometry partitions (for SnappyHexMesh regions or any other consumer). Port 0 is the added patches; port 1 is Input minus the union of selection-row cells. With Apply on Add (default), each Add or Remove applies so both ports refresh. Uncheck Apply on Add to skip Apply and allow overlapping picks. Select a box/sphere row's widget in the 3D view to move and resize it."/>
 
       <OutputPort name="Added patches" index="0" id="port0"/>
       <OutputPort name="Remaining cells" index="1" id="port1"/>
@@ -97,7 +97,7 @@
           number_of_elements="1" default_values="" animateable="0" panel_visibility="never">
         <Documentation>
           Newline-separated kinds aligned with Patch Names: selection (default), pipeline, box,
-          or sphere.
+          or sphere. Add from Celldata writes selection rows (one unique CellData value per row).
         </Documentation>
       </StringVectorProperty>
 
@@ -106,7 +106,7 @@
         <Documentation>
           Newline-separated extra data aligned with Patch Names. Box: 16-element unit-cube
           transform (legacy AABB xmin,xmax,ymin,ymax,zmin,zmax). Sphere: cx,cy,cz,radius.
-          Pipeline: display label. Selection rows leave this empty.
+          Pipeline: display label. Selection and CellData rows leave this empty.
         </Documentation>
       </StringVectorProperty>
 

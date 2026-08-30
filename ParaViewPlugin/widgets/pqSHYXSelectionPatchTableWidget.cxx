@@ -2,6 +2,7 @@
 
 #include "pqActiveObjects.h"
 #include "pqApplicationCore.h"
+#include "pqDataAssemblyTreeModel.h"
 #include "pqDataRepresentation.h"
 #include "pqOutputPort.h"
 #include "pqPVApplicationCore.h"
@@ -11,8 +12,10 @@
 #include "pqSelectionManager.h"
 #include "pqServerManagerModel.h"
 #include "pqTreeView.h"
+#include "pqUndoStack.h"
 #include "pqView.h"
 
+#include "vtkAbstractArray.h"
 #include "vtkAlgorithm.h"
 #include "vtkBoxRepresentation.h"
 #include "vtkBoxWidget2.h"
@@ -21,14 +24,18 @@
 #include "vtkCommand.h"
 #include "vtkConvertSelection.h"
 #include "vtkDataArray.h"
+#include "vtkDataAssembly.h"
 #include "vtkDataSet.h"
+#include "vtkEventQtSlotConnect.h"
 #include "vtkIdTypeArray.h"
 #include "vtkInteractorObserver.h"
 #include "vtkMath.h"
 #include "vtkMatrix4x4.h"
 #include "vtkNew.h"
 #include "vtkObjectFactory.h"
+#include "vtkPVArrayInformation.h"
 #include "vtkPVDataInformation.h"
+#include "vtkPVDataSetAttributesInformation.h"
 #include "vtkProperty.h"
 #include "vtkRenderWindowInteractor.h"
 #include "vtkRenderer.h"
@@ -40,11 +47,14 @@
 #include "vtkSMRenderViewProxy.h"
 #include "vtkSMSourceProxy.h"
 #include "vtkSMStringVectorProperty.h"
+#include "vtkSMTrace.h"
 #include "vtkSelection.h"
 #include "vtkSmartPointer.h"
 #include "vtkSphereRepresentation.h"
 #include "vtkSphereWidget2.h"
+#include "vtkStringArray.h"
 #include "vtkTransform.h"
+#include "vtkVariant.h"
 
 #include <QAbstractItemView>
 #include <QAction>
@@ -53,10 +63,14 @@
 #include <QEvent>
 #include <QHBoxLayout>
 #include <QHeaderView>
+#include <QIcon>
 #include <QItemSelection>
 #include <QItemSelectionModel>
 #include <QLabel>
+#include <QMap>
 #include <QMenu>
+#include <QPainter>
+#include <QPixmap>
 #include <QPushButton>
 #include <QRegularExpression>
 #include <QScopedValueRollback>
@@ -144,13 +158,17 @@ void vtkSHYXPatchBoxRepresentation::Scale(const double*, const double*, int X, i
 
 namespace
 {
-constexpr int kColIndex = 0;
-constexpr int kColName = 1;
-constexpr int kColType = 2;
-constexpr int kColInfo = 3;
+constexpr int kColVisibility = 0;
+constexpr int kColIndex = 1;
+constexpr int kColName = 2;
+constexpr int kColType = 3;
+constexpr int kColInfo = 4;
 constexpr int kRoleCellIds = Qt::UserRole;
 constexpr int kRoleKind = Qt::UserRole + 1;
 constexpr int kRoleParams = Qt::UserRole + 2;
+constexpr int kSelectorPathRole = Qt::UserRole;
+constexpr int kDataSetIndexRole = Qt::UserRole + 1;
+constexpr int kVisibleRole = Qt::UserRole + 2;
 
 vtkSMProperty* propertyFromGroup(
   vtkSMPropertyGroup* group, vtkSMProxy* proxy, const char* function, const char* fallbackName)
@@ -555,6 +573,269 @@ void styleSphereRepresentation(vtkSphereRepresentation* repr)
     p->SetColor(0.2, 0.65, 1.0);
   }
 }
+
+constexpr int kMaxUniqueCellDataValues = 256;
+
+bool isIntegralDataType(int vtkType)
+{
+  switch (vtkType)
+  {
+    case VTK_BIT:
+    case VTK_CHAR:
+    case VTK_SIGNED_CHAR:
+    case VTK_UNSIGNED_CHAR:
+    case VTK_SHORT:
+    case VTK_UNSIGNED_SHORT:
+    case VTK_INT:
+    case VTK_UNSIGNED_INT:
+    case VTK_LONG:
+    case VTK_UNSIGNED_LONG:
+    case VTK_ID_TYPE:
+    case VTK_LONG_LONG:
+    case VTK_UNSIGNED_LONG_LONG:
+      return true;
+    default:
+      return false;
+  }
+}
+
+QString sanitizePatchName(const QString& raw)
+{
+  QString s = raw;
+  s.replace(QLatin1Char('\r'), QLatin1Char(' '));
+  s.replace(QLatin1Char('\n'), QLatin1Char(' '));
+  s.replace(QLatin1Char('\t'), QLatin1Char(' '));
+  return s.trimmed();
+}
+
+QString cellDataValueName(vtkAbstractArray* arr, vtkIdType i, const QString& arrayName)
+{
+  if (!arr)
+  {
+    return QString();
+  }
+  if (auto* str = vtkStringArray::SafeDownCast(arr))
+  {
+    const QString name = sanitizePatchName(QString::fromUtf8(str->GetValue(i).c_str()));
+    if (name.isEmpty())
+    {
+      return QStringLiteral("%1_empty").arg(arrayName);
+    }
+    return name;
+  }
+  if (auto* data = vtkDataArray::SafeDownCast(arr))
+  {
+    const double v = data->GetComponent(i, 0);
+    if (!std::isfinite(v))
+    {
+      return QString();
+    }
+    if (isIntegralDataType(data->GetDataType()) || std::floor(v) == v)
+    {
+      return QString::number(static_cast<qint64>(std::llround(v)));
+    }
+    return QString::number(v, 'g', 8);
+  }
+  const vtkVariant variant = arr->GetVariantValue(i);
+  const QString name = sanitizePatchName(QString::fromUtf8(variant.ToString().c_str()));
+  if (name.isEmpty())
+  {
+    return QStringLiteral("%1_empty").arg(arrayName);
+  }
+  return name;
+}
+
+vtkSMSourceProxy* inputSourceProxy(vtkSMProxy* filter, unsigned int& port)
+{
+  port = 0;
+  if (!filter)
+  {
+    return nullptr;
+  }
+  auto* inputProp = vtkSMInputProperty::SafeDownCast(filter->GetProperty("Input"));
+  if (!inputProp || inputProp->GetNumberOfProxies() == 0)
+  {
+    return nullptr;
+  }
+  port = inputProp->GetOutputPortForConnection(0);
+  return vtkSMSourceProxy::SafeDownCast(inputProp->GetProxy(0));
+}
+
+QStringList cellDataArrayNames(vtkSMProxy* filter)
+{
+  QStringList names;
+  unsigned int port = 0;
+  vtkSMSourceProxy* src = inputSourceProxy(filter, port);
+  if (src)
+  {
+    src->UpdatePipeline();
+  }
+
+  if (vtkDataSet* ds = clientInputDataSet(filter))
+  {
+    vtkCellData* cd = ds->GetCellData();
+    const int n = cd ? cd->GetNumberOfArrays() : 0;
+    for (int i = 0; i < n; ++i)
+    {
+      vtkAbstractArray* arr = cd->GetAbstractArray(i);
+      const char* name = arr ? arr->GetName() : nullptr;
+      if (name && name[0] != '\0')
+      {
+        names << QString::fromUtf8(name);
+      }
+    }
+    names.removeDuplicates();
+    return names;
+  }
+
+  if (!src)
+  {
+    return names;
+  }
+  vtkPVDataInformation* di = src->GetDataInformation(port);
+  vtkPVDataSetAttributesInformation* cellInfo = di ? di->GetCellDataInformation() : nullptr;
+  const int n = cellInfo ? cellInfo->GetNumberOfArrays() : 0;
+  for (int i = 0; i < n; ++i)
+  {
+    vtkPVArrayInformation* ai = cellInfo->GetArrayInformation(i);
+    const char* name = ai ? ai->GetName() : nullptr;
+    if (name && name[0] != '\0')
+    {
+      names << QString::fromUtf8(name);
+    }
+  }
+  names.removeDuplicates();
+  return names;
+}
+
+QIcon eyeIcon(Qt::CheckState state)
+{
+  if (state == Qt::Unchecked)
+  {
+    return QIcon(QStringLiteral(":/pqWidgets/Icons/pqEyeballClosed.svg"));
+  }
+  if (state == Qt::Checked)
+  {
+    return QIcon(QStringLiteral(":/pqWidgets/Icons/pqEyeball.svg"));
+  }
+
+  const QIcon open(QStringLiteral(":/pqWidgets/Icons/pqEyeball.svg"));
+  QIcon mixed;
+  for (const int dim : { 16, 20, 24, 32 })
+  {
+    const QPixmap src = open.pixmap(dim, dim);
+    QPixmap faded(src.size());
+    faded.fill(Qt::transparent);
+    QPainter painter(&faded);
+    painter.setOpacity(0.4);
+    painter.drawPixmap(0, 0, src);
+    painter.end();
+    mixed.addPixmap(faded);
+  }
+  return mixed;
+}
+
+QIcon eyeIcon(bool visible)
+{
+  return eyeIcon(visible ? Qt::Checked : Qt::Unchecked);
+}
+
+QStringList checkedSelectorsFromProperty(
+  vtkSMStringVectorProperty* prop, vtkDataAssembly* assembly)
+{
+  if (!prop)
+  {
+    return { QStringLiteral("/") };
+  }
+
+  const std::vector<std::string>& elems = prop->GetElements();
+  if (elems.empty())
+  {
+    return {};
+  }
+
+  const char* root = assembly ? assembly->GetRootNodeName() : nullptr;
+  const std::string rootName = std::string("/") + (root ? root : "");
+  if (elems[0] == "/" || elems[0] == rootName)
+  {
+    return { QStringLiteral("/") };
+  }
+
+  QStringList checked;
+  checked.reserve(static_cast<int>(elems.size()));
+  for (const std::string& elem : elems)
+  {
+    checked.push_back(QString::fromStdString(elem));
+  }
+  return checked;
+}
+
+int findNodeByDataSetIndex(vtkDataAssembly* assembly, int parent, unsigned int index)
+{
+  if (!assembly || parent < 0)
+  {
+    return -1;
+  }
+
+  const std::vector<unsigned int> indices =
+    assembly->GetDataSetIndices(parent, /*traverse_subtree=*/false);
+  for (unsigned int value : indices)
+  {
+    if (value == index)
+    {
+      return parent;
+    }
+  }
+
+  const int n = assembly->GetNumberOfChildren(parent);
+  for (int i = 0; i < n; ++i)
+  {
+    const int found = findNodeByDataSetIndex(assembly, assembly->GetChild(parent, i), index);
+    if (found >= 0)
+    {
+      return found;
+    }
+  }
+  return -1;
+}
+
+int findNodeByLabel(vtkDataAssembly* assembly, int parent, const QString& label)
+{
+  if (!assembly || parent < 0 || label.isEmpty())
+  {
+    return -1;
+  }
+
+  const char* nodeLabel = nullptr;
+  if (assembly->GetAttribute(parent, "label", nodeLabel) && nodeLabel && nodeLabel[0] != '\0' &&
+    QString::fromUtf8(nodeLabel) == label)
+  {
+    return parent;
+  }
+
+  const int n = assembly->GetNumberOfChildren(parent);
+  for (int i = 0; i < n; ++i)
+  {
+    const int found = findNodeByLabel(assembly, assembly->GetChild(parent, i), label);
+    if (found >= 0)
+    {
+      return found;
+    }
+  }
+  return -1;
+}
+
+vtkSMStringVectorProperty* blockVisibilityProperty(vtkSMProxy* reprProxy)
+{
+  if (!reprProxy)
+  {
+    return nullptr;
+  }
+  auto* visibility =
+    vtkSMStringVectorProperty::SafeDownCast(reprProxy->GetProperty("BlockVisibilities"));
+  return visibility ? visibility
+                    : vtkSMStringVectorProperty::SafeDownCast(reprProxy->GetProperty("BlockSelectors"));
+}
 }
 
 struct pqSHYXSelectionPatchShapeHost
@@ -580,18 +861,23 @@ pqSHYXSelectionPatchTableWidget::pqSHYXSelectionPatchTableWidget(
   vbox->setSpacing(4);
 
   auto* tip = new QLabel(
-    tr("Add geometry patches from a 3D cell selection, another pipeline node, or a box/sphere "
-       "shape. All rows become PDC partitions (SnappyHexMesh can use any of them as a Region). "
-       "Port 0 is added patches; port 1 is Input minus selection-row cells. Apply on Add "
-       "(default) Applies after each Add or Remove. Rename only (any name). The table keeps "
-       "every row; Apply merges same names. Check Show Interactable widget and select a Box or "
-       "Sphere row to edit it in the 3D view."),
+    tr("Add geometry patches from a 3D cell selection, an Input CellData array (one row per unique "
+       "value), another pipeline node, or a box/sphere shape. All rows become PDC partitions "
+       "(SnappyHexMesh can use any of them as a Region). Click the eye to show or hide that patch "
+       "in the active view (same as Hide Block; same-named rows share one block). Port 0 is added "
+       "patches; port 1 is Input minus selection-row cells. Apply on Add (default) Applies after "
+       "each Add or Remove. Rename only (any name). The table keeps every row; Apply merges same "
+       "names. Check Show Interactable widget and select a Box or Sphere row to edit it in the "
+       "3D view."),
     this);
   tip->setWordWrap(true);
   tip->setStyleSheet(QStringLiteral("color: gray; font-size: 11px;"));
   vbox->addWidget(tip);
 
-  this->Model = new QStandardItemModel(0, 4, this);
+  this->Model = new QStandardItemModel(0, 5, this);
+  this->Model->setHeaderData(kColVisibility, Qt::Horizontal, eyeIcon(true), Qt::DecorationRole);
+  this->Model->setHeaderData(kColVisibility, Qt::Horizontal,
+    tr("Show or hide this patch in the active view"), Qt::ToolTipRole);
   this->Model->setHeaderData(kColIndex, Qt::Horizontal, tr("#"));
   this->Model->setHeaderData(kColName, Qt::Horizontal, tr("Name"));
   this->Model->setHeaderData(kColType, Qt::Horizontal, tr("Type"));
@@ -613,6 +899,9 @@ pqSHYXSelectionPatchTableWidget::pqSHYXSelectionPatchTableWidget(
   this->View->setModel(this->Model);
 
   auto* header = this->View->header();
+  header->setSectionsClickable(true);
+  header->setHighlightSections(false);
+  header->setSectionResizeMode(kColVisibility, QHeaderView::ResizeToContents);
   header->setSectionResizeMode(kColIndex, QHeaderView::ResizeToContents);
   header->setSectionResizeMode(kColName, QHeaderView::Stretch);
   header->setSectionResizeMode(kColType, QHeaderView::ResizeToContents);
@@ -635,6 +924,16 @@ pqSHYXSelectionPatchTableWidget::pqSHYXSelectionPatchTableWidget(
   addPipeBtn->setToolTip(
     tr("Add a pipeline geometry node as an extra patch (same PDC entries as selection rows)."));
 
+  this->CellDataMenu = new QMenu(this);
+  auto* addCellDataBtn = new QToolButton(this);
+  addCellDataBtn->setText(tr("Add from Celldata"));
+  addCellDataBtn->setPopupMode(QToolButton::InstantPopup);
+  addCellDataBtn->setToolButtonStyle(Qt::ToolButtonTextOnly);
+  addCellDataBtn->setMenu(this->CellDataMenu);
+  addCellDataBtn->setToolTip(
+    tr("Pick a CellData array on the Input. Each unique value becomes a selection patch "
+       "(name = value; first component of vectors). Integer and string labels work best."));
+
   auto* shapeMenu = new QMenu(this);
   shapeMenu->addAction(tr("Box"), this, &pqSHYXSelectionPatchTableWidget::onAddBox);
   shapeMenu->addAction(tr("Sphere"), this, &pqSHYXSelectionPatchTableWidget::onAddSphere);
@@ -648,6 +947,7 @@ pqSHYXSelectionPatchTableWidget::pqSHYXSelectionPatchTableWidget(
        "Check Show Interactable widget and keep the row selected to drag it."));
 
   addRow->addWidget(addSelBtn);
+  addRow->addWidget(addCellDataBtn);
   addRow->addWidget(addPipeBtn);
   addRow->addWidget(addShapeBtn);
   addRow->addStretch(1);
@@ -688,11 +988,17 @@ pqSHYXSelectionPatchTableWidget::pqSHYXSelectionPatchTableWidget(
     &pqSHYXSelectionPatchTableWidget::onRemoveSelected);
   QObject::connect(this->PipelineMenu, &QMenu::aboutToShow, this,
     &pqSHYXSelectionPatchTableWidget::onPopulatePipelineMenu);
+  QObject::connect(this->CellDataMenu, &QMenu::aboutToShow, this,
+    &pqSHYXSelectionPatchTableWidget::onPopulateCellDataMenu);
   QObject::connect(&pqActiveObjects::instance(), &pqActiveObjects::viewChanged, this,
     &pqSHYXSelectionPatchTableWidget::onActiveViewChanged);
   this->connectViewVisibility(pqActiveObjects::instance().activeView());
   QObject::connect(this->ShowInteractable, &QCheckBox::toggled, this,
     &pqSHYXSelectionPatchTableWidget::onShowInteractableToggled);
+  QObject::connect(this->View, &pqTreeView::clicked, this,
+    &pqSHYXSelectionPatchTableWidget::onViewClicked);
+  QObject::connect(this->View->header(), &QHeaderView::sectionClicked, this,
+    &pqSHYXSelectionPatchTableWidget::onHeaderSectionClicked);
   QObject::connect(this->View->selectionModel(), &QItemSelectionModel::selectionChanged, this,
     [this](const QItemSelection&, const QItemSelection&) { this->onTableSelectionChanged(); });
 
@@ -731,11 +1037,45 @@ pqSHYXSelectionPatchTableWidget::pqSHYXSelectionPatchTableWidget(
 
   this->setChangeAvailableAsChangeFinished(true);
   this->rebuildFromProperty();
+
+  this->BlockVisibilityVTKConnect = vtkEventQtSlotConnect::New();
+  QObject::connect(&pqActiveObjects::instance(),
+    QOverload<pqDataRepresentation*>::of(&pqActiveObjects::representationChanged), this,
+    &pqSHYXSelectionPatchTableWidget::onActiveViewOrRepresentationChanged);
+  if (auto* smm = pqApplicationCore::instance()->getServerManagerModel())
+  {
+    if (auto* src = smm->findItem<pqPipelineSource*>(smproxy))
+    {
+      this->RepresentationConnections.push_back(
+        QObject::connect(src, &pqPipelineSource::representationAdded, this,
+          [this](pqPipelineSource*, pqDataRepresentation*, int)
+          { this->connectBlockVisibilityObserver(); }));
+      this->RepresentationConnections.push_back(
+        QObject::connect(src, &pqPipelineSource::representationRemoved, this,
+          [this](pqPipelineSource*, pqDataRepresentation*, int)
+          { this->connectBlockVisibilityObserver(); }));
+      this->RepresentationConnections.push_back(QObject::connect(
+        src, QOverload<pqPipelineSource*>::of(&pqPipelineSource::dataUpdated), this,
+        [this](pqPipelineSource*) { this->updateEyeIcons(); }));
+    }
+  }
+  this->connectBlockVisibilityObserver();
 }
 
 pqSHYXSelectionPatchTableWidget::~pqSHYXSelectionPatchTableWidget()
 {
   this->disconnectViewVisibilityLinks();
+  this->disconnectBlockVisibilityObserver();
+  for (const QMetaObject::Connection& c : this->RepresentationConnections)
+  {
+    QObject::disconnect(c);
+  }
+  this->RepresentationConnections.clear();
+  if (this->BlockVisibilityVTKConnect)
+  {
+    this->BlockVisibilityVTKConnect->Delete();
+    this->BlockVisibilityVTKConnect = nullptr;
+  }
   this->destroyShapeWidgets();
 }
 
@@ -757,12 +1097,14 @@ void pqSHYXSelectionPatchTableWidget::setView(pqView* view)
 {
   this->Superclass::setView(view);
   this->connectViewVisibility(pqActiveObjects::instance().activeView());
+  this->connectBlockVisibilityObserver();
   this->syncShapeWidgets();
 }
 
 void pqSHYXSelectionPatchTableWidget::onActiveViewChanged()
 {
   this->connectViewVisibility(pqActiveObjects::instance().activeView());
+  this->connectBlockVisibilityObserver();
   this->syncShapeWidgets();
 }
 
@@ -998,15 +1340,32 @@ QString pqSHYXSelectionPatchTableWidget::infoText(const PatchRow& row) const
 void pqSHYXSelectionPatchTableWidget::appendRow(
   const PatchRow& row, const QString& okStatus, bool errorStatus)
 {
+  this->appendRows(QList<PatchRow>{ row }, okStatus, errorStatus);
+}
+
+void pqSHYXSelectionPatchTableWidget::appendRows(
+  const QList<PatchRow>& extra, const QString& okStatus, bool errorStatus)
+{
+  if (extra.isEmpty())
+  {
+    this->setStatus(okStatus, errorStatus);
+    return;
+  }
   QList<PatchRow> rows = this->collectRows();
-  rows.push_back(row);
+  rows.append(extra);
   this->rebuildRows(rows);
   this->writeBackProperty();
   if (this->View && this->View->selectionModel() && this->Model->rowCount() > 0)
   {
-    const QModelIndex idx = this->Model->index(this->Model->rowCount() - 1, 0);
-    this->View->selectionModel()->select(
-      idx, QItemSelectionModel::ClearAndSelect | QItemSelectionModel::Rows);
+    const int firstNew = this->Model->rowCount() - extra.size();
+    const int lastNew = this->Model->rowCount() - 1;
+    if (firstNew >= 0 && lastNew >= firstNew)
+    {
+      const QModelIndex topLeft = this->Model->index(firstNew, 0);
+      const QModelIndex bottomRight = this->Model->index(lastNew, 0);
+      this->View->selectionModel()->select(QItemSelection(topLeft, bottomRight),
+        QItemSelectionModel::ClearAndSelect | QItemSelectionModel::Rows);
+    }
   }
   this->setStatus(okStatus, errorStatus);
   if (this->ApplyOnAdd && this->ApplyOnAdd->isChecked())
@@ -1038,6 +1397,148 @@ void pqSHYXSelectionPatchTableWidget::onAddFromSelection()
       : tr("Added %1 (%2 cells). Remaining port not refreshed; overlaps allowed until Apply.")
           .arg(row.Name)
           .arg(ids.size()));
+}
+
+void pqSHYXSelectionPatchTableWidget::onPopulateCellDataMenu()
+{
+  if (!this->CellDataMenu)
+  {
+    return;
+  }
+  this->CellDataMenu->clear();
+
+  const QStringList names = cellDataArrayNames(this->proxy());
+  if (names.isEmpty())
+  {
+    auto* a = this->CellDataMenu->addAction(tr("(no CellData arrays on Input)"));
+    a->setEnabled(false);
+    return;
+  }
+
+  vtkDataSet* ds = clientInputDataSet(this->proxy());
+  vtkCellData* cd = ds ? ds->GetCellData() : nullptr;
+  for (const QString& name : names)
+  {
+    QString label = name;
+    vtkAbstractArray* arr = cd ? cd->GetAbstractArray(name.toUtf8().constData()) : nullptr;
+    if (arr && arr->GetNumberOfComponents() > 1)
+    {
+      label = tr("%1 (%2 comps, first used)").arg(name).arg(arr->GetNumberOfComponents());
+    }
+    auto* act = this->CellDataMenu->addAction(label);
+    QObject::connect(act, &QAction::triggered, this, [this, name]() { this->onAddFromCellData(name); });
+  }
+}
+
+void pqSHYXSelectionPatchTableWidget::onAddFromCellData(const QString& arrayName)
+{
+  if (arrayName.isEmpty())
+  {
+    this->setStatus(tr("No CellData array selected."), true);
+    return;
+  }
+
+  unsigned int port = 0;
+  if (vtkSMSourceProxy* src = inputSourceProxy(this->proxy(), port))
+  {
+    src->UpdatePipeline();
+  }
+
+  vtkDataSet* inputDs = clientInputDataSet(this->proxy());
+  if (!inputDs)
+  {
+    this->setStatus(tr("Filter Input has no client-side vtkDataSet."), true);
+    return;
+  }
+  vtkCellData* cd = inputDs->GetCellData();
+  vtkAbstractArray* arr = cd ? cd->GetAbstractArray(arrayName.toUtf8().constData()) : nullptr;
+  if (!arr)
+  {
+    this->setStatus(tr("CellData array '%1' was not found on Input.").arg(arrayName), true);
+    return;
+  }
+
+  const vtkIdType nCells = inputDs->GetNumberOfCells();
+  const vtkIdType nTuples = arr->GetNumberOfTuples();
+  const vtkIdType n = nCells < nTuples ? nCells : nTuples;
+  if (n <= 0)
+  {
+    this->setStatus(tr("CellData array '%1' has no values on Input cells.").arg(arrayName), true);
+    return;
+  }
+
+  QStringList order;
+  QMap<QString, std::vector<vtkIdType>> groups;
+  vtkIdType skipped = 0;
+  for (vtkIdType i = 0; i < n; ++i)
+  {
+    const QString key = cellDataValueName(arr, i, arrayName);
+    if (key.isEmpty())
+    {
+      ++skipped;
+      continue;
+    }
+    auto it = groups.find(key);
+    if (it == groups.end())
+    {
+      if (order.size() >= kMaxUniqueCellDataValues)
+      {
+        this->setStatus(
+          tr("CellData '%1' has more than %2 unique values. Pick a discrete label array "
+             "(patch name, region id), not a continuous scalar.")
+            .arg(arrayName)
+            .arg(kMaxUniqueCellDataValues),
+          true);
+        return;
+      }
+      order.push_back(key);
+      groups.insert(key, std::vector<vtkIdType>());
+      it = groups.find(key);
+    }
+    it.value().push_back(i);
+  }
+
+  if (order.isEmpty())
+  {
+    this->setStatus(
+      tr("CellData '%1' had no usable values (all empty or non-finite).").arg(arrayName), true);
+    return;
+  }
+
+  QList<PatchRow> extra;
+  extra.reserve(order.size());
+  vtkIdType nCellsAdded = 0;
+  for (const QString& name : order)
+  {
+    const std::vector<vtkIdType>& ids = groups[name];
+    if (ids.empty())
+    {
+      continue;
+    }
+    PatchRow row;
+    row.Name = name;
+    row.Kind = QStringLiteral("selection");
+    row.CellIds = compactIdList(ids);
+    extra.push_back(row);
+    nCellsAdded += static_cast<vtkIdType>(ids.size());
+  }
+
+  QString status =
+    tr("Added %1 patch(es) from CellData '%2' (%3 cells).")
+      .arg(extra.size())
+      .arg(arrayName)
+      .arg(static_cast<qint64>(nCellsAdded));
+  if (skipped > 0)
+  {
+    status += QLatin1Char(' ');
+    status += tr("Skipped %1 non-finite value(s).").arg(static_cast<qint64>(skipped));
+  }
+  if (this->ApplyOnAdd && this->ApplyOnAdd->isChecked())
+  {
+    status += QLatin1Char(' ');
+    status += tr("Applying to refresh added and remaining ports.");
+  }
+  this->appendRows(extra, status);
 }
 
 void pqSHYXSelectionPatchTableWidget::applyOutputsIfChecked()
@@ -1459,15 +1960,37 @@ void pqSHYXSelectionPatchTableWidget::rebuildFromProperty()
   }
   this->rebuildRows(rows);
   this->syncShapeWidgets();
+  this->updateEyeIcons();
 }
 
 void pqSHYXSelectionPatchTableWidget::rebuildRows(const QList<PatchRow>& rows)
 {
   QScopedValueRollback<bool> guard(this->UpdatingFromProperty, true);
   this->Model->removeRows(0, this->Model->rowCount());
+  QMap<QString, int> firstSeenIndex;
+  int nextDs = 0;
   for (int i = 0; i < rows.size(); ++i)
   {
     const PatchRow& row = rows[i];
+    QString outName = row.Name.trimmed();
+    if (outName.isEmpty())
+    {
+      outName = QStringLiteral("geo_%1").arg(i);
+    }
+    if (!firstSeenIndex.contains(outName))
+    {
+      firstSeenIndex.insert(outName, nextDs++);
+    }
+    const int dsIndex = firstSeenIndex.value(outName);
+    auto* visItem = new QStandardItem();
+    visItem->setEditable(false);
+    visItem->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable | Qt::ItemNeverHasChildren);
+    visItem->setTextAlignment(Qt::AlignCenter);
+    visItem->setIcon(eyeIcon(true));
+    visItem->setData(true, kVisibleRole);
+    visItem->setData(dsIndex, kDataSetIndexRole);
+    visItem->setData(QStringLiteral("/patches/patch_%1").arg(dsIndex), kSelectorPathRole);
+    visItem->setToolTip(tr("Show/hide this patch in the active view (same-named rows stay linked)"));
     auto* indexItem = new QStandardItem(QString::number(i));
     indexItem->setEditable(false);
     indexItem->setData(row.CellIds, kRoleCellIds);
@@ -1478,8 +2001,9 @@ void pqSHYXSelectionPatchTableWidget::rebuildRows(const QList<PatchRow>& rows)
     typeItem->setEditable(false);
     auto* infoItem = new QStandardItem(this->infoText(row));
     infoItem->setEditable(false);
-    this->Model->appendRow({ indexItem, nameItem, typeItem, infoItem });
+    this->Model->appendRow({ visItem, indexItem, nameItem, typeItem, infoItem });
   }
+  this->updateEyeIcons();
 }
 
 QList<pqSHYXSelectionPatchTableWidget::PatchRow> pqSHYXSelectionPatchTableWidget::collectRows() const
@@ -1867,4 +2391,434 @@ void pqSHYXSelectionPatchTableWidget::syncShapeWidgets()
   {
     rview->render();
   }
+}
+
+void pqSHYXSelectionPatchTableWidget::onViewClicked(const QModelIndex& index)
+{
+  if (!index.isValid() || index.column() != kColVisibility)
+  {
+    return;
+  }
+  this->toggleRowVisibility(index.row());
+}
+
+void pqSHYXSelectionPatchTableWidget::onHeaderSectionClicked(int logicalIndex)
+{
+  if (logicalIndex != kColVisibility)
+  {
+    return;
+  }
+  this->toggleAllVisibility();
+}
+
+void pqSHYXSelectionPatchTableWidget::onBlockVisibilityModified()
+{
+  if (this->UpdatingBlockVisibility)
+  {
+    return;
+  }
+  this->updateEyeIcons();
+}
+
+void pqSHYXSelectionPatchTableWidget::onActiveViewOrRepresentationChanged()
+{
+  this->connectBlockVisibilityObserver();
+}
+
+void pqSHYXSelectionPatchTableWidget::disconnectBlockVisibilityObserver()
+{
+  if (this->BlockVisibilityVTKConnect)
+  {
+    this->BlockVisibilityVTKConnect->Disconnect();
+  }
+  this->ObservedRepresentation = nullptr;
+}
+
+void pqSHYXSelectionPatchTableWidget::connectBlockVisibilityObserver()
+{
+  pqDataRepresentation* repr = this->currentRepresentation();
+  if (repr == this->ObservedRepresentation)
+  {
+    this->updateEyeIcons();
+    return;
+  }
+
+  this->disconnectBlockVisibilityObserver();
+  this->ObservedRepresentation = repr;
+  if (!repr || !this->BlockVisibilityVTKConnect)
+  {
+    this->updateEyeIcons();
+    return;
+  }
+
+  if (vtkSMStringVectorProperty* prop = this->visibilityProperty(repr))
+  {
+    this->BlockVisibilityVTKConnect->Connect(
+      prop, vtkCommand::ModifiedEvent, this, SLOT(onBlockVisibilityModified()));
+  }
+  this->updateEyeIcons();
+}
+
+pqDataRepresentation* pqSHYXSelectionPatchTableWidget::currentRepresentation() const
+{
+  auto* smm = pqApplicationCore::instance()->getServerManagerModel();
+  auto* src = smm ? smm->findItem<pqPipelineSource*>(this->proxy()) : nullptr;
+  if (!src)
+  {
+    return nullptr;
+  }
+
+  pqView* view = this->view();
+  if (!view)
+  {
+    view = pqActiveObjects::instance().activeView();
+  }
+  if (view)
+  {
+    if (auto* repr = src->getRepresentation(0, view))
+    {
+      return repr;
+    }
+  }
+
+  const QList<pqView*> views = src->getViews();
+  for (pqView* candidate : views)
+  {
+    if (auto* repr = src->getRepresentation(0, candidate))
+    {
+      return repr;
+    }
+  }
+  return nullptr;
+}
+
+vtkSMStringVectorProperty* pqSHYXSelectionPatchTableWidget::visibilityProperty(
+  pqDataRepresentation* repr) const
+{
+  return blockVisibilityProperty(repr ? repr->getProxy() : nullptr);
+}
+
+vtkDataAssembly* pqSHYXSelectionPatchTableWidget::activeAssembly(pqDataRepresentation* repr) const
+{
+  if (!repr)
+  {
+    return nullptr;
+  }
+
+  vtkPVDataInformation* info = repr->getInputDataInformation();
+  if (!info)
+  {
+    auto* source = vtkSMSourceProxy::SafeDownCast(this->proxy());
+    info = source ? source->GetDataInformation(0) : nullptr;
+  }
+  if (!info)
+  {
+    return nullptr;
+  }
+
+  vtkSMProxy* reprProxy = repr->getProxy();
+  const char* assemblyName = nullptr;
+  if (reprProxy && reprProxy->GetProperty("Assembly"))
+  {
+    assemblyName = vtkSMPropertyHelper(reprProxy, "Assembly").GetAsString();
+  }
+  if (assemblyName && assemblyName[0] != '\0')
+  {
+    if (vtkDataAssembly* named = info->GetDataAssembly(assemblyName))
+    {
+      return named;
+    }
+  }
+  return info->GetDataAssembly();
+}
+
+QString pqSHYXSelectionPatchTableWidget::outputNameForRow(int row) const
+{
+  if (!this->Model || row < 0 || row >= this->Model->rowCount())
+  {
+    return {};
+  }
+  const QString name = this->Model->item(row, kColName)
+    ? this->Model->item(row, kColName)->text().trimmed()
+    : QString();
+  if (!name.isEmpty())
+  {
+    return name;
+  }
+  return QStringLiteral("geo_%1").arg(row);
+}
+
+QString pqSHYXSelectionPatchTableWidget::selectorForRow(int row) const
+{
+  if (!this->Model)
+  {
+    return {};
+  }
+  auto* visItem = this->Model->item(row, kColVisibility);
+  const QString stored = visItem ? visItem->data(kSelectorPathRole).toString() : QString();
+  auto* repr = this->currentRepresentation();
+  vtkDataAssembly* assembly = this->activeAssembly(repr);
+  if (!assembly)
+  {
+    return stored;
+  }
+
+  const QString label = this->outputNameForRow(row);
+  const int byLabel = findNodeByLabel(assembly, vtkDataAssembly::GetRootNode(), label);
+  if (byLabel >= 0)
+  {
+    return QString::fromStdString(assembly->GetNodePath(byLabel));
+  }
+
+  if (!stored.isEmpty() && assembly->GetFirstNodeByPath(stored.toUtf8().constData()) >= 0)
+  {
+    return stored;
+  }
+
+  const int dsIndex = visItem ? visItem->data(kDataSetIndexRole).toInt() : -1;
+  if (dsIndex >= 0)
+  {
+    const int node =
+      findNodeByDataSetIndex(assembly, vtkDataAssembly::GetRootNode(), static_cast<unsigned int>(dsIndex));
+    if (node >= 0)
+    {
+      return QString::fromStdString(assembly->GetNodePath(node));
+    }
+  }
+  return stored;
+}
+
+void pqSHYXSelectionPatchTableWidget::updateEyeIcons()
+{
+  if (!this->Model)
+  {
+    return;
+  }
+
+  QScopedValueRollback<bool> guard(this->UpdatingFromProperty, true);
+  auto* repr = this->currentRepresentation();
+  vtkDataAssembly* assembly = this->activeAssembly(repr);
+  vtkSMStringVectorProperty* prop = this->visibilityProperty(repr);
+
+  pqDataAssemblyTreeModel treeModel;
+  bool haveTree = false;
+  if (assembly)
+  {
+    treeModel.setUserCheckable(true);
+    treeModel.setDataAssembly(assembly);
+    treeModel.setCheckedNodes(checkedSelectorsFromProperty(prop, assembly));
+    haveTree = true;
+  }
+
+  for (int row = 0; row < this->Model->rowCount(); ++row)
+  {
+    auto* item = this->Model->item(row, kColVisibility);
+    if (!item)
+    {
+      continue;
+    }
+
+    bool visible = true;
+    if (haveTree)
+    {
+      const QString path = this->selectorForRow(row);
+      if (!path.isEmpty())
+      {
+        const std::vector<int> nodes = assembly->SelectNodes({ path.toStdString() });
+        if (!nodes.empty())
+        {
+          const QModelIndex idx = treeModel.index(nodes.front());
+          visible = treeModel.data(idx, Qt::CheckStateRole).toInt() != Qt::Unchecked;
+        }
+      }
+    }
+
+    item->setIcon(eyeIcon(visible));
+    item->setData(visible, kVisibleRole);
+    item->setToolTip(visible ? tr("Hide this patch in the active view")
+                             : tr("Show this patch in the active view"));
+  }
+
+  if (this->View)
+  {
+    this->View->viewport()->repaint();
+    if (this->View->header())
+    {
+      const Qt::CheckState headerState = this->headerVisibilityState();
+      this->Model->setHeaderData(
+        kColVisibility, Qt::Horizontal, eyeIcon(headerState), Qt::DecorationRole);
+      QString tip;
+      switch (headerState)
+      {
+        case Qt::Checked:
+          tip = tr("Hide all listed patches in the active view");
+          break;
+        case Qt::Unchecked:
+          tip = tr("Show all listed patches in the active view");
+          break;
+        default:
+          tip = tr("Some patches are hidden. Click to show all listed patches");
+          break;
+      }
+      this->Model->setHeaderData(kColVisibility, Qt::Horizontal, tip, Qt::ToolTipRole);
+      this->View->header()->viewport()->repaint();
+    }
+  }
+}
+
+void pqSHYXSelectionPatchTableWidget::toggleRowVisibility(int row)
+{
+  if (!this->Model || row < 0 || row >= this->Model->rowCount())
+  {
+    return;
+  }
+
+  auto* visItem = this->Model->item(row, kColVisibility);
+  const bool currentlyVisible = visItem ? visItem->data(kVisibleRole).toBool() : true;
+  const QString name = this->outputNameForRow(row);
+  QList<int> rows;
+  for (int r = 0; r < this->Model->rowCount(); ++r)
+  {
+    if (this->outputNameForRow(r) == name)
+    {
+      rows.push_back(r);
+    }
+  }
+  if (rows.isEmpty())
+  {
+    rows.push_back(row);
+  }
+  this->setBlocksVisible(rows, !currentlyVisible);
+}
+
+Qt::CheckState pqSHYXSelectionPatchTableWidget::headerVisibilityState() const
+{
+  if (!this->Model || this->Model->rowCount() == 0)
+  {
+    return Qt::Checked;
+  }
+
+  int visibleCount = 0;
+  int totalCount = 0;
+  for (int row = 0; row < this->Model->rowCount(); ++row)
+  {
+    auto* item = this->Model->item(row, kColVisibility);
+    if (!item)
+    {
+      continue;
+    }
+    ++totalCount;
+    if (item->data(kVisibleRole).toBool())
+    {
+      ++visibleCount;
+    }
+  }
+
+  if (totalCount == 0 || visibleCount == totalCount)
+  {
+    return Qt::Checked;
+  }
+  if (visibleCount == 0)
+  {
+    return Qt::Unchecked;
+  }
+  return Qt::PartiallyChecked;
+}
+
+void pqSHYXSelectionPatchTableWidget::toggleAllVisibility()
+{
+  if (!this->Model || this->Model->rowCount() == 0)
+  {
+    return;
+  }
+
+  if (this->headerVisibilityState() == Qt::Checked)
+  {
+    QList<int> rows;
+    rows.reserve(this->Model->rowCount());
+    for (int row = 0; row < this->Model->rowCount(); ++row)
+    {
+      rows.push_back(row);
+    }
+    this->setBlocksVisible(rows, false);
+    return;
+  }
+
+  auto* repr = this->currentRepresentation();
+  vtkSMProxy* reprProxy = repr ? repr->getProxy() : nullptr;
+  vtkSMStringVectorProperty* prop = this->visibilityProperty(repr);
+  if (!repr || !reprProxy || !prop)
+  {
+    this->setStatus(tr("No display of Added patches in the active view to show/hide."), true);
+    return;
+  }
+
+  QScopedValueRollback<bool> guard(this->UpdatingBlockVisibility, true);
+  SM_SCOPED_TRACE(PropertiesModified).arg("proxy", reprProxy);
+  BEGIN_UNDO_SET(tr("Show All Blocks"));
+  prop->SetElements(std::vector<std::string>({ "/" }));
+  reprProxy->UpdateVTKObjects();
+  END_UNDO_SET();
+  repr->renderViewEventually();
+  this->updateEyeIcons();
+}
+
+void pqSHYXSelectionPatchTableWidget::setBlocksVisible(const QList<int>& rows, bool visible)
+{
+  auto* repr = this->currentRepresentation();
+  vtkSMProxy* reprProxy = repr ? repr->getProxy() : nullptr;
+  vtkSMStringVectorProperty* prop = this->visibilityProperty(repr);
+  vtkDataAssembly* assembly = this->activeAssembly(repr);
+  if (!repr || !reprProxy || !prop || !assembly)
+  {
+    this->setStatus(tr("Apply first so Added patches exist, then use the eye to show/hide."), true);
+    return;
+  }
+
+  QList<int> nodeIds;
+  for (int row : rows)
+  {
+    const QString path = this->selectorForRow(row);
+    if (path.isEmpty())
+    {
+      continue;
+    }
+    const std::vector<int> nodes = assembly->SelectNodes({ path.toStdString() });
+    for (int id : nodes)
+    {
+      nodeIds.push_back(id);
+    }
+  }
+  if (nodeIds.isEmpty())
+  {
+    this->setStatus(tr("This patch is not in the current output yet. Apply first."), true);
+    return;
+  }
+
+  pqDataAssemblyTreeModel treeModel;
+  treeModel.setUserCheckable(true);
+  treeModel.setDataAssembly(assembly);
+  treeModel.setCheckedNodes(checkedSelectorsFromProperty(prop, assembly));
+
+  const QModelIndexList indexes = treeModel.index(nodeIds);
+  for (const QModelIndex& idx : indexes)
+  {
+    treeModel.setData(idx, visible ? Qt::Checked : Qt::Unchecked, Qt::CheckStateRole);
+  }
+
+  const QStringList checkedNodes = treeModel.checkedNodes();
+  std::vector<std::string> values(static_cast<size_t>(checkedNodes.size()));
+  for (int i = 0; i < checkedNodes.size(); ++i)
+  {
+    values[static_cast<size_t>(i)] = checkedNodes[i].toStdString();
+  }
+
+  QScopedValueRollback<bool> guard(this->UpdatingBlockVisibility, true);
+  SM_SCOPED_TRACE(PropertiesModified).arg("proxy", reprProxy);
+  BEGIN_UNDO_SET(visible ? tr("Show Block") : tr("Hide Block"));
+  prop->SetElements(values);
+  reprProxy->UpdateVTKObjects();
+  END_UNDO_SET();
+  repr->renderViewEventually();
+  this->updateEyeIcons();
 }

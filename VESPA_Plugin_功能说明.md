@@ -576,15 +576,16 @@
 
 ### 29a. SHYX Selection Append Patches（`vtkSHYXSelectionAppendPatches`）
 
-**功能**：把几何 patch 收入 **`vtkPartitionedDataSetCollection`**。三种来源（输出里不区分，都是 PDC 分块，可供 SnappyHexMesh Region 按名引用）：
+**功能**：把几何 patch 收入 **`vtkPartitionedDataSetCollection`**。四种来源（输出里不区分，都是 PDC 分块，可供 SnappyHexMesh Region 按名引用）：
 
 - **Add from selection**：在父网格的 3D 视图里选单元（**不需要** Copy Active Selection）。
+- **Add from Celldata**：选 Input 上的一个 CellData 数组，按唯一值自动拆成多行（Name = 该值；向量用第一分量）。整数/字符串标签最合适。
 - **Add from pipeline**：下拉选择管线里其它几何节点。
 - **Add from shape**：下拉 **Box** / **Sphere**，视口里有可交互 widget（初始化方式与 Sphere Selection 相同：视口中心贴表面，半径约短边 15%）。Box 支持左键旋转，姿态会随 Apply 保存。
 
 表里只改 **Name**（默认 `geo_0`…，任意字符串即可）；**表中同名行保持多条，不合并**。**Apply** 时才按名称把同名合成一块并沿用第一次的标记，按表中首次出现顺序给唯一名称打 `0, 1, 2, …`。
 
-**输出**：端口 0 **Added patches** 为已 Add 的 **`vtkPartitionedDataSetCollection`**；端口 1 **Remaining cells** 为 **Input 减去所有 selection 行的 cell**（pipeline / box / sphere 不从端口 1 扣除）。勾选 **Apply on Add**（默认开）时，每次 **Add** 或 **Remove** 都会立刻 Apply。未选中的父网格单元不会自动进端口 0；不写 GlobalIds。常数 Mark 写入该块全部单元的 `PatchMark`。
+**输出**：端口 0 **Added patches** 为已 Add 的 **`vtkPartitionedDataSetCollection`**；端口 1 **Remaining cells** 为 **Input 减去所有 selection 行的 cell**（pipeline / box / sphere 不从端口 1 扣除）。勾选 **Apply on Add**（默认开）时，每次 **Add** 或 **Remove** 都会立刻 Apply。表行前方的眼睛控制该 patch 在当前视图中的显示（与右键 Hide Block 共用 BlockSelectors；同名行联动）。未选中的父网格单元不会自动进端口 0；不写 GlobalIds。常数 Mark 写入该块全部单元的 `PatchMark`。
 
 与 **DataSet To Partitioned Collection** 不同：那条是 IOSS/Exodus 装配；本滤镜只做选区与自定义几何 append。
 

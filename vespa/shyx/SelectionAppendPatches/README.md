@@ -13,12 +13,14 @@
 
 1. 把滤镜接到封闭或开放的 `vtkDataSet`（通常是表面 `vtkPolyData`）。
 2. **Add from selection**：在 Input（或端口 1 剩余网格）上选单元（Sphere / Grow / 橡皮筋均可），**不必**点 Copy Active Selection。新行默认名 `geo_N`。
-3. **Add from pipeline**：下拉选择管线里其它几何节点（`vtkDataSet` / PDC 等），作为额外 patch 接入。不要选本滤镜自己或其下游，也不要重复加同一个端口。
-4. **Add from shape**：下拉 **Box** 或 **Sphere**。初始中心与半径与标题栏 **Sphere Selection** 相同（视口中心贴到表面上，直径约短边的 30%）。3D 视图里出现可拖动/旋转/缩放的 widget（Box 左键旋转）；勾选 Apply on Add 时，松手会 Apply。
-5. **Apply on Add**（默认勾选）：每次 **Add** 或 **Remove** 都会立刻 **Apply**，刷新两个端口。接着在 **Remaining cells** 上选，已 Add 的 selection 单元不在该端口上，不会重复选中。
-6. 取消勾选 **Apply on Add**：只改表、不 Apply。
-7. 双击改 **Name**。**表里的行不会合并**，同名可以有多行。
-8. 手动 **Apply**：按名称把同名行合成一个输出 patch（沿用该名第一次出现时的标记），唯一名称按表中顺序标记 `0, 1, 2, ...`。
+3. **Add from Celldata**：下拉选择 Input 上的一个 **CellData** 数组，按**唯一值**自动拆成多行（每行一个 patch，Name 为该值；向量只用第一分量）。整数 / 字符串标签最合适；连续标量唯一值过多会拒绝（上限 256）。行类型与 selection 相同，会从端口 1 扣除。
+4. **Add from pipeline**：下拉选择管线里其它几何节点（`vtkDataSet` / PDC 等），作为额外 patch 接入。不要选本滤镜自己或其下游，也不要重复加同一个端口。
+5. **Add from shape**：下拉 **Box** 或 **Sphere**。初始中心与半径与标题栏 **Sphere Selection** 相同（视口中心贴到表面上，直径约短边的 30%）。3D 视图里出现可拖动/旋转/缩放的 widget（Box 左键旋转）；勾选 Apply on Add 时，松手会 Apply。
+6. **Apply on Add**（默认勾选）：每次 **Add** 或 **Remove** 都会立刻 **Apply**，刷新两个端口。接着在 **Remaining cells** 上选，已 Add 的 selection 单元不在该端口上，不会重复选中。
+7. 取消勾选 **Apply on Add**：只改表、不 Apply。
+8. 双击改 **Name**。**表里的行不会合并**，同名可以有多行。
+9. 手动 **Apply**：按名称把同名行合成一个输出 patch（沿用该名第一次出现时的标记），唯一名称按表中顺序标记 `0, 1, 2, ...`。
+10. **眼睛**：每行最前方的眼睛控制该 patch 在当前视图中的显示（写入表示层 **BlockSelectors / BlockVisibilities**，与右键 Hide Block 相同）。表头眼睛可全开/全关。同名行共用一块输出，眼睛联动。需先有端口 0 的 Apply 结果。
 
 不写 GlobalIds，各块顶点相互独立。Mark 写到该块所有单元的 cell data / field data（数组名 **Mark Array Name**，默认 `PatchMark`）。
 
