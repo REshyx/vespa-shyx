@@ -5,7 +5,7 @@
                  name="SHYXSnappyHexMesh">
       <Documentation
           short_help="SHYX SnappyHexMesh: Hex-dominant volume mesh from PDC patches or a surface."
-          long_help="Takes a vtkPartitionedDataSetCollection (each partition is one STL / triSurfaceMesh patch) or a single vtkPolyData (wrapped as geometry). Optional Feature edges are chosen on the Properties panel (pipeline dropdown), not as a second required input, and written as .eMesh. Generates a hex-dominant volume mesh with snappyHexMesh. STL regions / firstSolid / secondSolid are not used. The OpenFOAM case is kept with a case.foam marker. After a successful mesh, Block variables can add/delete custom BoundaryVariable columns per internalMesh/patch; finite values are written to 0/shyx_BoundaryVariableN (same 0/ volField style as SHYX Partitioned Collection To OpenFOAM; NaN/empty -&gt; 0). Changing only those values reuses the previous polyMesh. The filter output is the vtkMultiBlockDataSet from vtkOpenFOAMReader (internalMesh plus boundary patches), same tree as File → Open of Case Folder case.foam."/>
+          long_help="Takes a vtkPartitionedDataSetCollection (each partition is one STL / triSurfaceMesh patch) or a single vtkPolyData (wrapped as geometry). Optional Feature edges are chosen on the Properties panel (pipeline dropdown), not as a second required input, and written as .eMesh. Generates a hex-dominant volume mesh with snappyHexMesh. STL regions / firstSolid / secondSolid are not used. The OpenFOAM case is kept with a case.foam marker. After a successful mesh, Block variables can add/delete custom BoundaryVariable columns per internalMesh/patch; finite values are written to 0/shyx_BoundaryVariableN (same 0/ volField style as SHYX Partitioned Collection To OpenFOAM; NaN/empty -&gt; 0). Patch rows can Write Normal (0/shyx_BoundaryRadialValueNormal); Compute Boundary Radial Value scales that vector by 1 - x^a. Changing only those values reuses the previous polyMesh. The filter output is the vtkMultiBlockDataSet from vtkOpenFOAMReader (internalMesh plus boundary patches), same tree as File → Open of Case Folder case.foam."/>
 
       <InputProperty name="Input" command="SetInputConnection">
         <ProxyGroupDomain name="groups">
@@ -290,6 +290,33 @@
         </Documentation>
       </StringVectorProperty>
 
+      <IntVectorProperty name="ComputeBoundaryRadialValue" label="Compute Boundary Radial Value"
+          command="SetComputeBoundaryRadialValue" number_of_elements="1" default_values="0"
+          animateable="0">
+        <BooleanDomain name="bool"/>
+        <Documentation>
+          When enabled, compute BoundaryRadialValue = 1 - x^a on each patch, and
+          BoundaryRadialValueNormal uses BoundaryRadialValue * patchNormal. When disabled,
+          BoundaryRadialValue is not computed, and Write Normal uses patchNormal.
+        </Documentation>
+      </IntVectorProperty>
+      <DoubleVectorProperty name="BoundaryRadialNormalFalloffFactor"
+          label="Boundary Radial Normal Falloff Factor (a)"
+          command="SetBoundaryRadialNormalFalloffFactor" number_of_elements="1"
+          default_values="1.0" animateable="0">
+        <DoubleRangeDomain name="range" min="-1e12" max="1e12"/>
+        <Documentation>
+          Exponent a in BoundaryRadialValue = 1 - x^a, where x is the raw radial coordinate
+          on the patch (open-boundary distance, same as SHYX Partitioned Collection Boundary Fields).
+        </Documentation>
+        <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="visibility"
+                                   property="ComputeBoundaryRadialValue"
+                                   value="1"/>
+        </Hints>
+      </DoubleVectorProperty>
+
       <!-- BlockNames is the group-widget anchor: must NOT be panel_visibility=never. -->
       <StringVectorProperty name="BlockNames" label="Block Names" command="SetBlockNames"
           number_of_elements="1" default_values="" animateable="0">
@@ -309,6 +336,15 @@
           internalField; patch rows set that patch). Empty / NaN cells write 0.
           Changing only these values skips snappyHexMesh when the previous polyMesh
           is still valid.
+        </Documentation>
+      </StringVectorProperty>
+      <StringVectorProperty name="BoundaryWriteNormals" label="Boundary Write Normals"
+          command="SetBoundaryWriteNormals" number_of_elements="1" default_values=""
+          animateable="0" panel_visibility="never">
+        <Documentation>
+          Newline-separated 0/1 flags aligned with Block Names. Only patch rows are used.
+          When non-zero, that patch's BoundaryRadialValueNormal is written to
+          0/shyx_BoundaryRadialValueNormal (independent of BoundaryVariables).
         </Documentation>
       </StringVectorProperty>
 
@@ -368,11 +404,16 @@
         <Property function="CaseDirectory" name="CaseDirectory"/>
         <Property function="CaseFoamPath" name="CaseFoamPath"/>
       </PropertyGroup>
+      <PropertyGroup label="Boundary radial">
+        <Property name="ComputeBoundaryRadialValue"/>
+        <Property name="BoundaryRadialNormalFalloffFactor"/>
+      </PropertyGroup>
       <PropertyGroup label="Block variables"
                      panel_widget="shyx_snappy_block_variables"
                      panel_visibility="default">
         <Property function="Names" name="BlockNames"/>
         <Property function="BoundaryVariables" name="BoundaryVariables"/>
+        <Property function="BoundaryWriteNormals" name="BoundaryWriteNormals"/>
       </PropertyGroup>
 
       <Hints>

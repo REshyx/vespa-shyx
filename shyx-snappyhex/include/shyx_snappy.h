@@ -82,6 +82,13 @@ typedef struct ShyxSnappyParams
 void shyx_snappy_params_default(ShyxSnappyParams* p);
 
 /**
+ * Optional progress hook (ParaView / VTK UpdateProgress).
+ * fraction is 0..1 within snappyHexMesh itself. text may be NULL.
+ * Return non-zero to cancel (shyx_snappy_run / mesh_only then return 6).
+ */
+typedef int (*ShyxSnappyProgressFn)(double fraction, const char* text, void* user);
+
+/**
  * Write a cartesian background hex mesh + snappyHexMeshDict, then run
  * castellated / snap / addLayers into case_dir/constant/polyMesh.
  *
@@ -89,20 +96,24 @@ void shyx_snappy_params_default(ShyxSnappyParams* p);
  *           p->n_geometries > 0.
  * case_dir: OpenFOAM case root (created if needed).
  * err/err_len: optional error buffer.
+ * progress / progress_user: optional; NULL disables. Invoked from Foam Info
+ *           lines so a host (ParaView) can update its progress bar.
  *
- * Returns 0 on success, non-zero on failure.
+ * Returns 0 on success, 6 if progress requested cancel, other non-zero on failure.
  *
  * Runs snappyHexMesh in-process through the statically linked OpenFOAM
  * archive (no snappy_cli.exe). Foam FatalError is thrown as C++ exceptions.
  */
 int shyx_snappy_run(const char* stl_path, const char* case_dir,
-    const ShyxSnappyParams* p, char* err, int err_len);
+    const ShyxSnappyParams* p, char* err, int err_len,
+    ShyxSnappyProgressFn progress, void* progress_user);
 
 /** Must match SHYX_SNAPPY_PARAMS_ABI in the header used to compile the plugin. */
 int shyx_snappy_params_abi(void);
 
 /** Run snappyHexMesh on an already-written case (used by snappy_cli -runCase). */
-int shyx_snappy_mesh_only(const char* case_dir, char* err, int err_len);
+int shyx_snappy_mesh_only(const char* case_dir, char* err, int err_len,
+    ShyxSnappyProgressFn progress, void* progress_user);
 
 /* Linker anchor: pull foam_env_early.obj (FOAM_SIGFPE/FOAM_ABORT before OpenFOAM ctors). */
 void shyx_touch_foam_env(void);

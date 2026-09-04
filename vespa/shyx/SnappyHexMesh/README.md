@@ -25,15 +25,15 @@ Properties 三张表（Add partition 从 Input 分块名下拉，不是 3D 选�
 
 关掉 castellated / snap / layers 时，用输入表面 AABB（加 Bounds margin）直接生成笛卡尔 `VTK_HEXAHEDRON` 背景盒，不写 OpenFOAM ASCII、不调用 snappyHexMesh。格子尺寸：`Background cell size > 0` 用该值，否则取加 margin 后最长边的 1/16。
 
-每次跑完（成功或失败）都保留这一次的 Foam case，并在 case 根目录写 `case.foam`。**Case Directory 留空**时每次 Apply 另开 `%TEMP%\shyx-snappy-<id>-<mtime>\case`，并尽量删掉上一轮自动创建的目录；指定了文件夹则写进该目录（覆盖），不删用户目录。滤镜输出用 ParaView 自带的 `vtkOpenFOAMReader` 读整棵 `vtkMultiBlockDataSet`（`internalMesh` 和 boundary patches），与 **File → Open** Case Folder 里的 `case.foam` 相同。关掉 castellated 时背景盒也包成单块 MultiBlock。分块 STL / `.eMesh` 在该 case 的 `constant/triSurface/`，面板 **Case Directory** 可选路径，**Case Folder** 显示实际写出位置。
+每次跑完（成功或失败）都保留这一次的 Foam case，并在 case 根目录写 `case.foam`。Apply 过程中 ParaView 底部进度条会显示阶段（写 STL、castellated / snap / layers 迭代、读网格），点 Cancel 可中止。**Case Directory 留空**时每次 Apply 另开 `%TEMP%\shyx-snappy-<id>-<mtime>\case`，并尽量删掉上一轮自动创建的目录；指定了文件夹则写进该目录（覆盖），不删用户目录。滤镜输出用 ParaView 自带的 `vtkOpenFOAMReader` 读整棵 `vtkMultiBlockDataSet`（`internalMesh` 和 boundary patches），与 **File → Open** Case Folder 里的 `case.foam` 相同。关掉 castellated 时背景盒也包成单块 MultiBlock。分块 STL / `.eMesh` 在该 case 的 `constant/triSurface/`，面板 **Case Directory** 可选路径，**Case Folder** 显示实际写出位置。
 
 **Inside points** 列表可 Add insidePoint：选中一行后视图里出现可拖动手柄。空列表仍用 AABB 中心；多个点写成 OpenFOAM `locationsInMesh`（zone `none`）。点必须落在要保留的单元格内，不要贴在面上。
 
 ## Block variables
 
-网格划分成功后，Properties 里的 **Block variables** 表列出输出里的 **internalMesh** 和各 patch（名称只读，点 **Refresh** 从当前输出刷新）。**Add variable / Delete variable** 增删列，写法对齐 **SHYX Partitioned Collection Boundary Fields**。
+网格划分成功后，Properties 里的 **Block variables** 表列出输出里的 **internalMesh** 和各 patch（名称只读，点 **Refresh** 从当前输出刷新）。**Add variable / Delete variable** 增删列，写法对齐 **SHYX Partitioned Collection Boundary Fields**。Patch 行可勾选 **Write Normal**；上方 **Compute Boundary Radial Value** 与 **Falloff Factor (a)** 控制是否把径向系数乘进法线。
 
-有限值写成 OpenFOAM `0/shyx_BoundaryVariableN`（`type calculated` 的均匀 `volScalarField`），与 **SHYX Partitioned Collection To OpenFOAM** 的 `0/shyx_<name>` 相同：internalMesh 行写入 `internalField`，patch 行写入该 patch 的 `boundaryField`；空单元格 / NaN 写成 **0**（OpenFOAM 场文件不能含 NaN）。只改这些列时，只要上一份 `constant/polyMesh` 仍匹配网格指纹，就**不会**重跑 snappyHexMesh，也不会另开 `%TEMP%/shyx-snappy-*-<mtime>`。关掉 castellated 时不写 `0/`，而是在背景 hex 的 CellData 上挂同名数组 `shyx_BoundaryVariableN`。
+有限值写成 OpenFOAM `0/shyx_BoundaryVariableN`（`type calculated` 的均匀 `volScalarField`），与 **SHYX Partitioned Collection To OpenFOAM** 的 `0/shyx_<name>` 相同：internalMesh 行写入 `internalField`，patch 行写入该 patch 的 `boundaryField`；空单元格 / NaN 写成 **0**（OpenFOAM 场文件不能含 NaN）。勾选 Write Normal 的 patch 写成 `0/shyx_BoundaryRadialValueNormal`（`volVectorField`，该 patch 的平均面法向；开启 Compute Boundary Radial Value 时为 `BoundaryRadialValue * patchNormal`，`BoundaryRadialValue = 1 - x^a`，同时写出 `0/shyx_BoundaryRadialValue`）。只改这些列 / Write Normal / 径向系数时，只要上一份 `constant/polyMesh` 仍匹配网格指纹，就**不会**重跑 snappyHexMesh，也不会另开 `%TEMP%/shyx-snappy-*-<mtime>`。关掉 castellated 时不写 `0/`，而是在背景 hex 的 CellData 上挂同名数组 `shyx_BoundaryVariableN`。
 
 示例 dict 与笔记：
 

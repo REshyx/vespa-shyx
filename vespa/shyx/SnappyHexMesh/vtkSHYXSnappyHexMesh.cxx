@@ -12,6 +12,7 @@
 #include <vtkCellType.h>
 #include <vtkCompositeDataIterator.h>
 #include <vtkCompositeDataSet.h>
+#include <vtkDataArray.h>
 #include <vtkDataObject.h>
 #include <vtkDataSet.h>
 #include <vtkDoubleArray.h>
@@ -27,6 +28,7 @@
 #include <vtkOpenFOAMReader.h>
 #include <vtkPartitionedDataSet.h>
 #include <vtkPartitionedDataSetCollection.h>
+#include <vtkPointData.h>
 #include <vtkPoints.h>
 #include <vtkPolyData.h>
 #include <vtkSTLWriter.h>
@@ -36,6 +38,7 @@
 #include <vtkUnstructuredGrid.h>
 
 #include <algorithm>
+#include <array>
 #include <cctype>
 #include <cmath>
 #include <cstdint>
@@ -66,6 +69,8 @@ vtkStandardNewMacro(vtkSHYXSnappyHexMesh);
 namespace
 {
 const void* const kShyxFoamEnvAnchor = reinterpret_cast<const void*>(&shyx_touch_foam_env);
+constexpr const char* kBoundaryRadialValueArrayName = "BoundaryRadialValue";
+constexpr const char* kBoundaryRadialNormalArrayName = "BoundaryRadialValueNormal";
 
 namespace fs = std::filesystem;
 
@@ -1105,7 +1110,8 @@ void RemoveStaleShyxVariableFiles(const fs::path& zeroDir)
   {
     const fs::path p = it->path();
     const std::string name = p.filename().string();
-    if (name.rfind("shyx_BoundaryVariable", 0) == 0)
+    if (name.rfind("shyx_BoundaryVariable", 0) == 0 || name == FoamFieldFileName(kBoundaryRadialValueArrayName) ||
+      name == FoamFieldFileName(kBoundaryRadialNormalArrayName))
     {
       stale.push_back(p);
     }
@@ -1114,6 +1120,19 @@ void RemoveStaleShyxVariableFiles(const fs::path& zeroDir)
   {
     fs::remove(p, ec);
   }
+}
+
+void RemoveStaleShyxRadialFiles(const fs::path& zeroDir)
+{
+  std::error_code ec;
+  if (!fs::exists(zeroDir, ec) || !fs::is_directory(zeroDir, ec))
+  {
+    return;
+  }
+  const std::string radialName = FoamFieldFileName(kBoundaryRadialValueArrayName);
+  const std::string normalName = FoamFieldFileName(kBoundaryRadialNormalArrayName);
+  fs::remove(zeroDir / radialName, ec);
+  fs::remove(zeroDir / normalName, ec);
 }
 
 int FindBlockRow(const std::vector<std::string>& names, const std::string& want)
@@ -1268,7 +1287,728 @@ void AttachUniformCellArrays(vtkDataSet* ds, const char* blockNames, const char*
   }
 }
 
+std::vector<int> ParseLineIntFlags(const char* values)
+{
+  std::vector<int> result;
+  if (!values || values[0] == '\0')
+  {
+    return result;
+  }
+  std::stringstream stream(values);
+  std::string line;
+  while (std::getline(stream, line))
+  {
+    if (!line.empty() && line.back() == '\r')
+    {
+      line.pop_back();
+    }
+    std::stringstream lineStream(line);
+    int flag = 0;
+    lineStream >> flag;
+    result.push_back(flag != 0 ? 1 : 0);
+  }
+  return result;
+}
+
+bool ResolveWriteNormal(const std::vector<int>& flags, size_t rowIndex)
+{
+  return rowIndex < flags.size() && flags[rowIndex] != 0;
+}
+
+bool AnyWriteNormal(const std::vector<int>& flags)
+{
+  for (int flag : flags)
+  {
+    if (flag != 0)
+    {
+      return true;
+    }
+  }
+  return false;
+}
+
+double Cross2D(const double a[2], const double b[2])
+{
+  return a[0] * b[1] - a[1] * b[0];
+}
+
+void AddCountedEdge(std::map<std::pair<vtkIdType, vtkIdType>, int>& edgeCounts, vtkIdType a, vtkIdType b)
+{
+  if (a == b)
+  {
+    return;
+  }
+  if (b < a)
+  {
+    std::swap(a, b);
+  }
+  ++edgeCounts[std::make_pair(a, b)];
+}
+
+bool ComputeAverageCellNormal(vtkDataSet* ds, double normal[3])
+{
+  normal[0] = normal[1] = normal[2] = 0.0;
+  if (!ds || ds->GetNumberOfPoints() == 0)
+  {
+    return false;
+  }
+
+  vtkNew<vtkIdList> cpts;
+  double p0[3], p1[3], p2[3], e1[3], e2[3], n[3];
+  for (vtkIdType cid = 0; cid < ds->GetNumberOfCells(); ++cid)
+  {
+    ds->GetCellPoints(cid, cpts);
+    if (cpts->GetNumberOfIds() < 3)
+    {
+      continue;
+    }
+    ds->GetPoint(cpts->GetId(0), p0);
+    for (vtkIdType k = 1; k + 1 < cpts->GetNumberOfIds(); ++k)
+    {
+      ds->GetPoint(cpts->GetId(k), p1);
+      ds->GetPoint(cpts->GetId(k + 1), p2);
+      vtkMath::Subtract(p1, p0, e1);
+      vtkMath::Subtract(p2, p0, e2);
+      vtkMath::Cross(e1, e2, n);
+      normal[0] += n[0];
+      normal[1] += n[1];
+      normal[2] += n[2];
+    }
+  }
+
+  const double len = vtkMath::Norm(normal);
+  if (len <= 1e-30 || !vtkMath::IsFinite(len))
+  {
+    return false;
+  }
+  normal[0] /= len;
+  normal[1] /= len;
+  normal[2] /= len;
+  return true;
+}
+
+void AddBoundaryRadialValueArray(vtkPolyData* pd, const char* arrayName, double exponent)
+{
+  if (!pd || !arrayName || arrayName[0] == '\0')
+  {
+    return;
+  }
+
+  const vtkIdType nPts = pd->GetNumberOfPoints();
+  const vtkIdType nCells = pd->GetNumberOfCells();
+  vtkNew<vtkDoubleArray> values;
+  values->SetName(arrayName);
+  values->SetNumberOfComponents(1);
+  values->SetNumberOfTuples(nPts);
+  const double nanv = std::numeric_limits<double>::quiet_NaN();
+  values->Fill(nanv);
+
+  vtkNew<vtkDoubleArray> cellValues;
+  cellValues->SetName(arrayName);
+  cellValues->SetNumberOfComponents(1);
+  cellValues->SetNumberOfTuples(nCells);
+  cellValues->Fill(nanv);
+
+  auto assignEmpty = [&]() {
+    pd->GetPointData()->RemoveArray(arrayName);
+    pd->GetPointData()->AddArray(values);
+    pd->GetCellData()->RemoveArray(arrayName);
+    pd->GetCellData()->AddArray(cellValues);
+  };
+
+  if (nPts == 0 || nCells == 0 || !pd->GetPoints())
+  {
+    assignEmpty();
+    return;
+  }
+
+  std::map<std::pair<vtkIdType, vtkIdType>, int> edgeCounts;
+  vtkNew<vtkIdList> cpts;
+  for (vtkIdType cid = 0; cid < pd->GetNumberOfCells(); ++cid)
+  {
+    pd->GetCellPoints(cid, cpts);
+    const vtkIdType ncp = cpts->GetNumberOfIds();
+    if (ncp == 2)
+    {
+      AddCountedEdge(edgeCounts, cpts->GetId(0), cpts->GetId(1));
+      continue;
+    }
+    if (ncp < 3)
+    {
+      continue;
+    }
+    for (vtkIdType k = 0; k < ncp; ++k)
+    {
+      AddCountedEdge(edgeCounts, cpts->GetId(k), cpts->GetId((k + 1) % ncp));
+    }
+  }
+
+  std::vector<std::pair<vtkIdType, vtkIdType>> boundaryEdges;
+  std::vector<unsigned char> isBoundaryPoint(static_cast<size_t>(nPts), 0);
+  for (const auto& item : edgeCounts)
+  {
+    if (item.second != 1)
+    {
+      continue;
+    }
+    const vtkIdType a = item.first.first;
+    const vtkIdType b = item.first.second;
+    if (a < 0 || a >= nPts || b < 0 || b >= nPts)
+    {
+      continue;
+    }
+    boundaryEdges.push_back(item.first);
+    isBoundaryPoint[static_cast<size_t>(a)] = 1;
+    isBoundaryPoint[static_cast<size_t>(b)] = 1;
+  }
+
+  if (boundaryEdges.empty())
+  {
+    assignEmpty();
+    return;
+  }
+
+  double center[3] = { 0.0, 0.0, 0.0 };
+  vtkIdType nBoundaryPts = 0;
+  double x[3];
+  for (vtkIdType p = 0; p < nPts; ++p)
+  {
+    if (!isBoundaryPoint[static_cast<size_t>(p)])
+    {
+      continue;
+    }
+    pd->GetPoint(p, x);
+    center[0] += x[0];
+    center[1] += x[1];
+    center[2] += x[2];
+    ++nBoundaryPts;
+  }
+  if (nBoundaryPts == 0)
+  {
+    assignEmpty();
+    return;
+  }
+  center[0] /= static_cast<double>(nBoundaryPts);
+  center[1] /= static_cast<double>(nBoundaryPts);
+  center[2] /= static_cast<double>(nBoundaryPts);
+
+  double normal[3];
+  if (!ComputeAverageCellNormal(pd, normal))
+  {
+    assignEmpty();
+    return;
+  }
+
+  double axisU[3], axisV[3];
+  vtkMath::Perpendiculars(normal, axisU, axisV, 0.0);
+
+  std::vector<std::array<double, 2>> uv(static_cast<size_t>(nPts));
+  double scale = 0.0;
+  for (vtkIdType p = 0; p < nPts; ++p)
+  {
+    pd->GetPoint(p, x);
+    const double rel[3] = { x[0] - center[0], x[1] - center[1], x[2] - center[2] };
+    uv[static_cast<size_t>(p)] = { vtkMath::Dot(rel, axisU), vtkMath::Dot(rel, axisV) };
+    scale = std::max(scale, std::abs(uv[static_cast<size_t>(p)][0]));
+    scale = std::max(scale, std::abs(uv[static_cast<size_t>(p)][1]));
+  }
+
+  const double geomTol = 1e-12 * std::max(1.0, scale);
+  const double rayTol = 1e-9;
+  for (vtkIdType p = 0; p < nPts; ++p)
+  {
+    if (isBoundaryPoint[static_cast<size_t>(p)])
+    {
+      values->SetValue(p, 0.0);
+      continue;
+    }
+
+    const double q[2] = { uv[static_cast<size_t>(p)][0], uv[static_cast<size_t>(p)][1] };
+    const double qNorm = std::sqrt(q[0] * q[0] + q[1] * q[1]);
+    if (qNorm <= geomTol)
+    {
+      values->SetValue(p, 1.0);
+      continue;
+    }
+
+    double bestS = std::numeric_limits<double>::infinity();
+    for (const auto& edge : boundaryEdges)
+    {
+      const double a[2] = { uv[static_cast<size_t>(edge.first)][0],
+        uv[static_cast<size_t>(edge.first)][1] };
+      const double b[2] = { uv[static_cast<size_t>(edge.second)][0],
+        uv[static_cast<size_t>(edge.second)][1] };
+      const double e[2] = { b[0] - a[0], b[1] - a[1] };
+      const double denom = Cross2D(q, e);
+      if (std::abs(denom) <= geomTol * qNorm)
+      {
+        continue;
+      }
+      const double s = Cross2D(a, e) / denom;
+      const double u = Cross2D(a, q) / denom;
+      if (s >= 1.0 - rayTol && u >= -rayTol && u <= 1.0 + rayTol && s < bestS)
+      {
+        bestS = s;
+      }
+    }
+
+    if (vtkMath::IsFinite(bestS) && bestS > 0.0)
+    {
+      double raw = 1.0 / bestS;
+      raw = std::max(0.0, std::min(1.0, raw));
+      values->SetValue(p, 1.0 - std::pow(raw, exponent));
+    }
+  }
+
+  for (vtkIdType cid = 0; cid < nCells; ++cid)
+  {
+    pd->GetCellPoints(cid, cpts);
+    double sum = 0.0;
+    vtkIdType count = 0;
+    for (vtkIdType k = 0; k < cpts->GetNumberOfIds(); ++k)
+    {
+      const vtkIdType pid = cpts->GetId(k);
+      if (pid < 0 || pid >= nPts)
+      {
+        continue;
+      }
+      const double v = values->GetValue(pid);
+      if (!vtkMath::IsFinite(v))
+      {
+        continue;
+      }
+      sum += v;
+      ++count;
+    }
+    if (count > 0)
+    {
+      cellValues->SetValue(cid, sum / static_cast<double>(count));
+    }
+  }
+
+  pd->GetPointData()->RemoveArray(arrayName);
+  pd->GetPointData()->AddArray(values);
+  pd->GetCellData()->RemoveArray(arrayName);
+  pd->GetCellData()->AddArray(cellValues);
+}
+
+void CollectNamedBlocks(
+  vtkDataObject* obj, const std::string& name, std::vector<std::pair<std::string, vtkDataSet*>>& out)
+{
+  if (!obj)
+  {
+    return;
+  }
+  if (auto* ds = vtkDataSet::SafeDownCast(obj))
+  {
+    if (!name.empty() && name != "Root")
+    {
+      out.push_back({ name, ds });
+    }
+    return;
+  }
+  auto* mb = vtkMultiBlockDataSet::SafeDownCast(obj);
+  if (!mb)
+  {
+    return;
+  }
+  const unsigned int n = mb->GetNumberOfBlocks();
+  for (unsigned int i = 0; i < n; ++i)
+  {
+    std::string childName = name;
+    if (vtkInformation* meta = mb->GetMetaData(i))
+    {
+      if (const char* raw = meta->Get(vtkCompositeDataSet::NAME()))
+      {
+        childName = raw;
+      }
+    }
+    CollectNamedBlocks(mb->GetBlock(i), childName, out);
+  }
+}
+
+vtkDataSet* FindNamedBlock(
+  const std::vector<std::pair<std::string, vtkDataSet*>>& blocks, const std::string& want)
+{
+  for (const auto& b : blocks)
+  {
+    if (b.first == want)
+    {
+      return b.second;
+    }
+  }
+  const std::string wantLower = LowerCopy(want);
+  for (const auto& b : blocks)
+  {
+    if (LowerCopy(b.first) == wantLower)
+    {
+      return b.second;
+    }
+  }
+  return nullptr;
+}
+
+void RemoveNamedArrays(vtkDataSet* ds, const char* name)
+{
+  if (!ds || !name || name[0] == '\0')
+  {
+    return;
+  }
+  ds->GetCellData()->RemoveArray(name);
+  ds->GetPointData()->RemoveArray(name);
+}
+
+void AttachZeroCellArray(vtkDataSet* ds, const char* name, int ncomp)
+{
+  if (!ds || !name || name[0] == '\0' || ncomp < 1)
+  {
+    return;
+  }
+  vtkNew<vtkDoubleArray> arr;
+  arr->SetName(name);
+  arr->SetNumberOfComponents(ncomp);
+  arr->SetNumberOfTuples(ds->GetNumberOfCells());
+  arr->Fill(0.0);
+  ds->GetCellData()->RemoveArray(name);
+  ds->GetCellData()->AddArray(arr);
+}
+
+void WriteComponentTuple(std::ostream& os, const double* v, int ncomp)
+{
+  os << std::setprecision(17);
+  if (ncomp == 1)
+  {
+    os << v[0];
+    return;
+  }
+  os << "(";
+  for (int c = 0; c < ncomp; ++c)
+  {
+    if (c)
+    {
+      os << " ";
+    }
+    os << v[c];
+  }
+  os << ")";
+}
+
+struct PatchFieldBlock
+{
+  bool Uniform = true;
+  std::vector<double> Data;
+};
+
+bool WriteCalculatedVolField(const fs::path& zeroDir, const std::string& foamName, const char* cls,
+  const char* listType, int ncomp, const double* internalUniform,
+  const std::vector<std::string>& patches, const std::vector<PatchFieldBlock>& patchFields,
+  std::string* err)
+{
+  const fs::path filePath = zeroDir / foamName;
+  std::ofstream os(filePath.string());
+  if (!os)
+  {
+    if (err)
+    {
+      *err = "Cannot write 0/" + foamName;
+    }
+    return false;
+  }
+  WriteFoamHeader(os, cls, foamName.c_str(), "0");
+  os << "dimensions      [0 0 0 0 0 0 0];\n\n";
+  os << std::setprecision(17);
+  os << "internalField   uniform ";
+  WriteComponentTuple(os, internalUniform, ncomp);
+  os << ";\n\nboundaryField\n{\n";
+  for (size_t i = 0; i < patches.size(); ++i)
+  {
+    const PatchFieldBlock& block =
+      i < patchFields.size() ? patchFields[i] : PatchFieldBlock{};
+    os << "    " << patches[i] << "\n    {\n        type            calculated;\n";
+    if (block.Uniform || block.Data.size() < static_cast<size_t>(ncomp))
+    {
+      double zero[9] = { 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0 };
+      const double* v = block.Data.size() >= static_cast<size_t>(ncomp) ? block.Data.data() : zero;
+      os << "        value           uniform ";
+      WriteComponentTuple(os, v, ncomp);
+      os << ";\n";
+    }
+    else
+    {
+      const vtkIdType nTuples = static_cast<vtkIdType>(block.Data.size() / static_cast<size_t>(ncomp));
+      os << "        value           nonuniform List<" << listType << ">\n" << nTuples << "\n(\n";
+      for (vtkIdType t = 0; t < nTuples; ++t)
+      {
+        WriteComponentTuple(os, &block.Data[static_cast<size_t>(t) * static_cast<size_t>(ncomp)], ncomp);
+        os << "\n";
+      }
+      os << ");\n";
+    }
+    os << "    }\n";
+  }
+  os << "}\n";
+  return true;
+}
+
+PatchFieldBlock MakePatchFieldFromArray(vtkDataArray* arr, int ncomp, bool forceUniformZero)
+{
+  PatchFieldBlock block;
+  if (forceUniformZero || !arr || arr->GetNumberOfComponents() < ncomp || arr->GetNumberOfTuples() == 0)
+  {
+    block.Uniform = true;
+    block.Data.assign(static_cast<size_t>(ncomp), 0.0);
+    return block;
+  }
+  const vtkIdType n = arr->GetNumberOfTuples();
+  if (n == 1)
+  {
+    block.Uniform = true;
+    block.Data.resize(static_cast<size_t>(ncomp));
+    for (int c = 0; c < ncomp; ++c)
+    {
+      block.Data[static_cast<size_t>(c)] = FiniteOrZero(arr->GetComponent(0, c));
+    }
+    return block;
+  }
+  bool allSame = true;
+  double first[9] = { 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0 };
+  for (int c = 0; c < ncomp; ++c)
+  {
+    first[c] = FiniteOrZero(arr->GetComponent(0, c));
+  }
+  block.Data.resize(static_cast<size_t>(n) * static_cast<size_t>(ncomp));
+  for (vtkIdType t = 0; t < n; ++t)
+  {
+    for (int c = 0; c < ncomp; ++c)
+    {
+      const double v = FiniteOrZero(arr->GetComponent(t, c));
+      block.Data[static_cast<size_t>(t) * static_cast<size_t>(ncomp) + static_cast<size_t>(c)] = v;
+      if (v != first[c])
+      {
+        allSame = false;
+      }
+    }
+  }
+  if (allSame)
+  {
+    block.Uniform = true;
+    block.Data.assign(first, first + ncomp);
+  }
+  else
+  {
+    block.Uniform = false;
+  }
+  return block;
+}
+
+bool ApplyBoundaryNormalsAndRadial(vtkMultiBlockDataSet* output, const fs::path& caseDir,
+  const char* blockNames, const char* writeNormals, int computeRadial, double exponent,
+  std::string* err)
+{
+  const std::string radialFoam = FoamFieldFileName(kBoundaryRadialValueArrayName);
+  const std::string normalFoam = FoamFieldFileName(kBoundaryRadialNormalArrayName);
+  const fs::path zeroDir = caseDir / "0";
+  const std::vector<std::string> names = ParseBlockNames(blockNames);
+  const std::vector<int> flags = ParseLineIntFlags(writeNormals);
+  const bool writeAnyNormal = AnyWriteNormal(flags);
+  const bool doRadial = computeRadial != 0;
+
+  std::vector<std::pair<std::string, vtkDataSet*>> blocks;
+  CollectNamedBlocks(output, std::string(), blocks);
+
+  auto stripArrays = [&]() {
+    for (const auto& b : blocks)
+    {
+      RemoveNamedArrays(b.second, radialFoam.c_str());
+      RemoveNamedArrays(b.second, normalFoam.c_str());
+    }
+  };
+
+  if (!writeAnyNormal && !doRadial)
+  {
+    stripArrays();
+    RemoveStaleShyxRadialFiles(zeroDir);
+    return true;
+  }
+
+  std::error_code ec;
+  fs::create_directories(zeroDir, ec);
+  if (ec)
+  {
+    if (err)
+    {
+      *err = "Cannot create 0/: " + ec.message();
+    }
+    return false;
+  }
+  RemoveStaleShyxRadialFiles(zeroDir);
+
+  std::vector<std::string> patches = ParsePolyMeshBoundaryNames(caseDir / "constant" / "polyMesh" / "boundary");
+  if (patches.empty())
+  {
+    for (const std::string& n : names)
+    {
+      if (!IsInternalMeshName(n) && !n.empty())
+      {
+        patches.push_back(n);
+      }
+    }
+  }
+
+  vtkDataSet* internal = nullptr;
+  const int internalRow = FindInternalMeshRow(names);
+  if (internalRow >= 0)
+  {
+    internal = FindNamedBlock(blocks, names[static_cast<size_t>(internalRow)]);
+  }
+  if (!internal)
+  {
+    for (const auto& b : blocks)
+    {
+      if (IsInternalMeshName(b.first) && vtkUnstructuredGrid::SafeDownCast(b.second))
+      {
+        internal = b.second;
+        break;
+      }
+    }
+  }
+
+  for (const auto& b : blocks)
+  {
+    RemoveNamedArrays(b.second, radialFoam.c_str());
+    RemoveNamedArrays(b.second, normalFoam.c_str());
+  }
+
+  if (internal)
+  {
+    if (doRadial)
+    {
+      AttachZeroCellArray(internal, radialFoam.c_str(), 1);
+    }
+    if (writeAnyNormal)
+    {
+      AttachZeroCellArray(internal, normalFoam.c_str(), 3);
+    }
+  }
+
+  for (const std::string& patch : patches)
+  {
+    vtkDataSet* ds = FindNamedBlock(blocks, patch);
+    if (!ds)
+    {
+      continue;
+    }
+    const int rowIndex = FindBlockRow(names, patch);
+    const bool writeNormal =
+      rowIndex >= 0 && ResolveWriteNormal(flags, static_cast<size_t>(rowIndex));
+
+    vtkPolyData* pd = vtkPolyData::SafeDownCast(ds);
+    if (doRadial && pd)
+    {
+      AddBoundaryRadialValueArray(pd, radialFoam.c_str(), exponent);
+    }
+    else if (doRadial)
+    {
+      AttachZeroCellArray(ds, radialFoam.c_str(), 1);
+    }
+
+    if (!writeAnyNormal)
+    {
+      continue;
+    }
+
+    double avgN[3] = { 0.0, 0.0, 0.0 };
+    const bool haveNormal = writeNormal && ComputeAverageCellNormal(ds, avgN);
+    vtkDataArray* cellRadial =
+      doRadial ? vtkDataArray::SafeDownCast(ds->GetCellData()->GetArray(radialFoam.c_str())) : nullptr;
+
+    vtkNew<vtkDoubleArray> normals;
+    normals->SetName(normalFoam.c_str());
+    normals->SetNumberOfComponents(3);
+    const vtkIdType nCells = ds->GetNumberOfCells();
+    normals->SetNumberOfTuples(nCells);
+    for (vtkIdType cid = 0; cid < nCells; ++cid)
+    {
+      if (!haveNormal)
+      {
+        normals->SetTuple3(cid, 0.0, 0.0, 0.0);
+        continue;
+      }
+      double scale = 1.0;
+      if (doRadial)
+      {
+        scale = 0.0;
+        if (cellRadial && cid < cellRadial->GetNumberOfTuples())
+        {
+          scale = FiniteOrZero(cellRadial->GetComponent(cid, 0));
+        }
+      }
+      normals->SetTuple3(cid, avgN[0] * scale, avgN[1] * scale, avgN[2] * scale);
+    }
+    ds->GetCellData()->RemoveArray(normalFoam.c_str());
+    ds->GetCellData()->AddArray(normals);
+  }
+
+  std::vector<PatchFieldBlock> radialFields;
+  std::vector<PatchFieldBlock> normalFields;
+  radialFields.reserve(patches.size());
+  normalFields.reserve(patches.size());
+  for (const std::string& patch : patches)
+  {
+    vtkDataSet* ds = FindNamedBlock(blocks, patch);
+    vtkDataArray* radialArr =
+      ds ? vtkDataArray::SafeDownCast(ds->GetCellData()->GetArray(radialFoam.c_str())) : nullptr;
+    vtkDataArray* normalArr =
+      ds ? vtkDataArray::SafeDownCast(ds->GetCellData()->GetArray(normalFoam.c_str())) : nullptr;
+    if (doRadial)
+    {
+      radialFields.push_back(MakePatchFieldFromArray(radialArr, 1, false));
+    }
+    if (writeAnyNormal)
+    {
+      normalFields.push_back(MakePatchFieldFromArray(normalArr, 3, false));
+    }
+  }
+
+  const double zeroS = 0.0;
+  const double zeroV[3] = { 0.0, 0.0, 0.0 };
+  if (doRadial &&
+    !WriteCalculatedVolField(zeroDir, radialFoam, "volScalarField", "scalar", 1, &zeroS, patches,
+      radialFields, err))
+  {
+    return false;
+  }
+  if (writeAnyNormal &&
+    !WriteCalculatedVolField(zeroDir, normalFoam, "volVectorField", "vector", 3, zeroV, patches,
+      normalFields, err))
+  {
+    return false;
+  }
+  return true;
+}
+
+bool ReportVtkProgress(vtkSHYXSnappyHexMesh* self, double frac, const char* text)
+{
+  if (!self)
+  {
+    return false;
+  }
+  self->SetProgressText(text);
+  self->UpdateProgress(frac);
+  return self->CheckAbort() != 0;
+}
+
 } // namespace
+
+extern "C" int vtkSHYXSnappyProgressCb(double snappyFrac, const char* text, void* user)
+{
+  auto* self = static_cast<vtkSHYXSnappyHexMesh*>(user);
+  const double t = snappyFrac < 0.0 ? 0.0 : (snappyFrac > 1.0 ? 1.0 : snappyFrac);
+  return ReportVtkProgress(
+           self, 0.08 + 0.84 * t, (text && text[0] != '\0') ? text : "snappyHexMesh")
+    ? 1
+    : 0;
+}
 
 vtkSHYXSnappyHexMesh::vtkSHYXSnappyHexMesh()
 {
@@ -1293,6 +2033,7 @@ vtkSHYXSnappyHexMesh::~vtkSHYXSnappyHexMesh()
   this->SetLayerNSurfaceLayers(nullptr);
   this->SetBlockNames(nullptr);
   this->SetBoundaryVariables(nullptr);
+  this->SetBoundaryWriteNormals(nullptr);
 }
 
 void vtkSHYXSnappyHexMesh::SetFeatureEdgesConnection(vtkAlgorithmOutput* algOutput)
@@ -1331,6 +2072,11 @@ void vtkSHYXSnappyHexMesh::PrintSelf(ostream& os, vtkIndent indent)
   os << indent << "BlockNames: " << (this->BlockNames ? this->BlockNames : "(none)") << "\n";
   os << indent << "BoundaryVariables: "
      << (this->BoundaryVariables ? this->BoundaryVariables : "(none)") << "\n";
+  os << indent << "BoundaryWriteNormals: "
+     << (this->BoundaryWriteNormals ? this->BoundaryWriteNormals : "(none)") << "\n";
+  os << indent << "ComputeBoundaryRadialValue: " << this->ComputeBoundaryRadialValue << "\n";
+  os << indent << "BoundaryRadialNormalFalloffFactor: " << this->BoundaryRadialNormalFalloffFactor
+     << "\n";
 }
 
 std::string vtkSHYXSnappyHexMesh::ComputeMeshFingerprint(
@@ -1480,6 +2226,11 @@ int vtkSHYXSnappyHexMesh::RequestData(
     return 0;
   }
 
+  if (ReportVtkProgress(this, 0.01, "Preparing surfaces"))
+  {
+    return 0;
+  }
+
   std::string partErr;
   std::vector<MeshPart> parts;
   if (!CollectParts(input, parts, &partErr))
@@ -1550,6 +2301,10 @@ int vtkSHYXSnappyHexMesh::RequestData(
     }
     std::string hexErr;
     vtkNew<vtkUnstructuredGrid> hex;
+    if (ReportVtkProgress(this, 0.4, "Building background hex"))
+    {
+      return 0;
+    }
     if (!BuildBackgroundHexVtk(
           hex, box[0], box[2], box[4], box[1], box[3], box[5], nx, ny, nz, &hexErr))
     {
@@ -1558,6 +2313,7 @@ int vtkSHYXSnappyHexMesh::RequestData(
     }
     AttachUniformCellArrays(hex, this->BlockNames, this->BoundaryVariables);
     SetSingleBlockMesh(output, hex, "internalMesh");
+    ReportVtkProgress(this, 1.0, "Done");
     return 1;
   }
 
@@ -1575,8 +2331,20 @@ int vtkSHYXSnappyHexMesh::RequestData(
     {
       std::string parseErr;
       const fs::path foamPath = fs::path(previousCase) / "case.foam";
+      if (ReportVtkProgress(this, 0.5, "Reusing previous mesh"))
+      {
+        return 0;
+      }
       if (ReadCaseWithOpenFOAMReader(foamPath.string(), output, &parseErr))
       {
+        std::string normalErr;
+        if (!ApplyBoundaryNormalsAndRadial(output, fs::path(previousCase), this->BlockNames,
+              this->BoundaryWriteNormals, this->ComputeBoundaryRadialValue,
+              this->BoundaryRadialNormalFalloffFactor, &normalErr))
+        {
+          vtkWarningMacro(<< normalErr);
+        }
+        ReportVtkProgress(this, 1.0, "Done");
         return 1;
       }
       vtkWarningMacro(<< parseErr << " Reusing previous mesh failed; remeshing.");
@@ -1618,8 +2386,15 @@ int vtkSHYXSnappyHexMesh::RequestData(
   std::vector<std::string> geoPaths;
   geoNames.reserve(parts.size());
   geoPaths.reserve(parts.size());
-  for (const MeshPart& part : parts)
+  for (size_t i = 0; i < parts.size(); ++i)
   {
+    const MeshPart& part = parts[i];
+    const double frac =
+      0.02 + 0.04 * (static_cast<double>(i) / static_cast<double>(std::max<size_t>(1, parts.size())));
+    if (ReportVtkProgress(this, frac, "Writing surfaces"))
+    {
+      return 0;
+    }
     const std::string stlPath = (triDir / (part.foam + ".stl")).string();
     std::string stlErr;
     if (!WriteBinaryStl(part.surface, stlPath, &stlErr))
@@ -1874,10 +2649,19 @@ int vtkSHYXSnappyHexMesh::RequestData(
   err[0] = '\0';
   const std::string caseDir = caseDirPath.string();
   const char* stlArg = nullptr;
-  const int rc = shyx_snappy_run(stlArg, caseDir.c_str(), &p, err, 2048);
+  if (ReportVtkProgress(this, 0.08, "Running snappyHexMesh"))
+  {
+    return 0;
+  }
+  const int rc =
+    shyx_snappy_run(stlArg, caseDir.c_str(), &p, err, 2048, &vtkSHYXSnappyProgressCb, this);
   WriteCaseFoam(caseDirPath);
   const fs::path foamPath = caseDirPath / "case.foam";
   const fs::path caseLog = caseDirPath / "snappyHexMesh.log";
+  if (rc == 6)
+  {
+    return 0;
+  }
   if (rc != 0 && rc != 5)
   {
     std::error_code existEc;
@@ -1901,6 +2685,10 @@ int vtkSHYXSnappyHexMesh::RequestData(
   }
 
   std::string fieldErr;
+  if (ReportVtkProgress(this, 0.93, "Writing block variables"))
+  {
+    return 0;
+  }
   if (!WriteCustomVolFields(caseDirPath, this->BlockNames, this->BoundaryVariables, &fieldErr))
   {
     vtkErrorMacro(<< fieldErr);
@@ -1908,11 +2696,25 @@ int vtkSHYXSnappyHexMesh::RequestData(
   }
 
   std::string parseErr;
+  if (ReportVtkProgress(this, 0.96, "Reading mesh"))
+  {
+    return 0;
+  }
   if (!ReadCaseWithOpenFOAMReader(foamPath.string(), output, &parseErr))
   {
     vtkErrorMacro(<< parseErr << " (case.foam: " << foamPath.string() << ")");
     return 0;
   }
+  {
+    std::string normalErr;
+    if (!ApplyBoundaryNormalsAndRadial(output, caseDirPath, this->BlockNames,
+          this->BoundaryWriteNormals, this->ComputeBoundaryRadialValue,
+          this->BoundaryRadialNormalFalloffFactor, &normalErr))
+    {
+      vtkWarningMacro(<< normalErr);
+    }
+  }
   this->LastMeshFingerprint = fingerprint;
+  ReportVtkProgress(this, 1.0, "Done");
   return 1;
 }

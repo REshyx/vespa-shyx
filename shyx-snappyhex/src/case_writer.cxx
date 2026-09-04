@@ -404,7 +404,7 @@ int shyx_write_foam_case(const std::string& caseDir, const std::string& stlPath,
               "writeControl    timeStep;\n"
               "writeInterval   1;\n"
               "purgeWrite      0;\n"
-              "writeFormat     ascii;\n"
+              "writeFormat     binary;\n"
               "writePrecision  10;\n"
               "writeCompression off;\n"
               "timeFormat      general;\n"

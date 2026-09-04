@@ -11,7 +11,9 @@ param(
   [string]$VsDev = "C:\Program Files\Microsoft Visual Studio\18\Community\Common7\Tools\VsDevCmd.bat",
   [string]$CMake = "C:\Program Files\Microsoft Visual Studio\18\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe",
   [string]$Ninja = "C:\Program Files\Microsoft Visual Studio\18\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\Ninja\ninja.exe",
-  [string]$Clang = "C:\Program Files\Microsoft Visual Studio\18\Community\VC\Tools\Llvm\x64\bin\clang-cl.exe"
+  [string]$Clang = "C:\Program Files\Microsoft Visual Studio\18\Community\VC\Tools\Llvm\x64\bin\clang-cl.exe",
+  [string]$TbbDir = "C:\SoftWare\oneapi-tbb-2021.12.0\lib\cmake\tbb",
+  [string]$PatchDir = "C:\Users\18490\Documents\Github\OpenFOAM-v2412-tbb"
 )
 
 $ErrorActionPreference = "Stop"
@@ -38,7 +40,13 @@ switch ($Step) {
       "-DCMAKE_INSTALL_PREFIX=`"$Prefix`" " +
       "-DFOAM_SOURCE_DIR=`"$FoamDir`" " +
       "-DSHYX_OPENFOAM_VERSION=$Version " +
-      "-DSHYX_BUILD_OPENFOAM=ON -DSHYX_BUILD_CLI=OFF"
+      "-DSHYX_BUILD_OPENFOAM=ON -DSHYX_BUILD_CLI=ON"
+    if ($TbbDir) {
+      $inner += " -DTBB_DIR=`"$TbbDir`""
+    }
+    if ($PatchDir) {
+      $inner += " -DSHYX_FOAM_PATCH_DIR=`"$PatchDir`""
+    }
     Invoke-Dev $inner
   }
   "build" {

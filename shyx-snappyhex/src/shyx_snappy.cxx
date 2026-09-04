@@ -3,12 +3,15 @@
 #include "case_writer.h"
 
 #include <algorithm>
+#include <cctype>
 #include <cstdint>
 #include <cstring>
+#include <exception>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <sstream>
+#include <streambuf>
 #include <string>
 #include <system_error>
 #include <vector>
@@ -35,6 +38,11 @@ void setErr(char* err, int err_len, const std::string& msg)
     const size_t m = msg.size() < n ? msg.size() : n;
     std::memcpy(err, msg.c_str(), m);
     err[m] = '\0';
+}
+
+bool progressAborted(ShyxSnappyProgressFn cb, void* user, double frac, const char* text)
+{
+    return cb && cb(frac, text, user) != 0;
 }
 
 bool readStlBounds(const std::string& path, double b[6], std::string* err)
@@ -132,23 +140,388 @@ bool readStlBounds(const std::string& path, double b[6], std::string* err)
 #if SHYX_HAS_OPENFOAM
 namespace
 {
+struct ShyxSnappyAborted : std::exception
+{
+    const char* what() const noexcept override { return "cancelled"; }
+};
+
+int lastInt(const std::string& s)
+{
+    int n = -1;
+    int cur = 0;
+    bool in = false;
+    for (unsigned char c : s)
+    {
+        if (std::isdigit(c))
+        {
+            cur = in ? cur * 10 + (c - '0') : (c - '0');
+            in = true;
+            n = cur;
+        }
+        else
+        {
+            in = false;
+            cur = 0;
+        }
+    }
+    return n;
+}
+
+double climb(double lo, double hi, int iter)
+{
+    if (iter < 0)
+    {
+        iter = 0;
+    }
+    const double t = static_cast<double>(iter + 1) / static_cast<double>(iter + 8);
+    return lo + (hi - lo) * t;
+}
+
+// Parse snappyHexMesh Info lines into a monotonic 0..1 fraction.
+bool mapSnappyInfoLine(const std::string& raw, double last, double* frac, std::string* text)
+{
+    std::string line = raw;
+    while (!line.empty() && std::isspace(static_cast<unsigned char>(line.front())))
+    {
+        line.erase(line.begin());
+    }
+    while (!line.empty() && std::isspace(static_cast<unsigned char>(line.back())))
+    {
+        line.pop_back();
+    }
+    if (line.empty() || line[0] == '-')
+    {
+        return false;
+    }
+
+    auto hit = [&](const char* prefix) {
+        const size_t n = std::strlen(prefix);
+        return line.size() >= n && line.compare(0, n, prefix) == 0;
+    };
+
+    double mapped = last;
+    const char* label = nullptr;
+
+    if (hit("Small surface feature refinement iteration"))
+    {
+        mapped = climb(0.42, 0.46, lastInt(line));
+        label = "Castellated: small features";
+    }
+    else if (hit("Directional shell refinement iteration"))
+    {
+        mapped = climb(0.54, 0.56, lastInt(line));
+        label = "Castellated: directional shells";
+    }
+    else if (hit("Refinement transition refinement iteration"))
+    {
+        mapped = climb(0.56, 0.57, lastInt(line));
+        label = "Castellated: transition";
+    }
+    else if (hit("Dangling coarse cells refinement iteration"))
+    {
+        mapped = climb(0.46, 0.48, lastInt(line));
+        label = "Castellated: dangling cells";
+    }
+    else if (hit("Big gap refinement iteration"))
+    {
+        mapped = climb(0.45, 0.47, lastInt(line));
+        label = "Castellated: big gaps";
+    }
+    else if (hit("Gap refinement iteration"))
+    {
+        mapped = climb(0.43, 0.45, lastInt(line));
+        label = "Castellated: gaps";
+    }
+    else if (hit("Gap blocking iteration"))
+    {
+        mapped = climb(0.47, 0.48, lastInt(line));
+        label = "Castellated: gap blocking";
+    }
+    else if (hit("Feature refinement iteration"))
+    {
+        mapped = climb(0.22, 0.30, lastInt(line));
+        label = "Castellated: feature refinement";
+    }
+    else if (hit("Surface refinement iteration"))
+    {
+        mapped = climb(0.30, 0.42, lastInt(line));
+        label = "Castellated: surface refinement";
+    }
+    else if (hit("Shell refinement iteration"))
+    {
+        mapped = climb(0.50, 0.54, lastInt(line));
+        label = "Castellated: shell refinement";
+    }
+    else if (hit("Layer addition iteration"))
+    {
+        mapped = climb(0.80, 0.88, lastInt(line));
+        label = "Layers";
+    }
+    else if (hit("Morph iteration"))
+    {
+        mapped = climb(0.62, 0.74, lastInt(line));
+        label = "Snap: morph";
+    }
+    else if (hit("Scaling iteration"))
+    {
+        mapped = climb(0.68, 0.76, lastInt(line));
+        label = "Snap: scaling";
+    }
+    else if (hit("Smoothing iteration"))
+    {
+        mapped = climb(0.64, 0.70, lastInt(line));
+        label = "Snap: smoothing";
+    }
+    else if (hit("Outer iteration"))
+    {
+        mapped = climb(0.82, 0.88, lastInt(line));
+        label = "Layers: outer";
+    }
+    else if (hit("Removing mesh beyond surface intersections"))
+    {
+        mapped = 0.48;
+        label = "Castellated: removing outside cells";
+    }
+    else if (hit("Splitting mesh at surface intersections"))
+    {
+        mapped = 0.57;
+        label = "Castellated: splitting at surfaces";
+    }
+    else if (hit("Handling cells with snap problems"))
+    {
+        mapped = 0.58;
+        label = "Castellated: snap problems";
+    }
+    else if (hit("Merge refined boundary faces"))
+    {
+        mapped = 0.59;
+        label = "Castellated: merging faces";
+    }
+    else if (hit("Directional expansion ratio smoothing"))
+    {
+        mapped = 0.56;
+        label = "Castellated: expansion smoothing";
+    }
+    else if (hit("Erode non-manifold zone faces"))
+    {
+        mapped = 0.585;
+        label = "Castellated: erode zones";
+    }
+    else if (hit("Adding patches for surface regions"))
+    {
+        mapped = 0.20;
+        label = "Adding patches";
+    }
+    else if (hit("Calculated surface intersections"))
+    {
+        mapped = 0.18;
+        label = "Surface intersections";
+    }
+    else if (hit("Checking for geometry size"))
+    {
+        mapped = 0.14;
+        label = "Checking geometry size";
+    }
+    else if (hit("Reading refinement surfaces"))
+    {
+        mapped = 0.08;
+        label = "Reading refinement surfaces";
+    }
+    else if (hit("Reading refinement shells"))
+    {
+        mapped = 0.10;
+        label = "Reading refinement shells";
+    }
+    else if (hit("Reading limit shells"))
+    {
+        mapped = 0.11;
+        label = "Reading limit shells";
+    }
+    else if (hit("Reading features"))
+    {
+        mapped = 0.12;
+        label = "Reading features";
+    }
+    else if (hit("Refinement phase"))
+    {
+        mapped = 0.22;
+        label = "Castellated mesh";
+    }
+    else if (hit("Morphing phase"))
+    {
+        mapped = 0.62;
+        label = "Snap";
+    }
+    else if (hit("Mesh refined in"))
+    {
+        mapped = 0.60;
+        label = "Castellated done";
+    }
+    else if (hit("Mesh snapped in"))
+    {
+        mapped = 0.78;
+        label = "Snap done";
+    }
+    else if (hit("Layers added in"))
+    {
+        mapped = 0.90;
+        label = "Layers done";
+    }
+    else if (hit("Checking final mesh"))
+    {
+        mapped = 0.94;
+        label = "Checking mesh";
+    }
+    else if (hit("Finished meshing"))
+    {
+        mapped = 0.98;
+        label = "Finished snappyHexMesh";
+    }
+    else if (hit("Read mesh in"))
+    {
+        mapped = 0.06;
+        label = "Reading background mesh";
+    }
+    else if (hit("Writing mesh to time"))
+    {
+        mapped = last + 0.002;
+        label = "Writing mesh";
+    }
+    else if (line == "End")
+    {
+        mapped = 1.0;
+        label = "End";
+    }
+    else
+    {
+        return false;
+    }
+
+    if (mapped < last)
+    {
+        mapped = last;
+    }
+    if (mapped > 1.0)
+    {
+        mapped = 1.0;
+    }
+    *frac = mapped;
+    if (text && label)
+    {
+        *text = label;
+        const int iter = lastInt(line);
+        if (iter >= 0 && line.find("iteration") != std::string::npos)
+        {
+            std::ostringstream os;
+            os << label << " " << iter;
+            *text = os.str();
+        }
+    }
+    return true;
+}
+
+// Tee Foam Info to snappyHexMesh.log and map stage lines to a progress callback.
+struct TeeProgressBuf : public std::streambuf
+{
+    std::filebuf file;
+    std::string line;
+    ShyxSnappyProgressFn cb = nullptr;
+    void* user = nullptr;
+    double last = 0.0;
+    bool aborted = false;
+
+    bool open(const std::string& path)
+    {
+        return file.open(path.c_str(), std::ios::out | std::ios::trunc) != nullptr;
+    }
+
+    void close() { file.close(); }
+
+protected:
+    int_type overflow(int_type ch) override
+    {
+        if (traits_type::eq_int_type(ch, traits_type::eof()))
+        {
+            return traits_type::not_eof(ch);
+        }
+        const char c = traits_type::to_char_type(ch);
+        if (file.sputc(c) == traits_type::eof())
+        {
+            return traits_type::eof();
+        }
+        consume(c);
+        return ch;
+    }
+
+    std::streamsize xsputn(const char* s, std::streamsize n) override
+    {
+        const auto w = file.sputn(s, n);
+        for (std::streamsize i = 0; i < w; ++i)
+        {
+            consume(s[i]);
+        }
+        return w;
+    }
+
+    int sync() override { return file.pubsync(); }
+
+    void consume(char c)
+    {
+        if (c == '\n' || c == '\r')
+        {
+            if (!line.empty())
+            {
+                parseLine(line);
+                line.clear();
+            }
+        }
+        else if (line.size() < 1024)
+        {
+            line.push_back(c);
+        }
+    }
+
+    void parseLine(const std::string& raw)
+    {
+        if (!cb || aborted)
+        {
+            return;
+        }
+        double frac = last;
+        std::string text;
+        if (!mapSnappyInfoLine(raw, last, &frac, &text))
+        {
+            return;
+        }
+        last = frac;
+        if (cb(frac, text.c_str(), user) != 0)
+        {
+            aborted = true;
+            throw ShyxSnappyAborted();
+        }
+    }
+};
+
 // ParaView has no console; std::cout is failed and Foam::Sout throws
 // "error in IOstream Sout for operation operator<<".
 struct FoamStdoutRedirect
 {
-    std::ofstream log;
+    TeeProgressBuf buf;
     std::streambuf* oldOut;
     std::streambuf* oldErr;
+    bool redirected = false;
 
-    explicit FoamStdoutRedirect(const std::string& path)
-        : log(path, std::ios::out | std::ios::trunc)
-        , oldOut(std::cout.rdbuf())
+    FoamStdoutRedirect(const std::string& path, ShyxSnappyProgressFn progress, void* user)
+        : oldOut(std::cout.rdbuf())
         , oldErr(std::cerr.rdbuf())
     {
-        if (log)
+        buf.cb = progress;
+        buf.user = user;
+        if (buf.open(path))
         {
-            std::cout.rdbuf(log.rdbuf());
-            std::cerr.rdbuf(log.rdbuf());
+            std::cout.rdbuf(&buf);
+            std::cerr.rdbuf(&buf);
+            redirected = true;
         }
         std::cout.clear();
         std::cerr.clear();
@@ -164,10 +537,15 @@ struct FoamStdoutRedirect
 
     ~FoamStdoutRedirect()
     {
+        buf.aborted = true;
         std::cout.flush();
         std::cerr.flush();
-        std::cout.rdbuf(oldOut);
-        std::cerr.rdbuf(oldErr);
+        if (redirected)
+        {
+            std::cout.rdbuf(oldOut);
+            std::cerr.rdbuf(oldErr);
+        }
+        buf.close();
     }
 
     FoamStdoutRedirect(const FoamStdoutRedirect&) = delete;
@@ -279,7 +657,8 @@ static bool shyx_set_runtime_foam_dir()
 }
 #endif
 
-extern "C" int shyx_snappy_mesh_only(const char* case_dir, char* err, int err_len)
+extern "C" int shyx_snappy_mesh_only(const char* case_dir, char* err, int err_len,
+    ShyxSnappyProgressFn progress, void* progress_user)
 {
 #if SHYX_HAS_OPENFOAM
     if (!case_dir)
@@ -289,6 +668,11 @@ extern "C" int shyx_snappy_mesh_only(const char* case_dir, char* err, int err_le
     }
     try
     {
+        if (progressAborted(progress, progress_user, 0.02, "Running snappyHexMesh"))
+        {
+            setErr(err, err_len, "cancelled");
+            return 6;
+        }
         if (!shyx_set_runtime_foam_dir())
         {
             setErr(err, err_len, "failed to write %TEMP%/shyx-openfoam/etc");
@@ -298,7 +682,7 @@ extern "C" int shyx_snappy_mesh_only(const char* case_dir, char* err, int err_le
         Foam::FatalError.throwExceptions();
         Foam::FatalIOError.throwExceptions();
         std::string caseDir(case_dir);
-        FoamStdoutRedirect foamIo(caseDir + "/snappyHexMesh.log");
+        FoamStdoutRedirect foamIo(caseDir + "/snappyHexMesh.log", progress, progress_user);
         CwdGuard cwd(caseDir);
         Foam::FatalError.throwExceptions();
         Foam::FatalIOError.throwExceptions();
@@ -316,6 +700,11 @@ extern "C" int shyx_snappy_mesh_only(const char* case_dir, char* err, int err_le
             setErr(err, err_len, "snappyHexMesh failed");
             return rc;
         }
+    }
+    catch (const ShyxSnappyAborted&)
+    {
+        setErr(err, err_len, "cancelled");
+        return 6;
     }
     catch (const Foam::IOerror& ex)
     {
@@ -340,6 +729,8 @@ extern "C" int shyx_snappy_mesh_only(const char* case_dir, char* err, int err_le
     return 0;
 #else
     (void)case_dir;
+    (void)progress;
+    (void)progress_user;
     setErr(err, err_len, "OpenFOAM snappyHexMesh was not linked");
     return 5;
 #endif
@@ -410,7 +801,7 @@ extern "C" void shyx_snappy_params_default(ShyxSnappyParams* p)
 }
 
 extern "C" int shyx_snappy_run(const char* stl_path, const char* case_dir, const ShyxSnappyParams* p,
-    char* err, int err_len)
+    char* err, int err_len, ShyxSnappyProgressFn progress, void* progress_user)
 {
     if (!case_dir || case_dir[0] == '\0')
     {
@@ -495,6 +886,11 @@ extern "C" int shyx_snappy_run(const char* stl_path, const char* case_dir, const
     const double zmin = bb[4] - m * dz;
     const double zmax = bb[5] + m * dz;
 
+    if (progressAborted(progress, progress_user, 0.0, "Writing OpenFOAM case"))
+    {
+        setErr(err, err_len, "cancelled");
+        return 6;
+    }
     if (shyx_write_foam_case(case_dir, stl_path ? stl_path : "", params, xmin, ymin, zmin, xmax, ymax, zmax, &msg) != 0)
     {
         setErr(err, err_len, msg);
@@ -515,8 +911,10 @@ extern "C" int shyx_snappy_run(const char* stl_path, const char* case_dir, const
     }
 
 #if SHYX_HAS_OPENFOAM
-    return shyx_snappy_mesh_only(case_dir, err, err_len);
+    return shyx_snappy_mesh_only(case_dir, err, err_len, progress, progress_user);
 #else
+    (void)progress;
+    (void)progress_user;
     setErr(err, err_len,
         "case written; OpenFOAM snappyHexMesh was not linked (SHYX_HAS_OPENFOAM=0)");
     return 5;

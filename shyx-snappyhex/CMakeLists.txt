@@ -9,7 +9,9 @@ include(GNUInstallDirs)
 include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/FoamLibrary.cmake")
 
 set(FOAM_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/third_party/openfoam-v2412"
-    CACHE PATH "Pristine OpenFOAM source tree (src/wmake/etc). Not patched; not vendored.")
+    CACHE PATH "Case-sensitive OpenFOAM source tree (src/wmake/etc).")
+set(SHYX_FOAM_PATCH_DIR "" CACHE PATH
+    "OpenFOAM-v2412-tbb (TBB query patches). Empty = sibling OpenFOAM-v2412-tbb.")
 set(SHYX_OPENFOAM_VERSION "2412" CACHE STRING "OpenFOAM version baked into WM macros (2412, ...)")
 
 option(SHYX_BUILD_OPENFOAM "Compile OpenFOAM meshing static libs and link snappyHexMesh" ON)
@@ -99,6 +101,43 @@ if(SHYX_BUILD_OPENFOAM)
     "${CMAKE_CURRENT_SOURCE_DIR}/adapter/foam_error.cxx" error.C)
   foam_overlay_lninclude("${FOAM_LNINCLUDE_ROOT}/OpenFOAM"
     "${CMAKE_CURRENT_SOURCE_DIR}/adapter/foam_IOerror.cxx" IOerror.C)
+
+  if(NOT SHYX_FOAM_PATCH_DIR)
+    foreach(_p IN ITEMS
+        "${CMAKE_SOURCE_DIR}/../OpenFOAM-v2412-tbb"
+        "C:/Users/18490/Documents/Github/OpenFOAM-v2412-tbb")
+      if(EXISTS "${_p}/src/meshTools/triSurface/triSurfaceSearch/shyxTbbQueries.H")
+        set(SHYX_FOAM_PATCH_DIR "${_p}")
+        break()
+      endif()
+    endforeach()
+  endif()
+  if(EXISTS "${SHYX_FOAM_PATCH_DIR}/src/OpenFOAM/algorithms/indexedOctree/indexedOctree.H")
+    foam_overlay_lninclude("${FOAM_LNINCLUDE_ROOT}/OpenFOAM"
+      "${SHYX_FOAM_PATCH_DIR}/src/OpenFOAM/algorithms/indexedOctree/indexedOctree.H"
+      indexedOctree.H)
+    set(_octree_base
+      "${SHYX_FOAM_PATCH_DIR}/src/OpenFOAM/algorithms/indexedOctree/indexedOctreeBase.C")
+    target_sources(OpenFOAM PRIVATE "${_octree_base}")
+    set_source_files_properties("${_octree_base}" PROPERTIES LANGUAGE CXX)
+    foreach(_of_tbb IN ITEMS
+        "${SHYX_FOAM_PATCH_DIR}/src/OpenFOAM/meshes/polyMesh/polyMesh.C"
+        "${SHYX_FOAM_PATCH_DIR}/src/OpenFOAM/meshes/polyMesh/polyMeshInitMesh.C"
+        "${SHYX_FOAM_PATCH_DIR}/src/OpenFOAM/meshes/primitiveMesh/primitiveMesh.C"
+        "${SHYX_FOAM_PATCH_DIR}/src/OpenFOAM/meshes/primitiveMesh/primitiveMeshCheck/primitiveMeshTools.C")
+      if(EXISTS "${_of_tbb}")
+        target_sources(OpenFOAM PRIVATE "${_of_tbb}")
+        set_source_files_properties("${_of_tbb}" PROPERTIES LANGUAGE CXX)
+      endif()
+    endforeach()
+    if(EXISTS "${SHYX_FOAM_PATCH_DIR}/src/meshTools/triSurface/triSurfaceSearch/shyxTbbQueries.H")
+      foam_overlay_lninclude("${FOAM_LNINCLUDE_ROOT}/OpenFOAM"
+        "${SHYX_FOAM_PATCH_DIR}/src/meshTools/triSurface/triSurfaceSearch/shyxTbbQueries.H"
+        shyxTbbQueries.H)
+    endif()
+    message(STATUS "SHYXSnappyHex: overlay TBB patches from ${SHYX_FOAM_PATCH_DIR}")
+  endif()
+
   target_sources(OpenFOAM PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/adapter/foam_IOobject.cxx")
   set_source_files_properties("${CMAKE_CURRENT_SOURCE_DIR}/adapter/foam_IOobject.cxx" PROPERTIES LANGUAGE CXX)
   set(_foam_cfg "${CMAKE_BINARY_DIR}/generated/foamConfig.C")
@@ -122,10 +161,90 @@ if(SHYX_BUILD_OPENFOAM)
     "${CMAKE_CURRENT_SOURCE_DIR}/adapter/foam_edgeMeshFormat.cxx"
     "${CMAKE_CURRENT_SOURCE_DIR}/adapter/foam_extendedEdgeMeshFormat.cxx"
     PROPERTIES LANGUAGE CXX)
+  if(EXISTS "${SHYX_FOAM_PATCH_DIR}/src/meshTools/triSurface/triSurfaceSearch/triSurfaceSearch.C")
+    set(_tbb_search
+      "${SHYX_FOAM_PATCH_DIR}/src/meshTools/triSurface/triSurfaceSearch")
+    set(_tbb_trimsh
+      "${SHYX_FOAM_PATCH_DIR}/src/meshTools/searchableSurfaces/triSurfaceMesh")
+    target_sources(meshTools PRIVATE
+      "${_tbb_search}/triSurfaceSearch.C"
+      "${_tbb_trimsh}/triSurfaceMesh.C")
+    set_source_files_properties(
+      "${_tbb_search}/triSurfaceSearch.C"
+      "${_tbb_trimsh}/triSurfaceMesh.C"
+      PROPERTIES LANGUAGE CXX)
+    foam_quote_include(meshTools "${_tbb_search}")
+    foam_overlay_lninclude("${FOAM_LNINCLUDE_ROOT}/meshTools"
+      "${_tbb_search}/shyxTbbQueries.H"
+      shyxTbbQueries.H)
+    foam_overlay_lninclude("${FOAM_LNINCLUDE_ROOT}/meshTools"
+      "${_tbb_search}/shyxLabelField.H"
+      shyxLabelField.H)
+  endif()
+  if(EXISTS "${SHYX_FOAM_PATCH_DIR}/src/meshTools/polyTopoChange/polyTopoChange.C")
+    set(_ptc "${SHYX_FOAM_PATCH_DIR}/src/meshTools/polyTopoChange/polyTopoChange.C")
+    target_sources(meshTools PRIVATE "${_ptc}")
+    set_source_files_properties("${_ptc}" PROPERTIES LANGUAGE CXX)
+    foam_overlay_lninclude("${FOAM_LNINCLUDE_ROOT}/meshTools"
+      "${SHYX_FOAM_PATCH_DIR}/src/meshTools/polyTopoChange/polyTopoChangeTemplates.C"
+      polyTopoChangeTemplates.C)
+  endif()
+  if(EXISTS "${SHYX_FOAM_PATCH_DIR}/src/meshTools/algorithms/MeshWave/FaceCellWave.C")
+    foam_overlay_lninclude("${FOAM_LNINCLUDE_ROOT}/meshTools"
+      "${SHYX_FOAM_PATCH_DIR}/src/meshTools/algorithms/MeshWave/FaceCellWave.C"
+      FaceCellWave.C)
+    foam_overlay_lninclude("${FOAM_LNINCLUDE_ROOT}/OpenFOAM"
+      "${SHYX_FOAM_PATCH_DIR}/src/meshTools/algorithms/MeshWave/FaceCellWave.C"
+      FaceCellWave.C)
+  endif()
+  if(EXISTS "${SHYX_FOAM_PATCH_DIR}/src/meshTools/regionSplit/regionSplit.C")
+    set(_rs "${SHYX_FOAM_PATCH_DIR}/src/meshTools/regionSplit/regionSplit.C")
+    target_sources(meshTools PRIVATE "${_rs}")
+    set_source_files_properties("${_rs}" PROPERTIES LANGUAGE CXX)
+  endif()
   foam_add_static_library(blockMesh "${FOAM_SOURCE_DIR}/src/mesh/blockMesh" DEPS meshTools)
   foam_add_static_library(extrudeModel "${FOAM_SOURCE_DIR}/src/mesh/extrudeModel" DEPS meshTools blockMesh)
   foam_add_static_library(finiteVolume "${FOAM_SOURCE_DIR}/src/finiteVolume" DEPS meshTools)
   foam_add_static_library(dynamicMesh "${FOAM_SOURCE_DIR}/src/dynamicMesh" DEPS finiteVolume extrudeModel)
+  if(EXISTS "${SHYX_FOAM_PATCH_DIR}/src/dynamicMesh/polyTopoChange/polyTopoChange/hexRef8/hexRef8.C")
+    set(_hexref "${SHYX_FOAM_PATCH_DIR}/src/dynamicMesh/polyTopoChange/polyTopoChange/hexRef8/hexRef8.C")
+    target_sources(dynamicMesh PRIVATE "${_hexref}")
+    set_source_files_properties("${_hexref}" PROPERTIES LANGUAGE CXX)
+    if(EXISTS "${SHYX_FOAM_PATCH_DIR}/src/dynamicMesh/polyTopoChange/polyTopoChange/hexRef8/hexRef8.H")
+      foam_overlay_lninclude("${FOAM_LNINCLUDE_ROOT}/dynamicMesh"
+        "${SHYX_FOAM_PATCH_DIR}/src/dynamicMesh/polyTopoChange/polyTopoChange/hexRef8/hexRef8.H"
+        hexRef8.H)
+    endif()
+    foam_overlay_lninclude("${FOAM_LNINCLUDE_ROOT}/dynamicMesh"
+      "${SHYX_FOAM_PATCH_DIR}/src/meshTools/triSurface/triSurfaceSearch/shyxLabelField.H"
+      shyxLabelField.H)
+    if(EXISTS "${SHYX_FOAM_PATCH_DIR}/src/dynamicMesh/polyTopoChange/polyTopoChange/removeCells.C")
+      set(_rmc "${SHYX_FOAM_PATCH_DIR}/src/dynamicMesh/polyTopoChange/polyTopoChange/removeCells.C")
+      target_sources(dynamicMesh PRIVATE "${_rmc}")
+      set_source_files_properties("${_rmc}" PROPERTIES LANGUAGE CXX)
+    endif()
+    if(EXISTS "${SHYX_FOAM_PATCH_DIR}/src/dynamicMesh/motionSmoother/polyMeshGeometry/polyMeshGeometry.C")
+      set(_pmg "${SHYX_FOAM_PATCH_DIR}/src/dynamicMesh/motionSmoother/polyMeshGeometry/polyMeshGeometry.C")
+      target_sources(dynamicMesh PRIVATE "${_pmg}")
+      set_source_files_properties("${_pmg}" PROPERTIES LANGUAGE CXX)
+    endif()
+    if(EXISTS "${SHYX_FOAM_PATCH_DIR}/src/dynamicMesh/motionSmoother/motionSmootherAlgo.C")
+      set(_msa "${SHYX_FOAM_PATCH_DIR}/src/dynamicMesh/motionSmoother/motionSmootherAlgo.C")
+      target_sources(dynamicMesh PRIVATE "${_msa}")
+      set_source_files_properties("${_msa}" PROPERTIES LANGUAGE CXX)
+      foam_overlay_lninclude("${FOAM_LNINCLUDE_ROOT}/dynamicMesh"
+        "${SHYX_FOAM_PATCH_DIR}/src/dynamicMesh/motionSmoother/motionSmootherAlgo.H"
+        motionSmootherAlgo.H)
+      foam_overlay_lninclude("${FOAM_LNINCLUDE_ROOT}/dynamicMesh"
+        "${SHYX_FOAM_PATCH_DIR}/src/dynamicMesh/motionSmoother/motionSmootherAlgoTemplates.C"
+        motionSmootherAlgoTemplates.C)
+    endif()
+    if(EXISTS "${SHYX_FOAM_PATCH_DIR}/src/dynamicMesh/motionSmoother/motionSmootherAlgoCheck.C")
+      set(_msac "${SHYX_FOAM_PATCH_DIR}/src/dynamicMesh/motionSmoother/motionSmootherAlgoCheck.C")
+      target_sources(dynamicMesh PRIVATE "${_msac}")
+      set_source_files_properties("${_msac}" PROPERTIES LANGUAGE CXX)
+    endif()
+  endif()
   foam_add_static_library(dynamicFvMesh "${FOAM_SOURCE_DIR}/src/dynamicFvMesh" DEPS dynamicMesh)
   foam_add_static_library(lagrangian "${FOAM_SOURCE_DIR}/src/lagrangian/basic" DEPS meshTools)
   foam_add_static_library(sampling "${FOAM_SOURCE_DIR}/src/sampling" DEPS finiteVolume lagrangian)
@@ -148,6 +267,42 @@ if(SHYX_BUILD_OPENFOAM)
     "${CMAKE_CURRENT_SOURCE_DIR}/adapter/foam_refinementFeatures.cxx")
   set_source_files_properties(
     "${CMAKE_CURRENT_SOURCE_DIR}/adapter/foam_refinementFeatures.cxx" PROPERTIES LANGUAGE CXX)
+  if(EXISTS "${SHYX_FOAM_PATCH_DIR}/src/mesh/snappyHexMesh/meshRefinement/meshRefinementRefine.C")
+    set(_refine_c
+      "${SHYX_FOAM_PATCH_DIR}/src/mesh/snappyHexMesh/meshRefinement/meshRefinementRefine.C")
+    target_sources(snappyHexMesh PRIVATE "${_refine_c}")
+    set_source_files_properties("${_refine_c}" PROPERTIES LANGUAGE CXX)
+  endif()
+  if(EXISTS "${SHYX_FOAM_PATCH_DIR}/src/mesh/snappyHexMesh/meshRefinement/meshRefinement.C")
+    set(_mr_c
+      "${SHYX_FOAM_PATCH_DIR}/src/mesh/snappyHexMesh/meshRefinement/meshRefinement.C")
+    target_sources(snappyHexMesh PRIVATE "${_mr_c}")
+    set_source_files_properties("${_mr_c}" PROPERTIES LANGUAGE CXX)
+  endif()
+  if(EXISTS "${SHYX_FOAM_PATCH_DIR}/src/mesh/snappyHexMesh/meshRefinement/meshRefinementBaffles.C")
+    set(_baffle_c
+      "${SHYX_FOAM_PATCH_DIR}/src/mesh/snappyHexMesh/meshRefinement/meshRefinementBaffles.C")
+    target_sources(snappyHexMesh PRIVATE "${_baffle_c}")
+    set_source_files_properties("${_baffle_c}" PROPERTIES LANGUAGE CXX)
+  endif()
+  if(EXISTS "${SHYX_FOAM_PATCH_DIR}/src/mesh/snappyHexMesh/meshRefinement/meshRefinementProblemCells.C")
+    set(_prob_c
+      "${SHYX_FOAM_PATCH_DIR}/src/mesh/snappyHexMesh/meshRefinement/meshRefinementProblemCells.C")
+    target_sources(snappyHexMesh PRIVATE "${_prob_c}")
+    set_source_files_properties("${_prob_c}" PROPERTIES LANGUAGE CXX)
+  endif()
+  if(EXISTS "${SHYX_FOAM_PATCH_DIR}/src/mesh/snappyHexMesh/snappyHexMeshDriver/snappySnapDriver.C")
+    set(_snap_c
+      "${SHYX_FOAM_PATCH_DIR}/src/mesh/snappyHexMesh/snappyHexMeshDriver/snappySnapDriver.C")
+    target_sources(snappyHexMesh PRIVATE "${_snap_c}")
+    set_source_files_properties("${_snap_c}" PROPERTIES LANGUAGE CXX)
+  endif()
+  if(EXISTS "${SHYX_FOAM_PATCH_DIR}/src/mesh/snappyHexMesh/refinementSurfaces/refinementSurfaces.C")
+    set(_rfs_c
+      "${SHYX_FOAM_PATCH_DIR}/src/mesh/snappyHexMesh/refinementSurfaces/refinementSurfaces.C")
+    target_sources(snappyHexMesh PRIVATE "${_rfs_c}")
+    set_source_files_properties("${_rfs_c}" PROPERTIES LANGUAGE CXX)
+  endif()
 
   set(FOAM_LIBS
     snappyHexMesh overset fvMotionSolver lagrangian sampling finiteVolume
@@ -173,6 +328,23 @@ if(SHYX_BUILD_OPENFOAM)
   endif()
   if(WIN32)
     target_link_libraries(OSspecific PUBLIC ws2_32 psapi advapi32 shell32 ole32 user32)
+  endif()
+
+  find_package(TBB QUIET CONFIG)
+  if(TARGET TBB::tbb)
+    set(_tbb_search "${SHYX_FOAM_PATCH_DIR}/src/meshTools/triSurface/triSurfaceSearch")
+    foreach(_t IN ITEMS OpenFOAM meshTools snappyHexMesh dynamicMesh)
+      target_compile_definitions(${_t} PRIVATE SHYX_HAS_TBB=1)
+      target_link_libraries(${_t} PRIVATE TBB::tbb)
+      foam_quote_include(${_t} "${_tbb_search}")
+      target_include_directories(${_t} PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/adapter")
+    endforeach()
+    foam_overlay_lninclude("${FOAM_LNINCLUDE_ROOT}/OpenFOAM"
+      "${_tbb_search}/shyxTbbQueries.H"
+      shyxTbbQueries.H)
+    message(STATUS "SHYXSnappyHex: TBB query loops ENABLED")
+  else()
+    message(STATUS "SHYXSnappyHex: TBB not found; query loops stay serial")
   endif()
 endif()
 
@@ -208,6 +380,9 @@ if(SHYX_BUILD_OPENFOAM)
     SHYX_HAS_OPENFOAM=1
     ${FOAM_COMMON_DEFS})
     set(_shm "${FOAM_SOURCE_DIR}/applications/utilities/mesh/generation/snappyHexMesh/snappyHexMesh.C")
+    if(EXISTS "${SHYX_FOAM_PATCH_DIR}/applications/utilities/mesh/generation/snappyHexMesh/snappyHexMesh.C")
+      set(_shm "${SHYX_FOAM_PATCH_DIR}/applications/utilities/mesh/generation/snappyHexMesh/snappyHexMesh.C")
+    endif()
   if(EXISTS "${_shm}")
     target_sources(SHYXSnappyHex PRIVATE src/snappyHexMesh_main.cxx)
     set_source_files_properties(src/snappyHexMesh_main.cxx PROPERTIES
@@ -240,6 +415,9 @@ if(SHYX_BUILD_OPENFOAM)
   # PRIVATE: Foam iquote / WM_* stay on this archive. CMake still propagates
   # the static Foam .libs to the final EXE/DLL as LINK_ONLY.
   target_link_libraries(SHYXSnappyHex PRIVATE ${FOAM_LIBS})
+  if(TARGET TBB::tbb)
+    target_link_libraries(SHYXSnappyHex PRIVATE TBB::tbb)
+  endif()
 endif()
 
 add_library(SHYXSnappyHex::SHYXSnappyHex ALIAS SHYXSnappyHex)
@@ -247,6 +425,9 @@ add_library(SHYXSnappyHex::SHYXSnappyHex ALIAS SHYXSnappyHex)
 if(SHYX_BUILD_CLI)
   add_executable(snappy_cli apps/snappy_cli.cxx)
   target_link_libraries(snappy_cli PRIVATE SHYXSnappyHex)
+  if(TARGET TBB::tbb)
+    target_link_libraries(snappy_cli PRIVATE TBB::tbb)
+  endif()
   if(MSVC)
     # Driver + foam_force_link live in this archive; lld-link drops unreferenced members.
     target_link_options(snappy_cli PRIVATE

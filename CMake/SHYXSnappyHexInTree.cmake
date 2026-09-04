@@ -16,7 +16,16 @@ foreach(_cand IN ITEMS
 endforeach()
 
 set(FOAM_SOURCE_DIR "${_vespa_foam_default}" CACHE PATH
-  "Pristine OpenFOAM source (src/wmake/etc). Not vendored; not patched.")
+  "Case-sensitive OpenFOAM source (src/wmake/etc). Not the -tbb copy unless that tree is NTFS case-sensitive.")
+set(SHYX_FOAM_PATCH_DIR "${CMAKE_SOURCE_DIR}/../OpenFOAM-v2412-tbb" CACHE PATH
+  "Fork with TBB query patches. Overlay TUs only; FOAM_SOURCE_DIR stays the case-sensitive tree.")
+if(NOT EXISTS "${SHYX_FOAM_PATCH_DIR}/src/meshTools/triSurface/triSurfaceSearch/shyxTbbQueries.H")
+  set(SHYX_FOAM_PATCH_DIR "C:/Users/18490/Documents/Github/OpenFOAM-v2412-tbb")
+endif()
+if(FOAM_SOURCE_DIR MATCHES "-tbb")
+  message(WARNING "FOAM_SOURCE_DIR is the -tbb copy; it must be NTFS case-sensitive "
+    "(lduMatrix vs LduMatrix). Prefer the original OpenFOAM-v2412 tree.")
+endif()
 set(SHYX_OPENFOAM_VERSION "2412" CACHE STRING "OpenFOAM version for WM macros")
 unset(_vespa_foam_default)
 unset(_cand)
@@ -75,6 +84,8 @@ ExternalProject_Add(shyx_snappyhex_ep
       -Prefix "<INSTALL_DIR>"
       -FoamDir "${FOAM_SOURCE_DIR}"
       -Version "${SHYX_OPENFOAM_VERSION}"
+      -TbbDir "${TBB_DIR}"
+      -PatchDir "${SHYX_FOAM_PATCH_DIR}"
   BUILD_COMMAND
     "${_shyx_pwsh}" -NoProfile -ExecutionPolicy Bypass
       -File "${_shyx_ep_ps1}"
@@ -99,6 +110,12 @@ foreach(_n IN LISTS _shyx_foam_lib_names)
 endforeach()
 if(WIN32)
   list(APPEND _shyx_iface ws2_32 psapi advapi32 shell32 ole32 user32)
+endif()
+if(NOT TARGET TBB::tbb)
+  find_package(TBB QUIET CONFIG)
+endif()
+if(TARGET TBB::tbb)
+  list(APPEND _shyx_iface TBB::tbb)
 endif()
 set_property(TARGET SHYXSnappyHex::SHYXSnappyHex PROPERTY
   INTERFACE_LINK_LIBRARIES ${_shyx_iface})

@@ -10,8 +10,10 @@
  *
  * After a successful mesh, BlockNames / BoundaryVariables can add per-block
  * custom scalars (BoundaryVariable1, ...) written like Partitioned Collection
- * To OpenFOAM: 0/shyx_<name> volScalarFields (NaN / empty -> 0). Changing only
- * those properties reuses the existing polyMesh and skips snappyHexMesh.
+ * To OpenFOAM: 0/shyx_<name> volScalarFields (NaN / empty -> 0). Patch rows can
+ * also Write Normal (0/shyx_BoundaryRadialValueNormal) with optional
+ * BoundaryRadialValue = 1 - x^a coefficient. Changing only those properties
+ * reuses the existing polyMesh and skips snappyHexMesh.
  */
 
 #ifndef vtkSHYXSnappyHexMesh_h
@@ -155,6 +157,27 @@ public:
   vtkSetStringMacro(BoundaryVariables);
   vtkGetStringMacro(BoundaryVariables);
 
+  /**
+   * Newline-separated 0/1 flags aligned with BlockNames. Only patch rows are
+   * used. When non-zero, that patch's average face normal is written to
+   * 0/shyx_BoundaryRadialValueNormal (independent of BoundaryVariables). When
+   * ComputeBoundaryRadialValue is on, the vector is scaled by BoundaryRadialValue.
+   */
+  vtkSetStringMacro(BoundaryWriteNormals);
+  vtkGetStringMacro(BoundaryWriteNormals);
+
+  /**
+   * When non-zero, BoundaryRadialValueNormal uses BoundaryRadialValue * patchNormal.
+   * Otherwise it uses patchNormal and BoundaryRadialValue is not computed.
+   */
+  vtkSetMacro(ComputeBoundaryRadialValue, int);
+  vtkGetMacro(ComputeBoundaryRadialValue, int);
+  vtkBooleanMacro(ComputeBoundaryRadialValue, int);
+
+  /** Exponent a used to convert raw radial coordinate x to BoundaryRadialValue = 1 - x^a. */
+  vtkSetMacro(BoundaryRadialNormalFalloffFactor, double);
+  vtkGetMacro(BoundaryRadialNormalFalloffFactor, double);
+
 protected:
   vtkSHYXSnappyHexMesh();
   ~vtkSHYXSnappyHexMesh() override;
@@ -201,6 +224,9 @@ protected:
   char* LayerNSurfaceLayers = nullptr;
   char* BlockNames = nullptr;
   char* BoundaryVariables = nullptr;
+  char* BoundaryWriteNormals = nullptr;
+  int ComputeBoundaryRadialValue = 0;
+  double BoundaryRadialNormalFalloffFactor = 1.0;
   std::vector<double> InsidePoints;
 
   std::string ComputeMeshFingerprint(vtkMTimeType inputMTime, vtkMTimeType featureMTime) const;

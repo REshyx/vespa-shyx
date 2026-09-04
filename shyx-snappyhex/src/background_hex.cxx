@@ -1,12 +1,22 @@
 #include "background_hex.h"
 
+#include <chrono>
+#include <cstdint>
 #include <filesystem>
 #include <fstream>
+#include <iostream>
 #include <vector>
 
 namespace
 {
-void writeFoamHeader(std::ostream& os, const char* cls, const char* object, const char* location)
+void writeFoamHeader
+(
+    std::ostream& os,
+    const char* cls,
+    const char* object,
+    const char* location,
+    const bool binary
+)
 {
     os << "/*--------------------------------*- C++ -*----------------------------------*\\\n"
           "| =========                 |                                                 |\n"
@@ -18,13 +28,28 @@ void writeFoamHeader(std::ostream& os, const char* cls, const char* object, cons
           "FoamFile\n"
           "{\n"
           "    version     2.0;\n"
-          "    format      ascii;\n"
-          "    class       "
-       << cls << ";\n"
+          "    format      "
+       << (binary ? "binary" : "ascii") << ";\n";
+    if (binary)
+    {
+        os << "    arch        \"LSB;label=32;scalar=64\";\n";
+    }
+    os << "    class       " << cls << ";\n"
        << "    location    \"" << location << "\";\n"
        << "    object      " << object << ";\n"
           "}\n"
           "// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //\n\n";
+}
+
+void writeBinaryBlock(std::ostream& os, const void* data, const std::size_t nBytes, const int n)
+{
+    os << '\n' << n << '\n';
+    os.put('(');
+    if (nBytes)
+    {
+        os.write(static_cast<const char*>(data), static_cast<std::streamsize>(nBytes));
+    }
+    os.put(')');
 }
 
 bool ensureDir(const std::string& path, std::string* err)
@@ -69,9 +94,25 @@ int shyx_write_background_hex(const std::string& caseDir, double xmin, double ym
     const double dx = (xmax - xmin) / nx;
     const double dy = (ymax - ymin) / ny;
     const double dz = (zmax - zmin) / nz;
+    using Clock = std::chrono::steady_clock;
+    const auto t0 = Clock::now();
 
+    std::vector<double> xyz(static_cast<std::size_t>(nPoints) * 3);
     {
-        std::ofstream os(meshDir + "/points");
+        std::size_t w = 0;
+        for (int k = 0; k < npz; ++k)
+        {
+            for (int j = 0; j < npy; ++j)
+            {
+                for (int i = 0; i < npx; ++i)
+                {
+                    xyz[w++] = xmin + i * dx;
+                    xyz[w++] = ymin + j * dy;
+                    xyz[w++] = zmin + k * dz;
+                }
+            }
+        }
+        std::ofstream os(meshDir + "/points", std::ios::binary);
         if (!os)
         {
             if (err)
@@ -80,40 +121,27 @@ int shyx_write_background_hex(const std::string& caseDir, double xmin, double ym
             }
             return 1;
         }
-        writeFoamHeader(os, "vectorField", "points", "constant/polyMesh");
-        os << nPoints << "\n(\n";
-        for (int k = 0; k < npz; ++k)
-        {
-            for (int j = 0; j < npy; ++j)
-            {
-                for (int i = 0; i < npx; ++i)
-                {
-                    os << "(" << (xmin + i * dx) << " " << (ymin + j * dy) << " " << (zmin + k * dz)
-                       << ")\n";
-                }
-            }
-        }
-        os << ")\n";
+        writeFoamHeader(os, "vectorField", "points", "constant/polyMesh", true);
+        writeBinaryBlock(os, xyz.data(), xyz.size() * sizeof(double), nPoints);
+        os.put('\n');
     }
+    const auto tPoints = Clock::now();
 
-    // Owner/neighbour/faces: internal faces first, then 6 boundary patches.
     struct Face
     {
         int a, b, c, d;
         int own;
-        int nei; // -1 boundary
+        int nei;
     };
     std::vector<Face> faces;
-    faces.reserve(nCells * 6);
+    faces.reserve(static_cast<std::size_t>(nCells) * 6);
 
     auto addInternal = [&](int a, int b, int c, int d, int own, int nei) {
-        Face f{ a, b, c, d, own, nei };
-        faces.push_back(f);
+        faces.push_back(Face{ a, b, c, d, own, nei });
     };
 
     const auto cellId = [nx, ny](int i, int j, int k) { return i + nx * (j + ny * k); };
 
-    // x-normal internals (i = 1..nx-1)
     for (int k = 0; k < nz; ++k)
     {
         for (int j = 0; j < ny; ++j)
@@ -128,7 +156,6 @@ int shyx_write_background_hex(const std::string& caseDir, double xmin, double ym
             }
         }
     }
-    // y-normal internals
     for (int k = 0; k < nz; ++k)
     {
         for (int j = 1; j < ny; ++j)
@@ -143,7 +170,6 @@ int shyx_write_background_hex(const std::string& caseDir, double xmin, double ym
             }
         }
     }
-    // z-normal internals
     for (int k = 1; k < nz; ++k)
     {
         for (int j = 0; j < ny; ++j)
@@ -202,40 +228,53 @@ int shyx_write_background_hex(const std::string& caseDir, double xmin, double ym
     appendPatch(zminF);
     appendPatch(zmaxF);
     const int nFaces = static_cast<int>(faces.size());
+    const auto tBuild = Clock::now();
 
     {
-        std::ofstream os(meshDir + "/faces");
-        writeFoamHeader(os, "faceList", "faces", "constant/polyMesh");
-        os << nFaces << "\n(\n";
-        for (const Face& f : faces)
+        std::vector<std::int32_t> start(static_cast<std::size_t>(nFaces) + 1);
+        std::vector<std::int32_t> elems(static_cast<std::size_t>(nFaces) * 4);
+        start[0] = 0;
+        for (int i = 0; i < nFaces; ++i)
         {
-            os << "4(" << f.a << " " << f.b << " " << f.c << " " << f.d << ")\n";
+            start[static_cast<std::size_t>(i) + 1] = (i + 1) * 4;
+            const Face& f = faces[static_cast<std::size_t>(i)];
+            std::int32_t* e = elems.data() + static_cast<std::size_t>(i) * 4;
+            e[0] = f.a;
+            e[1] = f.b;
+            e[2] = f.c;
+            e[3] = f.d;
         }
-        os << ")\n";
+        std::ofstream os(meshDir + "/faces", std::ios::binary);
+        writeFoamHeader(os, "faceCompactList", "faces", "constant/polyMesh", true);
+        writeBinaryBlock(os, start.data(), start.size() * sizeof(std::int32_t), nFaces + 1);
+        writeBinaryBlock(os, elems.data(), elems.size() * sizeof(std::int32_t), nFaces * 4);
+        os.put('\n');
     }
     {
-        std::ofstream os(meshDir + "/owner");
-        writeFoamHeader(os, "labelList", "owner", "constant/polyMesh");
-        os << nFaces << "\n(\n";
-        for (const Face& f : faces)
+        std::vector<std::int32_t> own(static_cast<std::size_t>(nFaces));
+        for (int i = 0; i < nFaces; ++i)
         {
-            os << f.own << "\n";
+            own[static_cast<std::size_t>(i)] = faces[static_cast<std::size_t>(i)].own;
         }
-        os << ")\n";
+        std::ofstream os(meshDir + "/owner", std::ios::binary);
+        writeFoamHeader(os, "labelList", "owner", "constant/polyMesh", true);
+        writeBinaryBlock(os, own.data(), own.size() * sizeof(std::int32_t), nFaces);
+        os.put('\n');
     }
     {
-        std::ofstream os(meshDir + "/neighbour");
-        writeFoamHeader(os, "labelList", "neighbour", "constant/polyMesh");
-        os << nInternal << "\n(\n";
+        std::vector<std::int32_t> nei(static_cast<std::size_t>(nInternal));
         for (int i = 0; i < nInternal; ++i)
         {
-            os << faces[static_cast<size_t>(i)].nei << "\n";
+            nei[static_cast<std::size_t>(i)] = faces[static_cast<std::size_t>(i)].nei;
         }
-        os << ")\n";
+        std::ofstream os(meshDir + "/neighbour", std::ios::binary);
+        writeFoamHeader(os, "labelList", "neighbour", "constant/polyMesh", true);
+        writeBinaryBlock(os, nei.data(), nei.size() * sizeof(std::int32_t), nInternal);
+        os.put('\n');
     }
     {
         std::ofstream os(meshDir + "/boundary");
-        writeFoamHeader(os, "polyBoundaryMesh", "boundary", "constant/polyMesh");
+        writeFoamHeader(os, "polyBoundaryMesh", "boundary", "constant/polyMesh", false);
         int start = nInternal;
         os << "6\n(\n";
         auto patch = [&](const char* name, int n) {
@@ -254,6 +293,15 @@ int shyx_write_background_hex(const std::string& caseDir, double xmin, double ym
         patch("zmax", static_cast<int>(zmaxF.size()));
         os << ")\n";
     }
-    (void)nCells;
+    const auto tWrite = Clock::now();
+    const auto ms = [](Clock::time_point a, Clock::time_point b) {
+        return std::chrono::duration<double>(b - a).count();
+    };
+    std::cout << "SHYX io background nCells=" << nCells
+              << " nPoints=" << nPoints << " nFaces=" << nFaces
+              << " pointsBin=" << ms(t0, tPoints)
+              << "s facesBuild=" << ms(tPoints, tBuild)
+              << "s restBin=" << ms(tBuild, tWrite)
+              << "s total=" << ms(t0, tWrite) << " s\n";
     return 0;
 }

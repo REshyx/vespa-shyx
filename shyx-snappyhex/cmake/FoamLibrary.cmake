@@ -87,8 +87,14 @@ function(foam_add_static_library target src_dir)
   )
   set_source_files_properties(${_srcs} PROPERTIES LANGUAGE CXX)
   if(_foam_src_dirs)
+    set(_foam_crt_shadow_dirs string wchar cstring Time)
     foreach(_s _d IN ZIP_LISTS _srcs _foam_src_dirs)
-      set_source_files_properties("${_s}" PROPERTIES INCLUDE_DIRECTORIES "${_d}")
+      get_filename_component(_dn "${_d}" NAME)
+      # -I on string/ or wchar/ makes <string.h>/<wchar.h> hit Foam headers.
+      # Other orig dirs (LduMatrix vs lduMatrix) still need -I for case.
+      if(NOT _dn IN_LIST _foam_crt_shadow_dirs)
+        set_source_files_properties("${_s}" PROPERTIES INCLUDE_DIRECTORIES "${_d}")
+      endif()
     endforeach()
   endif()
 

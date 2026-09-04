@@ -63,10 +63,14 @@ int main(int argc, char** argv)
         {
             p.add_layers = 0;
         }
+        else if (a == "-maxCells")
+        {
+            needi(&p.max_global_cells);
+        }
         else if (a == "-h" || a == "--help")
         {
             std::cout << "snappy_cli -stl surface.stl [-case dir] [-cell size] [-margin frac]\n"
-                         "           [-level min max] [-layers n] [-noLayers]\n"
+                         "           [-level min max] [-layers n] [-noLayers] [-maxCells n]\n"
                          "snappy_cli -runCase dir\n";
             return 0;
         }
@@ -80,7 +84,7 @@ int main(int argc, char** argv)
     err[0] = '\0';
     if (!runCase.empty())
     {
-        const int rc = shyx_snappy_mesh_only(runCase.c_str(), err, 2048);
+        const int rc = shyx_snappy_mesh_only(runCase.c_str(), err, 2048, nullptr, nullptr);
         if (rc != 0)
         {
             std::cerr << "snappyHexMesh failed (" << rc << "): " << err << "\n";
@@ -93,7 +97,7 @@ int main(int argc, char** argv)
         std::cerr << "missing -stl\n";
         return 2;
     }
-    const int rc = shyx_snappy_run(stl.c_str(), caseDir.c_str(), &p, err, 2048);
+    const int rc = shyx_snappy_run(stl.c_str(), caseDir.c_str(), &p, err, 2048, nullptr, nullptr);
     if (rc != 0)
     {
         std::cerr << "shyx_snappy_run failed (" << rc << "): " << err << "\n";

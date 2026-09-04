@@ -28,7 +28,9 @@ class vtkSMStringVectorProperty;
  * Rows come from the OpenFOAM MultiBlock output (internalMesh then patches).
  * Add Variable / Delete Variable columns. Values are stored in BlockNames +
  * BoundaryVariables. Finite cells are written to 0/shyx_BoundaryVariableN.
- * A leading eye toggles that block in the active view (Hide Block).
+ * Patch rows can check Write Normal (0/shyx_BoundaryRadialValueNormal), stored
+ * in BoundaryWriteNormals. A leading eye toggles that block in the active view
+ * (Hide Block).
  */
 class pqSHYXSnappyBlockVariablesWidget : public pqPropertyWidget
 {
@@ -40,6 +42,7 @@ public:
   {
     QString Type;
     QString Name;
+    bool WriteNormal = false;
     QStringList Variables;
     QString SelectorPath;
     int DataSetIndex = -1;
@@ -75,7 +78,9 @@ private:
   void setVariableColumnCount(int count);
   QList<QString> currentNamesFromProperty() const;
   QList<QStringList> currentBoundaryVariablesFromProperty() const;
+  QList<int> currentBoundaryWriteNormalsFromProperty() const;
   QMap<QString, QStringList> variablesByName() const;
+  QMap<QString, bool> writeNormalsByName() const;
   QList<BlockRow> collectCurrentOutputNames() const;
 
   void connectBlockVisibilityObserver();
@@ -94,6 +99,7 @@ private:
   QTreeView* View = nullptr;
   QString NamesPropertyName;
   QString BoundaryVariablesPropertyName;
+  QString BoundaryWriteNormalsPropertyName;
   int VariableColumnCount = 1;
   bool UpdatingFromProperty = false;
   bool UpdatingFromUI = false;

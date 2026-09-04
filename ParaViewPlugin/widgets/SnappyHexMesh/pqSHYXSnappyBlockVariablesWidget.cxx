@@ -44,6 +44,7 @@
 #include <QStringList>
 #include <QTreeView>
 #include <QVBoxLayout>
+#include <QVariant>
 
 #include <algorithm>
 #include <string>
@@ -55,7 +56,8 @@ constexpr int kColVisibility = 0;
 constexpr int kColIndex = 1;
 constexpr int kColType = 2;
 constexpr int kColName = 3;
-constexpr int kFirstVariableCol = 4;
+constexpr int kColWriteNormal = 4;
+constexpr int kFirstVariableCol = 5;
 constexpr int kSelectorPathRole = Qt::UserRole;
 constexpr int kDataSetIndexRole = Qt::UserRole + 1;
 constexpr int kVisibleRole = Qt::UserRole + 2;
@@ -314,8 +316,11 @@ pqSHYXSnappyBlockVariablesWidget::pqSHYXSnappyBlockVariablesWidget(
   auto* tip = new QLabel(
     tr("After a successful mesh Apply, click Refresh to list internalMesh and patches. "
        "Add Variable / Delete Variable columns. Finite values are written to "
-       "0/shyx_BoundaryVariable1/... (empty / NaN → 0). Changing only these values skips "
-       "snappyHexMesh. Click the eye to show or hide that block in the active view."),
+       "0/shyx_BoundaryVariable1/... (empty / NaN → 0). For Patch rows, check Write Normal to "
+       "write 0/shyx_BoundaryRadialValueNormal (patch average normal; scaled by "
+       "BoundaryRadialValue = 1 - x^a when Compute Boundary Radial Value is on). Changing only "
+       "these values skips snappyHexMesh. Click the eye to show or hide that block in the "
+       "active view."),
     this);
   tip->setWordWrap(true);
   tip->setStyleSheet(QStringLiteral("color: gray; font-size: 11px;"));
@@ -380,6 +385,16 @@ pqSHYXSnappyBlockVariablesWidget::pqSHYXSnappyBlockVariablesWidget(
     this->addPropertyLink(this, this->BoundaryVariablesPropertyName.toUtf8().data(),
       SIGNAL(blockVariablesChanged()), varsProp);
   }
+  vtkSMProperty* writeNormalsProp =
+    propertyFromGroup(smgroup, smproxy, "BoundaryWriteNormals", "BoundaryWriteNormals");
+  if (writeNormalsProp)
+  {
+    const char* pname = smproxy ? smproxy->GetPropertyName(writeNormalsProp) : nullptr;
+    this->BoundaryWriteNormalsPropertyName =
+      QString::fromUtf8(pname ? pname : "BoundaryWriteNormals");
+    this->addPropertyLink(this, this->BoundaryWriteNormalsPropertyName.toUtf8().data(),
+      SIGNAL(blockVariablesChanged()), writeNormalsProp);
+  }
 
   this->BlockVisibilityVTKConnect = vtkEventQtSlotConnect::New();
   QObject::connect(&pqActiveObjects::instance(), &pqActiveObjects::viewChanged, this,
@@ -439,7 +454,8 @@ bool pqSHYXSnappyBlockVariablesWidget::event(QEvent* e)
   {
     auto* devt = static_cast<QDynamicPropertyChangeEvent*>(e);
     const QString name = QString::fromLatin1(devt->propertyName());
-    if (name == this->NamesPropertyName || name == this->BoundaryVariablesPropertyName)
+    if (name == this->NamesPropertyName || name == this->BoundaryVariablesPropertyName ||
+      name == this->BoundaryWriteNormalsPropertyName)
     {
       this->rebuildFromProperty();
       return true;
@@ -462,7 +478,8 @@ void pqSHYXSnappyBlockVariablesWidget::reset()
 
 void pqSHYXSnappyBlockVariablesWidget::onItemChanged(QStandardItem* item)
 {
-  if (!item || this->UpdatingFromProperty || item->column() < kFirstVariableCol)
+  if (!item || this->UpdatingFromProperty ||
+    (item->column() != kColWriteNormal && item->column() < kFirstVariableCol))
   {
     return;
   }
@@ -473,8 +490,10 @@ void pqSHYXSnappyBlockVariablesWidget::onRefreshClicked()
 {
   QList<BlockRow> rows = this->collectCurrentOutputNames();
   const QMap<QString, QStringList> varsByName = this->variablesByName();
+  const QMap<QString, bool> writeNormalsByName = this->writeNormalsByName();
   const QList<QString> propNames = this->currentNamesFromProperty();
   const QList<QStringList> propVars = this->currentBoundaryVariablesFromProperty();
+  const QList<int> propWriteNormals = this->currentBoundaryWriteNormalsFromProperty();
 
   auto assignVars = [&](BlockRow& row, int propIndex)
   {
@@ -485,6 +504,14 @@ void pqSHYXSnappyBlockVariablesWidget::onRefreshClicked()
     else if (propIndex >= 0 && propIndex < propVars.size() && !propVars[propIndex].isEmpty())
     {
       row.Variables = propVars[propIndex];
+    }
+    if (writeNormalsByName.contains(row.Name))
+    {
+      row.WriteNormal = writeNormalsByName.value(row.Name);
+    }
+    else if (propIndex >= 0 && propIndex < propWriteNormals.size())
+    {
+      row.WriteNormal = propWriteNormals[propIndex] != 0;
     }
   };
 
@@ -555,6 +582,7 @@ void pqSHYXSnappyBlockVariablesWidget::rebuildFromProperty()
 
   const QList<QString> names = this->currentNamesFromProperty();
   const QList<QStringList> variables = this->currentBoundaryVariablesFromProperty();
+  const QList<int> writeNormals = this->currentBoundaryWriteNormalsFromProperty();
   QList<BlockRow> rows;
   rows.reserve(names.size());
   for (int i = 0; i < names.size(); ++i)
@@ -562,6 +590,7 @@ void pqSHYXSnappyBlockVariablesWidget::rebuildFromProperty()
     BlockRow row;
     row.Type = isInternalMeshName(names[i]) ? tr("Internal mesh") : tr("Patch");
     row.Name = names[i];
+    row.WriteNormal = i < writeNormals.size() ? writeNormals[i] != 0 : false;
     row.Variables = i < variables.size() ? variables[i] : QStringList{ QString() };
     rows.push_back(row);
   }
@@ -605,7 +634,24 @@ void pqSHYXSnappyBlockVariablesWidget::rebuildRows(const QList<BlockRow>& rows)
     auto* nameItem = new QStandardItem(rows[row].Name);
     nameItem->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable | Qt::ItemNeverHasChildren);
 
-    QList<QStandardItem*> items = { visibilityItem, indexItem, typeItem, nameItem };
+    const bool isPatch = rows[row].Type == tr("Patch");
+    auto* writeNormalItem = new QStandardItem();
+    writeNormalItem->setTextAlignment(Qt::AlignCenter);
+    if (isPatch)
+    {
+      writeNormalItem->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable | Qt::ItemIsUserCheckable |
+        Qt::ItemNeverHasChildren);
+      writeNormalItem->setCheckState(rows[row].WriteNormal ? Qt::Checked : Qt::Unchecked);
+      writeNormalItem->setToolTip(
+        tr("Write this patch's BoundaryRadialValueNormal to 0/shyx_BoundaryRadialValueNormal"));
+    }
+    else
+    {
+      writeNormalItem->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable | Qt::ItemNeverHasChildren);
+      writeNormalItem->setCheckState(Qt::Unchecked);
+    }
+
+    QList<QStandardItem*> items = { visibilityItem, indexItem, typeItem, nameItem, writeNormalItem };
     for (int c = 0; c < this->VariableColumnCount; ++c)
     {
       const QString value =
@@ -630,12 +676,20 @@ void pqSHYXSnappyBlockVariablesWidget::writeBackProperty()
 
   QStringList names;
   QStringList variableRows;
+  QStringList writeNormalRows;
   names.reserve(this->Model->rowCount());
   variableRows.reserve(this->Model->rowCount());
+  writeNormalRows.reserve(this->Model->rowCount());
   for (int row = 0; row < this->Model->rowCount(); ++row)
   {
     auto* nameItem = this->Model->item(row, kColName);
     names.push_back(nameItem ? nameItem->text().trimmed() : QString());
+    auto* typeItem = this->Model->item(row, kColType);
+    const bool isPatch = typeItem && typeItem->text() == tr("Patch");
+    auto* writeNormalItem = this->Model->item(row, kColWriteNormal);
+    const bool writeNormal =
+      isPatch && writeNormalItem && writeNormalItem->checkState() == Qt::Checked;
+    writeNormalRows.push_back(writeNormal ? QStringLiteral("1") : QStringLiteral("0"));
     QStringList variables;
     for (int c = 0; c < this->VariableColumnCount; ++c)
     {
@@ -656,6 +710,11 @@ void pqSHYXSnappyBlockVariablesWidget::writeBackProperty()
       this->setProperty(this->BoundaryVariablesPropertyName.toUtf8().data(),
         variableRows.join(QLatin1Char('\n')));
     }
+    if (!this->BoundaryWriteNormalsPropertyName.isEmpty())
+    {
+      this->setProperty(this->BoundaryWriteNormalsPropertyName.toUtf8().data(),
+        writeNormalRows.join(QLatin1Char('\n')));
+    }
   }
   Q_EMIT this->blockVariablesChanged();
 }
@@ -670,7 +729,7 @@ void pqSHYXSnappyBlockVariablesWidget::setVariableColumnCount(int count)
   this->VariableColumnCount = count;
   this->Model->setColumnCount(kFirstVariableCol + count);
 
-  QStringList labels = { QString(), tr("#"), tr("Type"), tr("Name") };
+  QStringList labels = { QString(), tr("#"), tr("Type"), tr("Name"), tr("Write Normal") };
   for (int i = 0; i < count; ++i)
   {
     labels.push_back(tr("Variable %1").arg(i + 1));
@@ -688,6 +747,7 @@ void pqSHYXSnappyBlockVariablesWidget::setVariableColumnCount(int count)
     header->setSectionResizeMode(kColIndex, QHeaderView::ResizeToContents);
     header->setSectionResizeMode(kColType, QHeaderView::ResizeToContents);
     header->setSectionResizeMode(kColName, QHeaderView::Stretch);
+    header->setSectionResizeMode(kColWriteNormal, QHeaderView::ResizeToContents);
     for (int c = 0; c < count; ++c)
     {
       header->setSectionResizeMode(kFirstVariableCol + c, QHeaderView::ResizeToContents);
@@ -761,6 +821,33 @@ QList<QStringList> pqSHYXSnappyBlockVariablesWidget::currentBoundaryVariablesFro
   return variables;
 }
 
+QList<int> pqSHYXSnappyBlockVariablesWidget::currentBoundaryWriteNormalsFromProperty() const
+{
+  QList<int> flags;
+  if (this->BoundaryWriteNormalsPropertyName.isEmpty())
+  {
+    return flags;
+  }
+  const QVariant value = this->property(this->BoundaryWriteNormalsPropertyName.toUtf8().data());
+  const QString text = value.toString();
+  if (text.isEmpty())
+  {
+    return flags;
+  }
+  const QStringList split = text.split(QLatin1Char('\n'), Qt::KeepEmptyParts);
+  for (QString line : split)
+  {
+    if (line.endsWith(QLatin1Char('\r')))
+    {
+      line.chop(1);
+    }
+    bool ok = false;
+    const int flag = line.trimmed().toInt(&ok);
+    flags.push_back(ok && flag != 0 ? 1 : 0);
+  }
+  return flags;
+}
+
 QMap<QString, QStringList> pqSHYXSnappyBlockVariablesWidget::variablesByName() const
 {
   QMap<QString, QStringList> out;
@@ -792,6 +879,40 @@ QMap<QString, QStringList> pqSHYXSnappyBlockVariablesWidget::variablesByName() c
     if (!names[i].isEmpty())
     {
       out.insert(names[i], i < vars.size() ? vars[i] : QStringList());
+    }
+  }
+  return out;
+}
+
+QMap<QString, bool> pqSHYXSnappyBlockVariablesWidget::writeNormalsByName() const
+{
+  QMap<QString, bool> out;
+  if (this->Model && this->Model->rowCount() > 0)
+  {
+    for (int row = 0; row < this->Model->rowCount(); ++row)
+    {
+      auto* nameItem = this->Model->item(row, kColName);
+      const QString name = nameItem ? nameItem->text().trimmed() : QString();
+      if (name.isEmpty())
+      {
+        continue;
+      }
+      auto* typeItem = this->Model->item(row, kColType);
+      const bool isPatch = typeItem && typeItem->text() == tr("Patch");
+      auto* writeNormalItem = this->Model->item(row, kColWriteNormal);
+      out.insert(name,
+        isPatch && writeNormalItem && writeNormalItem->checkState() == Qt::Checked);
+    }
+    return out;
+  }
+
+  const QList<QString> names = this->currentNamesFromProperty();
+  const QList<int> flags = this->currentBoundaryWriteNormalsFromProperty();
+  for (int i = 0; i < names.size(); ++i)
+  {
+    if (!names[i].isEmpty())
+    {
+      out.insert(names[i], i < flags.size() && flags[i] != 0);
     }
   }
   return out;
