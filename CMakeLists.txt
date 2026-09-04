@@ -159,7 +159,14 @@ endif()
 ## Module build
 # Recursively discover vtk.module under vespa/: Algorithm (shared), vespa/vespa (upstream CGAL),
 # vespa/shyx, and any future author folder. CGAL is one backend, not the project identity.
-vtk_module_find_modules(vespa_module_files "${CMAKE_CURRENT_SOURCE_DIR}/vespa")
+# CONFIGURE_DEPENDS: adding/removing vespa/**/vtk.module re-runs Configure (VTK's
+# vtk_module_find_modules uses a plain GLOB and can miss new modules until cache wipe).
+file(GLOB_RECURSE vespa_module_files
+  CONFIGURE_DEPENDS
+  "${CMAKE_CURRENT_SOURCE_DIR}/vespa/vtk.module")
+list(LENGTH vespa_module_files _vespa_n_module_files)
+message(STATUS "VESPA: scanned ${_vespa_n_module_files} vtk.module file(s) under vespa/")
+unset(_vespa_n_module_files)
 if(NOT VESPA_USE_VMTK)
   list(FILTER vespa_module_files EXCLUDE REGEX "VmtkPolyDataCenterlines")
   list(FILTER vespa_module_files EXCLUDE REGEX "VmtkOpeningCenterlines")
@@ -218,6 +225,7 @@ if(VESPA_USE_CGAL AND _vespa_cgal_module_files)
   endif()
   if (NOT CGAL_VERSION VERSION_GREATER_EQUAL 5.5)
     list(FILTER vespa_module_files EXCLUDE REGEX "SelectionFillAlphaReunion")
+    list(FILTER vespa_module_files EXCLUDE REGEX "AutoMeshRepair")
   endif()
 elseif(NOT VESPA_USE_CGAL AND _vespa_cgal_module_files)
   list(REMOVE_ITEM vespa_module_files ${_vespa_cgal_module_files})

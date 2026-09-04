@@ -2,6 +2,7 @@
 
 #include "pqSHYXAIOutputLog.h"
 #include "pqSHYXGrowSelectionWithSimilarController.h"
+#include "pqSHYXProximityGapSelectionController.h"
 
 #include "pqActiveObjects.h"
 #include "pqAnimationManager.h"
@@ -1343,7 +1344,8 @@ QString listFilters(const QString& queryRaw)
   {
     out += QStringLiteral(
       "RenderView title-bar tools are not proxies: Sphere cell selection; "
-      "Grow selection with similar normals. Block context menu: Select Block. "
+      "Grow selection with similar normals; Proximity gap selection. "
+      "Block context menu: Select Block. "
       "Selection context menu: Select All (connected region); "
       "Invert Selection; "
       "Select Similar → By Normal (grow to completion); "
@@ -1542,6 +1544,11 @@ QString describeClientTool(const QString& query)
     return {};
   }
   const QString ql = q.toLower();
+  const bool proximityGap = ql.contains(QLatin1String("proximity")) ||
+    ql.contains(QLatin1String("near-disconnected")) ||
+    ql.contains(QLatin1String("near disconnected")) ||
+    ql.contains(QLatin1String("gap selection")) ||
+    ql.contains(QLatin1String("shyxproximitygap"));
   const bool sphere = ql.contains(QLatin1String("sphere")) ||
     ql.contains(QLatin1String("shyxsphereselection"));
   const bool grow = ql.contains(QLatin1String("grow")) ||
@@ -1566,6 +1573,37 @@ QString describeClientTool(const QString& query)
     ql.contains(QLatin1String("connected region"));
   const bool invertSel = ql.contains(QLatin1String("invert")) ||
     ql.contains(QLatin1String("shyxinvert"));
+  if (proximityGap)
+  {
+    const double eps = pqSHYXProximityGapSelectionController::Epsilon();
+    const bool single = pqSHYXProximityGapSelectionController::SingleNearestRegion();
+    const bool opposite = pqSHYXProximityGapSelectionController::TowardOppositeCenter();
+    const QString epsText = eps > 0.0 ? QString::number(eps, 'g', 6)
+                                      : QStringLiteral("auto (closest pair x 1.05 if single/opposite, else 2 x mean edge)");
+    return QStringLiteral(
+      "SHYX Proximity gap selection (RenderView title-bar; not a Server Manager proxy)\n"
+      "No Python constructor and no SM properties. After the user uses it, call get_selection_ids.\n"
+      "Selects cells at near-disconnected contacts for later local Alpha Wrap.\n"
+      "Parameters:\n"
+      "  Epsilon  type=double  current=%1  units=world  default=0 (auto)\n"
+      "    Euclidean gap distance. While the tool is toggled on, wheel on the button scales it.\n"
+      "    Right-click to set. Wheel does nothing while the tool is off.\n"
+      "  SingleNearestRegion  type=bool  current=%2  default=true\n"
+      "    Used when TowardOppositeCenter is off: keep only the cluster of the closest pair.\n"
+      "  TowardOppositeCenter  type=bool  current=%3  default=false\n"
+      "    A = part1 points within ε of B's centroid; B = part2 points within ε of A's centroid.\n"
+      "    Centroids iterate from the globally closest pair. Limits expansion along parallel surfaces.\n"
+      "    When on, this mode is used instead of dist(a, whole other part).\n"
+      "Interaction:\n"
+      "  Toggle the title-bar two-patch/gap button on to compute on the active visible vtkPolyData\n"
+      "  While on, wheel on the button: scale ε and recompute. Wheel while off does nothing.\n"
+      "  Toggle off to stop; the current selection is left as-is\n"
+      "  Right-click: Set gap distance ε… / Single nearest region / Toward opposite center\n"
+      "Typical next step: SHYXSelectionFillAlphaReunionFilter on this cell selection.\n")
+      .arg(epsText)
+      .arg(single ? QStringLiteral("true") : QStringLiteral("false"))
+      .arg(opposite ? QStringLiteral("true") : QStringLiteral("false"));
+  }
   if (sphere && !grow)
   {
     return QStringLiteral(
@@ -1578,6 +1616,8 @@ QString describeClientTool(const QString& query)
       "  Left-drag: move center (grab point stays under the cursor)\n"
       "  Hover + mouse wheel: scale radius (min 1e-12)\n"
       "  Selects cells whose vertices lie inside the sphere\n"
+      "  All visible pipeline representations in the view are queried (not only the active node)\n"
+      "  Composite parent (multiblock / PDC): every intersecting leaf is selected\n"
       "  Selection modifiers: ParaView add/subtract/toggle (Shift/Ctrl as usual)\n"
       "  Right-click the button: 'Apply selection on release only' (DeferSelectionUntilRelease)\n");
   }
@@ -1664,7 +1704,7 @@ QString describeProxy(const QString& query)
   if (!proto)
   {
     return QStringLiteral("No proxy definition matching '%1'. Try list_filters or describe_proxy('sphere') / "
-                          "describe_proxy('Pulse Glyphs').")
+                          "describe_proxy('proximity gap') / describe_proxy('Pulse Glyphs').")
       .arg(query.trimmed());
   }
   QString out;
@@ -1908,7 +1948,14 @@ struct ShyxExtra
 const ShyxExtra kShyxExtra[] = {
   { "SHYXMeshChecker",
     "Prefer over VESPA Mesh Checker for vascular work. Port0 repaired mesh, port1 illegal primitives "
-    "(soup edges / boundary rings / self-intersections)." },
+    "(soup edges / boundary rings / self-intersections). Typical follow-up for self-intersections: "
+    "SHYXAutoMeshRepair." },
+  { "SHYXAutoMeshRepair",
+    "Further step after SHYXMeshChecker for self-intersecting faces (CGAL>=5.5). Clusters each "
+    "intersection location, dilates DilateLayers, then local hole-fill + alpha wrap + union + "
+    "bridge remesh/smooth (same pipeline as SHYXSelectionFillAlphaReunionFilter). One cluster per "
+    "pass, then re-detect, up to MaxPasses. Port0 repaired mesh (field data SHYXAutoMeshRepair*). "
+    "Port1 first-pass intersecting triangles with SHYX_ClusterId." },
   { "SHYXBooleanOperationFilter", "Relaxed boolean; open meshes OK. Strict watertight meshes can use VESPA Boolean." },
   { "SHYXHoleFillFilter", "SHYX hole fill; new pipelines prefer this over VESPA Hole Filling." },
   { "SHYXShapeSmoothing", "Three algorithms (MCF / Angle&Area / Fair). VESPA Shape Smoothing is MCF only." },
@@ -1916,18 +1963,23 @@ const ShyxExtra kShyxExtra[] = {
     "Curvature-adaptive remesh (CGAL>=6). Ports: remeshed, sharp features, mask patch, sizing preview. "
     "Uniform target edge length: VESPA Isotropic Remesher." },
   { "SHYXRemeshWithEndpoint",
-    "Vascular step 4: optional endpoint cull then ICC remesh / cap. Filled caps are retagged on "
+    "Vascular step 5: optional endpoint cull then ICC remesh / cap. Filled caps are retagged on "
     "cell EndpointIndex (wall -1, patches 1..n by area)." },
   { "SHYXSkeletonExtraction", "Vascular step 1. Input must be watertight triangle mesh." },
   { "SHYXVesselEndClipper", "Vascular step 2. Port0 clipped mesh, port1 clip planes (Point Label)." },
-  { "SHYXSelectionPlaneClipper", "Vascular step 3. Uses current selection / interactive plane." },
-  { "SHYXTetGen", "Vascular step 5. Closed triangle surface -> tetrahedra." },
+  { "SHYXSkeletonEndClipper",
+    "Vascular step 3 (one-node combo of steps 1-2; standalone filters unchanged). "
+    "Single watertight surface input. Port0 clipped mesh, port1 skeleton lines plus "
+    "clip-plane labels and short direction lines (Point Label, VertexOnly on clip origins). "
+    "Same skeleton and clip parameters, including Endpoints to Clip and interactive planes." },
+  { "SHYXSelectionPlaneClipper", "Vascular step 4. Uses current selection / interactive plane." },
+  { "SHYXTetGen", "Vascular step 6. Closed triangle surface -> tetrahedra." },
   { "SHYXDataSetToPartitionedCollection",
-    "Vascular step 6. Convert dataset to PDC; then Boundary Assignment. Partitioned block names "
+    "Vascular step 7. Convert dataset to PDC; then Boundary Assignment. Partitioned block names "
     "table has a leading eye per row that toggles that block in the active view (same "
     "BlockSelectors / BlockVisibilities as Hide Block). Side and node rows stay linked." },
   { "SHYXPartitionedCollectionBoundaryAssignment",
-    "Vascular step 7. Call get_blocks on the PDC first. After area sort, side/node ENTITY_IDs are "
+    "Vascular step 8. Call get_blocks on the PDC first. After area sort, side/node ENTITY_IDs are "
     "rewritten so rank follows numbering (largest -> smallest existing IDs). Port0 collection, "
     "port1 assignment debug. Export writes Exodus + options + Nodeset + current .pvsm beside the "
     "chosen .exo." },
@@ -1977,7 +2029,15 @@ const ShyxExtra kShyxExtra[] = {
     "needed if the selection changes afterwards. InvertSelection (default off) keeps the "
     "complement. Empty selection (after invert) yields an empty output." },
   { "SHYXFlipSelectedCellsWindingFilter", "Needs an active cell selection." },
-  { "SHYXSelectionFillAlphaReunionFilter", "Selection -> fill / alpha wrap / union (CGAL>=5.5)." },
+  { "SHYXSelectionFillAlphaReunionFilter",
+    "Multiple Input connections on port 0 are merged (vtkAppendPolyData / Append Geometry). "
+    "Selection is not a second pipeline port (SelectionInput hint, same as Extract Selection). "
+    "It is repeatable and paired with Input order: extract each Input with its own cell ids, "
+    "then remap by append offset. The panel copies every Input's current selection "
+    "(Copy Input Selections). Then fill / alpha wrap / union (CGAL>=5.5). "
+    "SelectionCellArrayName is a fallback mask on the merged mesh. "
+    "SHYXBridgeCleanupMask (cell array, 1 = cleanup patch) is always written when a bridge "
+    "cleanup mask exists; there is no ExportBridgeMask toggle." },
   { "SHYXPointCloudSurfaceSDF", "Point cloud to surface SDF (VTK). Not CGAL vtkCGALSignedDistanceFunction." },
   { "SHYXSurfaceToVolumeMesh", "CGAL Mesh_3 tets from closed surface (alternative to TetGen)." },
   { "SHYXSnappyHexMesh",
@@ -2032,10 +2092,20 @@ const ShyxExtra kShyxExtra[] = {
     "Call describe_proxy('Point Label') for PL_* names (PL_ShowPointLabels, PL_PointLabelArray, PL_VertexOnly, ...)." },
   { "SHYXSphereSelection",
     "Not a filter and not a proxy. RenderView title-bar sphere button. "
-    "Call describe_proxy('sphere') for interaction parameters. After the user uses it, call get_selection_ids." },
+    "Selects every visible pipeline node in the view; on a composite parent, every intersecting "
+    "block. Call describe_proxy('sphere') for interaction parameters. After the user uses it, "
+    "call get_selection_ids." },
   { "SHYXGrowSelectionWithSimilar",
     "Not a filter and not a proxy. RenderView title-bar button: one ring per click, hold to keep growing. "
     "Call describe_proxy('grow') for DihedralThresholdDegrees (default 15). After use, call get_selection_ids." },
+  { "SHYXProximityGapSelection",
+    "Not a filter and not a proxy. RenderView title-bar button: select cells at near-disconnected "
+    "contacts. Optional TowardOppositeCenter: A/B are ε-balls around each other's centroids "
+    "(iterated from the closest pair), which limits parallel-surface flood. "
+    "Call describe_proxy('proximity gap') for Epsilon, SingleNearestRegion, TowardOppositeCenter. "
+    "Toggle the title-bar button on to compute; while on, wheel scales ε. Wheel while off does nothing. "
+    "Right-click sets ε / toggles. After use, call get_selection_ids. "
+    "Typical follow-up: SHYXSelectionFillAlphaReunionFilter." },
   { "SHYXSelectSimilar",
     "Not a filter and not a proxy. RenderView right-click when a cell selection is active: "
     "Select Similar → By Normal grows all similar-normal rings in one shot (same dihedral threshold as Grow). "
@@ -2070,8 +2140,9 @@ QString lookupShyxDocs(const QString& queryRaw)
   {
     out += QStringLiteral(
       "Vascular menu order: SHYXSkeletonExtraction -> SHYXVesselEndClipper -> "
-      "SHYXSelectionPlaneClipper -> SHYXRemeshWithEndpoint -> SHYXTetGen -> "
-      "SHYXDataSetToPartitionedCollection -> SHYXPartitionedCollectionBoundaryAssignment\n");
+      "SHYXSkeletonEndClipper -> SHYXSelectionPlaneClipper -> SHYXRemeshWithEndpoint -> "
+      "SHYXTetGen -> SHYXDataSetToPartitionedCollection -> "
+      "SHYXPartitionedCollectionBoundaryAssignment\n");
   }
   if (query.isEmpty())
   {
@@ -2083,7 +2154,7 @@ QString lookupShyxDocs(const QString& queryRaw)
       "   Pulse Glyphs, Animated Streamline, Point Label. "
       "Python: GetDisplayProperties().Representation = 'Pulse Glyphs'.\n"
       "3) RenderView title-bar selection tools (client Qt; no SM proxy / no Python constructor):\n"
-      "   Sphere cell selection; Grow selection with similar normals. "
+      "   Sphere cell selection; Grow selection with similar normals; Proximity gap selection. "
       "After the user uses them, call get_selection_ids.\n"
       "   Also: right-click a composite block → Select Block "
       "(clear current selection, then select all cells in that part).\n"
@@ -2097,7 +2168,7 @@ QString lookupShyxDocs(const QString& queryRaw)
       "Pass a name/topic (remesh, clip, representation, selection, sphere, glyph, ...) to filter notes.\n"
       "For parameter names/defaults: describe_proxy('Pulse Glyphs'), describe_proxy('Animated Streamline'), "
       "describe_proxy('Point Label'), describe_proxy('sphere'), describe_proxy('grow'), "
-      "describe_proxy('select block'), describe_proxy('select similar'), "
+      "describe_proxy('proximity gap'), describe_proxy('select block'), describe_proxy('select similar'), "
       "describe_proxy('fill interior'), describe_proxy('select all'), "
       "describe_proxy('invert').\n");
   }
@@ -2559,13 +2630,13 @@ QJsonArray pqSHYXAIAgentTools::schema()
     "Property schema: types, defaults, enums, docs. For filters: XML/python name. "
     "For SHYX Display types pass 'Pulse Glyphs', 'Animated Streamline', or 'Point Label' "
     "(returns exposed Python names PG_*/AS_*/PL_*). "
-    "For title-bar tools pass 'sphere' or 'grow' (no SM proxy). "
+    "For title-bar tools pass 'sphere', 'grow', or 'proximity gap' (no SM proxy). "
     "For the block context-menu action pass 'select block'. "
     "For Select Similar / By Normal pass 'select similar'. "
     "For Fill Interior pass 'fill interior'. "
     "For Select All (connected region) pass 'select all'. "
     "For Invert Selection pass 'invert'.",
-    QJsonObject{ { QStringLiteral("name"), strArg("XML name, display type (Pulse Glyphs), sphere/grow, select block, select similar, fill interior, select all, or invert.") } },
+    QJsonObject{ { QStringLiteral("name"), strArg("XML name, display type (Pulse Glyphs), sphere/grow/proximity gap, select block, select similar, fill interior, select all, or invert.") } },
     QJsonArray{ QStringLiteral("name") }));
   tools.append(fn("lookup_shyx_docs",
     "SHYX/VESPA usage notes: capability catalog (filters + Display representations + "

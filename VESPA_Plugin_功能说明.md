@@ -17,7 +17,7 @@
 | **`USE_CERES`** | 找到 Ceres 且为 ON 时才编 **VESPA Mesh Smoothing**（内部变量 `VESPA_MESH_SMOOTHING`）。 |
 | **`VESPA_USE_MKL`** | 构建含 MKL 时，**SHYX Clebsch Map Filter** 中可选用 MKL 直接法求解器。 |
 | **`VESPA_USE_SMP`** | 部分滤镜内部并行（Density Sampler、Array Probability Point Cull、Clebsch、Bidirectional Streamline Merge、Disconnected Region Fuse、Tet Mesh Region Partition）。**SHYX Radius Neighbor Count** 使用 VTK 自带的 **vtkSMPTools**，不依赖此开关。 |
-| **（CGAL 版本，内部状态）** | CGAL ≥ 5.5 时内部 `VESPA_ALPHA_WRAPPING` 打开（Alpha Wrapping / Selection Fill XML）。CGAL ≥ 6.0 时内部 `VESPA_ADAPTIVE_REMESHING` 打开（Adaptive Remesher / Remesh With Endpoint）。二者不是 cmake-gui 用户开关。 |
+| **（CGAL 版本，内部状态）** | CGAL ≥ 5.5 时内部 `VESPA_ALPHA_WRAPPING` 打开（Alpha Wrapping / Selection Fill / Auto Mesh Repair XML）。CGAL ≥ 6.0 时内部 `VESPA_ADAPTIVE_REMESHING` 打开（Adaptive Remesher / Remesh With Endpoint）。二者不是 cmake-gui 用户开关。 |
 
 客户端若使用 Qt 版 ParaView，插件还可注册 **Pulse Glyph** / **Animated Streamline** 相关的自动启动管理器与自定义面板（如数组曲线映射面板）；表示类型仍可在显示面板中选择。
 
@@ -57,6 +57,7 @@
 | 界面标签 | 备注 |
 |----------|------|
 | SHYX Mesh Checker | 诊断+修复；优先于 VESPA Mesh Checker |
+| SHYX Auto Mesh Repair | 自交分簇后局部 Alpha Wrap；CGAL ≥ 5.5 |
 | SHYX Hole Fill (CGAL) | 与 VESPA Hole Filling 成对 |
 | SHYX Repair Degeneracies (CGAL) | |
 | SHYX Boolean (CGAL, relaxed) | 不要求封闭；与 VESPA Boolean 成对 |
@@ -74,6 +75,7 @@
 | SHYX Enhanced Ruler | |
 | SHYX Skeleton Extraction | **Vascular** |
 | SHYX Vessel End Clipper | **Vascular** |
+| SHYX Skeleton End Clipper | **Vascular**（骨架提取 + 切端组合；原两个滤镜不变） |
 | SHYX Selection Plane Clipper | **Vascular** |
 | SHYX Surface to Volume Mesh | CGAL Mesh_3 |
 | SHYX TetGen / TetGen Mesh Optimize | **TetGen** 在 Vascular |
@@ -98,7 +100,7 @@
 | SHYX Vector Field Topology | 包装上游 VTK |
 | SHYX Auto Streamline / Bidirectional Streamline Merge | |
 
-**Filters → Vascular**（工具条顺序）：Skeleton Extraction → Vessel End Clipper → Selection Plane Clipper → Remesh With Endpoint → TetGen → DataSet To Partitioned Collection → Boundary Assignment。
+**Filters → Vascular**（工具条顺序）：Skeleton Extraction → Vessel End Clipper → Skeleton End Clipper → Selection Plane Clipper → Remesh With Endpoint → TetGen → DataSet To Partitioned Collection → Boundary Assignment。
 
 上游 VESPA 只作保留、SHYX 一般为升级版，见 [`vespa/INVENTORY.md`](vespa/INVENTORY.md) 末节。
 
@@ -112,7 +114,7 @@
 | **Animated Streamline**（`AnimatedStreamlineRepresentation`） | 基于 `SurfaceRepresentation` 的流线类网格 GPU 动画表示。 |
 | **Point Label**（`PointLabelRepresentation`） | 表面表示上叠加点数据文本标签。 |
 
-视图工具：球选（Sphere Selection）、按属性扩张选区（Grow Selection With Similar）为客户端 Qt，无独立 VTK 模块。复合数据（如 PDC 的 `Part_1`）在 3D 视图右键菜单中有 **Select Block**，会先清除当前选择再选中该 block 的全部 cell。有 cell 选择时右键还有 **Select All**（全选当前连通区域）、**Invert Selection**（反选）、**Select Similar → By Normal**（按法向一次 Grow 完，与标题栏 Grow 共用二面角阈值）和 **Fill Interior**（把被当前选区完全围住的未选面补进选择）。**SHYX AI Assistant** 在 **View** 菜单中作为可勾选停靠窗口（OpenAI 兼容；**Run script** 执行代码框）。
+视图工具：球选（Sphere Selection）、按属性扩张选区（Grow Selection With Similar）、近距断口选区（Proximity Gap Selection，按 ε 选不连通但邻近的接触带）为客户端 Qt，无独立 VTK 模块。复合数据（如 PDC 的 `Part_1`）在 3D 视图右键菜单中有 **Select Block**，会先清除当前选择再选中该 block 的全部 cell。有 cell 选择时右键还有 **Select All**（全选当前连通区域）、**Invert Selection**（反选）、**Select Similar → By Normal**（按法向一次 Grow 完，与标题栏 Grow 共用二面角阈值）和 **Fill Interior**（把被当前选区完全围住的未选面补进选择）。**SHYX AI Assistant** 在 **View** 菜单中作为可勾选停靠窗口（OpenAI 兼容；**Run script** 执行代码框）。
 
 ---
 
@@ -332,6 +334,20 @@
 | **Endpoints to Clip** | 选择 | — | 选择要裁剪的端点。需先 Apply 以发现端点。 |
 
 **输出**：端口 0 = 裁剪后的网格；端口 1 = 裁剪平面可视化（位置与法向；首次显示默认 **Point Label**）。
+
+---
+
+### 16a. SHYX Skeleton End Clipper
+
+**功能**：把 **SHYX Skeleton Extraction** 与 **SHYX Vessel End Clipper** 串成一个节点（原来的两个滤镜不变）。输入只需闭合血管表面；内部先提取骨架，再按叶端点切端。
+
+| 输入/参数 | 类型 | 默认值 | 说明 |
+|-----------|------|--------|------|
+| **Input** | vtkPolyData | — | 水密血管表面（不再需要单独的 Centerline 输入）。 |
+| 骨架参数 | — | 与 Skeleton Extraction 相同 | Max Iterations 等。 |
+| 切端参数 | — | 与 Vessel End Clipper 相同 | Clip Offset、Endpoints to Clip、交互切平面等。 |
+
+**输出**：端口 0 = 切过的几何（同 End Clipper 端口 0）；端口 1 = 骨架折线 + clip 平面 label（vertex）与短延长方向线（首次显示默认 **Point Label**）。
 
 ---
 
@@ -643,6 +659,7 @@
 | 滤镜 | 要点 |
 |------|------|
 | **SHYX Mesh Checker** | 汤边 / 边界环 / 自交；port 1 诊断几何；可选 autorefine |
+| **SHYX Auto Mesh Repair** | Mesh Checker 交叉面的下一步：每处自交当选区，扩圈后局部 fill + Alpha Wrap + union + smooth；CGAL ≥ 5.5 |
 | **SHYX Hole Fill** | CGAL 补洞；与 VESPA Hole Filling 成对 |
 | **SHYX Repair Degeneracies** | CGAL 退化单元修复 |
 | **SHYX Boolean (relaxed)** | 不要求封闭 |
@@ -695,7 +712,7 @@
 - 多数网格滤镜要求输入为**三角化**的 `vtkPolyData`，建议先 **Tetrahedralize** + **Extract Surface**，必要时再用 **VESPA Alpha Wrapping** 得到水密 2-流形。
 - 布尔运算、重网格、细分等要求输入为**封闭、流形**网格时效果更稳定；可先用 **VESPA Mesh Checker** 检查或修复。
 - **SHYX Skeleton Extraction**、**SHYX Surface to Volume Mesh**、**SHYX TetGen** 的输入必须是**水密闭合**网格；若模型有洞，建议先用 **VESPA Hole Filling** 或 **VESPA Alpha Wrapping** 处理。
-- 血管建模流程示例（与 **Filters → Vascular** 工具条一致）：封闭表面 → **SHYX Skeleton Extraction** → **SHYX Vessel End Clipper** → **SHYX Selection Plane Clipper** → **SHYX Remesh With Endpoint** → **SHYX TetGen**（或 Surface to Volume Mesh；hex 用 **Filters → SHYX SnappyHexMesh**）→ **SHYX DataSet To Partitioned Collection** → **SHYX Partitioned Collection Boundary Assignment**。
+- 血管建模流程示例（与 **Filters → Vascular** 工具条一致）：封闭表面 → **SHYX Skeleton Extraction** → **SHYX Vessel End Clipper**（或一步 **SHYX Skeleton End Clipper**）→ **SHYX Selection Plane Clipper** → **SHYX Remesh With Endpoint** → **SHYX TetGen**（或 Surface to Volume Mesh；hex 用 **Filters → SHYX SnappyHexMesh**）→ **SHYX DataSet To Partitioned Collection** → **SHYX Partitioned Collection Boundary Assignment**。
 - 从点云重建时，一般顺序：点云 → **VESPA PCA Estimate Normals** → **VESPA Poisson** 或 **Advancing Front**；若点云较乱可考虑先 **Alpha Wrapping** 再后续处理。
 - **SHYX TetGen** 与 **SHYX Surface to Volume Mesh** 均可从表面生成体积网格：TetGen 基于 TetGen 库，参数更直观；后者基于 CGAL Mesh_3，可精细控制表面与体积质量。
 - **SHYX Bidirectional Streamline Merge** 适用于 **Stream Tracer** 等产生的双向折线，需正确设置 **SeedIds** 数组（单元或点数据）。

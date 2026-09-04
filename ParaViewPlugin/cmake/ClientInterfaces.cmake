@@ -68,6 +68,22 @@ list(APPEND vespa_plugin_qt_auto_sources
   selection/GrowSelectionWithSimilar/pqSHYXGrowSelectionWithSimilarController.h)
 
 paraview_plugin_add_auto_start(
+  CLASS_NAME "pqSHYXProximityGapSelectionAutoStart"
+  STARTUP onStartup
+  SHUTDOWN onShutdown
+  INTERFACES proximity_gap_selection_autostart_interfaces
+  SOURCES proximity_gap_selection_autostart_sources)
+list(APPEND vespa_plugin_qt_auto_interfaces ${proximity_gap_selection_autostart_interfaces})
+list(APPEND vespa_plugin_qt_auto_sources
+  ${proximity_gap_selection_autostart_sources}
+  selection/ProximityGapSelection/pqSHYXProximityGapSelectionAutoStart.cxx
+  selection/ProximityGapSelection/pqSHYXProximityGapSelectionAutoStart.h
+  selection/ProximityGapSelection/pqSHYXProximityGapSelectionViewFrameActions.cxx
+  selection/ProximityGapSelection/pqSHYXProximityGapSelectionViewFrameActions.h
+  selection/ProximityGapSelection/pqSHYXProximityGapSelectionController.cxx
+  selection/ProximityGapSelection/pqSHYXProximityGapSelectionController.h)
+
+paraview_plugin_add_auto_start(
   CLASS_NAME "pqSHYXVascularCategoryAutoStart"
   STARTUP onStartup
   SHUTDOWN onShutdown

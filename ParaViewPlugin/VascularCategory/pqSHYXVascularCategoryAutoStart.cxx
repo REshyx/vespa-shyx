@@ -29,6 +29,8 @@ constexpr const char* kVascularFiltersXml = R"xml(
              icon=":/VESPA/SHYX_Skeleton_Extraction.png"/>
       <Proxy group="filters" name="SHYXVesselEndClipper"
              icon=":/VESPA/SHYX_Vessel_End_Clipper.png"/>
+      <Proxy group="filters" name="SHYXSkeletonEndClipper"
+             icon=":/VESPA/SHYX_Vessel_End_Clipper.png"/>
       <Proxy group="filters" name="SHYXSelectionPlaneClipper"
              icon=":/VESPA/SHYX_Selection_Plane_Clipper.png"/>
       <Proxy group="filters" name="SHYXRemeshWithEndpoint"
@@ -49,7 +51,8 @@ constexpr auto kVascular = "Vascular";
 QStringList expectedVascularProxyNames()
 {
   return { QStringLiteral("SHYXSkeletonExtraction"), QStringLiteral("SHYXVesselEndClipper"),
-    QStringLiteral("SHYXSelectionPlaneClipper"), QStringLiteral("SHYXRemeshWithEndpoint"),
+    QStringLiteral("SHYXSkeletonEndClipper"), QStringLiteral("SHYXSelectionPlaneClipper"),
+    QStringLiteral("SHYXRemeshWithEndpoint"),
     QStringLiteral("SHYXTetGen"), QStringLiteral("SHYXDataSetToPartitionedCollection"),
     QStringLiteral("SHYXPartitionedCollectionBoundaryAssignment") };
 }

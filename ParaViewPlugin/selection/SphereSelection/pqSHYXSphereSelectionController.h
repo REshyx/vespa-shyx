@@ -7,6 +7,8 @@
 #include "vtkSmartPointer.h"
 #include "vtkType.h"
 
+#include <vector>
+
 class pqDataRepresentation;
 class pqOutputPort;
 class pqRenderView;
@@ -14,6 +16,7 @@ class pqViewFrame;
 class QAction;
 class vtkActor;
 class vtkCallbackCommand;
+class vtkDataObject;
 class vtkDataSet;
 class vtkObject;
 class vtkPolyDataMapper;
@@ -21,12 +24,14 @@ class vtkRenderer;
 class vtkSMSourceProxy;
 class vtkSphereSource;
 class vtkStaticCellLocator;
-class vtkStaticPointLocator;
 
 /**
  * Per-view interactive sphere used to select cells whose vertices fall inside the ball.
  * Toggle via title-bar action: snap to nearest vertex at view center, radius ~30% of viewport
  * short edge (as diameter). Left-drag moves the center; wheel while hovering scales radius.
+ *
+ * Applies to every visible pipeline representation in the view (not only the active node).
+ * Composite parents (multiblock / PDC) select every intersecting leaf.
  */
 class pqSHYXSphereSelectionController : public QObject
 {
@@ -44,6 +49,24 @@ private Q_SLOTS:
 private:
   Q_DISABLE_COPY(pqSHYXSphereSelectionController)
 
+  struct LeafCache
+  {
+    unsigned int FlatIndex = 0;
+    vtkDataSet* DataSet = nullptr;
+    vtkSmartPointer<vtkStaticCellLocator> CellLocator;
+  };
+
+  struct Target
+  {
+    QPointer<pqDataRepresentation> Repr;
+    QPointer<pqOutputPort> Port;
+    vtkDataObject* Root = nullptr;
+    vtkMTimeType RootMTime = 0;
+    bool IsComposite = false;
+    std::vector<LeafCache> Leaves;
+    vtkSmartPointer<vtkSMSourceProxy> BaselineAppendSelections;
+  };
+
   static void ProcessEvents(
     vtkObject* caller, unsigned long eid, void* clientdata, void* calldata);
 
@@ -57,31 +80,26 @@ private:
   bool pickSphere(int displayX, int displayY) const;
   void dragToDisplay(int displayX, int displayY);
   void applySelection();
+  void applySelectionToTarget(Target& target);
   void captureBaselineSelection();
   void installToggleActionContextMenu();
   void updateToggleActionTooltip();
   int currentSelectionModifier() const;
-  pqDataRepresentation* resolveRepresentation() const;
-  vtkDataSet* resolveDataSet(pqDataRepresentation* repr) const;
+  vtkDataObject* resolveDataObject(pqDataRepresentation* repr) const;
   vtkRenderer* renderer() const;
-  /** BuildCells (main thread) + cache point/cell locators; skip if data unchanged. */
-  bool ensureSpatialCaches(vtkDataSet* ds);
+  bool collectVisibleTargets();
+  bool ensureTargetCaches(Target& target);
+  bool ensureSpatialCaches();
 
   QPointer<pqRenderView> View;
   QPointer<pqViewFrame> Frame;
   QPointer<QAction> ToggleAction;
-  QPointer<pqDataRepresentation> TargetRepresentation;
-  QPointer<pqOutputPort> TargetPort;
+  std::vector<Target> Targets;
 
   vtkSmartPointer<vtkSphereSource> Sphere;
   vtkSmartPointer<vtkPolyDataMapper> Mapper;
   vtkSmartPointer<vtkActor> Actor;
   vtkSmartPointer<vtkCallbackCommand> Observer;
-  vtkSmartPointer<vtkSMSourceProxy> BaselineAppendSelections;
-  vtkSmartPointer<vtkStaticPointLocator> PointLocator;
-  vtkSmartPointer<vtkStaticCellLocator> CellLocator;
-  vtkDataSet* CachedDataSet = nullptr;
-  vtkMTimeType CachedDataMTime = 0;
 
   double Center[3] = { 0.0, 0.0, 0.0 };
   double Radius = 1.0;

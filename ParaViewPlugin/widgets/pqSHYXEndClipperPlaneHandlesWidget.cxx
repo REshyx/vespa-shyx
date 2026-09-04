@@ -15,6 +15,7 @@
 
 #include "vtkAlgorithm.h"
 #include "vtkBoundingBox.h"
+#include "vtkCellArray.h"
 #include "vtkCommand.h"
 #include "vtkMath.h"
 #include "vtkNew.h"
@@ -544,11 +545,25 @@ void pqSHYXEndClipperPlaneHandlesWidget::stylePlaneWidget(vtkSMNewWidgetRepresen
 //-----------------------------------------------------------------------------
 int pqSHYXEndClipperPlaneHandlesWidget::endpointCountFromClipViz(vtkPolyData* viz) const
 {
-    if (!viz || viz->GetNumberOfPoints() < 2)
+    if (!viz)
     {
         return 0;
     }
-    return viz->GetNumberOfPoints() / 2;
+    // Prefer vertex cells (clip origins). Skeleton End Clipper appends skeleton
+    // points after the 2-per-endpoint clip handles; nPoints/2 would over-count.
+    if (vtkCellArray* verts = viz->GetVerts())
+    {
+        const vtkIdType nVerts = verts->GetNumberOfCells();
+        if (nVerts > 0)
+        {
+            return static_cast<int>(nVerts);
+        }
+    }
+    if (viz->GetNumberOfPoints() < 2)
+    {
+        return 0;
+    }
+    return static_cast<int>(viz->GetNumberOfPoints() / 2);
 }
 
 //-----------------------------------------------------------------------------

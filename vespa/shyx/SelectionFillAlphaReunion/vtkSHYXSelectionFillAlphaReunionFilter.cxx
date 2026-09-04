@@ -4,6 +4,7 @@
 #include "vtkCGALHelper.h"
 #include "vtkSHYXHoleFillFilter.h"
 
+#include <vtkAppendPolyData.h>
 #include <vtkCellArray.h>
 #include <vtkCellData.h>
 #include <vtkDataArray.h>
@@ -73,6 +74,87 @@ vtkSmartPointer<vtkPolyData> ForceDataSetToPolyData(vtkDataSet* ds)
   vtkSmartPointer<vtkPolyData> copy = vtkSmartPointer<vtkPolyData>::New();
   copy->ShallowCopy(out);
   return copy;
+}
+
+void CollectCellsFromExtracted(vtkPolyData* mesh, vtkDataSet* extracted, std::set<vtkIdType>& selected);
+
+/**
+ * Convert every port-0 connection to vtkPolyData, extract port-1 selection i against input i
+ * (cell ids stay local to that producer), remap by append offset, then merge with vtkAppendPolyData.
+ * Empty / failed conversions are skipped and do not consume an offset (selection i is unused).
+ */
+vtkSmartPointer<vtkPolyData> MergeInputsAndCollectSelection(
+  vtkInformationVector* inVec, vtkInformationVector* selVec, std::set<vtkIdType>& selected)
+{
+  selected.clear();
+  if (!inVec)
+  {
+    return nullptr;
+  }
+
+  const int nInputs = inVec->GetNumberOfInformationObjects();
+  const int nSel = selVec ? selVec->GetNumberOfInformationObjects() : 0;
+  std::vector<vtkSmartPointer<vtkPolyData>> parts;
+  parts.reserve(static_cast<std::size_t>(nInputs));
+  vtkIdType offset = 0;
+
+  for (int i = 0; i < nInputs; ++i)
+  {
+    vtkDataSet* ds = vtkDataSet::GetData(inVec, i);
+    vtkSmartPointer<vtkPolyData> pd = ForceDataSetToPolyData(ds);
+    if (!pd || pd->GetNumberOfCells() == 0)
+    {
+      continue;
+    }
+
+    vtkSelection* sel = (i < nSel) ? vtkSelection::GetData(selVec, i) : nullptr;
+
+    if (sel && sel->GetNumberOfNodes() > 0)
+    {
+      vtkNew<vtkExtractSelection> extract;
+      extract->SetInputData(0, pd);
+      extract->SetInputData(1, sel);
+      extract->Update();
+      vtkDataSet* extracted = vtkDataSet::SafeDownCast(extract->GetOutputDataObject(0));
+      if (extracted && (extracted->GetNumberOfCells() > 0 || extracted->GetNumberOfPoints() > 0))
+      {
+        std::set<vtkIdType> local;
+        CollectCellsFromExtracted(pd, extracted, local);
+        for (vtkIdType id : local)
+        {
+          selected.insert(id + offset);
+        }
+      }
+    }
+
+    parts.push_back(pd);
+    offset += pd->GetNumberOfCells();
+  }
+
+  if (parts.empty())
+  {
+    return nullptr;
+  }
+  if (parts.size() == 1)
+  {
+    return parts[0];
+  }
+
+  vtkNew<vtkAppendPolyData> append;
+  for (auto& pd : parts)
+  {
+    append->AddInputData(pd);
+  }
+  append->Update();
+  vtkPolyData* out = append->GetOutput();
+  if (!out || out->GetNumberOfCells() == 0)
+  {
+    return nullptr;
+  }
+
+  vtkSmartPointer<vtkPolyData> merged = vtkSmartPointer<vtkPolyData>::New();
+  merged->ShallowCopy(out);
+  return merged;
 }
 
 void CollectCellsFromExtracted(vtkPolyData* mesh, vtkDataSet* extracted, std::set<vtkIdType>& selected)
@@ -1006,6 +1088,18 @@ void vtkSHYXSelectionFillAlphaReunionFilter::SetSourceConnection(vtkAlgorithmOut
 }
 
 //------------------------------------------------------------------------------
+void vtkSHYXSelectionFillAlphaReunionFilter::AddSourceConnection(vtkAlgorithmOutput* algOutput)
+{
+  this->AddInputConnection(1, algOutput);
+}
+
+//------------------------------------------------------------------------------
+void vtkSHYXSelectionFillAlphaReunionFilter::RemoveAllSelectionInputs()
+{
+  this->RemoveAllInputConnections(1);
+}
+
+//------------------------------------------------------------------------------
 void vtkSHYXSelectionFillAlphaReunionFilter::PrintSelf(ostream& os, vtkIndent indent)
 {
   this->Superclass::PrintSelf(os, indent);
@@ -1030,7 +1124,6 @@ void vtkSHYXSelectionFillAlphaReunionFilter::PrintSelf(ostream& os, vtkIndent in
   os << indent << "BridgeSmoothIterations: " << this->BridgeSmoothIterations << "\n";
   os << indent << "BridgeSmoothTimeStep: " << this->BridgeSmoothTimeStep << "\n";
   os << indent << "BridgeFairContinuity: " << this->BridgeFairContinuity << "\n";
-  os << indent << "ExportBridgeMask: " << (this->ExportBridgeMask ? "on" : "off") << "\n";
 }
 
 //------------------------------------------------------------------------------
@@ -1039,12 +1132,14 @@ int vtkSHYXSelectionFillAlphaReunionFilter::FillInputPortInformation(int port, v
   if (port == 0)
   {
     info->Set(vtkAlgorithm::INPUT_REQUIRED_DATA_TYPE(), "vtkDataSet");
+    info->Set(vtkAlgorithm::INPUT_IS_REPEATABLE(), 1);
     return 1;
   }
   if (port == 1)
   {
     info->Set(vtkAlgorithm::INPUT_REQUIRED_DATA_TYPE(), "vtkSelection");
     info->Set(vtkAlgorithm::INPUT_IS_OPTIONAL(), 1);
+    info->Set(vtkAlgorithm::INPUT_IS_REPEATABLE(), 1);
     return 1;
   }
   return 0;
@@ -1054,41 +1149,22 @@ int vtkSHYXSelectionFillAlphaReunionFilter::FillInputPortInformation(int port, v
 int vtkSHYXSelectionFillAlphaReunionFilter::RequestData(
   vtkInformation* vtkNotUsed(request), vtkInformationVector** inputVector, vtkInformationVector* outputVector)
 {
-  vtkDataSet* input = vtkDataSet::GetData(inputVector[0], 0);
   vtkPolyData* output = vtkPolyData::GetData(outputVector, 0);
-  if (!input || !output)
+  if (!output)
   {
-    return 0;
-  }
-
-  vtkSmartPointer<vtkPolyData> meshSP = ForceDataSetToPolyData(input);
-  vtkPolyData* mesh = meshSP.GetPointer();
-  if (!mesh || mesh->GetNumberOfCells() == 0)
-  {
-    vtkErrorMacro(<< "Empty input mesh (or failed vtkDataSet → vtkPolyData conversion).");
     return 0;
   }
 
   std::set<vtkIdType> selected;
-  if (this->GetNumberOfInputConnections(1) > 0)
+  vtkInformationVector* selVec =
+    (this->GetNumberOfInputConnections(1) > 0) ? inputVector[1] : nullptr;
+  vtkSmartPointer<vtkPolyData> meshSP =
+    MergeInputsAndCollectSelection(inputVector[0], selVec, selected);
+  vtkPolyData* mesh = meshSP.GetPointer();
+  if (!mesh || mesh->GetNumberOfCells() == 0)
   {
-    vtkInformation* selInfo = inputVector[1]->GetInformationObject(0);
-    if (selInfo && selInfo->Has(vtkDataObject::DATA_OBJECT()))
-    {
-      vtkSelection* inputSel = vtkSelection::SafeDownCast(selInfo->Get(vtkDataObject::DATA_OBJECT()));
-      if (inputSel && inputSel->GetNumberOfNodes() > 0)
-      {
-        vtkNew<vtkExtractSelection> extractSelection;
-        extractSelection->SetInputData(0, mesh);
-        extractSelection->SetInputData(1, inputSel);
-        extractSelection->Update();
-        vtkDataSet* extracted = vtkDataSet::SafeDownCast(extractSelection->GetOutputDataObject(0));
-        if (extracted && (extracted->GetNumberOfCells() > 0 || extracted->GetNumberOfPoints() > 0))
-        {
-          CollectCellsFromExtracted(mesh, extracted, selected);
-        }
-      }
-    }
+    vtkErrorMacro(<< "Empty input mesh (or failed vtkDataSet → vtkPolyData conversion / append).");
+    return 0;
   }
 
   if (selected.empty() && this->SelectionCellArrayName && this->SelectionCellArrayName[0] != '\0')
@@ -1269,10 +1345,9 @@ int vtkSHYXSelectionFillAlphaReunionFilter::RequestData(
 
       vtkNew<vtkPolyData> cleaned;
       std::string err;
-      std::vector<char>* maskOutPtr = this->ExportBridgeMask ? &maskAfterRemesh : nullptr;
       if (LocalRemeshAndPostSmoothBridge(united, bridgeMask, targetLen, this->BridgeRemeshIterations,
             this->BridgeRemeshRelaxationSteps, this->BridgeSmoothMethod, this->BridgeSmoothIterations,
-            this->BridgeSmoothTimeStep, this->BridgeFairContinuity, cleaned, err, maskOutPtr))
+            this->BridgeSmoothTimeStep, this->BridgeFairContinuity, cleaned, err, &maskAfterRemesh))
       {
         if (!err.empty())
         {
@@ -1299,18 +1374,15 @@ int vtkSHYXSelectionFillAlphaReunionFilter::RequestData(
     this->interpolateAttributes(mesh, output);
   }
 
-  if (this->ExportBridgeMask)
+  if (bridgeCleanupRan &&
+    static_cast<vtkIdType>(maskAfterRemesh.size()) == output->GetNumberOfCells())
   {
-    if (bridgeCleanupRan &&
-      static_cast<vtkIdType>(maskAfterRemesh.size()) == output->GetNumberOfCells())
-    {
-      AttachBridgeMaskArray(output, maskAfterRemesh, "SHYXBridgeCleanupMask");
-    }
-    else if (!bridgeCleanupRan &&
-      static_cast<vtkIdType>(bridgeMask.size()) == output->GetNumberOfCells())
-    {
-      AttachBridgeMaskArray(output, bridgeMask, "SHYXBridgeCleanupMask");
-    }
+    AttachBridgeMaskArray(output, maskAfterRemesh, "SHYXBridgeCleanupMask");
+  }
+  else if (!bridgeCleanupRan &&
+    static_cast<vtkIdType>(bridgeMask.size()) == output->GetNumberOfCells())
+  {
+    AttachBridgeMaskArray(output, bridgeMask, "SHYXBridgeCleanupMask");
   }
 
   return 1;

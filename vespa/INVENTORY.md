@@ -37,6 +37,7 @@ Kitware 原版 CGAL 滤镜，全部需 **`VESPA_USE_CGAL`**，只作保留（对
 | 界面标签 | 类 | 目录 | XML | 图标 | README | 后端 |
 |----------|----|------|-----|------|--------|------|
 | SHYX Mesh Checker | `vtkSHYXMeshChecker` | MeshChecker | SHYXMeshChecker.xml | 自有 | [有](shyx/MeshChecker/README.md) | CGAL |
+| SHYX Auto Mesh Repair | `vtkSHYXAutoMeshRepair` | AutoMeshRepair | SHYXAutoMeshRepair.xml | 自有（复用 Fill Alpha 图） | [有](shyx/AutoMeshRepair/README.md) | CGAL ≥ 5.5 |
 | SHYX Hole Fill (CGAL) | `vtkSHYXHoleFillFilter` | HoleFill | SHYXHoleFillFilter.xml | 自有 | [有](shyx/HoleFill/README.md) | CGAL |
 | SHYX Repair Degeneracies (CGAL) | `vtkSHYXRepairDegeneracies` | RepairDegeneracies | SHYXRepairDegeneracies.xml | 自有 | [有](shyx/RepairDegeneracies/README.md) | CGAL |
 | SHYX Boolean (CGAL, relaxed) | `vtkSHYXBooleanOperationFilter` | BooleanOperation | SHYXBooleanOperationFilter.xml | 自有 | [有](shyx/BooleanOperation/README.md) | CGAL |
@@ -58,23 +59,24 @@ Kitware 原版 CGAL 滤镜，全部需 **`VESPA_USE_CGAL`**，只作保留（对
 
 ### 血管 / 体积网格（含 Vascular 工具条）
 
-Vascular 顺序（[`VESPAVascularCategory.xml`](../ParaViewPlugin/smxml/VESPAVascularCategory.xml)）：骨架 → 切端 → 平面裁 → 端点重网格 → TetGen → PDC → 边界分配。
+Vascular 顺序（[`VESPAVascularCategory.xml`](../ParaViewPlugin/smxml/VESPAVascularCategory.xml)）：骨架 → 切端 → 骨架+切端组合 → 平面裁 → 端点重网格 → TetGen → PDC → 边界分配。
 
 | 界面标签 | 类 | 目录 | XML | 图标 | README | 后端 | Vascular |
 |----------|----|------|-----|------|--------|------|----------|
 | SHYX Skeleton Extraction | `vtkCGALSkeletonExtraction` | SkeletonExtraction | SHYXSkeletonExtraction.xml | fluent | [有](shyx/SkeletonExtraction/README.md) | CGAL | 1 |
 | SHYX Vessel End Clipper | `vtkCGALVesselEndClipper` | VesselEndClipper | SHYXVesselEndClipper.xml | fluent | [有](shyx/VesselEndClipper/README.md) | CGAL | 2 |
-| SHYX Selection Plane Clipper | `vtkSHYXSelectionPlaneClipper` | SelectionPlaneClipper | SHYXSelectionPlaneClipper.xml | fluent | [有](shyx/SelectionPlaneClipper/README.md) | VTK | 3 |
-| SHYX Remesh With Endpoint | （见上） | | | fluent | | CGAL ≥ 6 | 4 |
+| SHYX Skeleton End Clipper | `vtkSHYXSkeletonEndClipper` | SkeletonEndClipper | SHYXSkeletonEndClipper.xml | fluent（复用 End Clipper） | [有](shyx/SkeletonEndClipper/README.md) | CGAL | 3 |
+| SHYX Selection Plane Clipper | `vtkSHYXSelectionPlaneClipper` | SelectionPlaneClipper | SHYXSelectionPlaneClipper.xml | fluent | [有](shyx/SelectionPlaneClipper/README.md) | VTK | 4 |
+| SHYX Remesh With Endpoint | （见上） | | | fluent | | CGAL ≥ 6 | 5 |
 | SHYX Surface to Volume Mesh | `vtkCGALSurfaceToVolumeMesh` | SurfaceToVolumeMesh | SHYXSurfaceToVolumeMesh.xml | 自有 | [有](shyx/SurfaceToVolumeMesh/README.md) | CGAL | |
-| SHYX TetGen | `vtkSHYXTetGen` | TetGen | SHYXTetGen.xml | fluent | [有](shyx/TetGen/README.md) | TetGen | 5 |
+| SHYX TetGen | `vtkSHYXTetGen` | TetGen | SHYXTetGen.xml | fluent | [有](shyx/TetGen/README.md) | TetGen | 6 |
 | SHYX TetGen Mesh Optimize | `vtkSHYXTetGenMeshOptimize` | 同上模块 | SHYXTetGenMeshOptimize.xml | 自有 | （同 TetGen README） | TetGen | |
 | SHYX SnappyHexMesh | `vtkSHYXSnappyHexMesh` | SnappyHexMesh | SHYXSnappyHexMesh.xml | 自有 | [有](shyx/SnappyHexMesh/README.md) | 可选 `VESPA_USE_SNAPPYHEXMESH` + `FOAM_SOURCE_DIR` | |
 | SHYX Extended Feature Edge Mesh | `vtkSHYXExtendedFeatureEdgeMesh` | ExtendedFeatureEdgeMesh | SHYXExtendedFeatureEdgeMesh.xml | 复用 Snappy | [有](shyx/ExtendedFeatureEdgeMesh/README.md) | 可选 `VESPA_USE_SNAPPYHEXMESH` + `FOAM_SOURCE_DIR` | |
 | SHYX OpenFOAM eMesh Reader | `vtkSHYXEMeshReader` | EMeshReader | SHYXEMeshReader.xml | 复用 Snappy | [有](shyx/EMeshReader/README.md) | VTK（ASCII FoamFile，无 OpenFOAM 运行时） | |
 | SHYX Tet Mesh Region Partition | `vtkSHYXTetMeshRegionPartition` | TetMeshRegionPartition | SHYXTetMeshRegionPartition.xml | 自有 | [有](shyx/TetMeshRegionPartition/README.md) | VTK | |
-| SHYX DataSet To Partitioned Collection | `vtkSHYXDataSetToPartitionedCollection` | DataSetToPartitionedCollection | SHYXDataSetToPartitionedCollection.xml | fluent | [有](shyx/DataSetToPartitionedCollection/README.md) | VTK | 6 |
-| SHYX Partitioned Collection Boundary Assignment | `vtkSHYXPartitionedCollectionBoundaryAssignment` | PartitionedCollectionBoundaryAssignment | SHYXPartitionedCollectionBoundaryAssignment.xml | fluent | [有](shyx/PartitionedCollectionBoundaryAssignment/README.md) | VTK | 7 |
+| SHYX DataSet To Partitioned Collection | `vtkSHYXDataSetToPartitionedCollection` | DataSetToPartitionedCollection | SHYXDataSetToPartitionedCollection.xml | fluent | [有](shyx/DataSetToPartitionedCollection/README.md) | VTK | 7 |
+| SHYX Partitioned Collection Boundary Assignment | `vtkSHYXPartitionedCollectionBoundaryAssignment` | PartitionedCollectionBoundaryAssignment | SHYXPartitionedCollectionBoundaryAssignment.xml | fluent | [有](shyx/PartitionedCollectionBoundaryAssignment/README.md) | VTK | 8 |
 | SHYX Partitioned Collection Boundary Fields | `vtkSHYXPartitionedCollectionBoundaryFields` | PartitionedCollectionBoundaryFields | SHYXPartitionedCollectionBoundaryFields.xml | 自有 | [有](shyx/PartitionedCollectionBoundaryFields/README.md) | VTK | |
 | SHYX Partitioned Collection WSL Simulation | `vtkSHYXPartitionedCollectionWslSimulation` | PartitionedCollectionWslSimulation | SHYXPartitionedCollectionWslSimulation.xml | 自有 | [有](shyx/PartitionedCollectionWslSimulation/README.md) | VTK | |
 | SHYX Partitioned Collection To OpenFOAM | `vtkSHYXPartitionedCollectionToOpenFOAM` | PartitionedCollectionToOpenFOAM | SHYXPartitionedCollectionToOpenFOAM.xml | 复用 Snappy | [有](shyx/PartitionedCollectionToOpenFOAM/README.md) | VTK | |
@@ -132,6 +134,7 @@ Vascular 顺序（[`VESPAVascularCategory.xml`](../ParaViewPlugin/smxml/VESPAVas
 |------|------|------|
 | Sphere Selection | `ParaViewPlugin/selection/SphereSelection/` | `SHYX_Sphere_Selection.svg` |
 | Grow Selection With Similar | `ParaViewPlugin/selection/GrowSelectionWithSimilar/` | `SHYX_Grow_Selection_With_Similar.svg` |
+| Proximity Gap Selection | `ParaViewPlugin/selection/ProximityGapSelection/` | `SHYX_Proximity_Gap_Selection.svg` |
 | Select Block（3D 视图 block 右键） | `ParaViewPlugin/selection/SelectBlock/` | ParaView `pqSelectBlock.svg` |
 | Select Similar（选择右键，By Normal 一次 Grow 完） | `ParaViewPlugin/selection/SelectSimilar/` | 复用 Grow 图标 |
 | Fill Interior（选择右键，填充被选区围住的未选面） | `ParaViewPlugin/selection/SelectSimilar/` + Grow controller | （无独立图标） |

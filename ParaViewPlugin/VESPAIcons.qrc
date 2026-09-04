@@ -3,6 +3,7 @@
     <file alias="SHYX_Adaptive_Isotropic_Remesher.png">../icon/SHYX_Adaptive_Isotropic_Remesher.png</file>
     <file alias="SHYX_Array_Curve_Mapper.png">../icon/SHYX_Array_Curve_Mapper.png</file>
     <file alias="SHYX_Array_Probability_Point_Cull.png">../icon/SHYX_Array_Probability_Point_Cull.png</file>
+    <file alias="SHYX_Auto_Mesh_Repair.png">../icon/SHYX_Selection_Fill_Alpha_Reunion.png</file>
     <file alias="SHYX_Auto_Streamline.png">../icon/SHYX_Auto_Streamline.png</file>
     <file alias="SHYX_Bidirectional_Streamline_Merge.png">../icon/SHYX_Bidirectional_Streamline_Merge.png</file>
     <file alias="SHYX_Boolean.png">../icon/SHYX_Boolean.png</file>
@@ -37,6 +38,7 @@
     <file alias="SHYX_Shape_Smoothing.png">../icon/SHYX_Shape_Smoothing.png</file>
     <file alias="SHYX_Skeleton_Extraction.png">../icon/SHYX_Skeleton_Extraction_fluent.png</file>
     <file alias="SHYX_Grow_Selection_With_Similar.svg">../icon/SHYX_Grow_Selection_With_Similar.svg</file>
+    <file alias="SHYX_Proximity_Gap_Selection.svg">../icon/SHYX_Proximity_Gap_Selection.svg</file>
     <file alias="SHYX_SnappyHexMesh.png">../icon/SHYX_SnappyHexMesh.png</file>
     <file alias="SHYX_Sphere_Selection.svg">../icon/SHYX_Sphere_Selection.svg</file>
     <file alias="SHYX_Surface_Tip_Extractor.png">../icon/SHYX_Surface_Tip_Extractor.png</file>

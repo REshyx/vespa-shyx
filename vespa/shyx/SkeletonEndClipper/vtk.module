@@ -1,0 +1,15 @@
+NAME
+  vtkSHYXSkeletonEndClipper
+DESCRIPTION
+  "Skeleton extraction then vessel-end clipping: port 0 clipped mesh, port 1 skeleton plus clip-plane labels."
+GROUPS
+  Vascular
+DEPENDS
+  vtkSHYXSkeletonExtraction
+  vtkSHYXVesselEndClipper
+  vtkCGALAlgorithm
+  VTK::FiltersCore
+PRIVATE_DEPENDS
+  VTK::CommonCore
+  VTK::CommonDataModel
+  VTK::CommonExecutionModel

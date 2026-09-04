@@ -1,0 +1,289 @@
+<ServerManagerConfiguration>
+  <ProxyGroup name="filters">
+    <SourceProxy class="vtkSHYXSkeletonEndClipper"
+                 label="SHYX Skeleton End Clipper"
+                 name="SHYXSkeletonEndClipper">
+      <Documentation short_help="SHYX Skeleton End Clipper: Extract skeleton then clip vessel ends (two outputs).">
+        One-node combination of SHYX Skeleton Extraction and SHYX Vessel End Clipper.
+        The two standalone filters are unchanged. Input is a watertight vessel surface.
+
+        Outputs:
+          - Port 0 (Clipped Mesh): vessel mesh with tips clipped (and optionally capped)
+          - Port 1 (Skeleton + Clip Planes): skeleton polylines plus clip-plane labels
+            (vertex cells) and short direction lines. First display uses Point Label
+            (VertexOnly labels only clip origins, not skeleton vertices).
+      </Documentation>
+
+      <OutputPort name="Clipped Mesh" index="0" id="port0" />
+      <OutputPort name="Skeleton + Clip Planes" index="1" id="port1" />
+
+      <InputProperty name="Input"
+                     command="SetInputConnection">
+        <ProxyGroupDomain name="groups">
+          <Group name="sources"/>
+          <Group name="filters"/>
+        </ProxyGroupDomain>
+        <DataTypeDomain name="input_type">
+          <DataType value="vtkPolyData"/>
+        </DataTypeDomain>
+        <Documentation>
+          Closed (watertight) vessel surface mesh. Skeleton extraction requires a closed
+          triangle mesh; clipping uses that surface plus the internally extracted centerline.
+        </Documentation>
+      </InputProperty>
+
+      <IntVectorProperty command="SetMaxIterations"
+                         name="MaxIterations"
+                         label="Max Iterations"
+                         number_of_elements="1"
+                         default_values="500">
+        <IntRangeDomain name="range" min="1" max="5000"/>
+        <Documentation>
+          Maximum number of skeleton contraction iterations.
+        </Documentation>
+      </IntVectorProperty>
+
+      <DoubleVectorProperty command="SetMaxTriangleAngle"
+                            name="MaxTriangleAngle"
+                            label="Max Triangle Angle (deg)"
+                            number_of_elements="1"
+                            default_values="110"
+                            panel_visibility="advanced">
+        <DoubleRangeDomain name="range" min="1" max="179"/>
+        <Documentation>
+          Local remeshing parameter for skeleton extraction (CGAL max_triangle_angle). Unit is degrees.
+        </Documentation>
+      </DoubleVectorProperty>
+
+      <DoubleVectorProperty command="SetMinEdgeLength"
+                            name="MinEdgeLength"
+                            label="Min Edge Length"
+                            number_of_elements="1"
+                            default_values="0"
+                            panel_visibility="advanced">
+        <BoundsDomain mode="scaled_extent" name="bounds" scale_factor="0.002">
+          <RequiredProperties>
+            <Property function="Input" name="Input" />
+          </RequiredProperties>
+        </BoundsDomain>
+        <Documentation>
+          Local remeshing parameter for skeleton extraction (CGAL min_edge_length).
+          Values &lt;= 0 use 0.002 times the longest AABB side.
+        </Documentation>
+      </DoubleVectorProperty>
+
+      <DoubleVectorProperty command="SetAreaThreshold"
+                            name="AreaThreshold"
+                            label="Area Threshold"
+                            number_of_elements="1"
+                            default_values="1e-4"
+                            panel_visibility="advanced">
+        <DoubleRangeDomain name="range" min="1e-8" max="1"/>
+        <Documentation>
+          Area variation factor controlling skeleton contraction convergence.
+        </Documentation>
+      </DoubleVectorProperty>
+
+      <DoubleVectorProperty command="SetQualitySpeedTradeoff"
+                            name="QualitySpeedTradeoff"
+                            label="Quality / Speed Tradeoff (w_H)"
+                            number_of_elements="1"
+                            default_values="0.1"
+                            panel_visibility="advanced">
+        <DoubleRangeDomain name="range" min="0" max="10"/>
+        <Documentation>
+          Skeleton contraction speed vs quality (CGAL quality_speed_tradeoff, w_H).
+        </Documentation>
+      </DoubleVectorProperty>
+
+      <IntVectorProperty command="SetMediallyCentered"
+                         name="MediallyCentered"
+                         label="Medially Centered"
+                         number_of_elements="1"
+                         default_values="1"
+                         panel_visibility="advanced">
+        <BooleanDomain name="bool"/>
+        <Documentation>
+          If ON, medial centering is applied during skeleton extraction.
+        </Documentation>
+      </IntVectorProperty>
+
+      <DoubleVectorProperty command="SetMediallyCenteredSpeedTradeoff"
+                            name="MediallyCenteredSpeedTradeoff"
+                            label="Medial Centering Tradeoff (w_M)"
+                            number_of_elements="1"
+                            default_values="0.2"
+                            panel_visibility="advanced">
+        <DoubleRangeDomain name="range" min="0" max="10"/>
+        <Documentation>
+          Smoothness of medial approximation (CGAL medially_centered_speed_tradeoff, w_M).
+          Only used if Medially Centered is ON.
+        </Documentation>
+      </DoubleVectorProperty>
+
+      <DoubleVectorProperty command="SetClipOffset"
+                            name="ClipOffset"
+                            label="Clip Offset"
+                            number_of_elements="1"
+                            default_values="0.0">
+        <Documentation>
+          Offset distance to shift each cutting plane along the centerline tangent.
+          Positive values move the plane outward, negative values move it inward.
+        </Documentation>
+      </DoubleVectorProperty>
+
+      <IntVectorProperty command="SetTangentDepth"
+                         name="TangentDepth"
+                         label="Tangent Depth"
+                         number_of_elements="1"
+                         default_values="1">
+        <IntRangeDomain name="range" min="1" max="10" />
+        <Documentation>
+          Number of skeleton edges to walk inward from each leaf when estimating
+          the local tangent for the cutting plane.
+        </Documentation>
+      </IntVectorProperty>
+
+      <DoubleVectorProperty command="SetMinBranchLength"
+                            name="MinBranchLength"
+                            label="Min Branch Length"
+                            number_of_elements="1"
+                            default_values="0.0">
+        <BoundsDomain mode="scaled_extent" name="bounds" scale_factor="0.01">
+          <RequiredProperties>
+            <Property function="Input" name="Input"/>
+          </RequiredProperties>
+        </BoundsDomain>
+        <Documentation>
+          Minimum centerline branch length for an endpoint to be checked by default.
+          Set to 0 to check all endpoints.
+        </Documentation>
+      </DoubleVectorProperty>
+
+      <IntVectorProperty command="SetCapEndpoints"
+                         name="CapEndpoints"
+                         label="Cap Endpoints"
+                         number_of_elements="1"
+                         default_values="1">
+        <BooleanDomain name="bool"/>
+        <Documentation>
+          If ON, holes created by clipping are filled with CGAL hole fairing.
+        </Documentation>
+      </IntVectorProperty>
+
+      <IntVectorProperty command="SetFairingContinuity"
+                         name="FairingContinuity"
+                         label="Capping Fairing Continuity"
+                         number_of_elements="1"
+                         default_values="0">
+        <IntRangeDomain name="range" min="0" max="2" />
+        <Documentation>
+          When Cap Endpoints is ON: 0 = C0, 1 = C1, 2 = C2 (CGAL fairing_continuity).
+        </Documentation>
+      </IntVectorProperty>
+
+      <StringVectorProperty name="EndpointInfo"
+                            command="GetEndpointSelection"
+                            number_of_elements_per_command="2"
+                            information_only="1"
+                            si_class="vtkSIDataArraySelectionProperty" />
+
+      <StringVectorProperty name="EndpointStatus"
+                            command="GetEndpointSelection"
+                            information_property="EndpointInfo"
+                            number_of_elements_per_command="2"
+                            element_types="2 0"
+                            repeat_command="1"
+                            si_class="vtkSIDataArraySelectionProperty"
+                            label="Endpoints to Clip">
+        <ArraySelectionDomain name="array_list">
+          <RequiredProperties>
+            <Property function="ArrayList" name="EndpointInfo" />
+          </RequiredProperties>
+        </ArraySelectionDomain>
+        <Documentation>
+          Select which skeleton leaf endpoints to clip. Apply once first to discover
+          endpoints from the extracted centerline.
+        </Documentation>
+      </StringVectorProperty>
+
+      <IntVectorProperty
+         name="UseUpdateAttributes"
+         command="SetUpdateAttributes"
+         label="Interpolate attributes"
+         number_of_elements="1"
+         default_values="1"
+         panel_visibility="advanced">
+         <BooleanDomain name="bool"/>
+         <Documentation>
+           If ON, attributes will be interpolated unto the clipped mesh (port 0).
+         </Documentation>
+      </IntVectorProperty>
+
+      <IntVectorProperty command="SetUseInteractiveCutPlanes"
+                         name="UseInteractiveCutPlanes"
+                         label="Show Interactive Cut Planes"
+                         number_of_elements="1"
+                         default_values="0">
+        <BooleanDomain name="bool"/>
+        <Documentation>
+          When ON, yellow per-endpoint plane widgets are shown. Turning it OFF only hides
+          the widgets; clipping still uses InteractiveCutPacked when present.
+        </Documentation>
+      </IntVectorProperty>
+
+      <StringVectorProperty animateable="0"
+                            command="SetInteractiveCutPackedString"
+                            name="InteractiveCutPacked"
+                            number_of_elements="1"
+                            panel_visibility="never">
+        <Documentation>
+          Internal: packed interactive state (6 doubles per endpoint). Managed by the
+          custom panel widget.
+        </Documentation>
+      </StringVectorProperty>
+
+      <PropertyGroup label="Skeleton extraction">
+        <Property name="MaxIterations"/>
+        <Property name="MaxTriangleAngle"/>
+        <Property name="MinEdgeLength"/>
+        <Property name="AreaThreshold"/>
+        <Property name="QualitySpeedTradeoff"/>
+        <Property name="MediallyCentered"/>
+        <Property name="MediallyCenteredSpeedTradeoff"/>
+      </PropertyGroup>
+
+      <PropertyGroup label="End clip">
+        <Property name="ClipOffset"/>
+        <Property name="TangentDepth"/>
+        <Property name="MinBranchLength"/>
+        <Property name="CapEndpoints"/>
+        <Property name="FairingContinuity"/>
+        <Property name="EndpointStatus"/>
+      </PropertyGroup>
+
+      <PropertyGroup label="Interactive per-endpoint planes"
+                     panel_widget="shyx_endclipper_plane_handles">
+        <Property name="UseInteractiveCutPlanes" />
+        <Property name="InteractiveCutPacked" />
+      </PropertyGroup>
+
+      <StringVectorProperty name="OutputMessage"
+                            command="GetOutputMessage"
+                            label="Last update reason"
+                            number_of_elements="1"
+                            information_only="1"
+                            panel_visibility="advanced">
+        <Documentation>
+          Read-only text from the last pipeline update (skeleton size and clipper message).
+        </Documentation>
+      </StringVectorProperty>
+
+      <Hints>
+        <RepresentationType view="RenderView" type="Point Label" port="1"/>
+        <ShowInMenu category="SHYX" icon=":/VESPA/SHYX_Vessel_End_Clipper.png"/>
+      </Hints>
+
+    </SourceProxy>
+  </ProxyGroup>
+</ServerManagerConfiguration>

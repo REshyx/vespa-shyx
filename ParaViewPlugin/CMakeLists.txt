@@ -68,6 +68,7 @@ if (PARAVIEW_USE_QT)
     "${CMAKE_CURRENT_SOURCE_DIR}/Representations"
     "${CMAKE_CURRENT_SOURCE_DIR}/selection/SphereSelection"
     "${CMAKE_CURRENT_SOURCE_DIR}/selection/GrowSelectionWithSimilar"
+    "${CMAKE_CURRENT_SOURCE_DIR}/selection/ProximityGapSelection"
     "${CMAKE_CURRENT_SOURCE_DIR}/selection/SelectBlock"
     "${CMAKE_CURRENT_SOURCE_DIR}/selection/SelectSimilar")
 endif ()

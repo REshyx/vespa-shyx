@@ -3,13 +3,18 @@
  * @brief   Split mesh by selection; hole-fill the rest; hole-fill + Alpha Wrapping the selection;
  *          then CGAL boolean union with face-origin tracking; optionally clean the AW/original bridge.
  *
- * Port 0 accepts any vtkDataSet; non-PolyData inputs are converted to a surface mesh with
- * vtkGeometryFilter before the pipeline runs. After union, faces imported from the Alpha-Wrapped
- * mesh are marked exactly via a corefinement visitor (no distance heuristic). By default that AW
+ * Port 0 accepts one or more vtkDataSet connections (repeatable). Each non-PolyData input is
+ * converted to a surface with vtkGeometryFilter, then all connections are merged with
+ * vtkAppendPolyData (same as ParaView Append Geometry) before the rest of the pipeline runs.
+ * Port 1 is a matching optional/repeatable vtkSelection: connection i is extracted against
+ * input i (cell ids stay local to that producer), then remapped by the append cell offset.
+ * After union, faces imported from the Alpha-Wrapped mesh are marked exactly via a corefinement
+ * visitor (no distance heuristic). By default that AW
  * region is dilated by a few face rings; optionally the cleanup seed is only the AW/original
  * boolean seam, then dilated the same way. A local CGAL isotropic remesh (with relaxation) and a
  * selectable post-process (constrained smooth_shape / MCF, or fair with C0–C2 continuity) run on
- * that patch.
+ * that patch. Output cell array SHYXBridgeCleanupMask (1 = cleanup patch) is always attached
+ * when a cleanup mask exists; after remesh it tracks the remeshed cleanup region.
  *
  * @sa vtkSHYXHoleFillFilter, vtkCGALAlphaWrapping, vtkSHYXBooleanOperationFilter
  */
@@ -29,8 +34,14 @@ public:
   vtkTypeMacro(vtkSHYXSelectionFillAlphaReunionFilter, vtkCGALPolyDataAlgorithm);
   void PrintSelf(ostream& os, vtkIndent indent) override;
 
-  /** Port 1: optional vtkSelection (same pattern as other SHYX selection filters). */
+  /** Port 1: optional vtkSelection. Replaces all selection connections. */
   void SetSourceConnection(vtkAlgorithmOutput* algOutput);
+
+  /** Port 1: add another vtkSelection (index-aligned with port-0 Inputs). */
+  void AddSourceConnection(vtkAlgorithmOutput* algOutput);
+
+  /** Port 1: drop every selection connection (does not touch port 0). */
+  void RemoveAllSelectionInputs();
 
   /**
    * When port 1 has no usable selection: name of a cell data array on port 0. A cell is selected
@@ -165,17 +176,6 @@ public:
   vtkSetClampMacro(BridgeFairContinuity, int, 0, 2);
   //@}
 
-  //@{
-  /**
-   * When true, attach cell array SHYXBridgeCleanupMask (1 = cleanup patch). After remesh, the
-   * mask tracks the remeshed cleanup region (faces outside the pre-remesh patch stay 0). Default
-   * true.
-   */
-  vtkGetMacro(ExportBridgeMask, bool);
-  vtkSetMacro(ExportBridgeMask, bool);
-  vtkBooleanMacro(ExportBridgeMask, bool);
-  //@}
-
 protected:
   vtkSHYXSelectionFillAlphaReunionFilter();
   ~vtkSHYXSelectionFillAlphaReunionFilter() override;
@@ -202,7 +202,6 @@ protected:
   int BridgeSmoothIterations = 8;
   double BridgeSmoothTimeStep = 0.0025;
   int BridgeFairContinuity = 1;
-  bool ExportBridgeMask = true;
 
 private:
   vtkSHYXSelectionFillAlphaReunionFilter(const vtkSHYXSelectionFillAlphaReunionFilter&) = delete;

@@ -1,84 +1,67 @@
 <ServerManagerConfiguration>
   <ProxyGroup name="filters">
-    <SourceProxy name="SHYXSelectionFillAlphaReunionFilter"
-                 class="vtkSHYXSelectionFillAlphaReunionFilter"
-                 label="SHYX Selection: Fill, Alpha Wrap, Union">
-      <Documentation short_help="SHYX Selection: Fill, Alpha Wrap, Union: Split by selection, hole-fill both, Alpha wrap selection, CGAL union with face origin, then local bridge remesh/smooth or fair.">
-        Splits the surface into the selected and unselected regions, fills boundary holes (CGAL) on
-        each part, runs Alpha Wrapping on the selected part (CGAL 5.5+), and merges the two
-        closed-oriented surfaces with a CGAL PMP boolean union that tracks which faces came from
-        the Alpha-Wrapped mesh. Accepts one or more vtkDataSet connections on Input (same VTK port;
-        add further pipeline inputs like Append Geometry). Non-PolyData inputs are converted to a
-        surface with vtkGeometryFilter, then all connections are merged with vtkAppendPolyData
-        before the rest of the pipeline.         Selection is repeatable and paired with Input order:
-        each Input's own cell ids are extracted, then remapped by the append offset. The panel
-        Copy Input Selections button clones every Input's current selection (not a second
-        pipeline port; same SelectionInput hint as Extract Selection). Those faces are marked exactly
-        (no distance heuristic). Cleanup either dilates the full AW region or (checkbox) starts from the
-        AW/original boolean seam, then locally remeshes and post-smooths (smooth_shape MCF or fair
-        with C0–C2 at the patch boundary). When the unselected part is empty (entire surface
-        selected), only the selected path is output. Use Selection on port 1, or a cell data mask
-        (SelectionCellArrayName) like other SHYX selection tools.
+    <SourceProxy name="SHYXAutoMeshRepair"
+                 class="vtkSHYXAutoMeshRepair"
+                 label="SHYX Auto Mesh Repair">
+      <Documentation short_help="SHYX Auto Mesh Repair: cluster self-intersections, dilate, local Alpha Wrap + smooth (Mesh Checker follow-up).">
+        Further step after SHYX Mesh Checker for self-intersecting faces. Detects CGAL PMP
+        self-intersections, groups each connected location into its own cell selection, expands
+        by Dilate Layers, then runs the same local pipeline as SHYX Selection: Fill, Alpha Wrap,
+        Union (hole-fill both sides, Alpha Wrap the patch, CGAL boolean union, optional bridge
+        remesh + smooth/fair). One cluster is repaired per pass, then intersections are
+        re-detected, up to Max Passes. Port 0 is the repaired mesh. Port 1 is first-pass
+        intersecting triangles with SHYX_ClusterId. Requires CGAL 5.5+ (Alpha Wrapping).
       </Documentation>
 
-      <!-- Same VTK input port (0), multiple connections: must use AddInputConnection (Set replaces). -->
-      <InputProperty name="Input"
-                     command="AddInputConnection"
-                     clean_command="RemoveAllInputs"
-                     multiple_input="1"
-                     repeatable="1">
+      <OutputPort name="Repaired mesh" index="0" id="port0" />
+      <OutputPort name="Intersection clusters" index="1" id="port1" />
+
+      <InputProperty name="Input" command="SetInputConnection">
         <ProxyGroupDomain name="groups">
           <Group name="sources"/>
           <Group name="filters"/>
         </ProxyGroupDomain>
         <DataTypeDomain name="input_type">
-          <DataType value="vtkDataSet"/>
+          <DataType value="vtkPolyData"/>
         </DataTypeDomain>
-        <Documentation>
-          One or more datasets on port 0. Each connection is converted to a surface if needed, then
-          merged with vtkAppendPolyData (ParaView Append Geometry) before fill / alpha wrap / union.
-          Pipeline: select this filter, then add further inputs to this property so they append as
-          connections on port 0—not separate port indices.
-        </Documentation>
       </InputProperty>
 
-      <InputProperty command="AddSourceConnection"
-                     clean_command="RemoveAllSelectionInputs"
-                     name="Selection"
-                     label="Selection"
-                     multiple_input="1"
-                     repeatable="1"
-                     panel_widget="shyx_multi_selection_copy">
-        <ProxyGroupDomain name="groups">
-          <Group name="sources"/>
-          <Group name="filters"/>
-        </ProxyGroupDomain>
-        <DataTypeDomain name="input_type">
-          <DataType value="vtkSelection"/>
-        </DataTypeDomain>
+      <IntVectorProperty name="DilateLayers"
+                         label="Dilate layers (per cluster)"
+                         command="SetDilateLayers"
+                         number_of_elements="1"
+                         default_values="3"
+                         animateable="0">
+        <IntRangeDomain name="range" min="0" max="64"/>
         <Documentation>
-          Repeatable vtkSelection, index-aligned with Input. Connection i is extracted against
-          Input i (local cell ids), then remapped into the appended mesh. Copy Input Selections
-          clones each Input producer's current selection; empty Inputs get an empty placeholder
-          so the order stays aligned.
+          Face-ring expansion of each intersecting-face cluster before local Alpha Wrap.
         </Documentation>
-        <Hints>
-          <!-- Hide from the pipeline graph (same as Extract Selection). The panel uses
-               Copy Input Selections, not a second connectable port. -->
-          <SelectionInput/>
-        </Hints>
-      </InputProperty>
+      </IntVectorProperty>
 
-      <StringVectorProperty name="SelectionCellArrayName"
-                            command="SetSelectionCellArrayName"
-                            number_of_elements="1"
-                            default_values=""
-                            panel_visibility="advanced">
+      <IntVectorProperty name="MaxPasses"
+                         label="Max repair passes"
+                         command="SetMaxPasses"
+                         number_of_elements="1"
+                         default_values="32"
+                         animateable="0">
+        <IntRangeDomain name="range" min="1" max="256"/>
         <Documentation>
-          Optional: when Selection is not connected, name of a cell data array on the mesh. Same
-          rule as SHYX Delete Selected Cells: integral non-zero or float &gt; 0.5 selects a cell.
+          One intersecting cluster is repaired per pass, then self-intersections are detected
+          again. Stops early when none remain or a pass cannot repair any cluster.
         </Documentation>
-      </StringVectorProperty>
+      </IntVectorProperty>
+
+      <IntVectorProperty name="AttemptSoupRepair"
+                         label="Soup repair first (orient + repair_polygon_soup)"
+                         command="SetAttemptSoupRepair"
+                         number_of_elements="1"
+                         default_values="1"
+                         animateable="0">
+        <BooleanDomain name="bool"/>
+        <Documentation>
+          Same combinatorial soup repair as SHYX Mesh Checker before intersection detection.
+        </Documentation>
+      </IntVectorProperty>
 
       <IntVectorProperty command="SetFairingContinuity"
                          name="FairingContinuity"
@@ -101,7 +84,7 @@
                          animateable="0">
         <BooleanDomain name="bool"/>
         <Documentation>
-          If on, the selected part is only hole-filled (no Alpha Wrapping).
+          If on, each cluster is only hole-filled (no Alpha Wrapping).
         </Documentation>
       </IntVectorProperty>
 
@@ -166,9 +149,6 @@
                          panel_visibility="advanced"
                          animateable="0">
         <BooleanDomain name="bool"/>
-        <Documentation>
-          Probe the original full surface onto the merged result.
-        </Documentation>
       </IntVectorProperty>
 
       <IntVectorProperty command="SetEnableBridgeCleanup"
@@ -179,9 +159,8 @@
                          animateable="0">
         <BooleanDomain name="bool"/>
         <Documentation>
-          Mark faces that originated from the Alpha-Wrapped mesh during CGAL corefinement union
-          (precise provenance), seed/dilate a cleanup patch (whole AW region or union seam), then
-          run a local isotropic remesh + constrained smooth_shape (MCF) or fair.
+          After each local CGAL union, remesh + smooth/fair the Alpha-Wrap / original bridge,
+          same as SHYX Selection: Fill, Alpha Wrap, Union.
         </Documentation>
       </IntVectorProperty>
 
@@ -192,11 +171,6 @@
                          default_values="0"
                          animateable="0">
         <BooleanDomain name="bool"/>
-        <Documentation>
-          Off (default): expand from all Alpha-Wrap faces, then remesh/smooth that patch.
-          On: seed only faces on the AW/original boolean seam, expand by dilate layers, then
-          remesh/smooth — a band around the union junction instead of the whole AW region.
-        </Documentation>
         <Hints>
           <PropertyWidgetDecorator type="GenericDecorator"
                                    mode="enabled_state"
@@ -212,10 +186,6 @@
                          default_values="3"
                          animateable="0">
         <IntRangeDomain name="range" min="0" max="64"/>
-        <Documentation>
-          Face-ring expansion of the cleanup seed (all AW faces, or the union seam when
-          BridgeDilateFromSeam is on).
-        </Documentation>
         <Hints>
           <PropertyWidgetDecorator type="GenericDecorator"
                                    mode="enabled_state"
@@ -287,11 +257,6 @@
           <Entry text="Shape MCF (smooth_shape)" value="1"/>
           <Entry text="Fair" value="2"/>
         </EnumerationDomain>
-        <Documentation>
-          After remesh, optionally smooth the cleanup-patch interior with CGAL smooth_shape
-          (mean curvature flow, C0 at the seam) or fair (C0–C2 via Bridge Fair Continuity).
-          None leaves the remeshed patch as-is.
-        </Documentation>
         <Hints>
           <PropertyWidgetDecorator type="GenericDecorator"
                                    mode="enabled_state"
@@ -308,10 +273,6 @@
                          panel_visibility="advanced"
                          animateable="0">
         <IntRangeDomain name="range" min="0" max="50"/>
-        <Documentation>
-          CGAL smooth_shape iterations on the cleanup patch (0 = no MCF motion). Only used when
-          Bridge post-remesh method is Shape MCF.
-        </Documentation>
         <Hints>
           <PropertyWidgetDecorator type="GenericDecorator"
                                    mode="enabled_state"
@@ -331,9 +292,6 @@
                             default_values="0.0025"
                             panel_visibility="advanced"
                             animateable="0">
-        <Documentation>
-          Time step for smooth_shape. Larger values move more per iteration (more shrinkage risk).
-        </Documentation>
         <Hints>
           <PropertyWidgetDecorator type="GenericDecorator"
                                    mode="enabled_state"
@@ -358,10 +316,6 @@
           <Entry text="C1" value="1"/>
           <Entry text="C2" value="2"/>
         </EnumerationDomain>
-        <Documentation>
-          CGAL fairing_continuity at the cleanup-patch boundary (0=C0, 1=C1, 2=C2). Only used when
-          Bridge post-remesh method is Fair. Default C1.
-        </Documentation>
         <Hints>
           <PropertyWidgetDecorator type="GenericDecorator"
                                    mode="enabled_state"
@@ -374,7 +328,25 @@
         </Hints>
       </IntVectorProperty>
 
-      <PropertyGroup label="Bridge cleanup (after union)">
+      <IntVectorProperty name="LogSteps"
+                         label="Log steps (Output Messages)"
+                         command="SetLogSteps"
+                         number_of_elements="1"
+                         default_values="1"
+                         panel_visibility="advanced">
+        <BooleanDomain name="bool"/>
+        <Documentation>
+          When on, prints per-pass diagnostics to the ParaView Output Messages window.
+        </Documentation>
+      </IntVectorProperty>
+
+      <PropertyGroup label="Intersection clusters">
+        <Property name="DilateLayers"/>
+        <Property name="MaxPasses"/>
+        <Property name="AttemptSoupRepair"/>
+      </PropertyGroup>
+
+      <PropertyGroup label="Bridge cleanup (after each local union)">
         <Property name="EnableBridgeCleanup"/>
         <Property name="BridgeDilateFromSeam"/>
         <Property name="BridgeDilateLayers"/>
@@ -388,7 +360,7 @@
       </PropertyGroup>
 
       <Hints>
-        <ShowInMenu category="SHYX" icon=":/VESPA/SHYX_Selection_Fill_Alpha_Reunion.png"/>
+        <ShowInMenu category="SHYX" icon=":/VESPA/SHYX_Auto_Mesh_Repair.png"/>
       </Hints>
     </SourceProxy>
   </ProxyGroup>

@@ -21,6 +21,30 @@ macro(vespa_plugin_group_widget)
   unset(_vespa_pw_FILES)
 endmacro()
 
+macro(vespa_plugin_property_widget)
+  cmake_parse_arguments(_vespa_pw "" "TYPE;CLASS_NAME" "FILES" ${ARGN})
+  paraview_plugin_add_property_widget(
+    KIND WIDGET
+    TYPE "${_vespa_pw_TYPE}"
+    CLASS_NAME "${_vespa_pw_CLASS_NAME}"
+    INTERFACES _vespa_pw_ifaces
+    SOURCES _vespa_pw_srcs)
+  list(APPEND vespa_plugin_widget_interfaces ${_vespa_pw_ifaces})
+  list(APPEND vespa_plugin_widget_sources ${_vespa_pw_srcs} ${_vespa_pw_FILES})
+  unset(_vespa_pw_ifaces)
+  unset(_vespa_pw_srcs)
+  unset(_vespa_pw_TYPE)
+  unset(_vespa_pw_CLASS_NAME)
+  unset(_vespa_pw_FILES)
+endmacro()
+
+vespa_plugin_property_widget(
+  TYPE "shyx_multi_selection_copy"
+  CLASS_NAME pqSHYXMultiSelectionInputWidget
+  FILES
+    widgets/pqSHYXMultiSelectionInputWidget.cxx
+    widgets/pqSHYXMultiSelectionInputWidget.h)
+
 vespa_plugin_group_widget(
   TYPE "array_curve_mapper_panel"
   CLASS_NAME pqArrayCurveMapperPanel
