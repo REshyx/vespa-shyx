@@ -11,10 +11,10 @@
  * After union, faces imported from the Alpha-Wrapped mesh are marked exactly via a corefinement
  * visitor (no distance heuristic). By default that AW
  * region is dilated by a few face rings; optionally the cleanup seed is only the AW/original
- * boolean seam, then dilated the same way. A local CGAL isotropic remesh (with relaxation) and a
- * selectable post-process (constrained smooth_shape / MCF, or fair with C0–C2 continuity) run on
- * that patch. Output cell array SHYXBridgeCleanupMask (1 = cleanup patch) is always attached
- * when a cleanup mask exists; after remesh it tracks the remeshed cleanup region.
+ * boolean seam, then dilated the same way. EnableBridgeRemesh and EnableBridgeSmooth are independent:
+ * a local CGAL isotropic remesh (with relaxation) and/or a constrained smooth_shape / MCF or fair
+ * (C0–C2) can run on that patch. Output cell array SHYXBridgeCleanupMask (1 = cleanup patch) is
+ * always attached when a cleanup mask exists; after remesh it tracks the remeshed cleanup region.
  *
  * @sa vtkSHYXHoleFillFilter, vtkCGALAlphaWrapping, vtkSHYXBooleanOperationFilter
  */
@@ -83,7 +83,7 @@ public:
   /**
    * After a successful boolean union, mark faces that originated from the Alpha-Wrapped mesh
    * (corefinement visitor), seed a cleanup patch (all AW faces, or the AW/original seam when
-   * BridgeDilateFromSeam is on), dilate, then locally remesh + smooth/fair. Default ON.
+   * BridgeDilateFromSeam is on), dilate, then optionally remesh and/or smooth/fair. Default ON.
    * No-op when the unselected part is empty (no union).
    */
   vtkGetMacro(EnableBridgeCleanup, bool);
@@ -93,7 +93,27 @@ public:
 
   //@{
   /**
-   * Face-ring dilation of the cleanup seed. Default 3.
+   * Local CGAL isotropic remesh on the cleanup patch. Independent of EnableBridgeSmooth
+   * (uncheck smooth to remesh only). Default ON. Ignored when EnableBridgeCleanup is off.
+   */
+  vtkGetMacro(EnableBridgeRemesh, bool);
+  vtkSetMacro(EnableBridgeRemesh, bool);
+  vtkBooleanMacro(EnableBridgeRemesh, bool);
+  //@}
+
+  //@{
+  /**
+   * Constrained smooth_shape (MCF) or fair on the cleanup patch (see BridgeSmoothMethod).
+   * Independent of EnableBridgeRemesh. Default ON. Ignored when EnableBridgeCleanup is off.
+   */
+  vtkGetMacro(EnableBridgeSmooth, bool);
+  vtkSetMacro(EnableBridgeSmooth, bool);
+  vtkBooleanMacro(EnableBridgeSmooth, bool);
+  //@}
+
+  //@{
+  /**
+   * Face-ring dilation of the cleanup seed. Default 2.
    * Seed is either all AW faces (BridgeDilateFromSeam off) or only the AW/original seam band
    * (BridgeDilateFromSeam on).
    */
@@ -138,8 +158,9 @@ public:
 
   //@{
   /**
-   * Post-remesh smoothing on the cleanup patch (strict interior free; outside + boundary fixed):
-   *  - 0: None — remesh only
+   * Smoothing algorithm when EnableBridgeSmooth is on (strict interior free; outside + boundary
+   * fixed):
+   *  - 0: None — skip this pass even if EnableBridgeSmooth is on
    *  - 1: CGAL smooth_shape (mean curvature flow) — C0 at the seam
    *  - 2: CGAL fair — C0/C1/C2 at the seam via BridgeFairContinuity
    * Default 2 (fair).
@@ -151,7 +172,7 @@ public:
   //@{
   /**
    * CGAL smooth_shape iterations when BridgeSmoothMethod is Shape MCF. 0 skips the MCF pass
-   * (no vertex motion after remesh). Default 8.
+   * (no vertex motion). Default 8.
    */
   vtkGetMacro(BridgeSmoothIterations, int);
   vtkSetClampMacro(BridgeSmoothIterations, int, 0, 50);
@@ -159,8 +180,8 @@ public:
 
   //@{
   /**
-   * Time step for post-remesh smooth_shape. Larger = stronger motion per iteration (and more
-   * shrinkage). Default 0.0025.
+   * Time step for smooth_shape. Larger = stronger motion per iteration (and more shrinkage).
+   * Default 0.0025.
    */
   vtkGetMacro(BridgeSmoothTimeStep, double);
   vtkSetMacro(BridgeSmoothTimeStep, double);
@@ -193,7 +214,9 @@ protected:
   char* SelectionCellArrayName = nullptr;
 
   bool EnableBridgeCleanup = true;
-  int BridgeDilateLayers = 3;
+  bool EnableBridgeRemesh = true;
+  bool EnableBridgeSmooth = true;
+  int BridgeDilateLayers = 2;
   bool BridgeDilateFromSeam = false;
   double BridgeTargetEdgeLength = -1.0;
   int BridgeRemeshIterations = 3;

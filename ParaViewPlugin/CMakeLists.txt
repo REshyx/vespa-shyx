@@ -65,6 +65,7 @@ if (PARAVIEW_USE_QT)
     "${CMAKE_CURRENT_SOURCE_DIR}/widgets/SnappyHexMesh"
     "${CMAKE_CURRENT_SOURCE_DIR}/AIAssistant"
     "${CMAKE_CURRENT_SOURCE_DIR}/VascularCategory"
+    "${CMAKE_CURRENT_SOURCE_DIR}/SkeletonExtraction"
     "${CMAKE_CURRENT_SOURCE_DIR}/Representations"
     "${CMAKE_CURRENT_SOURCE_DIR}/selection/SphereSelection"
     "${CMAKE_CURRENT_SOURCE_DIR}/selection/GrowSelectionWithSimilar"

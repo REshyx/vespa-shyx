@@ -10,9 +10,10 @@ SHYX 是本仓库里 **一个作者命名空间**（[`vespa/shyx/`](.)），不�
 
 * [**Adaptive Isotropic Remesher**](./AdaptiveIsotropicRemesher/README.md) — 曲率自适应各向同性重网格（CGAL ≥ 6）；同模块含 **Remesh With Endpoint**
 * [**Mesh Checker**](./MeshChecker/README.md) — 汤边 / 边界环 / 自交诊断，可选修复
-* [**Auto Mesh Repair**](./AutoMeshRepair/README.md) — 自交分簇后局部 Alpha Wrap + smooth（CGAL ≥ 5.5；Mesh Checker 交叉面的下一步）
+* [**Auto Mesh Repair**](./AutoMeshRepair/README.md) — 前半段同 Mesh Checker；勾选后默认先抽出做 Alpha Wrap（port 2），再另一步 union 回去（CGAL ≥ 5.5）
 * [**Hole Fill**](./HoleFill/README.md) / [**Repair Degeneracies**](./RepairDegeneracies/README.md) / [**Edge Collapse**](./EdgeCollapse/README.md) / [**Boolean (relaxed)**](./BooleanOperation/README.md) / [**Shape Smoothing**](./ShapeSmoothing/README.md) — CGAL PMP
 * [**Convex Hull**](./ConvexHullFilter/README.md)
+* [**Resample Lines**](./ResampleLines/README.md) — 线网按弧长间距重采样；可选 Fuse；短分支保留两端
 * [**Disconnected Region Fuse**](./DisconnectedRegionFuse/README.md)
 * [**Selection Extrude**](./SelectionExtrude/README.md) / [**Selection Append Patches**](./SelectionAppendPatches/README.md) / [**Point Extrude**](./PointExtrude/README.md) / [**Delete Selected Cells**](./DeleteSelectedCells/README.md) / [**Extract Selection**](./ExtractSelectedCells/README.md) / [**Flip Selected Cells Winding**](./FlipSelectedCellsWinding/README.md)
 * [**Selection: Fill, Alpha Wrap, Union**](./SelectionFillAlphaReunion/README.md) — CGAL ≥ 5.5
@@ -67,7 +68,7 @@ SHYX 是本仓库里 **一个作者命名空间**（[`vespa/shyx/`](.)），不�
 * **Select Block** — 3D 视图右键复合 block（如 `Part_1`）先清当前选择再全选该块 cell；`ParaViewPlugin/selection/SelectBlock/`
 * **Select Similar** — 有 cell 选择时右键 **Select Similar → By Normal**，按法向一次 Grow 完；`ParaViewPlugin/selection/SelectSimilar/`（阈值与标题栏 Grow 共用）
 * **Fill Interior** — 有 cell 选择时右键 **Fill Interior**，把被当前选区完全围住的未选面补进选择（开放网格上仍连到开口的区域不填）
-* **Select All** — 有 cell 选择时右键 **Select All**，全选当前选区所在边连通区域（不相接的其它壳不选）
+* **Select Connected** — 有点或 cell 选择时右键 **Select Connected**，选中当前选区所在连通区域（点沿网格、线共顶点、面共边、体共面；不相接的其它连通域不选）
 * **Invert Selection** — 有 cell 选择时右键 **Invert Selection**，反选当前数据集上的 cell
 
 ## 表示

@@ -12,6 +12,14 @@
 该模块接收一个必须保持封闭且水密 (Watertight) 状态的表面三角面片数据（`vtkPolyData`），并在其内部填充生成高质量的实体四面体网格数据（`vtkUnstructuredGrid`）。若输入的表面网格存在破洞、自相交等拓扑错误，模块将无法完成网格化计算并抛出异常。
 
 **底层算法**：封装 **TetGen**。默认路径是带质量约束的四面体网格，**`UseCDT` 默认 OFF**；默认 **Preserve Surface / Nobisect ON**（`-Y`）。`-D` CDT 是高级选项，与 Nobisect 互斥。`-a` 仅当 **Use max volume**（`LimitMaxVolume`，默认 OFF）且 `MaxVolume > 0` 时传入。
+
+**内部顶点（`InteriorPointMode`）**：质量细化 vs 指定管线节点上的点。
+
+| 取值 | 含义 |
+| :--- | :--- |
+| **Quality (Steiner points)**（默认 0） | 现有质量细化路径，内部可插 Steiner 点。 |
+| **Prescribed pipeline points**（1） | 表面顶点 + **Interior points** 下拉所选管线节点的点；不选节点则只用表面顶点。强制保表面、禁止 Steiner 点（`-YS0O0`）。本滤镜**不**计算骨架；把 **SHYX Skeleton Extraction** 等已有节点选进下拉即可。 |
+
 其基本工作流程为：
 1. **数据解析**：将传入的 VTK 表面三角面片数据解包并转换为 TetGen 内部计算所支持的域定义结构。
 2. **四面体化填充**：利用 Delaunay 算法规则在三维空间中执行节点重连，保证生成的四面体具备良好的长宽比分布，从而避免狭长或退化的几何单元产生。
@@ -35,3 +43,7 @@
 | **CDTRefine** | `7` | `-D#` | **表面 CDT 细分级别**。此参数的调整区间通常为 1 至 7，仅在 `UseCDT` 开启时生效。数值越大表明边界网格的细分程度与精度越高。 |
 | **DoCheck** | `OFF` | `-C` | **几何一致性校验**。启用后，TetGen 将在运算结束前检查网格的拓扑有效性，排查是否存在重叠面、自交叉等劣质几何结构。 |
 | **Epsilon** | `1e-8` | `-T` | **共面测试容差系数**。浮点计算过程中的微小容差值，主要用于几何判定中确定多个点或面是否处于相同的空间平面。 |
+| **InteriorPointMode** | `0` | （模式） | **内部顶点**。0 质量 Steiner；1 表面顶点 + Interior points 管线下拉（空则仅表面）。模式 1 强制 `-YS0O0`。 |
+| **InteriorPoints** | （可选） | 管线节点 | 面板下拉选 pipeline 节点（`input_selector`，与 Snappy Feature edges 相同），其顶点作为允许的内部点。 |
+| **ConstrainInteriorEdges** | `ON` | 输入 `edgelist` | 模式 1：若所选节点含折线，则作为内部约束段。 |
+| **InteriorSurfaceClearance** | `0`（自动） | — | 模式 1：丢掉距任一表面顶点近于该距离的源点。`<=0` 为包围盒最长边的 0.001 倍。 |

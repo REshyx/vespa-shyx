@@ -55,6 +55,9 @@ public:
   /** True when the active (or hinted) port has a resolvable cell selection. */
   static bool HasActiveCellSelection(pqDataRepresentation* hintRepresentation = nullptr);
 
+  /** True when the active (or hinted) port has a resolvable point selection. */
+  static bool HasActivePointSelection(pqDataRepresentation* hintRepresentation = nullptr);
+
   /**
    * Grow the current cell selection across every ring of edge-adjacent faces
    * whose normal–normal angle is at most the shared dihedral threshold.
@@ -74,9 +77,10 @@ public:
     pqDataRepresentation* hintRepresentation = nullptr);
 
   /**
-   * Select every face in the edge-connected component(s) that contain the
-   * current cell selection (context-menu "Select All"). Disconnected shells
-   * that do not touch the selection are left unselected.
+   * Select every topologically connected point, line, face, or volume in the
+   * component(s) that contain the current selection (context-menu "Select Connected").
+   * Points grow along mesh edges; lines share a vertex; faces share an edge;
+   * volumes share a face. Disconnected components are left unselected.
    */
   static GrowToCompletionResult SelectConnectedRegion(
     pqDataRepresentation* hintRepresentation = nullptr);

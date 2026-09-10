@@ -803,16 +803,17 @@ void AttachBridgeMaskArray(vtkPolyData* mesh, const std::vector<char>& mask, con
 }
 
 /**
- * Local isotropic remesh (+ relaxation) and optional constrained smooth_shape or fair on a
+ * Optional local isotropic remesh (+ relaxation) and optional constrained smooth_shape or fair on a
  * dilated AW patch.
  * Returns false on hard failure (caller may keep the pre-cleanup mesh).
  * If @a outMaskAfter is non-null, it is filled in VTK cell order with 1 = cleanup patch after remesh
  * (faces that were outside the input mask keep 0; remeshed/new faces in the patch are 1).
  *
+ * @a doRemesh: run CGAL isotropic_remeshing.
  * @a smoothMethod: 0 = none, 1 = smooth_shape (MCF), 2 = fair.
  */
 bool LocalRemeshAndPostSmoothBridge(vtkPolyData* mesh, const std::vector<char>& mask,
-  double targetEdgeLength, int remeshIterations, int remeshRelaxationSteps, int smoothMethod,
+  double targetEdgeLength, bool doRemesh, int remeshIterations, int remeshRelaxationSteps, int smoothMethod,
   int smoothIterations, double smoothTimeStep, int fairContinuity, vtkPolyData* out,
   std::string& error, std::vector<char>* outMaskAfter = nullptr)
 {
@@ -838,7 +839,7 @@ bool LocalRemeshAndPostSmoothBridge(vtkPolyData* mesh, const std::vector<char>& 
     return false;
   }
 
-  if (targetEdgeLength <= 0.0)
+  if (doRemesh && targetEdgeLength <= 0.0)
   {
     error = "bridge target edge length must be positive.";
     return false;
@@ -944,53 +945,56 @@ bool LocalRemeshAndPostSmoothBridge(vtkPolyData* mesh, const std::vector<char>& 
       boost::put(keepFixed, v, !hasRemesh || hasNonRemesh);
     }
 
-    // Only constrain the cleanup-patch boundary (and patch border edges). Do NOT run
-    // detect_sharp_edges here — boolean seams often create artificial sharp dihedrals that
-    // would otherwise be protected and survive remesh/smooth inside the patch.
-    auto featureEdges = get(CGAL::edge_is_feature, sm);
-    for (CGAL_Surface::Edge_index e : sm.edges())
+    if (doRemesh)
     {
-      boost::put(featureEdges, e, false);
-    }
-    for (CGAL_Surface::Edge_index e : sm.edges())
-    {
-      const auto h0 = sm.halfedge(e);
-      const auto ho = sm.opposite(h0);
-      const bool b0 = sm.is_border(h0);
-      const bool b1 = sm.is_border(ho);
-      if (!b0 && !b1)
+      // Only constrain the cleanup-patch boundary (and patch border edges). Do NOT run
+      // detect_sharp_edges here — boolean seams often create artificial sharp dihedrals that
+      // would otherwise be protected and survive remesh/smooth inside the patch.
+      auto featureEdges = get(CGAL::edge_is_feature, sm);
+      for (CGAL_Surface::Edge_index e : sm.edges())
       {
-        const Graph_Faces fA = sm.face(h0);
-        const Graph_Faces fB = sm.face(ho);
-        const std::size_t ia = static_cast<std::size_t>(fA.idx());
-        const std::size_t ib = static_cast<std::size_t>(fB.idx());
-        const bool inA = (ia < faceInPatch.size() && faceInPatch[ia]);
-        const bool inB = (ib < faceInPatch.size() && faceInPatch[ib]);
-        if (inA != inB)
+        boost::put(featureEdges, e, false);
+      }
+      for (CGAL_Surface::Edge_index e : sm.edges())
+      {
+        const auto h0 = sm.halfedge(e);
+        const auto ho = sm.opposite(h0);
+        const bool b0 = sm.is_border(h0);
+        const bool b1 = sm.is_border(ho);
+        if (!b0 && !b1)
         {
-          boost::put(featureEdges, e, true);
+          const Graph_Faces fA = sm.face(h0);
+          const Graph_Faces fB = sm.face(ho);
+          const std::size_t ia = static_cast<std::size_t>(fA.idx());
+          const std::size_t ib = static_cast<std::size_t>(fB.idx());
+          const bool inA = (ia < faceInPatch.size() && faceInPatch[ia]);
+          const bool inB = (ib < faceInPatch.size() && faceInPatch[ib]);
+          if (inA != inB)
+          {
+            boost::put(featureEdges, e, true);
+          }
+        }
+        else if (b0 != b1)
+        {
+          const Graph_Faces f = b0 ? sm.face(ho) : sm.face(h0);
+          const std::size_t fi = static_cast<std::size_t>(f.idx());
+          if (fi < faceInPatch.size() && faceInPatch[fi])
+          {
+            boost::put(featureEdges, e, true);
+          }
         }
       }
-      else if (b0 != b1)
-      {
-        const Graph_Faces f = b0 ? sm.face(ho) : sm.face(h0);
-        const std::size_t fi = static_cast<std::size_t>(f.idx());
-        if (fi < faceInPatch.size() && faceInPatch[fi])
-        {
-          boost::put(featureEdges, e, true);
-        }
-      }
-    }
 
-    pmp::isotropic_remeshing(remeshFaces, targetEdgeLength, sm,
-      pmp::parameters::number_of_iterations(static_cast<unsigned int>(remeshIterations))
-        .number_of_relaxation_steps(static_cast<unsigned int>(remeshRelaxationSteps))
-        .protect_constraints(true)
-        .edge_is_constrained_map(featureEdges));
+      pmp::isotropic_remeshing(remeshFaces, targetEdgeLength, sm,
+        pmp::parameters::number_of_iterations(static_cast<unsigned int>(remeshIterations))
+          .number_of_relaxation_steps(static_cast<unsigned int>(remeshRelaxationSteps))
+          .protect_constraints(true)
+          .edge_is_constrained_map(featureEdges));
+    }
 
     if (smoothMethod == 1)
     {
-      // Post-remesh shape smooth (MCF). keepFixed freezes outside + patch-boundary (C0 only).
+      // Shape smooth (MCF). keepFixed freezes outside + patch-boundary (C0 only).
       if (smoothIterations > 0)
       {
         const double dt = (smoothTimeStep > 0.0) ? smoothTimeStep : 1e-3;
@@ -1034,7 +1038,7 @@ bool LocalRemeshAndPostSmoothBridge(vtkPolyData* mesh, const std::vector<char>& 
         }
       }
     }
-    // smoothMethod == 0: remesh only.
+    // smoothMethod == 0: remesh only (or mask-only if remesh was also skipped).
   }
   catch (const std::exception& e)
   {
@@ -1115,6 +1119,8 @@ void vtkSHYXSelectionFillAlphaReunionFilter::PrintSelf(ostream& os, vtkIndent in
   os << indent << "OrientToBoundVolumeWhenNeeded: "
      << (this->OrientToBoundVolumeWhenNeeded ? "on" : "off") << "\n";
   os << indent << "EnableBridgeCleanup: " << (this->EnableBridgeCleanup ? "on" : "off") << "\n";
+  os << indent << "EnableBridgeRemesh: " << (this->EnableBridgeRemesh ? "on" : "off") << "\n";
+  os << indent << "EnableBridgeSmooth: " << (this->EnableBridgeSmooth ? "on" : "off") << "\n";
   os << indent << "BridgeDilateLayers: " << this->BridgeDilateLayers << "\n";
   os << indent << "BridgeDilateFromSeam: " << (this->BridgeDilateFromSeam ? "on" : "off") << "\n";
   os << indent << "BridgeTargetEdgeLength: " << this->BridgeTargetEdgeLength << "\n";
@@ -1333,34 +1339,47 @@ int vtkSHYXSelectionFillAlphaReunionFilter::RequestData(
     }
     else
     {
-      double targetLen = this->BridgeTargetEdgeLength;
-      if (targetLen <= 0.0)
+      const bool doRemesh = this->EnableBridgeRemesh;
+      const int smoothMethod = this->EnableBridgeSmooth ? this->BridgeSmoothMethod : 0;
+      if (!doRemesh && smoothMethod == 0)
       {
-        targetLen = MeanEdgeLengthOfMaskedFaces(united, bridgeMask);
-      }
-      if (targetLen <= 0.0)
-      {
-        targetLen = 0.01 * (meshLen > 0.0 ? meshLen : 1.0);
-      }
-
-      vtkNew<vtkPolyData> cleaned;
-      std::string err;
-      if (LocalRemeshAndPostSmoothBridge(united, bridgeMask, targetLen, this->BridgeRemeshIterations,
-            this->BridgeRemeshRelaxationSteps, this->BridgeSmoothMethod, this->BridgeSmoothIterations,
-            this->BridgeSmoothTimeStep, this->BridgeFairContinuity, cleaned, err, &maskAfterRemesh))
-      {
-        if (!err.empty())
-        {
-          vtkWarningMacro(<< "Bridge cleanup note: " << err);
-        }
-        output->ShallowCopy(cleaned);
-        bridgeCleanupRan = true;
+        output->ShallowCopy(united);
       }
       else
       {
-        vtkWarningMacro(<< "Bridge cleanup failed (" << err
-                        << "). Returning boolean union without local remesh/smooth.");
-        output->ShallowCopy(united);
+        double targetLen = this->BridgeTargetEdgeLength;
+        if (doRemesh)
+        {
+          if (targetLen <= 0.0)
+          {
+            targetLen = MeanEdgeLengthOfMaskedFaces(united, bridgeMask);
+          }
+          if (targetLen <= 0.0)
+          {
+            targetLen = 0.01 * (meshLen > 0.0 ? meshLen : 1.0);
+          }
+        }
+
+        vtkNew<vtkPolyData> cleaned;
+        std::string err;
+        if (LocalRemeshAndPostSmoothBridge(united, bridgeMask, targetLen, doRemesh,
+              this->BridgeRemeshIterations, this->BridgeRemeshRelaxationSteps, smoothMethod,
+              this->BridgeSmoothIterations, this->BridgeSmoothTimeStep, this->BridgeFairContinuity,
+              cleaned, err, &maskAfterRemesh))
+        {
+          if (!err.empty())
+          {
+            vtkWarningMacro(<< "Bridge cleanup note: " << err);
+          }
+          output->ShallowCopy(cleaned);
+          bridgeCleanupRan = true;
+        }
+        else
+        {
+          vtkWarningMacro(<< "Bridge cleanup failed (" << err
+                          << "). Returning boolean union without local remesh/smooth.");
+          output->ShallowCopy(united);
+        }
       }
     }
   }

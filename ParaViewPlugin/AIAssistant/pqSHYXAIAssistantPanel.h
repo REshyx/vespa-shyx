@@ -8,6 +8,7 @@
 #include <QList>
 #include <QMap>
 #include <QPointer>
+#include <QSet>
 
 #include "pqSHYXCurlRequest.h"
 
@@ -65,7 +66,7 @@ private:
   QImage captureActiveViewImage() const;
   void rebuildQuestionThumbs();
   void clearQuestionImages();
-  void applyAssistantReply(const QString& content, const QList<QImage>& images = {});
+  void applyAssistantReply(const QList<QImage>& images = {});
   bool continueAgentIfNeeded(const QJsonObject& message);
   QString runAgentTool(const QString& name, const QJsonObject& args);
   QString executeCodeBoxForAgent(bool captureScreenshot);
@@ -77,6 +78,7 @@ private:
   void handleStreamEvent(const QJsonObject& obj);
   QJsonObject assembledAssistantMessage() const;
   void completeStreamReply();
+  void noteStreamingToolCall(int index, const QString& name, const QJsonObject& args);
   void failRequest(const QString& err);
   void dropActiveReply();
   void finishStoppedUi();
@@ -108,10 +110,12 @@ private:
   QJsonArray AgentMessages;
   QList<QByteArray> AgentFollowupJpegs;
   int AgentRound = 0;
+  bool AgentOmitTools = false;
   QByteArray StreamBuf;
   QString StreamContent;
   QString StreamReasoning;
   QMap<int, QJsonObject> StreamToolCalls;
+  QSet<int> StreamAnnouncedToolIndexes;
   QString StreamFinishReason;
   QString StreamError;
   bool StreamIsSse = false;

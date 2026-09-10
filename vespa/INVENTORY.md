@@ -46,6 +46,7 @@ Kitware 原版 CGAL 滤镜，全部需 **`VESPA_USE_CGAL`**，只作保留（对
 | SHYX Adaptive Isotropic Remesher | `vtkSHYXAdaptiveIsotropicRemesher` | AdaptiveIsotropicRemesher | SHYXAdaptiveIsotropicRemesher.xml | 自有 | [有](shyx/AdaptiveIsotropicRemesher/README.md) | CGAL ≥ 6 |
 | SHYX Remesh With Endpoint | `vtkSHYXRemeshWithEndpoint` | 同上模块 | SHYXRemeshWithEndpoint.xml | fluent | （同 Remesher README） | CGAL ≥ 6 |
 | SHYX Convex Hull | `vtkSHYXConvexHullFilter` | ConvexHullFilter | SHYXConvexHullFilter.xml | 自有 | [有](shyx/ConvexHullFilter/README.md) | VTK |
+| SHYX Resample Lines | `vtkSHYXResampleLines` | ResampleLines | SHYXResampleLines.xml | 复用 Array Curve Mapper | [有](shyx/ResampleLines/README.md) | VTK |
 | SHYX Disconnected Region Fuse | `vtkSHYXDisconnectedRegionFuse` | DisconnectedRegionFuse | SHYXDisconnectedRegionFuse.xml | 自有 | [有](shyx/DisconnectedRegionFuse/README.md) | VTK |
 | SHYX Selection Extrude | `vtkSHYXSelectionExtrudeFilter` | SelectionExtrude | SHYXSelectionExtrude.xml | 自有 | [有](shyx/SelectionExtrude/README.md) | VTK |
 | SHYX Selection Append Patches | `vtkSHYXSelectionAppendPatches` | SelectionAppendPatches | SHYXSelectionAppendPatches.xml | 自有（复用 Extrude 图） | [有](shyx/SelectionAppendPatches/README.md) | VTK |
@@ -138,7 +139,7 @@ Vascular 顺序（[`VESPAVascularCategory.xml`](../ParaViewPlugin/smxml/VESPAVas
 | Select Block（3D 视图 block 右键） | `ParaViewPlugin/selection/SelectBlock/` | ParaView `pqSelectBlock.svg` |
 | Select Similar（选择右键，By Normal 一次 Grow 完） | `ParaViewPlugin/selection/SelectSimilar/` | 复用 Grow 图标 |
 | Fill Interior（选择右键，填充被选区围住的未选面） | `ParaViewPlugin/selection/SelectSimilar/` + Grow controller | （无独立图标） |
-| Select All（选择右键，全选当前连通区域） | `ParaViewPlugin/selection/SelectSimilar/` + Grow controller | （无独立图标） |
+| Select Connected（选择右键，选中当前连通点/线/面/体） | `ParaViewPlugin/selection/SelectSimilar/` + Grow controller | （无独立图标） |
 | Invert Selection（选择右键，反选） | `ParaViewPlugin/selection/SelectSimilar/` + Grow controller | （无独立图标） |
 | Vascular 菜单/工具条 | `ParaViewPlugin/VascularCategory/` + [`smxml/VESPAVascularCategory.xml`](../ParaViewPlugin/smxml/VESPAVascularCategory.xml) | （各滤镜 fluent 图标） |
 

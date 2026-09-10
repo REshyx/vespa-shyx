@@ -96,6 +96,18 @@ list(APPEND vespa_plugin_qt_auto_sources
   VascularCategory/pqSHYXVascularCategoryAutoStart.h)
 
 paraview_plugin_add_auto_start(
+  CLASS_NAME "pqSHYXSkeletonExtractionAutoStart"
+  STARTUP onStartup
+  SHUTDOWN onShutdown
+  INTERFACES skeleton_extraction_autostart_interfaces
+  SOURCES skeleton_extraction_autostart_sources)
+list(APPEND vespa_plugin_qt_auto_interfaces ${skeleton_extraction_autostart_interfaces})
+list(APPEND vespa_plugin_qt_auto_sources
+  ${skeleton_extraction_autostart_sources}
+  SkeletonExtraction/pqSHYXSkeletonExtractionAutoStart.cxx
+  SkeletonExtraction/pqSHYXSkeletonExtractionAutoStart.h)
+
+paraview_plugin_add_auto_start(
   CLASS_NAME "pqSHYXAIAssistantAutoStart"
   STARTUP onStartup
   SHUTDOWN onShutdown

@@ -1077,7 +1077,7 @@ void pqSHYXSphereSelectionController::applySelection()
     primary = saved.front().first;
   }
 
-  // Copy Active Selection / get_selection_ids read the selection manager. select() may
+  // Copy Active Selection / inspect_selection read the selection manager. select() may
   // CleanSelectionInputs on ports that were previously registered, so restore the others.
   if (primary)
   {

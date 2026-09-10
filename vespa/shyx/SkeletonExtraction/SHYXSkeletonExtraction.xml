@@ -8,6 +8,15 @@
         using the CGAL Mean Curvature Flow Skeletonization algorithm.
         The input mesh must be watertight. The output is a set of polylines
         representing the medial skeleton of the shape.
+
+        Optional **Append Cap Endpoints**: after extraction, each connected patch of cells
+        whose cap array (default cell **EndpointIndex**) first component is greater than 0
+        is reduced to an area-weighted centroid and joined to the nearest point on the
+        skeleton (existing vertex, or a new vertex that splits that edge). If that
+        vertex already has line degree &gt; 1, the stub is a new branch rather than a
+        leaf extension: those lines are marked 1 on cell-data **NewCapBranch** and a
+        warning is issued (other cells 0). Use on capped meshes (e.g. after Vessel
+        End Clipper). Off by default.
       </Documentation>
 
       <InputProperty name="Input"
@@ -19,6 +28,7 @@
         <DataTypeDomain name="input_type">
           <DataType value="vtkPolyData"/>
         </DataTypeDomain>
+        <InputArrayDomain name="cap_endpoint_arrays" attribute_type="cell" optional="1"/>
       </InputProperty>
 
       <DoubleVectorProperty command="SetMaxTriangleAngle"
@@ -41,14 +51,14 @@
                             default_values="0"
                             panel_visibility="advanced">
         <!-- vtkSMBoundsDomain scaled_extent: same convention as many ParaView filters (slider + scale + reset). -->
-        <BoundsDomain mode="scaled_extent" name="bounds" scale_factor="0.002">
+        <BoundsDomain mode="scaled_extent" name="bounds" scale_factor="0.001">
           <RequiredProperties>
             <Property function="Input" name="Input" />
           </RequiredProperties>
         </BoundsDomain>
         <Documentation>
           Local remeshing parameter. Edges shorter than this value may be collapsed
-          during contraction (CGAL min_edge_length). Automatic length is 0.002 times the
+          during contraction (CGAL min_edge_length). Automatic length is 0.001 times the
           longest side of the input axis-aligned bounding box (matches ParaView BoundsDomain
           scaled_extent). The property&apos;s initial value is 0 for that rule; values &lt;= 0
           use it as well. The panel shows scale and reset controls when a BoundsDomain is present.
@@ -119,7 +129,63 @@
         </Documentation>
       </DoubleVectorProperty>
 
+      <IntVectorProperty command="SetAppendCapEndpoints"
+                         name="AppendCapEndpoints"
+                         label="Append Cap Endpoints"
+                         number_of_elements="1"
+                         default_values="0">
+        <BooleanDomain name="bool"/>
+        <Documentation>
+          When on, after skeleton extraction, each connected patch of cells whose cap
+          array (default **EndpointIndex**) first component is &gt; 0 is reduced to an
+          area-weighted centroid. A line is inserted from that centroid to the nearest
+          point on the skeleton. If the closest location is the interior of an edge, a
+          vertex is inserted and that edge is split so the stub is connected.
+          If the attach vertex has line degree &gt; 1, this is a new branch (not
+          extending a leaf): the stub is marked 1 on cell-data **NewCapBranch** and
+          a warning lists the attach degrees. Other skeleton cells are 0.
+          Intended for capped meshes (e.g. after Vessel End Clipper). No-op if the array
+          is missing or has no positive cells.
+        </Documentation>
+      </IntVectorProperty>
+
+      <StringVectorProperty name="CapEndpointArrayName"
+                            label="Cap array"
+                            command="SetInputArrayToProcess"
+                            number_of_elements="5"
+                            element_types="0 0 0 0 2"
+                            default_values="0 0 0 1 EndpointIndex"
+                            animateable="0">
+        <ArrayListDomain name="cap_endpoint_list"
+                         input_domain_name="cap_endpoint_arrays">
+          <RequiredProperties>
+            <Property name="Input" function="Input"/>
+          </RequiredProperties>
+        </ArrayListDomain>
+        <Documentation>
+          Cell-centered array identifying cap / opening faces (default **EndpointIndex**).
+          Cells whose first component is &gt; 0 form the patches (wall is typically -1).
+          The picker lists cell arrays only so EndpointIndex resolves to cell data when a
+          same-named point array also exists.
+        </Documentation>
+        <Hints>
+          <ArraySelectionWidget/>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="enabled_state"
+                                   property="AppendCapEndpoints"
+                                   value="0"
+                                   inverse="1"/>
+        </Hints>
+      </StringVectorProperty>
+
+      <PropertyGroup label="Cap endpoints (post-process)">
+        <Property name="AppendCapEndpoints"/>
+        <Property name="CapEndpointArrayName"/>
+      </PropertyGroup>
+
       <Hints>
+        <!-- replace_input: 0 = Apply 后不隐藏上游输入；客户端再把父节点 Opacity 设为 0.5 -->
+        <Visibility replace_input="0"/>
         <ShowInMenu category="SHYX" icon=":/VESPA/SHYX_Skeleton_Extraction.png"/>
       </Hints>
 

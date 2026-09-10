@@ -1,8 +1,13 @@
 #include "vtkSHYXVmtkOpeningCenterlines.h"
 
+#include "vtkvmtkCenterlineAttributesFilter.h"
+#include "vtkvmtkCenterlineBranchExtractor.h"
+#include "vtkvmtkCenterlineGeometry.h"
 #include "vtkvmtkPolyDataCenterlines.h"
+#include "vtkvmtkPolyDataNetworkExtraction.h"
 
 #include <vtkCellData.h>
+#include <vtkCleanPolyData.h>
 #include <vtkDataArray.h>
 #include <vtkDataArraySelection.h>
 #include <vtkDoubleArray.h>
@@ -29,6 +34,22 @@
 VTK_ABI_NAMESPACE_BEGIN
 
 vtkStandardNewMacro(vtkSHYXVmtkOpeningCenterlines);
+
+namespace
+{
+constexpr const char kRadiusArrayName[] = "MaximumInscribedSphereRadius";
+
+bool CopyIfNonEmpty(vtkPolyData* dst, vtkPolyData* src)
+{
+  if (!dst || !src || src->GetNumberOfCells() == 0)
+  {
+    return false;
+  }
+  dst->ShallowCopy(src);
+  return true;
+}
+
+} // namespace
 
 void vtkSHYXVmtkOpeningCenterlines::ClearAllArrays(vtkDataArraySelection* sel)
 {
@@ -415,6 +436,57 @@ void EnsurePointGlobalIds(vtkPolyData* pd)
   ptd->SetGlobalIds(gg);
 }
 
+/** Keep every cell whose id is not in punchCells (delete thresholded caps → boundary rings). */
+bool PunchCells(vtkPolyData* input, const std::set<vtkIdType>& punchCells, vtkPolyData* outMesh)
+{
+  std::set<vtkIdType> keep;
+  const vtkIdType nCells = input ? input->GetNumberOfCells() : 0;
+  for (vtkIdType cid = 0; cid < nCells; ++cid)
+  {
+    if (punchCells.find(cid) == punchCells.end())
+    {
+      keep.insert(cid);
+    }
+  }
+  vtkNew<vtkIdTypeArray> origPt;
+  vtkNew<vtkIdTypeArray> origCell;
+  return ExtractSelectedCells(input, keep, outMesh, origPt, origCell);
+}
+
+vtkIdType CountBoundaryEdges(vtkPolyData* pd)
+{
+  if (!pd || pd->GetNumberOfCells() == 0)
+  {
+    return 0;
+  }
+  pd->BuildLinks();
+  vtkNew<vtkIdList> nbrs;
+  vtkIdType nBoundary = 0;
+  const vtkIdType nCells = pd->GetNumberOfCells();
+  for (vtkIdType cid = 0; cid < nCells; ++cid)
+  {
+    vtkIdType npts = 0;
+    const vtkIdType* pts = nullptr;
+    pd->GetCellPoints(cid, npts, pts);
+    if (npts < 2 || !pts)
+    {
+      continue;
+    }
+    for (vtkIdType k = 0; k < npts; ++k)
+    {
+      const vtkIdType a = pts[k];
+      const vtkIdType b = pts[(k + 1) % npts];
+      nbrs->Reset();
+      pd->GetCellEdgeNeighbors(cid, a, b, nbrs);
+      if (nbrs->GetNumberOfIds() == 0)
+      {
+        ++nBoundary;
+      }
+    }
+  }
+  return nBoundary;
+}
+
 } // namespace
 
 vtkSHYXVmtkOpeningCenterlines::vtkSHYXVmtkOpeningCenterlines()
@@ -458,10 +530,92 @@ void vtkSHYXVmtkOpeningCenterlines::PrintSelf(ostream& os, vtkIndent indent)
   this->Superclass::PrintSelf(os, indent);
   os << indent << "Threshold rule: magnitude > 0 (fixed)\n";
   os << indent << "CalculateCenterline: " << this->CalculateCenterline << "\n";
+  os << indent << "CenterlineMethod: " << this->CenterlineMethod << "\n";
   os << indent << "FlipNormals: " << this->FlipNormals << "\n";
   os << indent << "StopFastMarchingOnReachingTarget: " << this->StopFastMarchingOnReachingTarget
      << "\n";
   os << indent << "AppendEndPointsToCenterlines: " << this->AppendEndPointsToCenterlines << "\n";
+  os << indent << "AdvancementRatio: " << this->AdvancementRatio << "\n";
+  os << indent << "ComputeCenterlineAttributes: " << this->ComputeCenterlineAttributes << "\n";
+  os << indent << "ExtractCenterlineBranches: " << this->ExtractCenterlineBranches << "\n";
+  os << indent << "ComputeCenterlineGeometry: " << this->ComputeCenterlineGeometry << "\n";
+}
+
+void vtkSHYXVmtkOpeningCenterlines::ApplyCenterlinePostProcess(vtkPolyData* centerlines)
+{
+  if (!centerlines || centerlines->GetNumberOfCells() == 0)
+  {
+    return;
+  }
+  if (!this->ComputeCenterlineAttributes && !this->ExtractCenterlineBranches &&
+    !this->ComputeCenterlineGeometry)
+  {
+    return;
+  }
+
+  vtkNew<vtkPolyData> current;
+  current->ShallowCopy(centerlines);
+
+  if (this->ComputeCenterlineAttributes)
+  {
+    vtkNew<vtkvmtkCenterlineAttributesFilter> attr;
+    attr->SetInputData(current);
+    attr->SetAbscissasArrayName("Abscissas");
+    attr->SetParallelTransportNormalsArrayName("ParallelTransportNormals");
+    attr->Update();
+    if (!CopyIfNonEmpty(current, attr->GetOutput()))
+    {
+      vtkWarningMacro("Centerline attributes produced empty output; skipped.");
+    }
+  }
+
+  if (this->ExtractCenterlineBranches)
+  {
+    vtkDataArray* radius = current->GetPointData()
+      ? current->GetPointData()->GetArray(kRadiusArrayName)
+      : nullptr;
+    if (!radius || radius->GetNumberOfTuples() != current->GetNumberOfPoints())
+    {
+      vtkWarningMacro("Extract branches needs point array MaximumInscribedSphereRadius; skipped.");
+    }
+    else
+    {
+      vtkNew<vtkvmtkCenterlineBranchExtractor> branches;
+      branches->SetInputData(current);
+      branches->SetRadiusArrayName(kRadiusArrayName);
+      branches->SetGroupIdsArrayName("GroupIds");
+      branches->SetCenterlineIdsArrayName("CenterlineIds");
+      branches->SetTractIdsArrayName("TractIds");
+      branches->SetBlankingArrayName("Blanking");
+      branches->Update();
+      if (!CopyIfNonEmpty(current, branches->GetOutput()))
+      {
+        vtkWarningMacro("Branch extractor produced empty output; skipped.");
+      }
+    }
+  }
+
+  if (this->ComputeCenterlineGeometry)
+  {
+    vtkNew<vtkvmtkCenterlineGeometry> geom;
+    geom->SetInputData(current);
+    geom->SetLengthArrayName("Length");
+    geom->SetCurvatureArrayName("Curvature");
+    geom->SetTorsionArrayName("Torsion");
+    geom->SetTortuosityArrayName("Tortuosity");
+    geom->SetFrenetTangentArrayName("FrenetTangent");
+    geom->SetFrenetNormalArrayName("FrenetNormal");
+    geom->SetFrenetBinormalArrayName("FrenetBinormal");
+    geom->SetLineSmoothing(0);
+    geom->SetOutputSmoothedLines(0);
+    geom->Update();
+    if (!CopyIfNonEmpty(current, geom->GetOutput()))
+    {
+      vtkWarningMacro("Centerline geometry produced empty output; skipped.");
+    }
+  }
+
+  centerlines->ShallowCopy(current);
 }
 
 int vtkSHYXVmtkOpeningCenterlines::FillInputPortInformation(int port, vtkInformation* info)
@@ -569,14 +723,15 @@ int vtkSHYXVmtkOpeningCenterlines::RequestData(vtkInformation* vtkNotUsed(reques
     return 0;
   }
 
-  std::vector<std::string> names;
-  std::vector<vtkIdType> surfacePidPerRegion;
-  std::vector<double> openingScalars;
-  names.reserve(static_cast<size_t>(nReg));
-  surfacePidPerRegion.reserve(static_cast<size_t>(nReg));
-  openingScalars.reserve(static_cast<size_t>(nReg));
+  struct OpeningInfo
+  {
+    vtkIdType sid = -1;
+    double scalar = 0.0;
+    std::string name;
+  };
+  std::vector<OpeningInfo> openings;
+  openings.reserve(static_cast<size_t>(nReg));
 
-  std::unordered_map<std::string, int> duplicateLabelCounter;
   for (int r = 0; r < nReg; ++r)
   {
     const vtkIdType sid =
@@ -587,36 +742,50 @@ int vtkSHYXVmtkOpeningCenterlines::RequestData(vtkInformation* vtkNotUsed(reques
       return 0;
     }
 
-    const double rep = ComputeRegionRepresentativeScalar(regionLabeled, r, rid, thrArr, thrPointMode,
+    OpeningInfo info;
+    info.sid = sid;
+    info.scalar = ComputeRegionRepresentativeScalar(regionLabeled, r, rid, thrArr, thrPointMode,
       origPtOnLabeled, origCellOnLabeled);
-    const std::string label = MakeSeedPointLabel(sid, duplicateLabelCounter);
-    names.emplace_back(label);
-    surfacePidPerRegion.push_back(sid);
-    openingScalars.push_back(rep);
+    openings.push_back(info);
   }
 
-  // Sync vtkDataArraySelection lists (inlet + remove); unchecked by default for both
+  std::stable_sort(openings.begin(), openings.end(),
+    [](const OpeningInfo& a, const OpeningInfo& b) { return a.sid < b.sid; });
+
+  std::unordered_map<std::string, int> duplicateLabelCounter;
+  std::vector<std::string> names;
+  std::vector<vtkIdType> surfacePidPerRegion;
+  std::vector<double> openingScalars;
+  names.reserve(openings.size());
+  surfacePidPerRegion.reserve(openings.size());
+  openingScalars.reserve(openings.size());
+  for (auto& info : openings)
   {
-    std::set<std::string> current;
-    for (const auto& s : names)
-    {
-      current.insert(s);
-    }
+    info.name = MakeSeedPointLabel(info.sid, duplicateLabelCounter);
+    names.push_back(info.name);
+    surfacePidPerRegion.push_back(info.sid);
+    openingScalars.push_back(info.scalar);
+  }
+
+  // Rebuild vtkDataArraySelection in SurfacePointId order; keep prior check state by name.
+  {
     auto syncOne = [&](vtkDataArraySelection* sel) {
-      for (int j = sel->GetNumberOfArrays() - 1; j >= 0; --j)
+      std::unordered_map<std::string, bool> enabled;
+      enabled.reserve(static_cast<size_t>(sel->GetNumberOfArrays()));
+      for (int j = 0; j < sel->GetNumberOfArrays(); ++j)
       {
         const char* existing = sel->GetArrayName(j);
-        if (existing && current.find(existing) == current.end())
+        if (existing)
         {
-          sel->RemoveArrayByName(existing);
+          enabled[existing] = sel->ArrayIsEnabled(existing) != 0;
         }
       }
+      ClearAllArrays(sel);
       for (const auto& nm : names)
       {
-        if (!sel->ArrayExists(nm.c_str()))
-        {
-          sel->AddArray(nm.c_str(), false);
-        }
+        const auto it = enabled.find(nm);
+        const bool wasEnabled = it != enabled.end() && it->second;
+        sel->AddArray(nm.c_str(), wasEnabled);
       }
     };
     syncOne(this->InletSelection);
@@ -700,6 +869,55 @@ int vtkSHYXVmtkOpeningCenterlines::RequestData(vtkInformation* vtkNotUsed(reques
     return 1;
   }
 
+  if (this->CenterlineMethod == 1)
+  {
+    vtkNew<vtkPolyData> punched;
+    if (!PunchCells(input, selectedCells, punched) || punched->GetNumberOfCells() == 0)
+    {
+      vtkErrorMacro("Network centerlines: punching Threshold cells left no wall triangles.");
+      this->Modified();
+      return 0;
+    }
+
+    vtkNew<vtkCleanPolyData> clean;
+    clean->SetInputData(punched);
+    clean->PointMergingOff();
+    clean->ConvertLinesToPointsOff();
+    clean->ConvertPolysToLinesOff();
+    clean->ConvertStripsToPolysOff();
+    clean->Update();
+    vtkPolyData* openSurface = clean->GetOutput();
+    if (!openSurface || openSurface->GetNumberOfCells() == 0)
+    {
+      vtkErrorMacro("Network centerlines: cleaned punched surface is empty.");
+      this->Modified();
+      return 0;
+    }
+
+    const vtkIdType nBoundary = CountBoundaryEdges(openSurface);
+    if (nBoundary == 0)
+    {
+      vtkWarningMacro(
+        << "Network centerlines: after deleting Threshold cells (array magnitude > 0) the "
+           "surface still has no boundary edges. vtkvmtkPolyDataNetworkExtraction needs at least "
+           "one geometric hole. Use a capped mesh with EndpointIndex on the caps, or clip ends "
+           "without filling.");
+      this->Modified();
+      return 1;
+    }
+
+    vtkNew<vtkvmtkPolyDataNetworkExtraction> network;
+    network->SetInputData(openSurface);
+    network->SetAdvancementRatio(this->AdvancementRatio);
+    network->SetRadiusArrayName(kRadiusArrayName);
+    network->SetTopologyArrayName("Topology");
+    network->Update();
+    outCenterlines->ShallowCopy(network->GetOutput());
+    this->ApplyCenterlinePostProcess(outCenterlines);
+    this->Modified();
+    return 1;
+  }
+
   if (activeNames.size() < 2)
   {
     vtkWarningMacro(
@@ -740,7 +958,7 @@ int vtkSHYXVmtkOpeningCenterlines::RequestData(vtkInformation* vtkNotUsed(reques
   centerlines->SetInputData(vmtkSurface);
   centerlines->SetSourceSeedIds(sourceIds);
   centerlines->SetTargetSeedIds(targetIds);
-  centerlines->SetRadiusArrayName("MaximumInscribedSphereRadius");
+  centerlines->SetRadiusArrayName(kRadiusArrayName);
   centerlines->SetFlipNormals(this->FlipNormals);
   centerlines->SetDelaunayTolerance(1e-3);
   centerlines->SetCenterlineResampling(0);
@@ -750,6 +968,7 @@ int vtkSHYXVmtkOpeningCenterlines::RequestData(vtkInformation* vtkNotUsed(reques
   centerlines->SetStopFastMarchingOnReachingTarget(this->StopFastMarchingOnReachingTarget);
   centerlines->Update();
   outCenterlines->ShallowCopy(centerlines->GetOutput());
+  this->ApplyCenterlinePostProcess(outCenterlines);
 
   this->Modified();
   return 1;

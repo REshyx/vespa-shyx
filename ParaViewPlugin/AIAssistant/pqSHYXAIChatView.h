@@ -47,14 +47,19 @@ public:
   void appendAssistant(const QString& text, const QList<QImage>& images = {},
     const QList<Attachment>& attachments = {});
   void beginAssistantStream();
+  void beginAgentRound();
   void appendAssistantDelta(const QString& chunk);
   void appendAssistantThinkingDelta(const QString& chunk);
-  void appendAssistantToolCall(const QString& name, const QString& result);
+  void appendAssistantToolProgress(const QString& name, const QString& title = QString());
+  void appendAssistantToolCall(
+    const QString& name, const QString& result, const QString& title = QString());
+  void setAssistantToolTitle(const QString& name, const QString& title);
   void finishAssistantStream(const QList<QImage>& images = {},
     const QList<Attachment>& attachments = {});
   bool isStreaming() const { return this->Streaming; }
   QString streamingText() const { return this->StreamText; }
   QString streamingThinking() const { return this->StreamThinking; }
+  bool hasVisibleStream() const;
   void clear();
 
 Q_SIGNALS:
@@ -67,8 +72,12 @@ private:
   struct ToolCall
   {
     QString name;
+    QString title;
     QString result;
     int atChar = 0;
+    bool pending = false;
+
+    QString displayTitle() const { return title.isEmpty() ? name : title; }
   };
 
   struct Message
@@ -84,9 +93,12 @@ private:
   void appendMessage(const Message& msg, bool emitChanged);
   void rebuildFromTranscript(const QString& text);
   void addBubbleWidget(const Message& msg);
-  void addToolFold(QWidget* frame, QVBoxLayout* layout, const QString& name, const QString& result,
-    const QString& fg);
+  QLabel* addToolFold(QWidget* frame, QVBoxLayout* layout, const QString& name, const QString& result,
+    const QString& fg, bool pending = false, QToolButton** toggleOut = nullptr);
   void ensureStreamTextLabel();
+  void ensureThinkingStreamLabel();
+  void hidePlaceholderBody();
+  void promoteRoundBodyToThinking();
   void clearBubbles();
   void removeLastMessage();
   void updateEmptyState();
@@ -104,13 +116,21 @@ private:
   QPointer<QLabel> StreamThinkingLabel;
   QPointer<QWidget> StreamThinkingFold;
   QPointer<QToolButton> StreamThinkingToggle;
+  QPointer<QWidget> StreamThinkingBody;
+  QPointer<QVBoxLayout> StreamThinkingLayout;
   QPointer<QWidget> StreamBubbleFrame;
   QPointer<QVBoxLayout> StreamBubbleLayout;
+  QList<QPointer<QLabel>> StreamToolResultLabels;
+  QList<QPointer<QToolButton>> StreamToolToggles;
   QString StreamFg;
+  QString StreamThinkFg;
   QString StreamText;
   QString StreamThinking;
   QList<ToolCall> StreamTools;
   int StreamSegmentStart = 0;
+  int StreamThinkingSegmentStart = 0;
+  int StreamRoundBodyStart = 0;
+  bool StreamRoundHasTools = false;
   bool Streaming = false;
 };
 

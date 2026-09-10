@@ -1,0 +1,93 @@
+<ServerManagerConfiguration>
+  <ProxyGroup name="filters">
+    <SourceProxy name="SHYXResampleLines"
+                 class="vtkSHYXResampleLines"
+                 label="SHYX Resample Lines">
+      <Documentation short_help="SHYX Resample Lines: Resample a polyline network at a fixed spacing; keep junctions and short branches.">
+        Optional Fuse merges points closer than Fuse Tolerance (default 1e-6 of the longest
+        bounding-box side) so nearly coincident endpoints share a vertex. Vertices whose line
+        degree is not 2 are features and are kept. Each branch is resampled at Sample Distance
+        along arc length. If that distance is greater than or equal to the branch length, both
+        endpoints are kept as one segment (short branches are not deleted). Closed loops with
+        no features are resampled around the cycle; a loop shorter than the spacing keeps its
+        original vertices.
+      </Documentation>
+
+      <InputProperty name="Input" command="SetInputConnection">
+        <ProxyGroupDomain name="groups">
+          <Group name="sources"/>
+          <Group name="filters"/>
+        </ProxyGroupDomain>
+        <DataTypeDomain name="input_type">
+          <DataType value="vtkPolyData"/>
+        </DataTypeDomain>
+      </InputProperty>
+
+      <IntVectorProperty name="Fuse"
+                         label="Fuse"
+                         command="SetFuse"
+                         number_of_elements="1"
+                         default_values="1"
+                         animateable="0">
+        <BooleanDomain name="bool"/>
+        <Documentation>
+          Merge points closer than Fuse Tolerance before walking the line graph, so nearby
+          branch ends become one vertex and the network stays connected.
+        </Documentation>
+      </IntVectorProperty>
+
+      <DoubleVectorProperty name="FuseTolerance"
+                            label="Fuse Tolerance"
+                            command="SetFuseTolerance"
+                            number_of_elements="1"
+                            default_values="0"
+                            animateable="0">
+        <BoundsDomain mode="scaled_extent" name="bounds" scale_factor="1e-6">
+          <RequiredProperties>
+            <Property function="Input" name="Input"/>
+          </RequiredProperties>
+        </BoundsDomain>
+        <Documentation>
+          Absolute merge distance. 0 (default) uses 1e-6 times the longest side of the input
+          axis-aligned bounding box (matches BoundsDomain scaled_extent). The panel Scale/Reset
+          controls fill that suggestion. Ignored when Fuse is off.
+        </Documentation>
+        <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="enabled_state"
+                                   property="Fuse"
+                                   value="0"
+                                   inverse="1"/>
+        </Hints>
+      </DoubleVectorProperty>
+
+      <DoubleVectorProperty name="SampleDistance"
+                            label="Sample Distance"
+                            command="SetSampleDistance"
+                            number_of_elements="1"
+                            default_values="0"
+                            animateable="0">
+        <BoundsDomain mode="scaled_extent" name="bounds" scale_factor="0.01">
+          <RequiredProperties>
+            <Property function="Input" name="Input"/>
+          </RequiredProperties>
+        </BoundsDomain>
+        <Documentation>
+          Arc-length spacing on each branch. 0 uses 0.01 times the longest bounding-box side
+          (BoundsDomain scaled_extent). If the spacing is &gt;= branch length, only the two
+          endpoints are kept.
+        </Documentation>
+      </DoubleVectorProperty>
+
+      <PropertyGroup label="Resample">
+        <Property name="Fuse"/>
+        <Property name="FuseTolerance"/>
+        <Property name="SampleDistance"/>
+      </PropertyGroup>
+
+      <Hints>
+        <ShowInMenu category="SHYX" icon=":/VESPA/SHYX_Array_Curve_Mapper.png"/>
+      </Hints>
+    </SourceProxy>
+  </ProxyGroup>
+</ServerManagerConfiguration>

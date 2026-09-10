@@ -1,15 +1,17 @@
 #include "vtkSHYXAutoMeshRepair.h"
 
+#include "vtkCGALAlphaWrapping.h"
 #include "vtkCGALHelper.h"
+#include "vtkSHYXHoleFillFilter.h"
+#include "vtkSHYXMeshChecker.h"
 #include "vtkSHYXSelectionFillAlphaReunionFilter.h"
 
+#include <vtkAlgorithm.h>
 #include <vtkAppendPolyData.h>
+#include <vtkCellArray.h>
 #include <vtkCellData.h>
 #include <vtkDataObject.h>
-#include <vtkDataSet.h>
-#include <vtkExtractCells.h>
 #include <vtkFieldData.h>
-#include <vtkGeometryFilter.h>
 #include <vtkIdList.h>
 #include <vtkIdTypeArray.h>
 #include <vtkInformation.h>
@@ -17,6 +19,7 @@
 #include <vtkIntArray.h>
 #include <vtkNew.h>
 #include <vtkObjectFactory.h>
+#include <vtkPoints.h>
 #include <vtkPolyData.h>
 #include <vtkPolyDataNormals.h>
 #include <vtkSelection.h>
@@ -25,9 +28,6 @@
 #include <vtkTriangleFilter.h>
 
 #include <CGAL/Polygon_mesh_processing/intersection.h>
-#include <CGAL/Polygon_mesh_processing/orient_polygon_soup.h>
-#include <CGAL/Polygon_mesh_processing/polygon_soup_to_polygon_mesh.h>
-#include <CGAL/Polygon_mesh_processing/repair_polygon_soup.h>
 #include <CGAL/boost/graph/helpers.h>
 
 #include <algorithm>
@@ -121,66 +121,6 @@ vtkSmartPointer<vtkSelection> SelectionFromCells(const std::vector<vtkIdType>& c
   vtkNew<vtkSelection> sel;
   sel->AddNode(node);
   return sel;
-}
-
-vtkSmartPointer<vtkPolyData> ExtractCellsAsPolyData(
-  vtkPolyData* mesh, const std::vector<vtkIdType>& cells, int clusterId)
-{
-  if (!mesh || cells.empty())
-  {
-    return nullptr;
-  }
-
-  vtkNew<vtkIdList> ids;
-  ids->SetNumberOfIds(static_cast<vtkIdType>(cells.size()));
-  for (std::size_t i = 0; i < cells.size(); ++i)
-  {
-    ids->SetId(static_cast<vtkIdType>(i), cells[i]);
-  }
-
-  vtkNew<vtkExtractCells> extract;
-  extract->SetInputData(mesh);
-  extract->SetCellList(ids);
-  extract->Update();
-  vtkDataSet* extracted = vtkDataSet::SafeDownCast(extract->GetOutput());
-  if (!extracted || extracted->GetNumberOfCells() == 0)
-  {
-    return nullptr;
-  }
-
-  vtkNew<vtkGeometryFilter> geom;
-  geom->SetInputData(extracted);
-  geom->Update();
-  vtkPolyData* surface = geom->GetOutput();
-  if (!surface || surface->GetNumberOfCells() == 0)
-  {
-    return nullptr;
-  }
-  vtkSmartPointer<vtkPolyData> pd = vtkSmartPointer<vtkPolyData>::New();
-  pd->ShallowCopy(surface);
-
-  vtkNew<vtkIntArray> cluster;
-  cluster->SetName("SHYX_ClusterId");
-  cluster->SetNumberOfComponents(1);
-  cluster->SetNumberOfTuples(pd->GetNumberOfCells());
-  for (vtkIdType i = 0; i < pd->GetNumberOfCells(); ++i)
-  {
-    cluster->SetValue(i, clusterId);
-  }
-  pd->GetCellData()->AddArray(cluster);
-  pd->GetCellData()->SetActiveScalars(cluster->GetName());
-
-  vtkNew<vtkIntArray> reason;
-  reason->SetName("SHYX_CheckReason");
-  reason->SetNumberOfComponents(1);
-  reason->SetNumberOfTuples(pd->GetNumberOfCells());
-  for (vtkIdType i = 0; i < pd->GetNumberOfCells(); ++i)
-  {
-    reason->SetValue(i, 3);
-  }
-  pd->GetCellData()->AddArray(reason);
-
-  return pd;
 }
 
 struct UnionFind
@@ -382,49 +322,233 @@ vtkSmartPointer<vtkPolyData> MakeConsistentSurface(vtkPolyData* input)
   return pd;
 }
 
-vtkSmartPointer<vtkPolyData> SoupRepairToPolyData(vtkPolyData* input, std::string& note)
+vtkSmartPointer<vtkPolyData> ExtractMaskedCells(
+  vtkPolyData* mesh, const std::vector<char>& mask, bool keepMarked)
 {
-  note.clear();
-  vtkCGALHelper::Vespa_soup soup;
-  vtkCGALHelper::toCGAL(input, &soup);
-  try
+  vtkSmartPointer<vtkPolyData> out = vtkSmartPointer<vtkPolyData>::New();
+  if (!mesh)
   {
-    (void)pmp::orient_polygon_soup(soup.points, soup.faces);
-    pmp::repair_polygon_soup(soup.points, soup.faces);
-    if (!pmp::is_polygon_soup_a_polygon_mesh(soup.faces))
-    {
-      note = "soup is not a polygon mesh after repair; continuing with triangulated VTK input.";
-      return nullptr;
-    }
-    vtkCGALHelper::Vespa_surface surf;
-    pmp::polygon_soup_to_polygon_mesh(soup.points, soup.faces, surf.surface);
-    surf.coords = get(CGAL::vertex_point, surf.surface);
-    vtkNew<vtkPolyData> out;
-    if (!vtkCGALHelper::toVTK(&surf, out))
-    {
-      note = "toVTK after soup repair failed; continuing with triangulated VTK input.";
-      return nullptr;
-    }
-    vtkNew<vtkTriangleFilter> triSoup;
-    triSoup->SetInputData(out);
-    triSoup->PassLinesOff();
-    triSoup->PassVertsOff();
-    triSoup->Update();
-    vtkPolyData* triOut = triSoup->GetOutput();
-    if (!triOut || triOut->GetNumberOfCells() == 0)
-    {
-      note = "soup repair produced no triangles; continuing with triangulated VTK input.";
-      return nullptr;
-    }
-    vtkSmartPointer<vtkPolyData> pd = vtkSmartPointer<vtkPolyData>::New();
-    pd->ShallowCopy(triOut);
-    return pd;
+    return out;
   }
-  catch (const std::exception& e)
+
+  const vtkIdType nPts = mesh->GetNumberOfPoints();
+  const vtkIdType nCells = mesh->GetNumberOfCells();
+  std::vector<vtkIdType> old2new(static_cast<size_t>(nPts), -1);
+  vtkNew<vtkPoints> newPts;
+  vtkNew<vtkCellArray> newPolys;
+  vtkNew<vtkIdList> cellPts;
+  vtkNew<vtkIdList> remapped;
+  mesh->BuildCells();
+
+  for (vtkIdType cid = 0; cid < nCells; ++cid)
   {
-    note = std::string("soup orient/repair threw: ") + e.what() + "; continuing with triangulated VTK input.";
+    const bool marked =
+      (cid < static_cast<vtkIdType>(mask.size()) && mask[static_cast<size_t>(cid)] != 0);
+    if (marked != keepMarked)
+    {
+      continue;
+    }
+    mesh->GetCellPoints(cid, cellPts);
+    const vtkIdType npts = cellPts->GetNumberOfIds();
+    remapped->SetNumberOfIds(npts);
+    bool ok = true;
+    for (vtkIdType k = 0; k < npts; ++k)
+    {
+      const vtkIdType pid = cellPts->GetId(k);
+      if (pid < 0 || pid >= nPts)
+      {
+        ok = false;
+        break;
+      }
+      if (old2new[static_cast<size_t>(pid)] < 0)
+      {
+        double x[3];
+        mesh->GetPoint(pid, x);
+        old2new[static_cast<size_t>(pid)] = newPts->InsertNextPoint(x);
+      }
+      remapped->SetId(k, old2new[static_cast<size_t>(pid)]);
+    }
+    if (ok)
+    {
+      newPolys->InsertNextCell(remapped);
+    }
+  }
+
+  out->SetPoints(newPts);
+  out->SetPolys(newPolys);
+  out->Squeeze();
+  return out;
+}
+
+vtkSmartPointer<vtkPolyData> FillThenWrap(vtkPolyData* patch, int fairingContinuity, bool skipWrap,
+  bool absoluteThresholds, double alpha, double offset)
+{
+  if (!patch || patch->GetNumberOfCells() == 0)
+  {
     return nullptr;
   }
+
+  vtkNew<vtkTriangleFilter> tri;
+  tri->SetInputData(patch);
+  tri->PassLinesOff();
+  tri->PassVertsOff();
+  tri->Update();
+  vtkPolyData* triOut = tri->GetOutput();
+  if (!triOut || triOut->GetNumberOfCells() == 0)
+  {
+    return nullptr;
+  }
+
+  vtkNew<vtkSHYXHoleFillFilter> fill;
+  fill->SetFairingContinuity(fairingContinuity);
+  fill->SetInputData(triOut);
+  fill->SetUpdateAttributes(false);
+  fill->Update();
+  vtkPolyData* filled = fill->GetOutput();
+  if (!filled || filled->GetNumberOfCells() == 0)
+  {
+    return nullptr;
+  }
+
+  vtkSmartPointer<vtkPolyData> out = vtkSmartPointer<vtkPolyData>::New();
+  if (skipWrap)
+  {
+    out->ShallowCopy(filled);
+    return out;
+  }
+
+  vtkNew<vtkCGALAlphaWrapping> aw;
+  aw->SetAbsoluteThresholds(absoluteThresholds);
+  aw->SetAlpha(alpha);
+  aw->SetOffset(offset);
+  aw->SetInputData(filled);
+  aw->SetUpdateAttributes(false);
+  aw->Update();
+  vtkPolyData* wrapped = aw->GetOutput();
+  if (!wrapped || wrapped->GetNumberOfCells() == 0)
+  {
+    return nullptr;
+  }
+  out->ShallowCopy(wrapped);
+  return out;
+}
+
+/**
+ * Dilate each seed cluster, then merge clusters whose dilated masks overlap.
+ * Output lists are dilated cell ids, largest first.
+ */
+void MergeDilatedClusters(vtkPolyData* mesh, const std::vector<std::vector<vtkIdType>>& seeds,
+  int layers, std::vector<std::vector<vtkIdType>>& dilated)
+{
+  dilated.clear();
+  if (!mesh || seeds.empty())
+  {
+    return;
+  }
+
+  const vtkIdType nCells = mesh->GetNumberOfCells();
+  const int n = static_cast<int>(seeds.size());
+  UnionFind uf(n);
+  std::vector<std::vector<char>> masks(static_cast<size_t>(n));
+  for (int i = 0; i < n; ++i)
+  {
+    masks[static_cast<size_t>(i)].assign(static_cast<size_t>(nCells), 0);
+    for (vtkIdType cid : seeds[static_cast<size_t>(i)])
+    {
+      if (cid >= 0 && cid < nCells)
+      {
+        masks[static_cast<size_t>(i)][static_cast<size_t>(cid)] = 1;
+      }
+    }
+    DilateCellMask(mesh, masks[static_cast<size_t>(i)], layers);
+  }
+
+  std::vector<int> owner(static_cast<size_t>(nCells), -1);
+  for (int i = 0; i < n; ++i)
+  {
+    for (vtkIdType cid = 0; cid < nCells; ++cid)
+    {
+      if (!masks[static_cast<size_t>(i)][static_cast<size_t>(cid)])
+      {
+        continue;
+      }
+      if (owner[static_cast<size_t>(cid)] >= 0)
+      {
+        uf.Unite(i, owner[static_cast<size_t>(cid)]);
+      }
+      else
+      {
+        owner[static_cast<size_t>(cid)] = i;
+      }
+    }
+  }
+
+  std::unordered_map<vtkIdType, std::vector<char>> rootMask;
+  for (int i = 0; i < n; ++i)
+  {
+    const vtkIdType root = uf.Find(i);
+    auto it = rootMask.find(root);
+    if (it == rootMask.end())
+    {
+      it = rootMask.emplace(root, masks[static_cast<size_t>(i)]).first;
+    }
+    else
+    {
+      for (vtkIdType cid = 0; cid < nCells; ++cid)
+      {
+        if (masks[static_cast<size_t>(i)][static_cast<size_t>(cid)])
+        {
+          it->second[static_cast<size_t>(cid)] = 1;
+        }
+      }
+    }
+  }
+
+  dilated.reserve(rootMask.size());
+  for (auto& kv : rootMask)
+  {
+    std::vector<vtkIdType> cells;
+    for (vtkIdType cid = 0; cid < nCells; ++cid)
+    {
+      if (kv.second[static_cast<size_t>(cid)])
+      {
+        cells.push_back(cid);
+      }
+    }
+    if (!cells.empty())
+    {
+      dilated.push_back(std::move(cells));
+    }
+  }
+
+  std::sort(dilated.begin(), dilated.end(),
+    [](const std::vector<vtkIdType>& a, const std::vector<vtkIdType>& b) {
+      return a.size() > b.size();
+    });
+}
+
+void ConfigureReunion(vtkSHYXSelectionFillAlphaReunionFilter* reunion, vtkSHYXAutoMeshRepair* self)
+{
+  reunion->SetFairingContinuity(self->GetFairingContinuity());
+  reunion->SetAbsoluteThresholds(self->GetAbsoluteThresholds());
+  reunion->SetAlpha(self->GetAlpha());
+  reunion->SetOffset(self->GetOffset());
+  reunion->SetSkipAlphaWrapping(self->GetSkipAlphaWrapping());
+  reunion->SetThrowOnSelfIntersection(self->GetThrowOnSelfIntersection());
+  reunion->SetOrientToBoundVolumeWhenNeeded(self->GetOrientToBoundVolumeWhenNeeded());
+  reunion->SetEnableBridgeCleanup(self->GetEnableBridgeCleanup());
+  reunion->SetEnableBridgeRemesh(self->GetEnableBridgeRemesh());
+  reunion->SetEnableBridgeSmooth(self->GetEnableBridgeSmooth());
+  reunion->SetBridgeDilateLayers(self->GetBridgeDilateLayers());
+  reunion->SetBridgeDilateFromSeam(self->GetBridgeDilateFromSeam());
+  reunion->SetBridgeTargetEdgeLength(self->GetBridgeTargetEdgeLength());
+  reunion->SetBridgeRemeshIterations(self->GetBridgeRemeshIterations());
+  reunion->SetBridgeRemeshRelaxationSteps(self->GetBridgeRemeshRelaxationSteps());
+  reunion->SetBridgeSmoothMethod(self->GetBridgeSmoothMethod());
+  reunion->SetBridgeSmoothIterations(self->GetBridgeSmoothIterations());
+  reunion->SetBridgeSmoothTimeStep(self->GetBridgeSmoothTimeStep());
+  reunion->SetBridgeFairContinuity(self->GetBridgeFairContinuity());
+  reunion->SetUpdateAttributes(false);
 }
 
 } // namespace
@@ -432,13 +556,31 @@ vtkSmartPointer<vtkPolyData> SoupRepairToPolyData(vtkPolyData* input, std::strin
 //------------------------------------------------------------------------------
 vtkSHYXAutoMeshRepair::vtkSHYXAutoMeshRepair()
 {
-  this->SetNumberOfOutputPorts(2);
+  this->SetNumberOfInputPorts(2);
+  this->SetNumberOfOutputPorts(3);
+}
+
+//------------------------------------------------------------------------------
+int vtkSHYXAutoMeshRepair::FillInputPortInformation(int port, vtkInformation* info)
+{
+  if (port == 0)
+  {
+    info->Set(vtkAlgorithm::INPUT_REQUIRED_DATA_TYPE(), "vtkPolyData");
+    return 1;
+  }
+  if (port == 1)
+  {
+    info->Set(vtkAlgorithm::INPUT_REQUIRED_DATA_TYPE(), "vtkPolyData");
+    info->Set(vtkAlgorithm::INPUT_IS_OPTIONAL(), 1);
+    return 1;
+  }
+  return 0;
 }
 
 //------------------------------------------------------------------------------
 int vtkSHYXAutoMeshRepair::FillOutputPortInformation(int port, vtkInformation* info)
 {
-  if (port == 0 || port == 1)
+  if (port == 0 || port == 1 || port == 2)
   {
     info->Set(vtkDataObject::DATA_TYPE_NAME(), "vtkPolyData");
     return 1;
@@ -450,9 +592,15 @@ int vtkSHYXAutoMeshRepair::FillOutputPortInformation(int port, vtkInformation* i
 void vtkSHYXAutoMeshRepair::PrintSelf(ostream& os, vtkIndent indent)
 {
   this->Superclass::PrintSelf(os, indent);
+  os << indent << "CheckSoupEdges: " << (this->CheckSoupEdges ? "on" : "off") << "\n";
+  os << indent << "CheckBoundary: " << (this->CheckBoundary ? "on" : "off") << "\n";
+  os << indent << "CheckSelfIntersection: " << (this->CheckSelfIntersection ? "on" : "off") << "\n";
+  os << indent << "CheckOrient: " << (this->CheckOrient ? "on" : "off") << "\n";
+  os << indent << "AttemptOrientRepair: " << (this->AttemptOrientRepair ? "on" : "off") << "\n";
+  os << indent << "RepairSelfIntersections: " << (this->RepairSelfIntersections ? "on" : "off") << "\n";
+  os << indent << "RepairStage: " << this->RepairStage << "\n";
   os << indent << "DilateLayers: " << this->DilateLayers << "\n";
   os << indent << "MaxPasses: " << this->MaxPasses << "\n";
-  os << indent << "AttemptSoupRepair: " << (this->AttemptSoupRepair ? "on" : "off") << "\n";
   os << indent << "LogSteps: " << (this->LogSteps ? "on" : "off") << "\n";
   os << indent << "FairingContinuity: " << this->FairingContinuity << "\n";
   os << indent << "AbsoluteThresholds: " << (this->AbsoluteThresholds ? "on" : "off") << "\n";
@@ -460,6 +608,8 @@ void vtkSHYXAutoMeshRepair::PrintSelf(ostream& os, vtkIndent indent)
   os << indent << "Offset: " << this->Offset << "\n";
   os << indent << "SkipAlphaWrapping: " << (this->SkipAlphaWrapping ? "on" : "off") << "\n";
   os << indent << "EnableBridgeCleanup: " << (this->EnableBridgeCleanup ? "on" : "off") << "\n";
+  os << indent << "EnableBridgeRemesh: " << (this->EnableBridgeRemesh ? "on" : "off") << "\n";
+  os << indent << "EnableBridgeSmooth: " << (this->EnableBridgeSmooth ? "on" : "off") << "\n";
   os << indent << "BridgeDilateLayers: " << this->BridgeDilateLayers << "\n";
   os << indent << "BridgeSmoothMethod: " << this->BridgeSmoothMethod << "\n";
 }
@@ -469,50 +619,180 @@ int vtkSHYXAutoMeshRepair::RequestData(
   vtkInformation*, vtkInformationVector** inputVector, vtkInformationVector* outputVector)
 {
   vtkPolyData* input = vtkPolyData::GetData(inputVector[0], 0);
+  vtkPolyData* wrappedInput = vtkPolyData::GetData(inputVector[1], 0);
   vtkPolyData* outMesh = vtkPolyData::GetData(outputVector, 0);
   vtkPolyData* outDiag = vtkPolyData::GetData(outputVector, 1);
-  if (!input || !outMesh || !outDiag)
+  vtkPolyData* outWrapped = vtkPolyData::GetData(outputVector, 2);
+  if (!input || !outMesh || !outDiag || !outWrapped)
   {
-    vtkErrorMacro("Missing input or output (expect two vtkPolyData output ports).");
+    vtkErrorMacro("Missing input or output (expect three vtkPolyData output ports).");
     return 0;
   }
 
   outDiag->Initialize();
+  outWrapped->Initialize();
+
+  int clustersRepaired = 0;
+  int firstPassClusters = 0;
+  int remaining = -1;
+
+  auto finish = [&](vtkPolyData* mesh, vtkPolyData* attrSrc) -> int {
+    outMesh->ShallowCopy(mesh);
+    SetFieldInt(outMesh, "SHYXAutoMeshRepairStage", this->RepairStage);
+    SetFieldInt(outMesh, "SHYXAutoMeshRepairFirstPassClusters", firstPassClusters);
+    SetFieldInt(outMesh, "SHYXAutoMeshRepairClustersRepaired", clustersRepaired);
+    SetFieldInt(outMesh, "SHYXAutoMeshRepairRemainingClusters", remaining < 0 ? -1 : remaining);
+    if (this->UpdateAttributes && attrSrc)
+    {
+      this->interpolateAttributes(attrSrc, outMesh);
+    }
+    if (this->LogSteps)
+    {
+      vtkWarningMacro(<< "[SHYXAutoMeshRepair] done; stage=" << this->RepairStage
+                       << " first-pass clusters=" << firstPassClusters
+                       << " repaired=" << clustersRepaired << " remaining=" << remaining
+                       << " out points=" << outMesh->GetNumberOfPoints()
+                       << " cells=" << outMesh->GetNumberOfCells()
+                       << " wrapped cells=" << outWrapped->GetNumberOfCells());
+    }
+    return 1;
+  };
+
+  if (this->RepairSelfIntersections && this->RepairStage == vtkSHYXAutoMeshRepair::UNION)
+  {
+    if (!wrappedInput || wrappedInput->GetNumberOfCells() == 0)
+    {
+      vtkErrorMacro("Union stage needs Wrapped patches (input port 1): connect port 2 of an "
+                    "Extract and Alpha Wrap Auto Mesh Repair.");
+      return 0;
+    }
+
+    const vtkIdType nRem = input->GetNumberOfCells();
+    const vtkIdType nWrap = wrappedInput->GetNumberOfCells();
+    if (nRem == 0)
+    {
+      if (this->LogSteps)
+      {
+        vtkWarningMacro(<< "[SHYXAutoMeshRepair] union: empty remainder; returning wrapped patches.");
+      }
+      remaining = 0;
+      clustersRepaired = 1;
+      return finish(wrappedInput, wrappedInput);
+    }
+
+    vtkNew<vtkAppendPolyData> append;
+    append->AddInputData(input);
+    append->AddInputData(wrappedInput);
+    append->Update();
+    vtkPolyData* appended = append->GetOutput();
+    if (!appended || appended->GetNumberOfCells() == 0)
+    {
+      vtkErrorMacro("Union stage: append of remainder + wrapped patches failed.");
+      return 0;
+    }
+
+    std::vector<vtkIdType> wrapCells(static_cast<size_t>(nWrap));
+    for (vtkIdType i = 0; i < nWrap; ++i)
+    {
+      wrapCells[static_cast<size_t>(i)] = nRem + i;
+    }
+
+    vtkNew<vtkSHYXSelectionFillAlphaReunionFilter> reunion;
+    ConfigureReunion(reunion, this);
+    reunion->SetSkipAlphaWrapping(true);
+    reunion->SetInputData(0, appended);
+    reunion->SetInputData(1, SelectionFromCells(wrapCells));
+    reunion->Update();
+
+    vtkPolyData* united = reunion->GetOutput();
+    if (!united || united->GetNumberOfCells() == 0)
+    {
+      vtkErrorMacro("Union stage: boolean union of remainder + wrapped patches produced an empty mesh.");
+      return 0;
+    }
+
+    vtkSmartPointer<vtkPolyData> result = vtkSmartPointer<vtkPolyData>::New();
+    result->ShallowCopy(united);
+    vtkSmartPointer<vtkPolyData> consistent = MakeConsistentSurface(result);
+    if (consistent && consistent->GetNumberOfCells() > 0)
+    {
+      result = consistent;
+    }
+
+    clustersRepaired = 1;
+    remaining = 0;
+    if (this->CheckSelfIntersection)
+    {
+      vtkNew<vtkSHYXMeshChecker> checker;
+      checker->SetCheckSoupEdges(false);
+      checker->SetCheckBoundary(false);
+      checker->SetCheckSelfIntersection(true);
+      checker->SetCheckOrient(false);
+      checker->SetAttemptOrientRepair(false);
+      checker->SetAttemptRepairSelfIntersections(false);
+      checker->SetLogSteps(false);
+      checker->SetUpdateAttributes(false);
+      checker->SetInputData(result);
+      checker->Update();
+      if (vtkPolyData* diag = checker->GetOutput(1))
+      {
+        outDiag->ShallowCopy(diag);
+      }
+    }
+
+    return finish(result, appended);
+  }
+
+  vtkNew<vtkSHYXMeshChecker> checker;
+  checker->SetCheckSoupEdges(this->CheckSoupEdges);
+  checker->SetCheckBoundary(this->CheckBoundary);
+  checker->SetCheckSelfIntersection(this->CheckSelfIntersection);
+  checker->SetCheckOrient(this->CheckOrient);
+  checker->SetAttemptOrientRepair(this->AttemptOrientRepair);
+  checker->SetAttemptRepairSelfIntersections(false);
+  checker->SetLogSteps(this->LogSteps);
+  checker->SetUpdateAttributes(false);
+  checker->SetInputData(input);
+  checker->Update();
+
+  vtkPolyData* checkedMesh = checker->GetOutput(0);
+  vtkPolyData* checkedDiag = checker->GetOutput(1);
+  if (!checkedMesh || checkedMesh->GetNumberOfCells() == 0)
+  {
+    vtkErrorMacro("Mesh Checker front-end produced an empty mesh.");
+    return 0;
+  }
+  if (checkedDiag)
+  {
+    outDiag->ShallowCopy(checkedDiag);
+  }
+
+  vtkSmartPointer<vtkPolyData> working = vtkSmartPointer<vtkPolyData>::New();
+  working->ShallowCopy(checkedMesh);
+
+  if (!this->RepairSelfIntersections)
+  {
+    if (this->LogSteps)
+    {
+      vtkWarningMacro(<< "[SHYXAutoMeshRepair] RepairSelfIntersections off: Mesh Checker soup "
+                         "repair / diagnostics only.");
+    }
+    remaining = -1;
+    return finish(working, input);
+  }
 
   vtkNew<vtkTriangleFilter> tri;
-  tri->SetInputData(input);
+  tri->SetInputData(working);
   tri->PassLinesOff();
   tri->PassVertsOff();
   tri->Update();
   vtkPolyData* triOut = tri->GetOutput();
   if (!triOut || triOut->GetNumberOfCells() == 0)
   {
-    vtkErrorMacro("Empty mesh after triangulation.");
+    vtkErrorMacro("Empty mesh after triangulation (self-intersection repair).");
     return 0;
   }
-
-  vtkSmartPointer<vtkPolyData> working = vtkSmartPointer<vtkPolyData>::New();
   working->ShallowCopy(triOut);
-
-  if (this->AttemptSoupRepair)
-  {
-    std::string soupNote;
-    vtkSmartPointer<vtkPolyData> repaired = SoupRepairToPolyData(working, soupNote);
-    if (repaired && repaired->GetNumberOfCells() > 0)
-    {
-      working = repaired;
-      if (this->LogSteps)
-      {
-        vtkWarningMacro(<< "[SHYXAutoMeshRepair] soup repair OK; points=" << working->GetNumberOfPoints()
-                         << " cells=" << working->GetNumberOfCells());
-      }
-    }
-    else if (this->LogSteps && !soupNote.empty())
-    {
-      vtkWarningMacro(<< "[SHYXAutoMeshRepair] " << soupNote);
-    }
-  }
-
   {
     vtkSmartPointer<vtkPolyData> consistent = MakeConsistentSurface(working);
     if (consistent && consistent->GetNumberOfCells() > 0)
@@ -521,9 +801,160 @@ int vtkSHYXAutoMeshRepair::RequestData(
     }
   }
 
-  int clustersRepaired = 0;
-  int firstPassClusters = 0;
-  int remaining = -1;
+  if (this->RepairStage != vtkSHYXAutoMeshRepair::EXTRACT_WRAP_AND_UNION)
+  {
+    std::vector<std::vector<vtkIdType>> seeds;
+    std::string detectErr;
+    if (!DetectIntersectionClusters(working, seeds, detectErr))
+    {
+      vtkWarningMacro(<< "[SHYXAutoMeshRepair] extract: detection failed (" << detectErr
+                       << "). Returning Mesh Checker mesh.");
+      remaining = -1;
+      return finish(working, input);
+    }
+    firstPassClusters = static_cast<int>(seeds.size());
+    if (seeds.empty())
+    {
+      remaining = 0;
+      if (this->LogSteps)
+      {
+        vtkWarningMacro(<< "[SHYXAutoMeshRepair] extract: no self-intersections.");
+      }
+      return finish(working, input);
+    }
+
+    std::vector<std::vector<vtkIdType>> dilated;
+    MergeDilatedClusters(working, seeds, this->DilateLayers, dilated);
+    if (this->LogSteps)
+    {
+      vtkWarningMacro(<< "[SHYXAutoMeshRepair] extract: " << seeds.size() << " seed cluster(s) -> "
+                       << dilated.size() << " dilated region(s); wrapping up to " << this->MaxPasses
+                       << ", dilate=" << this->DilateLayers);
+    }
+
+    const vtkIdType nCells = working->GetNumberOfCells();
+    std::vector<char> removed(static_cast<size_t>(nCells), 0);
+    vtkNew<vtkAppendPolyData> wrappedAppend;
+    const int nToWrap = std::min(this->MaxPasses, static_cast<int>(dilated.size()));
+    for (int i = 0; i < nToWrap; ++i)
+    {
+      if (this->CheckAbort())
+      {
+        break;
+      }
+      const auto& cells = dilated[static_cast<size_t>(i)];
+      if (cells.empty())
+      {
+        continue;
+      }
+      std::vector<char> mask(static_cast<size_t>(nCells), 0);
+      for (vtkIdType cid : cells)
+      {
+        if (cid >= 0 && cid < nCells)
+        {
+          mask[static_cast<size_t>(cid)] = 1;
+        }
+      }
+      vtkSmartPointer<vtkPolyData> patch = ExtractMaskedCells(working, mask, true);
+      if (!patch || patch->GetNumberOfCells() == 0)
+      {
+        continue;
+      }
+      if (patch->GetNumberOfCells() >= nCells && this->LogSteps)
+      {
+        vtkWarningMacro(<< "[SHYXAutoMeshRepair] extract: region " << i
+                         << " covers the whole mesh; Alpha Wrap will run on the entire surface.");
+      }
+
+      vtkSmartPointer<vtkPolyData> wrapped = FillThenWrap(patch, this->FairingContinuity,
+        this->SkipAlphaWrapping, this->AbsoluteThresholds, this->Alpha, this->Offset);
+      if (!wrapped || wrapped->GetNumberOfCells() == 0)
+      {
+        if (this->LogSteps)
+        {
+          vtkWarningMacro(<< "[SHYXAutoMeshRepair] extract: region " << i
+                           << " fill/Alpha Wrap failed; leaving it on the remainder.");
+        }
+        continue;
+      }
+
+      vtkNew<vtkIntArray> clusterIds;
+      clusterIds->SetName("SHYXAutoMeshRepairClusterId");
+      clusterIds->SetNumberOfComponents(1);
+      clusterIds->SetNumberOfTuples(wrapped->GetNumberOfCells());
+      for (vtkIdType c = 0; c < wrapped->GetNumberOfCells(); ++c)
+      {
+        clusterIds->SetValue(c, i);
+      }
+      wrapped->GetCellData()->AddArray(clusterIds);
+      wrappedAppend->AddInputData(wrapped);
+      for (vtkIdType cid = 0; cid < nCells; ++cid)
+      {
+        if (mask[static_cast<size_t>(cid)])
+        {
+          removed[static_cast<size_t>(cid)] = 1;
+        }
+      }
+      ++clustersRepaired;
+      this->UpdateProgress(static_cast<double>(i + 1) / static_cast<double>(std::max(1, nToWrap)));
+    }
+
+    remaining = static_cast<int>(dilated.size()) - clustersRepaired;
+    if (remaining < 0)
+    {
+      remaining = 0;
+    }
+
+    if (wrappedAppend->GetNumberOfInputConnections(0) > 0)
+    {
+      wrappedAppend->Update();
+      if (vtkPolyData* wout = wrappedAppend->GetOutput())
+      {
+        outWrapped->ShallowCopy(wout);
+      }
+    }
+
+    std::size_t nRemoved = 0;
+    for (char c : removed)
+    {
+      nRemoved += (c != 0) ? 1u : 0u;
+    }
+    if (nRemoved == 0)
+    {
+      vtkWarningMacro(<< "[SHYXAutoMeshRepair] extract: no cluster was wrapped.");
+      return finish(working, input);
+    }
+    if (nRemoved >= static_cast<std::size_t>(nCells))
+    {
+      if (this->LogSteps)
+      {
+        vtkWarningMacro(<< "[SHYXAutoMeshRepair] extract: remainder is empty (whole mesh wrapped).");
+      }
+      vtkNew<vtkPolyData> emptyRem;
+      remaining = 0;
+      return finish(emptyRem, input);
+    }
+
+    vtkSmartPointer<vtkPolyData> remainder = ExtractMaskedCells(working, removed, false);
+    vtkNew<vtkSHYXHoleFillFilter> fillRem;
+    fillRem->SetFairingContinuity(this->FairingContinuity);
+    fillRem->SetInputData(remainder);
+    fillRem->SetUpdateAttributes(false);
+    fillRem->Update();
+    vtkPolyData* filledRem = fillRem->GetOutput();
+    if (filledRem && filledRem->GetNumberOfCells() > 0)
+    {
+      remainder->ShallowCopy(filledRem);
+    }
+    {
+      vtkSmartPointer<vtkPolyData> consistent = MakeConsistentSurface(remainder);
+      if (consistent && consistent->GetNumberOfCells() > 0)
+      {
+        remainder = consistent;
+      }
+    }
+    return finish(remainder, input);
+  }
 
   for (int pass = 0; pass < this->MaxPasses; ++pass)
   {
@@ -544,27 +975,6 @@ int vtkSHYXAutoMeshRepair::RequestData(
     if (pass == 0)
     {
       firstPassClusters = static_cast<int>(clusters.size());
-      if (!clusters.empty())
-      {
-        vtkNew<vtkAppendPolyData> append;
-        for (std::size_t i = 0; i < clusters.size(); ++i)
-        {
-          vtkSmartPointer<vtkPolyData> part =
-            ExtractCellsAsPolyData(working, clusters[i], static_cast<int>(i + 1));
-          if (part)
-          {
-            append->AddInputData(part);
-          }
-        }
-        if (append->GetNumberOfInputConnections(0) > 0)
-        {
-          append->Update();
-          if (vtkPolyData* diag = append->GetOutput())
-          {
-            outDiag->ShallowCopy(diag);
-          }
-        }
-      }
     }
 
     if (clusters.empty())
@@ -630,24 +1040,7 @@ int vtkSHYXAutoMeshRepair::RequestData(
 
       vtkSmartPointer<vtkSelection> sel = SelectionFromCells(selected);
       vtkNew<vtkSHYXSelectionFillAlphaReunionFilter> reunion;
-      reunion->SetFairingContinuity(this->FairingContinuity);
-      reunion->SetAbsoluteThresholds(this->AbsoluteThresholds);
-      reunion->SetAlpha(this->Alpha);
-      reunion->SetOffset(this->Offset);
-      reunion->SetSkipAlphaWrapping(this->SkipAlphaWrapping);
-      reunion->SetThrowOnSelfIntersection(this->ThrowOnSelfIntersection);
-      reunion->SetOrientToBoundVolumeWhenNeeded(this->OrientToBoundVolumeWhenNeeded);
-      reunion->SetEnableBridgeCleanup(this->EnableBridgeCleanup);
-      reunion->SetBridgeDilateLayers(this->BridgeDilateLayers);
-      reunion->SetBridgeDilateFromSeam(this->BridgeDilateFromSeam);
-      reunion->SetBridgeTargetEdgeLength(this->BridgeTargetEdgeLength);
-      reunion->SetBridgeRemeshIterations(this->BridgeRemeshIterations);
-      reunion->SetBridgeRemeshRelaxationSteps(this->BridgeRemeshRelaxationSteps);
-      reunion->SetBridgeSmoothMethod(this->BridgeSmoothMethod);
-      reunion->SetBridgeSmoothIterations(this->BridgeSmoothIterations);
-      reunion->SetBridgeSmoothTimeStep(this->BridgeSmoothTimeStep);
-      reunion->SetBridgeFairContinuity(this->BridgeFairContinuity);
-      reunion->SetUpdateAttributes(false);
+      ConfigureReunion(reunion, this);
       reunion->SetInputData(0, working);
       reunion->SetInputData(1, sel);
       reunion->Update();
@@ -692,23 +1085,5 @@ int vtkSHYXAutoMeshRepair::RequestData(
     }
   }
 
-  outMesh->ShallowCopy(working);
-  SetFieldInt(outMesh, "SHYXAutoMeshRepairFirstPassClusters", firstPassClusters);
-  SetFieldInt(outMesh, "SHYXAutoMeshRepairClustersRepaired", clustersRepaired);
-  SetFieldInt(outMesh, "SHYXAutoMeshRepairRemainingClusters", remaining < 0 ? -1 : remaining);
-
-  if (this->UpdateAttributes)
-  {
-    this->interpolateAttributes(input, outMesh);
-  }
-
-  if (this->LogSteps)
-  {
-    vtkWarningMacro(<< "[SHYXAutoMeshRepair] done; first-pass clusters=" << firstPassClusters
-                     << " repaired=" << clustersRepaired << " remaining=" << remaining
-                     << " out points=" << outMesh->GetNumberOfPoints()
-                     << " cells=" << outMesh->GetNumberOfCells());
-  }
-
-  return 1;
+  return finish(working, input);
 }

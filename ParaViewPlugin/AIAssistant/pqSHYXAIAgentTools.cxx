@@ -337,9 +337,11 @@ QString pipelineTree()
       continue;
     }
     vtkSMSourceProxy* sp = src->getSourceProxy();
-    out += QStringLiteral("- %1  xml=%2\n")
+    const bool active = (src == pqActiveObjects::instance().activeSource());
+    out += QStringLiteral("- %1  xml=%2%3\n")
              .arg(src->getSMName())
-             .arg(QString::fromUtf8(src->getProxy()->GetXMLName()));
+             .arg(QString::fromUtf8(src->getProxy()->GetXMLName()))
+             .arg(active ? QStringLiteral("  (active)") : QString());
     const QString fn = fileNameOf(src->getProxy());
     if (!fn.isEmpty())
     {
@@ -694,7 +696,7 @@ QString displayInfo()
       out += QStringLiteral("    %1=%2\n").arg(k, vals.isEmpty() ? QStringLiteral("(empty)") : vals);
     }
   }
-  out += QStringLiteral("  (LUT details: call get_color_map; schema: describe_proxy on the display type)\n");
+  out += QStringLiteral("  (LUT / camera / time: inspect_view; schema: describe_proxy on the display type)\n");
   return out;
 }
 
@@ -922,20 +924,123 @@ QString xmlDocSummary(vtkPVXMLElement* def, int maxChars)
   return {};
 }
 
-bool queryHits(const QString& query, const QStringList& fields)
+QString extraNoteForXml(const QString& xml);
+bool isAsciiLetter(QChar c);
+
+QString spacedIdentifier(const QString& ident)
 {
-  if (query.isEmpty())
+  QString out;
+  out.reserve(ident.size() + 8);
+  for (int i = 0; i < ident.size(); ++i)
   {
-    return true;
+    const QChar c = ident[i];
+    if (i > 0)
+    {
+      const QChar prev = ident[i - 1];
+      const bool nextLower = (i + 1 < ident.size() && ident[i + 1].isLower());
+      if ((c.isUpper() && prev.isLower()) || (c.isUpper() && prev.isUpper() && nextLower))
+      {
+        out += QLatin1Char(' ');
+      }
+    }
+    out += c;
   }
-  for (const QString& f : fields)
+  return out;
+}
+
+bool isQueryStopword(const QString& token)
+{
+  static const char* kStop[] = { "a", "an", "the", "to", "of", "for", "in", "on", "at", "and", "or",
+    "is", "are", "do", "how", "what", "which", "with", "from", "this", "that", "please", "find",
+    "search", "list", "show", "filter", "filters", "all", "me", "i",
+    "\xE7\x9A\x84", "\xE4\xBA\x86", "\xE5\x90\x97", "\xE5\x91\xA2", "\xE5\x92\x8C", "\xE4\xB8\x8E",
+    "\xE6\x89\xBE", "\xE6\x90\x9C", "\xE5\x88\x97\xE5\x87\xBA" };
+  for (const char* w : kStop)
   {
-    if (f.contains(query, Qt::CaseInsensitive))
+    if (token.compare(QString::fromUtf8(w), Qt::CaseInsensitive) == 0)
     {
       return true;
     }
   }
   return false;
+}
+
+QStringList tokenizeQuery(const QString& query)
+{
+  QString buf;
+  QStringList raw;
+  auto flush = [&]() {
+    if (!buf.isEmpty())
+    {
+      raw << buf;
+      buf.clear();
+    }
+  };
+  for (const QChar c : query.trimmed())
+  {
+    const char16_t u = c.unicode();
+    const bool sep = c.isSpace() || c == QLatin1Char(',') || c == QLatin1Char(';') ||
+      c == QLatin1Char('/') || c == QLatin1Char('|') || c == QLatin1Char('+') || u == 0x3001 ||
+      u == 0xff0c || u == 0xff1b || u == 0x3002;
+    if (sep)
+    {
+      flush();
+    }
+    else
+    {
+      buf += c;
+    }
+  }
+  flush();
+  QStringList out;
+  for (const QString& t : raw)
+  {
+    if (isQueryStopword(t))
+    {
+      continue;
+    }
+    if (t.size() == 1 && isAsciiLetter(t[0]))
+    {
+      continue;
+    }
+    out << t;
+  }
+  if (out.isEmpty() && !query.trimmed().isEmpty())
+  {
+    out << query.trimmed();
+  }
+  return out;
+}
+
+bool fieldHasToken(const QString& field, const QString& token)
+{
+  return !field.isEmpty() && field.contains(token, Qt::CaseInsensitive);
+}
+
+bool queryHits(const QString& query, const QStringList& fields)
+{
+  const QStringList tokens = tokenizeQuery(query);
+  if (tokens.isEmpty())
+  {
+    return true;
+  }
+  for (const QString& tok : tokens)
+  {
+    bool hit = false;
+    for (const QString& f : fields)
+    {
+      if (fieldHasToken(f, tok))
+      {
+        hit = true;
+        break;
+      }
+    }
+    if (!hit)
+    {
+      return false;
+    }
+  }
+  return true;
 }
 
 bool isAsciiLetter(QChar c)
@@ -1136,9 +1241,30 @@ bool isShyxishProxy(const QString& xml, const QString& label)
   return isShyxDisplayRepresentation(xml);
 }
 
-int hitScore(const QString& query, const QString& xml, const QString& label)
+int tokenTextScore(const QString& token, const QString& text, int exact, int prefix, int contains)
 {
-  const QString display = representationDisplayName(xml);
+  if (text.isEmpty() || token.isEmpty())
+  {
+    return 0;
+  }
+  if (text.compare(token, Qt::CaseInsensitive) == 0)
+  {
+    return exact;
+  }
+  if (text.startsWith(token, Qt::CaseInsensitive))
+  {
+    return prefix;
+  }
+  if (text.contains(token, Qt::CaseInsensitive))
+  {
+    return contains;
+  }
+  return 0;
+}
+
+int hitScore(const QString& query, const QString& xml, const QString& label, const QString& display,
+  const QString& doc, const QString& menu, const QString& extra)
+{
   if (query.isEmpty())
   {
     int s = xml.startsWith(QLatin1String("SHYX")) ? 20 : 5;
@@ -1148,38 +1274,30 @@ int hitScore(const QString& query, const QString& xml, const QString& label)
     }
     return s;
   }
+  const QString spacedXml = spacedIdentifier(xml);
+  const QString spacedLabel = spacedIdentifier(label);
   int s = 0;
-  if (xml.compare(query, Qt::CaseInsensitive) == 0)
+  int matched = 0;
+  for (const QString& tok : tokenizeQuery(query))
   {
-    s += 100;
-  }
-  else if (xml.startsWith(query, Qt::CaseInsensitive))
-  {
-    s += 60;
-  }
-  else if (xml.contains(query, Qt::CaseInsensitive))
-  {
-    s += 30;
-  }
-  if (label.compare(query, Qt::CaseInsensitive) == 0)
-  {
-    s += 80;
-  }
-  else if (label.contains(query, Qt::CaseInsensitive))
-  {
-    s += 25;
-  }
-  if (!display.isEmpty())
-  {
-    if (display.compare(query, Qt::CaseInsensitive) == 0)
+    int nameScore = tokenTextScore(tok, xml, 100, 60, 30);
+    nameScore = std::max(nameScore, tokenTextScore(tok, spacedXml, 50, 40, 28));
+    nameScore = std::max(nameScore, tokenTextScore(tok, label, 80, 40, 25));
+    nameScore = std::max(nameScore, tokenTextScore(tok, spacedLabel, 50, 35, 22));
+    nameScore = std::max(nameScore, tokenTextScore(tok, display, 80, 50, 70));
+    int noteScore = tokenTextScore(tok, doc, 0, 0, 12);
+    noteScore = std::max(noteScore, tokenTextScore(tok, menu, 0, 0, 8));
+    noteScore = std::max(noteScore, tokenTextScore(tok, extra, 0, 0, 18));
+    const int piece = std::max(nameScore, noteScore);
+    if (piece > 0)
     {
-      s += 80;
+      ++matched;
     }
-    else if (display.contains(query, Qt::CaseInsensitive) ||
-      query.contains(display, Qt::CaseInsensitive))
-    {
-      s += 70;
-    }
+    s += piece;
+  }
+  if (matched > 1)
+  {
+    s += 15 * matched;
   }
   if (xml.startsWith(QLatin1String("SHYX")) || isShyxDisplayRepresentation(xml))
   {
@@ -1230,7 +1348,9 @@ QString listFilters(const QString& queryRaw)
     const QString label = labelc ? QString::fromUtf8(labelc) : (display.isEmpty() ? xml : display);
     const QString menu = menuFromHints(it->GetProxyHints() ? it->GetProxyHints()
                                                            : (def ? def->FindNestedElementByName("Hints") : nullptr));
-    const QString doc = xmlDocSummary(def, 90);
+    const QString docFull = xmlDocSummary(def, 400);
+    const QString doc = collapseWs(docFull, 90);
+    const QString extra = extraNoteForXml(xml);
     const bool shyxish = isShyxishProxy(xml, label);
     if (groupStr == QLatin1String("representations") && !shyxish)
     {
@@ -1240,11 +1360,12 @@ QString listFilters(const QString& queryRaw)
     {
       continue;
     }
-    if (!queryHits(query, { xml, label, menu, doc, groupStr, display }))
+    if (!queryHits(query, { xml, label, menu, docFull, display, spacedIdentifier(xml),
+          spacedIdentifier(label), extra }))
     {
       continue;
     }
-    const int score = hitScore(query, xml, label);
+    const int score = hitScore(query, xml, label, display, docFull, menu, extra);
     if (score <= 0 && !query.isEmpty())
     {
       continue;
@@ -1298,11 +1419,13 @@ QString listFilters(const QString& queryRaw)
   {
     out += QStringLiteral(
       "SHYX/VESPA catalog: filters/sources plus Display representations. "
-      "Pass a query to search all ParaView filters/sources (SHYX representations always).\n");
+      "Pass keywords (spaces/commas, AND) to search all ParaView filters/sources "
+      "(SHYX representations always).\n");
   }
   else
   {
-    out += QStringLiteral("Filters/sources/representations matching %1:\n").arg(query);
+    const QString tokens = tokenizeQuery(query).join(QStringLiteral(" + "));
+    out += QStringLiteral("Filters/sources/representations matching tokens (AND): %1\n").arg(tokens);
   }
   if (!reprHits.isEmpty())
   {
@@ -1346,11 +1469,11 @@ QString listFilters(const QString& queryRaw)
       "RenderView title-bar tools are not proxies: Sphere cell selection; "
       "Grow selection with similar normals; Proximity gap selection. "
       "Block context menu: Select Block. "
-      "Selection context menu: Select All (connected region); "
+      "Selection context menu: Select Connected (connected points/lines/faces/volumes); "
       "Invert Selection; "
       "Select Similar → By Normal (grow to completion); "
       "Fill Interior (enclosed unselected faces). "
-      "See lookup_shyx_docs. After the user uses them, call get_selection_ids.\n");
+      "See lookup_shyx_docs. After the user uses them, call inspect_selection.\n");
   }
   return out;
 }
@@ -1408,7 +1531,10 @@ vtkSMProxy* findPrototype(const QString& query, QString& groupOut, QString& xmlO
     {
       continue;
     }
-    const int score = hitScore(q, xml, label);
+    const QString menu = menuFromHints(it->GetProxyHints() ? it->GetProxyHints()
+                                                           : (def ? def->FindNestedElementByName("Hints") : nullptr));
+    const QString doc = xmlDocSummary(def, 400);
+    const int score = hitScore(q, xml, label, display, doc, menu, extraNoteForXml(xml));
     if (score > best)
     {
       best = score;
@@ -1566,10 +1692,12 @@ QString describeClientTool(const QString& query)
     ql.contains(QLatin1String("fillinterior")) ||
     ql.contains(QLatin1String("shyxfillinterior")) ||
     ql.contains(QLatin1String("select interior"));
-  const bool selectAll = ql.contains(QLatin1String("select all")) ||
+  const bool selectConnected = ql.contains(QLatin1String("select connected")) ||
+    ql.contains(QLatin1String("selectconnected")) ||
+    ql.contains(QLatin1String("shyxselectconnected")) ||
+    ql.contains(QLatin1String("select all")) ||
     ql.contains(QLatin1String("selectall")) ||
     ql.contains(QLatin1String("shyxselectall")) ||
-    ql.contains(QLatin1String("select connected")) ||
     ql.contains(QLatin1String("connected region"));
   const bool invertSel = ql.contains(QLatin1String("invert")) ||
     ql.contains(QLatin1String("shyxinvert"));
@@ -1582,7 +1710,7 @@ QString describeClientTool(const QString& query)
                                       : QStringLiteral("auto (closest pair x 1.05 if single/opposite, else 2 x mean edge)");
     return QStringLiteral(
       "SHYX Proximity gap selection (RenderView title-bar; not a Server Manager proxy)\n"
-      "No Python constructor and no SM properties. After the user uses it, call get_selection_ids.\n"
+      "No Python constructor and no SM properties. After the user uses it, call inspect_selection.\n"
       "Selects cells at near-disconnected contacts for later local Alpha Wrap.\n"
       "Parameters:\n"
       "  Epsilon  type=double  current=%1  units=world  default=0 (auto)\n"
@@ -1608,7 +1736,7 @@ QString describeClientTool(const QString& query)
   {
     return QStringLiteral(
       "SHYX Sphere cell selection (RenderView title-bar; not a Server Manager proxy)\n"
-      "No Python constructor and no SM properties. After the user uses it, call get_selection_ids.\n"
+      "No Python constructor and no SM properties. After the user uses it, call inspect_selection.\n"
       "Interaction:\n"
       "  Toggle: title-bar sphere button\n"
       "  On enable: snap center to nearest vertex at the view center\n"
@@ -1626,7 +1754,7 @@ QString describeClientTool(const QString& query)
     const double deg = pqSHYXGrowSelectionWithSimilarController::DihedralThresholdDegrees();
     return QStringLiteral(
       "SHYX Grow / Select Similar by normal (client Qt; not a Server Manager proxy)\n"
-      "No Python constructor. After the user uses it, call get_selection_ids.\n"
+      "No Python constructor. After the user uses it, call inspect_selection.\n"
       "Parameters:\n"
       "  DihedralThresholdDegrees  type=double  current=%1  range=[0, 180]  default=15\n"
       "    Angle between face normals. Shared by the title-bar button and the context menu.\n"
@@ -1640,11 +1768,11 @@ QString describeClientTool(const QString& query)
       "  Select Similar → By Normal: grow ALL similar rings in one action (not one click per ring)\n")
       .arg(deg, 0, 'g', 4);
   }
-  if (fillInterior && !sphere && !grow && !selectBlock && !selectAll && !invertSel)
+  if (fillInterior && !sphere && !grow && !selectBlock && !selectConnected && !invertSel)
   {
     return QStringLiteral(
       "SHYX Fill Interior (RenderView selection context menu; not a Server Manager proxy)\n"
-      "No Python constructor and no SM properties. After the user uses it, call get_selection_ids.\n"
+      "No Python constructor and no SM properties. After the user uses it, call inspect_selection.\n"
       "Interaction:\n"
       "  Right-click in the 3D view when a cell selection is active → Fill Interior\n"
       "  Adds unselected faces that form holes completely enclosed by the current selection\n"
@@ -1653,23 +1781,29 @@ QString describeClientTool(const QString& query)
       "  On a closed surface, the largest enclosed complement is treated as the exterior "
       "unless it is no larger than the current selection\n");
   }
-  if (selectAll && !sphere && !grow && !selectBlock && !invertSel)
+  if (selectConnected && !sphere && !grow && !selectBlock && !invertSel)
   {
     return QStringLiteral(
-      "SHYX Select All (RenderView selection context menu; not a Server Manager proxy)\n"
-      "No Python constructor and no SM properties. After the user uses it, call get_selection_ids.\n"
+      "SHYX Select Connected (RenderView selection context menu; not a Server Manager proxy)\n"
+      "No Python constructor and no SM properties. After the user uses it, call inspect_selection.\n"
       "Interaction:\n"
-      "  Right-click in the 3D view when a cell selection is active → Select All\n"
-      "  Selects every face in the edge-connected region(s) that contain the current selection\n"
-      "  Requires vtkPolyData. No dihedral threshold (unlike Select Similar / By Normal)\n"
-      "  Disconnected shells that do not touch the selection are left unselected\n"
-      "  If the mesh is a single connected component, this selects the whole surface\n");
+      "  Right-click in the 3D view when a point or cell selection is active → Select Connected\n"
+      "  Selects every topologically connected element in the region(s) that contain the selection:\n"
+      "    points: through cells that share those points (mesh connectivity)\n"
+      "    lines: other 1-D cells that share a vertex\n"
+      "    faces: other 2-D cells that share an edge\n"
+      "    volumes: other 3-D cells that share a face\n"
+      "  Works on vtkPolyData and vtkUnstructuredGrid (not only surfaces)\n"
+      "  No dihedral threshold (unlike Select Similar / By Normal)\n"
+      "  Disconnected components that do not touch the selection are left unselected\n"
+      "  If the mesh is a single connected component of that entity type, this selects all of them\n"
+      "  Menu name is Select Connected, not Select All: it does not select the whole mesh\n");
   }
   if (invertSel && !sphere && !grow && !selectBlock)
   {
     return QStringLiteral(
       "SHYX Invert Selection (RenderView selection context menu; not a Server Manager proxy)\n"
-      "No Python constructor and no SM properties. After the user uses it, call get_selection_ids.\n"
+      "No Python constructor and no SM properties. After the user uses it, call inspect_selection.\n"
       "Interaction:\n"
       "  Right-click in the 3D view when a cell selection is active → Invert Selection\n"
       "  Selects currently unselected cells and deselects the current selection\n"
@@ -1680,7 +1814,7 @@ QString describeClientTool(const QString& query)
   {
     return QStringLiteral(
       "SHYX Select Block (RenderView block context menu; not a Server Manager proxy)\n"
-      "No Python constructor and no SM properties. After the user uses it, call get_selection_ids.\n"
+      "No Python constructor and no SM properties. After the user uses it, call inspect_selection.\n"
       "Interaction:\n"
       "  Right-click a composite block in the 3D view (menu titled Block 'Part_1')\n"
       "  Choose Select Block to clear the current selection and select every cell "
@@ -1951,11 +2085,14 @@ const ShyxExtra kShyxExtra[] = {
     "(soup edges / boundary rings / self-intersections). Typical follow-up for self-intersections: "
     "SHYXAutoMeshRepair." },
   { "SHYXAutoMeshRepair",
-    "Further step after SHYXMeshChecker for self-intersecting faces (CGAL>=5.5). Clusters each "
-    "intersection location, dilates DilateLayers, then local hole-fill + alpha wrap + union + "
-    "bridge remesh/smooth (same pipeline as SHYXSelectionFillAlphaReunionFilter). One cluster per "
-    "pass, then re-detect, up to MaxPasses. Port0 repaired mesh (field data SHYXAutoMeshRepair*). "
-    "Port1 first-pass intersecting triangles with SHYX_ClusterId." },
+    "Mesh Checker front-end (soup/boundary/self-intersection diagnostics + soup repair). "
+    "RepairSelfIntersections is OFF by default. When on (CGAL>=5.5), RepairStage defaults to 0 "
+    "Extract and Alpha Wrap: cluster intersections, dilate DilateLayers, hole-fill + alpha wrap each "
+    "patch (no boolean union). Port0 remainder, port2 wrapped patches (cell SHYXAutoMeshRepairClusterId). "
+    "Stage 1 Union: Input=remainder, WrappedPatches=port2 of the extract filter; CGAL union + optional "
+    "bridge remesh/smooth (same as SHYXSelectionFillAlphaReunionFilter). Stage 2 is legacy one-shot "
+    "(one cluster per pass then re-detect, up to MaxPasses) and can hang on corefinement. "
+    "Port1 Mesh Checker illegal primitives (SHYX_CheckReason 1/2/3)." },
   { "SHYXBooleanOperationFilter", "Relaxed boolean; open meshes OK. Strict watertight meshes can use VESPA Boolean." },
   { "SHYXHoleFillFilter", "SHYX hole fill; new pipelines prefer this over VESPA Hole Filling." },
   { "SHYXShapeSmoothing", "Three algorithms (MCF / Angle&Area / Fair). VESPA Shape Smoothing is MCF only." },
@@ -1965,21 +2102,44 @@ const ShyxExtra kShyxExtra[] = {
   { "SHYXRemeshWithEndpoint",
     "Vascular step 5: optional endpoint cull then ICC remesh / cap. Filled caps are retagged on "
     "cell EndpointIndex (wall -1, patches 1..n by area)." },
-  { "SHYXSkeletonExtraction", "Vascular step 1. Input must be watertight triangle mesh." },
+  { "SHYXSkeletonExtraction",
+    "Vascular step 1. Input must be watertight triangle mesh. Optional AppendCapEndpoints: "
+    "cell EndpointIndex > 0 connected patches, area-weighted centroids joined to nearest "
+    "skeleton point (split edge if interior hit). Attach degree > 1 = new branch: "
+    "cell NewCapBranch=1 and warning; leaf (degree 1) extension stays 0. "
+    "For already-capped meshes. First Apply keeps the parent mesh visible at Opacity 0.5 "
+    "instead of hiding it." },
   { "SHYXVesselEndClipper", "Vascular step 2. Port0 clipped mesh, port1 clip planes (Point Label)." },
+  { "SHYXVmtkOpeningCenterlines",
+    "Threshold cell array (default EndpointIndex > 0) -> openings, port1 seeds (Point Label). "
+    "CalculateCenterline + CenterlineMethod: 0 Voronoi vtkvmtkPolyDataCenterlines on the closed "
+    "surface (checked inlets / unchecked outlets; loops keep only the cheaper arm). "
+    "1 Network: delete those threshold cells so each cap becomes a boundary ring, then "
+    "vtkvmtkPolyDataNetworkExtraction (keeps loops; inlet checks unused). AdvancementRatio "
+    "is Network-only. Optional post-process (CalculateCenterline on): "
+    "ComputeCenterlineAttributes (Abscissas, ParallelTransportNormals), "
+    "ExtractCenterlineBranches (CenterlineIds, TractIds, GroupIds, Blanking; Voronoi intended), "
+    "ComputeCenterlineGeometry (Length/Curvature/Torsion/Tortuosity, Frenet frames). "
+    "Order is attributes then branches then geometry." },
   { "SHYXSkeletonEndClipper",
     "Vascular step 3 (one-node combo of steps 1-2; standalone filters unchanged). "
     "Single watertight surface input. Port0 clipped mesh, port1 skeleton lines plus "
     "clip-plane labels and short direction lines (Point Label, VertexOnly on clip origins). "
     "Same skeleton and clip parameters, including Endpoints to Clip and interactive planes." },
   { "SHYXSelectionPlaneClipper", "Vascular step 4. Uses current selection / interactive plane." },
-  { "SHYXTetGen", "Vascular step 6. Closed triangle surface -> tetrahedra." },
+  { "SHYXTetGen",
+    "Vascular step 6. Closed triangle surface -> tetrahedra. InteriorPointMode: "
+    "0 Quality (Steiner, default), 1 Prescribed pipeline points (surface vertices plus "
+    "optional InteriorPoints dropdown; -YS0O0, no Steiner). InteriorPoints is a pipeline "
+    "node picker (same input_selector as Snappy Feature edges), not computed inside TetGen; "
+    "leave (none) for surface-only. Typical pick: SHYXSkeletonExtraction. Mode 1 options: "
+    "ConstrainInteriorEdges, InteriorSurfaceClearance." },
   { "SHYXDataSetToPartitionedCollection",
     "Vascular step 7. Convert dataset to PDC; then Boundary Assignment. Partitioned block names "
     "table has a leading eye per row that toggles that block in the active view (same "
     "BlockSelectors / BlockVisibilities as Hide Block). Side and node rows stay linked." },
   { "SHYXPartitionedCollectionBoundaryAssignment",
-    "Vascular step 8. Call get_blocks on the PDC first. After area sort, side/node ENTITY_IDs are "
+    "Vascular step 8. Call inspect_pipeline with the PDC name first. After area sort, side/node ENTITY_IDs are "
     "rewritten so rank follows numbering (largest -> smallest existing IDs). Port0 collection, "
     "port1 assignment debug. Export writes Exodus + options + Nodeset + current .pvsm beside the "
     "chosen .exo." },
@@ -2037,8 +2197,16 @@ const ShyxExtra kShyxExtra[] = {
     "(Copy Input Selections). Then fill / alpha wrap / union (CGAL>=5.5). "
     "SelectionCellArrayName is a fallback mask on the merged mesh. "
     "SHYXBridgeCleanupMask (cell array, 1 = cleanup patch) is always written when a bridge "
-    "cleanup mask exists; there is no ExportBridgeMask toggle." },
+    "cleanup mask exists; there is no ExportBridgeMask toggle. EnableBridgeRemesh and "
+    "EnableBridgeSmooth are independent checkboxes (default both on); uncheck smooth to remesh only." },
   { "SHYXPointCloudSurfaceSDF", "Point cloud to surface SDF (VTK). Not CGAL vtkCGALSignedDistanceFunction." },
+  { "SHYXResampleLines",
+    "Resample VTK_LINE / VTK_POLY_LINE networks. Fuse (default on) merges points within "
+    "FuseTolerance (0 = 1e-6 * AABB longest side) so nearby ends share a vertex. "
+    "Vertices with line degree != 2 are features and are kept. Each branch is sampled at "
+    "SampleDistance (0 = 0.01 * AABB longest side). If spacing >= branch length, both "
+    "endpoints stay as one segment; short branches are not deleted. Closed all-degree-2 "
+    "loops are resampled around the cycle." },
   { "SHYXSurfaceToVolumeMesh", "CGAL Mesh_3 tets from closed surface (alternative to TetGen)." },
   { "SHYXSnappyHexMesh",
     "Hex-dominant volume mesh. Input is vtkPartitionedDataSetCollection (each partition = one STL "
@@ -2094,42 +2262,56 @@ const ShyxExtra kShyxExtra[] = {
     "Not a filter and not a proxy. RenderView title-bar sphere button. "
     "Selects every visible pipeline node in the view; on a composite parent, every intersecting "
     "block. Call describe_proxy('sphere') for interaction parameters. After the user uses it, "
-    "call get_selection_ids." },
+    "call inspect_selection." },
   { "SHYXGrowSelectionWithSimilar",
     "Not a filter and not a proxy. RenderView title-bar button: one ring per click, hold to keep growing. "
-    "Call describe_proxy('grow') for DihedralThresholdDegrees (default 15). After use, call get_selection_ids." },
+    "Call describe_proxy('grow') for DihedralThresholdDegrees (default 15). After use, call inspect_selection." },
   { "SHYXProximityGapSelection",
     "Not a filter and not a proxy. RenderView title-bar button: select cells at near-disconnected "
     "contacts. Optional TowardOppositeCenter: A/B are ε-balls around each other's centroids "
     "(iterated from the closest pair), which limits parallel-surface flood. "
     "Call describe_proxy('proximity gap') for Epsilon, SingleNearestRegion, TowardOppositeCenter. "
     "Toggle the title-bar button on to compute; while on, wheel scales ε. Wheel while off does nothing. "
-    "Right-click sets ε / toggles. After use, call get_selection_ids. "
+    "Right-click sets ε / toggles. After use, call inspect_selection. "
     "Typical follow-up: SHYXSelectionFillAlphaReunionFilter." },
   { "SHYXSelectSimilar",
     "Not a filter and not a proxy. RenderView right-click when a cell selection is active: "
     "Select Similar → By Normal grows all similar-normal rings in one shot (same dihedral threshold as Grow). "
-    "Call describe_proxy('select similar'). After use, call get_selection_ids." },
+    "Call describe_proxy('select similar'). After use, call inspect_selection." },
   { "SHYXFillInterior",
     "Not a filter and not a proxy. RenderView right-click when a cell selection is active: "
     "Fill Interior adds unselected faces enclosed by the current selection (holes inside a closed loop). "
-    "Call describe_proxy('fill interior'). After use, call get_selection_ids." },
-  { "SHYXSelectAll",
-    "Not a filter and not a proxy. RenderView right-click when a cell selection is active: "
-    "Select All selects every face in the connected region(s) that contain the current selection. "
-    "Call describe_proxy('select all'). After use, call get_selection_ids." },
+    "Call describe_proxy('fill interior'). After use, call inspect_selection." },
+  { "SHYXSelectConnected",
+    "Not a filter and not a proxy. RenderView right-click when a point or cell selection is active: "
+    "Select Connected selects every connected point, line, face, or volume in the region(s) that contain the current selection "
+    "(points via mesh connectivity, lines sharing a vertex, faces sharing an edge, volumes sharing a face). "
+    "Does not select disconnected components. "
+    "Call describe_proxy('select connected') (select all still matches). After use, call inspect_selection." },
   { "SHYXInvertSelection",
     "Not a filter and not a proxy. RenderView right-click when a cell selection is active: "
     "Invert Selection selects currently unselected cells and deselects the current selection. "
-    "Call describe_proxy('invert'). After use, call get_selection_ids." },
+    "Call describe_proxy('invert'). After use, call inspect_selection." },
   { "SHYXSelectBlock",
     "Not a filter and not a proxy. RenderView right-click on a composite block (Block 'Part_1' menu). "
     "Select Block clears the current selection then selects all cells in that block (BLOCK_SELECTORS). "
     "Call describe_proxy('select block'). "
-    "After use, call get_selection_ids." },
+    "After use, call inspect_selection." },
   { "SHYXAIAssistant",
     "Deprecated. The assistant is View → SHYX AI Assistant, not a pipeline filter. Do not create this node." },
 };
+
+QString extraNoteForXml(const QString& xml)
+{
+  for (const ShyxExtra& e : kShyxExtra)
+  {
+    if (xml == QLatin1String(e.xml))
+    {
+      return QString::fromUtf8(e.note);
+    }
+  }
+  return {};
+}
 
 QString lookupShyxDocs(const QString& queryRaw)
 {
@@ -2155,11 +2337,12 @@ QString lookupShyxDocs(const QString& queryRaw)
       "Python: GetDisplayProperties().Representation = 'Pulse Glyphs'.\n"
       "3) RenderView title-bar selection tools (client Qt; no SM proxy / no Python constructor):\n"
       "   Sphere cell selection; Grow selection with similar normals; Proximity gap selection. "
-      "After the user uses them, call get_selection_ids.\n"
+      "After the user uses them, call inspect_selection.\n"
       "   Also: right-click a composite block → Select Block "
       "(clear current selection, then select all cells in that part).\n"
-      "   Also: right-click an active cell selection → Select All "
-      "(whole connected region); Invert Selection; Select Similar → By Normal "
+      "   Also: right-click an active point or cell selection → Select Connected "
+      "(connected region of that entity: points/lines/faces/volumes; not the whole mesh); "
+      "with a cell selection also Invert Selection; Select Similar → By Normal "
       "(grow all similar-normal rings in one shot); Fill Interior "
       "(add unselected faces enclosed by the current selection).\n"
       "4) Widget representations (stent placement 3D widgets, not Display dropdown): "
@@ -2169,7 +2352,7 @@ QString lookupShyxDocs(const QString& queryRaw)
       "For parameter names/defaults: describe_proxy('Pulse Glyphs'), describe_proxy('Animated Streamline'), "
       "describe_proxy('Point Label'), describe_proxy('sphere'), describe_proxy('grow'), "
       "describe_proxy('proximity gap'), describe_proxy('select block'), describe_proxy('select similar'), "
-      "describe_proxy('fill interior'), describe_proxy('select all'), "
+      "describe_proxy('fill interior'), describe_proxy('select connected'), "
       "describe_proxy('invert').\n");
   }
 
@@ -2177,10 +2360,8 @@ QString lookupShyxDocs(const QString& queryRaw)
   {
     const QString xml = QString::fromUtf8(e.xml);
     const QString display = representationDisplayName(xml);
-    if (query.isEmpty() || xml.contains(query, Qt::CaseInsensitive) ||
-      QString::fromUtf8(e.note).contains(query, Qt::CaseInsensitive) ||
-      query.contains(xml, Qt::CaseInsensitive) ||
-      (!display.isEmpty() && query.contains(display, Qt::CaseInsensitive)))
+    if (query.isEmpty() ||
+      queryHits(query, { xml, display, spacedIdentifier(xml), QString::fromUtf8(e.note) }))
     {
       out += QStringLiteral("- %1: %2\n").arg(xml, QString::fromUtf8(e.note));
     }
@@ -2217,7 +2398,8 @@ QString lookupShyxDocs(const QString& queryRaw)
         {
           continue;
         }
-        if (!queryHits(query, { xml, label, menu, doc, display, QString::fromUtf8(group ? group : "") }))
+        if (!queryHits(query, { xml, label, menu, doc, display, spacedIdentifier(xml),
+              spacedIdentifier(label) }))
         {
           continue;
         }
@@ -2248,7 +2430,7 @@ QString lookupShyxDocs(const QString& queryRaw)
     }
   }
   out += QStringLiteral("For property names/enums/defaults call describe_proxy with the XML/python name "
-                        "or display type (Pulse Glyphs, sphere, grow, select block, select similar, fill interior, select all, invert).\n");
+                        "or display type (Pulse Glyphs, sphere, grow, select block, select similar, fill interior, select connected, invert).\n");
   if (!query.isEmpty())
   {
     const QString client = describeClientTool(query);
@@ -2516,53 +2698,77 @@ QString pickWorldPoint(const QJsonObject& args)
   }
   return out;
 }
+
+QString inspectPipeline(const QJsonObject& args)
+{
+  const QString name = args.value(QStringLiteral("name")).toString();
+  if (name.trimmed().isEmpty())
+  {
+    return pipelineTree();
+  }
+  const int port = jsonInt(args, "port", 0);
+  const QString data = sourceData(name, port);
+  if (data.startsWith(QLatin1String("Source not found")) ||
+    data.startsWith(QLatin1String("Invalid port")) ||
+    data.startsWith(QLatin1String("No active source")))
+  {
+    return data;
+  }
+  QString out = data;
+  out += QLatin1Char('\n');
+  out += sourceProperties(name);
+  out += QLatin1Char('\n');
+  out += blockStructure(name, port);
+  return out;
 }
 
-QJsonArray pqSHYXAIAgentTools::schema()
+QString inspectView()
+{
+  QString out = displayInfo();
+  out += QLatin1Char('\n');
+  out += colorMapInfo();
+  out += QLatin1Char('\n');
+  out += cameraInfo();
+  out += QLatin1Char('\n');
+  out += timeInfo();
+  return out;
+}
+}
+
+QJsonArray pqSHYXAIAgentTools::schema(bool allowCaptureScreenshot)
 {
   QJsonArray tools;
-  tools.append(fn("get_pipeline_tree",
-    "List all pipeline sources/filters with names, XML types, inputs, FileName, and each output "
-    "port: data type, point/cell counts, visibility. Use before FindSource / GetActiveSource."));
-  tools.append(fn("get_active_data",
-    "Describe a pipeline source (default: active, port 0): type, point/cell counts, bounds, "
-    "array names and per-component ranges, file path. Optional name is the pipeline name; "
-    "optional port selects an output port (SHYX Mesh Checker / Remesher / End Clipper are multi-port).",
-    QJsonObject{ { QStringLiteral("name"), strArg("Pipeline object name (FindSource name). Omit for active.") },
-      { QStringLiteral("port"), intArg("Output port index. Default 0.") } }));
-  tools.append(fn("get_source_data",
-    "Same as get_active_data: describe any pipeline node and output port.",
-    QJsonObject{ { QStringLiteral("name"), strArg("Pipeline object name. Omit for active source.") },
-      { QStringLiteral("port"), intArg("Output port index. Default 0.") } }));
-  tools.append(fn("get_selection",
-    "Describe the current 3D/spreadsheet selection: source, port, counts, bounds."));
-  tools.append(fn("get_selection_ids",
-    "Selection details: type, bounds, IDs/CompositeIDs (truncated), field type. Use before "
+  tools.append(fn("inspect_pipeline",
+    "Live pipeline. Omit name for the tree (FindSource names, XML types, inputs, ports, "
+    "point/cell counts; the active source is marked). Pass name for that node's arrays/bounds, "
+    "property values including nested proxies (ClipType.Origin/Normal), and PDC/multiblock "
+    "hierarchy. Optional port for extra outputs (Mesh Checker / Remesher / End Clipper). "
+    "Use before FindSource, ExtractBlock, or editing an existing filter.",
+    QJsonObject{ { QStringLiteral("name"),
+        strArg("Pipeline object name (FindSource name). Omit for the tree.") },
+      { QStringLiteral("port"), intArg("Output port index when name is set. Default 0.") } }));
+  tools.append(fn("inspect_selection",
+    "Current 3D/spreadsheet selection: source, port, counts, bounds, IDs/CompositeIDs "
+    "(truncated), field type. Use after title-bar/context-menu selection tools and before "
     "SHYX Delete/Extrude/Flip/Fill/Plane Clipper scripts."));
-  tools.append(fn("get_display",
-    "Active representation: type, visibility, opacity, ColorArrayName, scalar visibility, "
-    "PointSize, LineWidth, Interpolation, Diffuse/Ambient colors, edges. LUT range is get_color_map."));
-  tools.append(fn("get_color_map",
-    "Active representation lookup table: mapped array, LUT range, log scale, vector mode/component, "
-    "color space, number of table values."));
-  tools.append(fn("get_camera",
-    "Active view camera: ViewSize, position, focal point, view up, view angle, parallel scale/projection."));
-  tools.append(fn("get_time",
-    "Animation clock time, range, and timestep list. Use before FTLE / streamlines / temporal filters."));
+  tools.append(fn("inspect_view",
+    "Active representation (type, visibility, opacity, ColorArrayName, PG_/AS_/PL_ values), "
+    "lookup table (range, log, vector mode), camera, and animation time/timesteps. "
+    "Use before Display / LUT / camera / FTLE / streamline edits. Prefer this over a screenshot "
+    "when pixels are not needed."));
   tools.append(fn("get_output_window",
     "Recent ParaView Output Window errors and warnings. Call this when diagnosing a failed "
     "script, a missing array, or unexpected filter output. Do not call it on every turn."));
-  tools.append(fn("capture_screenshot",
-    "Capture the current RenderView as a JPEG. Only works if the user enabled "
-    "'Access Auto Render Review'. The image is attached on the next turn. "
-    "Prefer get_display / get_camera / get_active_data when screenshots are disabled. "
-    "The result includes JPEG width/height for pick_world_point image_width/image_height."));
+  if (allowCaptureScreenshot)
+  {
+    tools.append(fn("capture_screenshot",
+      "Capture the current RenderView as a JPEG. The image is attached on the next turn. "
+      "The result includes JPEG width/height for pick_world_point."));
+  }
   tools.append(fn("pick_world_point",
-    "Convert 2D screenshot/view clicks to 3D world points. Put EVERY brush mark / click in ONE "
-    "call using points=[{x,y}, {x,y}, ...]. Do not call this once per mark. "
-    "Default origin is top_left (screenshots). Pass image_width/image_height from the JPEG. "
-    "If x,y are both in [0,1] and no image size is given, they are treated as normalized. "
-    "Do not grid-sample or re-pick the same pixel with different origin/normalized/pixel conventions.",
+    "Convert 2D screenshot clicks (brush marks) to 3D world points. Call this when the user "
+    "attached a screenshot. Put every mark in ONE call: points=[{x,y}, {x,y}, ...], with "
+    "image_width/image_height from the JPEG (origin=top_left).",
     QJsonObject{ { QStringLiteral("points"),
         QJsonObject{ { QStringLiteral("type"), QStringLiteral("array") },
           { QStringLiteral("description"),
@@ -2597,35 +2803,31 @@ QJsonArray pqSHYXAIAgentTools::schema()
     "and read errors before talking to the user.",
     setCodeProps, QJsonArray{ QStringLiteral("code") }));
   QJsonObject runProps;
-  runProps.insert(QStringLiteral("capture"),
-    QJsonObject{ { QStringLiteral("type"), QStringLiteral("boolean") },
-      { QStringLiteral("description"),
-        QStringLiteral("If true, attach a screenshot after the script runs. Ignored unless the user "
-                       "enabled render-view screenshots. Default is false when screenshots are off.") } });
-  tools.append(fn("run_code_script",
-    "Execute the current code box (same as the Run script button). Always call this after "
-    "set_code_script so you can see whether the script actually works. Returns new "
-    "Output Window lines, active-source data, and the pipeline tree after the run. A screenshot is "
-    "attached only if the user enabled render-view screenshots. "
-    "If the run errors, data looks wrong, or the pipeline grew duplicate filters (two Clips on the "
-    "same input), fix with set_code_script: FindSource the existing node and set properties, or "
-    "Delete the extra node, then run again.",
-    runProps));
-  tools.append(fn("get_source_properties",
-    "Dump property values of a pipeline source, including nested proxies (ClipType.Origin/Normal, "
-    "SliceType, widgets). Optional name is the pipeline name; omit it to use the active source.",
-    QJsonObject{ { QStringLiteral("name"), strArg("Pipeline object name (FindSource name).") } }));
-  tools.append(fn("get_blocks",
-    "PDC / multiblock / partitioned hierarchy and data-assembly names for ExtractBlock selectors. "
-    "Optional name and port; omit name for the active source.",
-    QJsonObject{ { QStringLiteral("name"), strArg("Pipeline object name. Omit for active source.") },
-      { QStringLiteral("port"), intArg("Output port index. Default 0.") } }));
+  QString runDesc =
+    QStringLiteral("Execute the current code box (same as the Run script button). Always call this "
+                   "after set_code_script so you can see whether the script actually works. Returns "
+                   "new Output Window lines, active-source data, and the pipeline tree after the "
+                   "run. If the run errors, data looks wrong, or the pipeline grew duplicate "
+                   "filters (two Clips on the same input), fix with set_code_script: FindSource "
+                   "the existing node and set properties, or Delete the extra node, then run again.");
+  if (allowCaptureScreenshot)
+  {
+    runProps.insert(QStringLiteral("capture"),
+      QJsonObject{ { QStringLiteral("type"), QStringLiteral("boolean") },
+        { QStringLiteral("description"),
+          QStringLiteral("If true, attach a RenderView JPEG after the script runs.") } });
+    runDesc += QStringLiteral(" capture=true attaches a screenshot after the run.");
+  }
+  const QByteArray runDescUtf8 = runDesc.toUtf8();
+  tools.append(fn("run_code_script", runDescUtf8.constData(), runProps));
   tools.append(fn("list_filters",
     "Search registered ParaView proxies. Empty query (or features/catalog) lists SHYX/VESPA "
     "filters/sources AND Display representations (Pulse Glyphs, Animated Streamline, Point Label) "
-    "plus a reminder of title-bar selection tools. Non-empty query searches all ParaView "
-    "filters/sources and SHYX representations. Representations are not python constructors.",
-    QJsonObject{ { QStringLiteral("query"), strArg("Substring: remesh, glyph, Point Label, SHYXMeshChecker, ...") } }));
+    "plus a reminder of title-bar selection tools. Non-empty query: several keywords separated by "
+    "spaces or commas; ALL keywords must match (AND) across XML name, label, menu, short docs, "
+    "display name, and SHYX usage notes. Representations are not python constructors.",
+    QJsonObject{ { QStringLiteral("query"),
+      strArg("Keywords (AND): remesh clip, mesh repair, Point Label, SHYXMeshChecker. Empty = catalog.") } }));
   tools.append(fn("describe_proxy",
     "Property schema: types, defaults, enums, docs. For filters: XML/python name. "
     "For SHYX Display types pass 'Pulse Glyphs', 'Animated Streamline', or 'Point Label' "
@@ -2634,20 +2836,26 @@ QJsonArray pqSHYXAIAgentTools::schema()
     "For the block context-menu action pass 'select block'. "
     "For Select Similar / By Normal pass 'select similar'. "
     "For Fill Interior pass 'fill interior'. "
-    "For Select All (connected region) pass 'select all'. "
+    "For Select Connected (connected points/lines/faces/volumes) pass 'select connected'. "
     "For Invert Selection pass 'invert'.",
-    QJsonObject{ { QStringLiteral("name"), strArg("XML name, display type (Pulse Glyphs), sphere/grow/proximity gap, select block, select similar, fill interior, select all, or invert.") } },
+    QJsonObject{ { QStringLiteral("name"), strArg("XML name, display type (Pulse Glyphs), sphere/grow/proximity gap, select block, select similar, fill interior, select connected, or invert.") } },
     QJsonArray{ QStringLiteral("name") }));
   tools.append(fn("lookup_shyx_docs",
     "SHYX/VESPA usage notes: capability catalog (filters + Display representations + "
     "title-bar selection tools), vascular pipeline order, which filter to prefer, multi-port hints, "
-    "and live XML short help. Empty query is the full catalog. Then call describe_proxy for property names.",
-    QJsonObject{ { QStringLiteral("query"), strArg("Empty for catalog, or topic: vascular, representation, selection, remesh, ...") } }));
+    "and live XML short help. Empty query is the full catalog. Keywords are AND across name/docs/"
+    "notes (spaces or commas). Then call describe_proxy for property names.",
+    QJsonObject{ { QStringLiteral("query"),
+      strArg("Empty for catalog, or keywords: vascular remesh, representation, selection, ...") } }));
   return tools;
 }
 
 QString pqSHYXAIAgentTools::run(const QString& name, const QJsonObject& args)
 {
+  if (name == QLatin1String("inspect_pipeline"))
+  {
+    return inspectPipeline(args);
+  }
   if (name == QLatin1String("get_pipeline_tree"))
   {
     return pipelineTree();
@@ -2656,13 +2864,17 @@ QString pqSHYXAIAgentTools::run(const QString& name, const QJsonObject& args)
   {
     return sourceData(args.value(QStringLiteral("name")).toString(), jsonInt(args, "port", 0));
   }
+  if (name == QLatin1String("inspect_selection") || name == QLatin1String("get_selection_ids"))
+  {
+    return selectionIds();
+  }
   if (name == QLatin1String("get_selection"))
   {
     return selectionInfo();
   }
-  if (name == QLatin1String("get_selection_ids"))
+  if (name == QLatin1String("inspect_view"))
   {
-    return selectionIds();
+    return inspectView();
   }
   if (name == QLatin1String("get_display"))
   {

@@ -32,7 +32,10 @@
 #include <QVBoxLayout>
 #include <QVariant>
 
+#include <algorithm>
+#include <limits>
 #include <string>
+#include <vector>
 
 namespace
 {
@@ -90,6 +93,43 @@ QString openingNameOfRow(QStandardItemModel* model, int row)
         return item->data(kRoleOpeningName).toString();
     }
     return QString();
+}
+
+qint64 seedPointIdFromLabel(const QString& name)
+{
+    static const QString prefix = QStringLiteral("SeedPoint: ");
+    if (!name.startsWith(prefix))
+    {
+        return std::numeric_limits<qint64>::max();
+    }
+
+    int begin = prefix.size();
+    int end = begin;
+    if (end < name.size() && (name[end] == QLatin1Char('+') || name[end] == QLatin1Char('-')))
+    {
+        ++end;
+    }
+    while (end < name.size() && name[end].isDigit())
+    {
+        ++end;
+    }
+    if (end <= begin || (end == begin + 1 && !name[begin].isDigit()))
+    {
+        return std::numeric_limits<qint64>::max();
+    }
+    return name.mid(begin, end - begin).toLongLong();
+}
+
+int duplicateSuffixFromLabel(const QString& name)
+{
+    const int hash = name.lastIndexOf(QLatin1Char('#'));
+    if (hash < 0)
+    {
+        return 1;
+    }
+    bool ok = false;
+    const int n = name.mid(hash + 1).trimmed().toInt(&ok);
+    return ok ? n : 1;
 }
 
 }
@@ -284,6 +324,8 @@ void pqSHYXOpeningTable::rebuildFromDynamicProperty(const QString& dynPropName)
     {
         this->updateRowAppearance(r);
     }
+
+    this->sortRowsBySeedPointId();
 }
 
 // ---------------------------------------------------------------------------
@@ -403,4 +445,53 @@ void pqSHYXOpeningTable::updateRowAppearance(int row)
         inletFlags |= Qt::ItemIsEnabled;
     }
     inletItem->setFlags(inletFlags);
+}
+
+// ---------------------------------------------------------------------------
+void pqSHYXOpeningTable::sortRowsBySeedPointId()
+{
+    if (!this->Model)
+    {
+        return;
+    }
+
+    const int n = this->Model->rowCount();
+    if (n <= 1)
+    {
+        return;
+    }
+
+    struct Row
+    {
+        qint64 sid = 0;
+        int suffix = 1;
+        QList<QStandardItem*> items;
+    };
+
+    std::vector<Row> rows(static_cast<size_t>(n));
+
+    {
+        QSignalBlocker blocker(this->Model);
+        for (int r = n - 1; r >= 0; --r)
+        {
+            Row& row = rows[static_cast<size_t>(r)];
+            const QString name = openingNameOfRow(this->Model, r);
+            row.sid = seedPointIdFromLabel(name);
+            row.suffix = duplicateSuffixFromLabel(name);
+            row.items = this->Model->takeRow(r);
+        }
+
+        std::stable_sort(rows.begin(), rows.end(), [](const Row& a, const Row& b) {
+            if (a.sid != b.sid)
+            {
+                return a.sid < b.sid;
+            }
+            return a.suffix < b.suffix;
+        });
+
+        for (Row& row : rows)
+        {
+            this->Model->appendRow(row.items);
+        }
+    }
 }

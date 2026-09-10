@@ -5,7 +5,9 @@
  * vtkSHYXTetGen takes a closed triangulated surface mesh (vtkPolyData) as input
  * and generates a tetrahedral volume mesh (vtkUnstructuredGrid) that fills the
  * interior of the surface. It uses the TetGen library to create constrained
- * Delaunay tetrahedralization.
+ * Delaunay tetrahedralization. InteriorPointMode selects quality Steiner
+ * meshing, or prescribed interior vertices from an optional pipeline node
+ * (surface vertices plus that node's points; no new Steiner points).
  *
  * The input surface must be:
  * - Closed (watertight) and manifold
@@ -17,6 +19,8 @@
 
 #include "vtkSHYXTetGenModule.h"
 #include "vtkDataSetAlgorithm.h"
+
+class vtkAlgorithmOutput;
 
 class VTKSHYXTETGEN_EXPORT vtkSHYXTetGen : public vtkDataSetAlgorithm
 {
@@ -147,6 +151,40 @@ public:
     /** Mask array name (input-array slot 0). Default \c EndpointIndex on cell data. */
     const char* GetMaskArrayName();
 
+    ///@{
+    /**
+     * Where interior vertices may be placed.
+     * 0 = quality Steiner (default, current TetGen -q path);
+     * 1 = prescribed points: input surface vertices plus points from the
+     *     optional Interior points pipeline node; no Steiner insertion (-YS0O0).
+     *     Leave Interior points empty for surface vertices only.
+     */
+    vtkGetMacro(InteriorPointMode, int);
+    vtkSetClampMacro(InteriorPointMode, int, 0, 1);
+    ///@}
+
+    /** Optional pipeline node whose points are allowed interior vertices (port 1). */
+    void SetInteriorPointsConnection(vtkAlgorithmOutput* algOutput);
+
+    ///@{
+    /**
+     * When InteriorPointMode is 1 and the interior-points node has line cells,
+     * pass those segments as TetGen input edges. Default ON.
+     */
+    vtkGetMacro(ConstrainInteriorEdges, bool);
+    vtkSetMacro(ConstrainInteriorEdges, bool);
+    vtkBooleanMacro(ConstrainInteriorEdges, bool);
+    ///@}
+
+    ///@{
+    /**
+     * Drop interior-source points closer than this to any surface vertex (mode 1).
+     * <= 0 uses 0.001 times the longest AABB side of the input.
+     */
+    vtkGetMacro(InteriorSurfaceClearance, double);
+    vtkSetMacro(InteriorSurfaceClearance, double);
+    ///@}
+
 protected:
     vtkSHYXTetGen();
     ~vtkSHYXTetGen() override = default;
@@ -168,6 +206,9 @@ protected:
     double SurfaceSizingScale = 1.0;
     bool ProbeInputPointData = true;
     bool MaskArrayEnabled = true;
+    int InteriorPointMode = 0;
+    bool ConstrainInteriorEdges = true;
+    double InteriorSurfaceClearance = 0.0;
 
 private:
     vtkSHYXTetGen(const vtkSHYXTetGen&) = delete;

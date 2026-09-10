@@ -57,7 +57,7 @@
 | 界面标签 | 备注 |
 |----------|------|
 | SHYX Mesh Checker | 诊断+修复；优先于 VESPA Mesh Checker |
-| SHYX Auto Mesh Repair | 自交分簇后局部 Alpha Wrap；CGAL ≥ 5.5 |
+| SHYX Auto Mesh Repair | 前半段同 Mesh Checker；勾选后默认抽出做 Alpha Wrap，再另一步 union；CGAL ≥ 5.5 |
 | SHYX Hole Fill (CGAL) | 与 VESPA Hole Filling 成对 |
 | SHYX Repair Degeneracies (CGAL) | |
 | SHYX Boolean (CGAL, relaxed) | 不要求封闭；与 VESPA Boolean 成对 |
@@ -66,6 +66,7 @@
 | SHYX Adaptive Isotropic Remesher | CGAL ≥ 6 |
 | SHYX Remesh With Endpoint | CGAL ≥ 6；**Vascular** |
 | SHYX Convex Hull | |
+| SHYX Resample Lines | 线网等距重采样；可选 Fuse；短分支保留两端 |
 | SHYX Disconnected Region Fuse | |
 | SHYX Selection Extrude / Point Extrude | |
 | SHYX Selection Append Patches | 选区 / 管线 / box·sphere 抽出为 PDC patch |
@@ -114,7 +115,7 @@
 | **Animated Streamline**（`AnimatedStreamlineRepresentation`） | 基于 `SurfaceRepresentation` 的流线类网格 GPU 动画表示。 |
 | **Point Label**（`PointLabelRepresentation`） | 表面表示上叠加点数据文本标签。 |
 
-视图工具：球选（Sphere Selection）、按属性扩张选区（Grow Selection With Similar）、近距断口选区（Proximity Gap Selection，按 ε 选不连通但邻近的接触带）为客户端 Qt，无独立 VTK 模块。复合数据（如 PDC 的 `Part_1`）在 3D 视图右键菜单中有 **Select Block**，会先清除当前选择再选中该 block 的全部 cell。有 cell 选择时右键还有 **Select All**（全选当前连通区域）、**Invert Selection**（反选）、**Select Similar → By Normal**（按法向一次 Grow 完，与标题栏 Grow 共用二面角阈值）和 **Fill Interior**（把被当前选区完全围住的未选面补进选择）。**SHYX AI Assistant** 在 **View** 菜单中作为可勾选停靠窗口（OpenAI 兼容；**Run script** 执行代码框）。
+视图工具：球选（Sphere Selection）、按属性扩张选区（Grow Selection With Similar）、近距断口选区（Proximity Gap Selection，按 ε 选不连通但邻近的接触带）为客户端 Qt，无独立 VTK 模块。复合数据（如 PDC 的 `Part_1`）在 3D 视图右键菜单中有 **Select Block**，会先清除当前选择再选中该 block 的全部 cell。有点或 cell 选择时右键还有 **Select Connected**（选中当前连通的点/线/面/体）、有 cell 选择时还有 **Invert Selection**（反选）、**Select Similar → By Normal**（按法向一次 Grow 完，与标题栏 Grow 共用二面角阈值）和 **Fill Interior**（把被当前选区完全围住的未选面补进选择）。**SHYX AI Assistant** 在 **View** 菜单中作为可勾选停靠窗口（OpenAI 兼容；**Run script** 执行代码框）。
 
 ---
 
@@ -311,10 +312,11 @@
 | **Max Iterations** | int | 500 | 收缩的最大迭代次数。 |
 | **Area Threshold** | double | 1e-4 | 收敛阈值。面积变化小于该比例时认为收敛；值越小骨架越细，但更耗时。 |
 | **Max Triangle Angle (deg)** | double | 110 | 局部重网格参数，过大的三角形可能被拆分。 |
-| **Min Edge Length** | double | **0.002×轴对齐包围盒最长边** | 局部重网格参数，过短边可能被塌缩。自动为包围盒最长边的 **0.002** 倍（ParaView `BoundsDomain` scaled_extent，`scale_factor=0.002`；缩放 + 重置）。属性默认 `0` 表示自动。 |
+| **Min Edge Length** | double | **0.001×轴对齐包围盒最长边** | 局部重网格参数，过短边可能被塌缩。自动为包围盒最长边的 **0.001** 倍（ParaView `BoundsDomain` scaled_extent，`scale_factor=0.001`；缩放 + 重置）。属性默认 `0` 表示自动。 |
 | **Quality / Speed Tradeoff (w_H)** | double | 0.1 | 收缩速度与质量权衡。值越小收敛更快，骨架质量可能下降。 |
 | **Medially Centered** | bool | true | 是否做 medial centering，开启时骨架更接近中轴，但更耗时。 |
 | **Medial Centering Tradeoff (w_M)** | double | 0.2 | medial centering 的平滑/靠近中轴权衡。 |
+| **Append Cap Endpoints** | bool | false | 后处理：把 cell **EndpointIndex**（可改数组）首分量 > 0 的每个连通端帽片的面积加权中心，用一条线段接到骨架上最近的点；落在边内部则拆边插入顶点。接到的点度数 > 1 时视为新分支（不是续叶端）：该 stub 的 cell **`NewCapBranch`** = 1，并 warning；其余单元为 0。用于已封口网格（如 Vessel End Clipper 之后再提骨架）。数组缺失或没有正值单元时跳过。 |
 
 ---
 
@@ -425,11 +427,12 @@
 
 | 参数 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
-| **Max Volume** | double | 0 | 四面体体积上界，TetGen 会细化超出的单元。0 表示不限制。 |
-| **Max Radius-Edge Ratio** | double | 1.8 | 质量网格时的半径-边比上界（TetGen -q）。>0 时须 ≥ 1.2；0 表示不限。 |
-| **Min Dihedral Angle** | double | 0 | 质量网格时的最小二面角（度）。>0 启用质量网格；0 表示不限。 |
-| **Preserve Surface** | bool | true | 开启时 TetGen 不在边界上插入 Steiner 点（-Y），保持输入表面不变。与 Use CDT 不兼容。 |
-| **Use CDT** | bool | false | 使用约束 Delaunay 细化（-D）。与 Preserve Surface 不兼容。 |
+| **Interior vertices** | enum | Quality (Steiner) | 内部顶点：质量 Steiner（默认）；指定管线节点上的点（表面 + Interior points 下拉，空则仅表面）。后一档强制保表面且不插 Steiner 点。本滤镜不提取骨架。 |
+| **Max Volume** | double | 0 | 四面体体积上界，TetGen 会细化超出的单元。0 表示不限制。仅质量模式。 |
+| **Max Radius-Edge Ratio** | double | 1.8 | 质量网格时的半径-边比上界（TetGen -q）。>0 时须 ≥ 1.2；0 表示不限。仅质量模式。 |
+| **Min Dihedral Angle** | double | 0 | 质量网格时的最小二面角（度）。>0 启用质量网格；0 表示不限。仅质量模式。 |
+| **Preserve Surface** | bool | true | 开启时 TetGen 不在边界上插入 Steiner 点（-Y），保持输入表面不变。与 Use CDT 不兼容。仅质量模式可关；骨架/仅表面模式强制开启。 |
+| **Use CDT** | bool | false | 使用约束 Delaunay 细化（-D）。与 Preserve Surface 不兼容。仅质量模式。 |
 | **CDT Refine Level** | int | 7 | CDT 细化等级 1–7（-D#），仅在 Use CDT 开启时有效。 |
 | **Check Mesh** | bool | false | 是否检查最终网格一致性（-C）。 |
 | **Epsilon** | double | 1e-8 | 共面检测容差（-T）。 |
@@ -659,7 +662,7 @@
 | 滤镜 | 要点 |
 |------|------|
 | **SHYX Mesh Checker** | 汤边 / 边界环 / 自交；port 1 诊断几何；可选 autorefine |
-| **SHYX Auto Mesh Repair** | Mesh Checker 交叉面的下一步：每处自交当选区，扩圈后局部 fill + Alpha Wrap + union + smooth；CGAL ≥ 5.5 |
+| **SHYX Auto Mesh Repair** | 前半段同 Mesh Checker；默认不修交叉面；勾选后默认 extract + Alpha Wrap（port 0 remainder、port 2 wrapped），再另一步 union + 可选 remesh/smooth；one-shot 仍可选用；CGAL ≥ 5.5 |
 | **SHYX Hole Fill** | CGAL 补洞；与 VESPA Hole Filling 成对 |
 | **SHYX Repair Degeneracies** | CGAL 退化单元修复 |
 | **SHYX Boolean (relaxed)** | 不要求封闭 |
@@ -667,6 +670,7 @@
 | **SHYX Edge Collapse** | CGAL 边塌缩 |
 | **SHYX Remesh With Endpoint** | Vascular 第 4 步；CGAL ≥ 6；与 Adaptive Remesher 同模块 |
 | **SHYX Convex Hull** | 纯 VTK 凸包 |
+| **SHYX Resample Lines** | 线网按 Sample Distance 重采样；Fuse 默认开（容差 1e-6×包围盒最长边）；度≠2 为特征点；短于间距的分支只留两端 |
 | **SHYX Selection / Point Extrude** | 选区挤出 / **全部顶点**沿法线或矢量位移（Point Extrude 无选区端口） |
 | **SHYX Selection Append Patches** | 选区 / 管线几何 / box·sphere 进 PDC；不收未选父网格单元 |
 | **SHYX Delete / Flip Selected Cells** | 删单元 / 翻转绕向 |
@@ -681,7 +685,7 @@
 | **SHYX Tet Mesh Region Partition** | 体网格分区 |
 | **SHYX Boundary Assignment / Fields / WSL Simulation** | PDC 管线 |
 | **SHYX Partitioned Collection To OpenFOAM** | 体网格 PDC → OpenFOAM `polyMesh` |
-| **SHYX VMTK Centerlines / Opening Centerlines** | 需 `VESPA_USE_VMTK` |
+| **SHYX VMTK Centerlines / Opening Centerlines** | 需 `VESPA_USE_VMTK`。Opening Centerlines 端口 0 数组含义见 [`vespa/shyx/VmtkOpeningCenterlines/README.md`](vespa/shyx/VmtkOpeningCenterlines/README.md) |
 | **SHYX Vascular / Endpoint Stent Placement** | 交互圆柱/端点支架 |
 | **SHYX Auto Streamline** | 自动布种流线 |
 
@@ -716,6 +720,7 @@
 - 从点云重建时，一般顺序：点云 → **VESPA PCA Estimate Normals** → **VESPA Poisson** 或 **Advancing Front**；若点云较乱可考虑先 **Alpha Wrapping** 再后续处理。
 - **SHYX TetGen** 与 **SHYX Surface to Volume Mesh** 均可从表面生成体积网格：TetGen 基于 TetGen 库，参数更直观；后者基于 CGAL Mesh_3，可精细控制表面与体积质量。
 - **SHYX Bidirectional Streamline Merge** 适用于 **Stream Tracer** 等产生的双向折线，需正确设置 **SeedIds** 数组（单元或点数据）。
+- **SHYX Resample Lines** 用于骨架/中心线等多分支折线：先可选 **Fuse**（默认开，容差 1e-6×包围盒最长边）保证近点连通，再按 **Sample Distance** 在各分支上等距重采样；分叉与端点（线度数 ≠ 2）保留；短于间距的分支只留两端，不会被删。
 - **SHYX Vector Field Topology**、**SHYX Vortex Criteria**、**SHYX FTLE**、**SHYX Clebsch Map** 等流场工具对数据类型与数组名要求不同，请以各节说明与 ParaView 属性面板为准。
 - **SHYX Disconnected Region Fuse** 用于将多个不连通表面（如断裂的网格）通过近距离顶点融合合并为一个整体；需根据模型尺度调整 Fuse Threshold。
 - **SHYX Point Cloud Surface SDF** 在**点云**上写 **SDF**；若要在**规则体素网格**上对**封闭**三角网格求有符号距离场（`vtkImageData`），应使用 CGAL 管线中的 **`vtkCGALSignedDistanceFunction`**（见 CGAL / PMP 模块文档或源码），二者勿混淆。

@@ -1,22 +1,29 @@
 #include "vtkSHYXTetGen.h"
 
+#include <vtkAlgorithmOutput.h>
 #include <vtkCell.h>
 #include <vtkCellData.h>
 #include <vtkCellDataToPointData.h>
+#include <vtkCellType.h>
 #include <vtkDataArray.h>
 #include <vtkDataObject.h>
 #include <vtkInformation.h>
 #include <vtkInformationVector.h>
+#include <vtkMath.h>
+#include <vtkNew.h>
 #include <vtkObjectFactory.h>
 #include <vtkPointData.h>
+#include <vtkPointSet.h>
 #include <vtkPoints.h>
 #include <vtkPolyData.h>
 #include <vtkProbeFilter.h>
+#include <vtkStaticPointLocator.h>
 #include <vtkUnstructuredGrid.h>
 
 #define TETLIBRARY
 #include "tetgen.h"
 
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
@@ -27,7 +34,7 @@ vtkStandardNewMacro(vtkSHYXTetGen);
 //------------------------------------------------------------------------------
 vtkSHYXTetGen::vtkSHYXTetGen()
 {
-    this->SetNumberOfInputPorts(1);
+    this->SetNumberOfInputPorts(2);
     this->SetNumberOfOutputPorts(1);
     // Prefer cell-centered EndpointIndex (e.g. vtkCGALVesselEndClipper) as the mask array.
     this->SetInputArrayToProcess(
@@ -50,11 +57,23 @@ const char* vtkSHYXTetGen::GetMaskArrayName()
 }
 
 //------------------------------------------------------------------------------
+void vtkSHYXTetGen::SetInteriorPointsConnection(vtkAlgorithmOutput* algOutput)
+{
+    this->SetInputConnection(1, algOutput);
+}
+
+//------------------------------------------------------------------------------
 int vtkSHYXTetGen::FillInputPortInformation(int port, vtkInformation* info)
 {
     if (port == 0)
     {
         info->Set(vtkAlgorithm::INPUT_REQUIRED_DATA_TYPE(), "vtkPolyData");
+        return 1;
+    }
+    if (port == 1)
+    {
+        info->Set(vtkAlgorithm::INPUT_REQUIRED_DATA_TYPE(), "vtkPointSet");
+        info->Set(vtkAlgorithm::INPUT_IS_OPTIONAL(), 1);
         return 1;
     }
     return 0;
@@ -87,6 +106,10 @@ void vtkSHYXTetGen::PrintSelf(ostream& os, vtkIndent indent)
     os << indent << "SurfaceSizingScale: " << this->SurfaceSizingScale << std::endl;
     os << indent << "ProbeInputPointData: " << (this->ProbeInputPointData ? "ON" : "OFF") << std::endl;
     os << indent << "MaskArrayEnabled: " << (this->MaskArrayEnabled ? "ON" : "OFF") << std::endl;
+    os << indent << "InteriorPointMode: " << this->InteriorPointMode << std::endl;
+    os << indent << "ConstrainInteriorEdges: " << (this->ConstrainInteriorEdges ? "ON" : "OFF")
+       << std::endl;
+    os << indent << "InteriorSurfaceClearance: " << this->InteriorSurfaceClearance << std::endl;
     if (const char* const maskName = this->GetMaskArrayName())
     {
         os << indent << "MaskArrayName: " << maskName << std::endl;
@@ -257,6 +280,129 @@ bool ComputeSurfaceVertexSizing(vtkPolyData* input, double scale, std::vector<RE
     }
     return true;
 }
+
+double AutoInteriorClearance(vtkPolyData* surface)
+{
+    double b[6] = { 0.0, 0.0, 0.0, 0.0, 0.0, 0.0 };
+    surface->GetBounds(b);
+    const double longest = std::max(b[1] - b[0], std::max(b[3] - b[2], b[5] - b[4]));
+    return 1e-3 * longest;
+}
+
+// Append points (and optional line segments) from a pipeline node to a PLC that
+// already holds the surface. Points closer than clearance to any surface vertex
+// are dropped. Returns false only when the source has points but none survive.
+bool AppendInteriorSourceNodes(vtkPolyData* surface, vtkPointSet* source, double clearance,
+    bool constrainEdges, tetgenio& in, int& addedCount)
+{
+    addedCount = 0;
+    if (!surface || !source || !source->GetPoints() || source->GetNumberOfPoints() == 0)
+    {
+        return true;
+    }
+
+    if (clearance <= 0.0)
+    {
+        clearance = AutoInteriorClearance(surface);
+    }
+
+    vtkNew<vtkStaticPointLocator> locator;
+    locator->SetDataSet(surface);
+    locator->BuildLocator();
+
+    const vtkIdType nSrc = source->GetNumberOfPoints();
+    std::vector<int> map(static_cast<size_t>(nSrc), -1);
+    std::vector<double> kept;
+    kept.reserve(static_cast<size_t>(nSrc) * 3);
+
+    const double clearance2 = clearance * clearance;
+    for (vtkIdType i = 0; i < nSrc; ++i)
+    {
+        double p[3] = { 0.0, 0.0, 0.0 };
+        source->GetPoint(i, p);
+        const vtkIdType cid = locator->FindClosestPoint(p);
+        if (cid < 0)
+        {
+            continue;
+        }
+        double q[3] = { 0.0, 0.0, 0.0 };
+        surface->GetPoint(cid, q);
+        if (vtkMath::Distance2BetweenPoints(p, q) < clearance2)
+        {
+            continue;
+        }
+        map[static_cast<size_t>(i)] = static_cast<int>(kept.size() / 3);
+        kept.push_back(p[0]);
+        kept.push_back(p[1]);
+        kept.push_back(p[2]);
+    }
+
+    if (kept.empty())
+    {
+        return false;
+    }
+
+    const int oldN = in.numberofpoints;
+    const int addN = static_cast<int>(kept.size() / 3);
+    REAL* merged = new REAL[static_cast<size_t>(oldN + addN) * 3];
+    if (in.pointlist && oldN > 0)
+    {
+        std::memcpy(merged, in.pointlist, sizeof(REAL) * static_cast<size_t>(oldN) * 3);
+    }
+    for (int i = 0; i < addN * 3; ++i)
+    {
+        merged[oldN * 3 + i] = static_cast<REAL>(kept[static_cast<size_t>(i)]);
+    }
+    delete[] in.pointlist;
+    in.pointlist = merged;
+    in.numberofpoints = oldN + addN;
+    addedCount = addN;
+
+    vtkPolyData* lines = vtkPolyData::SafeDownCast(source);
+    if (!constrainEdges || !lines)
+    {
+        return true;
+    }
+
+    std::vector<int> edges;
+    const vtkIdType nCells = lines->GetNumberOfCells();
+    for (vtkIdType c = 0; c < nCells; ++c)
+    {
+        vtkCell* cell = lines->GetCell(c);
+        const int type = cell->GetCellType();
+        if (type != VTK_LINE && type != VTK_POLY_LINE)
+        {
+            continue;
+        }
+        const vtkIdType np = cell->GetNumberOfPoints();
+        for (vtkIdType k = 0; k + 1 < np; ++k)
+        {
+            const int a = map[static_cast<size_t>(cell->GetPointId(k))];
+            const int b = map[static_cast<size_t>(cell->GetPointId(k + 1))];
+            if (a < 0 || b < 0 || a == b)
+            {
+                continue;
+            }
+            edges.push_back(oldN + a);
+            edges.push_back(oldN + b);
+        }
+    }
+
+    if (edges.empty())
+    {
+        return true;
+    }
+
+    in.numberofedges = static_cast<int>(edges.size() / 2);
+    in.edgelist = new int[edges.size()];
+    std::memcpy(in.edgelist, edges.data(), sizeof(int) * edges.size());
+    in.edgemarkerlist = new int[in.numberofedges];
+    for (int i = 0; i < in.numberofedges; ++i)
+    {
+        in.edgemarkerlist[i] = -1;
+    }
+    return true;
+}
 } // namespace
 
 //------------------------------------------------------------------------------
@@ -394,6 +540,17 @@ static void deallocateTetgenioFacets(tetgenio& in)
         delete[] in.pointlist;
         in.pointlist = nullptr;
     }
+    if (in.edgelist)
+    {
+        delete[] in.edgelist;
+        in.edgelist = nullptr;
+    }
+    if (in.edgemarkerlist)
+    {
+        delete[] in.edgemarkerlist;
+        in.edgemarkerlist = nullptr;
+    }
+    in.numberofedges = 0;
 }
 
 //------------------------------------------------------------------------------
@@ -438,8 +595,31 @@ int vtkSHYXTetGen::RequestData(
         return 0;
     }
 
+    const bool noSteinerInterior = this->InteriorPointMode != 0;
+    const bool preserveSurface = this->Nobisect || noSteinerInterior;
+    const bool qualityMode = this->InteriorPointMode == 0;
+
+    if (this->InteriorPointMode == 1)
+    {
+        vtkPointSet* interiorSrc = vtkPointSet::GetData(inputVector[1]);
+        if (interiorSrc && interiorSrc->GetNumberOfPoints() > 0)
+        {
+            int addedCount = 0;
+            if (!AppendInteriorSourceNodes(input, interiorSrc, this->InteriorSurfaceClearance,
+                    this->ConstrainInteriorEdges, in, addedCount))
+            {
+                vtkWarningMacro("Interior points source had vertices, but all were dropped as too "
+                                "close to the surface. Tetrahedralizing with surface vertices only.");
+            }
+            else if (addedCount > 0)
+            {
+                vtkDebugMacro("Inserted " << addedCount << " prescribed interior vertices.");
+            }
+        }
+    }
+
     std::vector<REAL> surfaceSizingMetrics;
-    if (this->UseSurfaceDensitySizing)
+    if (qualityMode && this->UseSurfaceDensitySizing)
     {
         if (!ComputeSurfaceVertexSizing(input, this->SurfaceSizingScale, surfaceSizingMetrics))
         {
@@ -469,24 +649,25 @@ int vtkSHYXTetGen::RequestData(
     len += std::snprintf(sw + len, 8, "p");
 
     double effectiveMaxVolume = 0.0;
-    if (this->LimitMaxVolume && this->MaxVolume > 0.0)
+    if (qualityMode && this->LimitMaxVolume && this->MaxVolume > 0.0)
     {
         effectiveMaxVolume = this->MaxVolume;
     }
 
-    if (this->Nobisect)
+    if (preserveSurface)
     {
         len += std::snprintf(sw + len, 8, "Y");
     }
-    if (this->UseCDT && !this->Nobisect)
+    if (qualityMode && this->UseCDT && !preserveSurface)
     {
         len += std::snprintf(sw + len, 8, "D");      // cdt=1
         len += std::snprintf(sw + len, 16, "D%d", this->CDTRefine); // cdtrefine
     }
     // Enable quality mesh if either MaxRadiusEdgeRatio or MinDihedralAngle is set (> 0)
     // Surface density sizing (-m) also requires -q.
-    const bool useQualityMesh = this->MaxRadiusEdgeRatio > 0.0 || this->MinDihedralAngle > 0.0 ||
-        this->UseSurfaceDensitySizing;
+    const bool useQualityMesh = qualityMode &&
+        (this->MaxRadiusEdgeRatio > 0.0 || this->MinDihedralAngle > 0.0 ||
+            this->UseSurfaceDensitySizing);
     if (useQualityMesh)
     {
         double radiusRatio = 0.0;
@@ -507,13 +688,19 @@ int vtkSHYXTetGen::RequestData(
             static_cast<double>(radiusRatio),
             static_cast<double>(dihedralAngle));
     }
-    if (this->UseSurfaceDensitySizing)
+    if (qualityMode && this->UseSurfaceDensitySizing)
     {
         len += std::snprintf(sw + len, 8, "m");
     }
     if (effectiveMaxVolume > 0.0)
     {
         len += std::snprintf(sw + len, 32, "a%g", effectiveMaxVolume);
+    }
+    if (noSteinerInterior)
+    {
+        // No Steiner points anywhere; O0 skips the Steiner-capable smoother.
+        len += std::snprintf(sw + len, 8, "S0");
+        len += std::snprintf(sw + len, 8, "O0");
     }
     if (this->DoCheck)
     {

@@ -12,7 +12,7 @@ class vtkSMPropertyGroup;
 
 /**
  * 单一表格（Inlet / Remove / Seed point）合并 vtkSHYXVmtkOpeningCenterlines 的两个
- * vtkDataArraySelection（InletStatus / ExcludedStatus）。
+ * vtkDataArraySelection（InletStatus / ExcludedStatus）。行按 SeedPoint 的 SurfacePointId 升序排列。
  *
  * Server-side 与 XML 完全不变；本 widget 只是把两个 pqArraySelectionWidget 合并为一张 3 列表。
  * 通过 pqArrayListDomain + dynamic Qt property 与 SM 双向绑定，与 pqArraySelectionWidget 同源协议。
@@ -39,6 +39,7 @@ private:
     void rebuildFromDynamicProperty(const QString& dynPropName);
     void writeBackProperty(const QString& dynPropName);
     void updateRowAppearance(int row);
+    void sortRowsBySeedPointId();
 
     QStandardItemModel* Model = nullptr;
     QTreeView* View = nullptr;

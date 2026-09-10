@@ -16,6 +16,7 @@
 #include "vtkCompositeDataSet.h"
 #include "vtkConvertSelection.h"
 #include "vtkDataSet.h"
+#include "vtkGenericCell.h"
 #include "vtkIdList.h"
 #include "vtkIdTypeArray.h"
 #include "vtkMath.h"
@@ -30,6 +31,7 @@
 #include "vtkSelection.h"
 #include "vtkSelectionNode.h"
 #include "vtkSmartPointer.h"
+#include "vtkUnstructuredGrid.h"
 
 #include <QAction>
 #include <QEvent>
@@ -91,6 +93,224 @@ double NormalAngleDegrees(const double n0[3], const double n1[3])
   double d = vtkMath::Dot(n0, n1);
   d = std::max(-1.0, std::min(1.0, d));
   return vtkMath::DegreesFromRadians(std::acos(d));
+}
+
+void EnsureCellLinks(vtkDataSet* ds)
+{
+  if (auto* pd = vtkPolyData::SafeDownCast(ds))
+  {
+    pd->BuildLinks();
+  }
+  else if (auto* ug = vtkUnstructuredGrid::SafeDownCast(ds))
+  {
+    ug->BuildLinks();
+  }
+}
+
+vtkSelection* SelectionFromPort(pqOutputPort* port)
+{
+  vtkSMSourceProxy* appendSel = port ? port->getSelectionInput() : nullptr;
+  if (!appendSel)
+  {
+    return nullptr;
+  }
+  appendSel->UpdatePipeline();
+  vtkAlgorithm* selAlg = vtkAlgorithm::SafeDownCast(appendSel->GetClientSideObject());
+  if (!selAlg)
+  {
+    return nullptr;
+  }
+  return vtkSelection::SafeDownCast(selAlg->GetOutputDataObject(0));
+}
+
+bool CollectSelectedIds(
+  pqOutputPort* port, vtkDataSet* ds, int fieldType, std::vector<vtkIdType>& ids)
+{
+  ids.clear();
+  vtkSelection* selection = SelectionFromPort(port);
+  if (!selection || !ds)
+  {
+    return false;
+  }
+
+  vtkNew<vtkIdTypeArray> selected;
+  vtkConvertSelection::GetSelectedItems(selection, ds, fieldType, selected);
+  const vtkIdType nmax = (fieldType == vtkSelectionNode::POINT) ? ds->GetNumberOfPoints()
+                                                               : ds->GetNumberOfCells();
+  const vtkIdType n = selected->GetNumberOfTuples();
+  ids.reserve(static_cast<size_t>(n));
+  for (vtkIdType i = 0; i < n; ++i)
+  {
+    const vtkIdType id = selected->GetValue(i);
+    if (id >= 0 && id < nmax)
+    {
+      ids.push_back(id);
+    }
+  }
+  std::sort(ids.begin(), ids.end());
+  ids.erase(std::unique(ids.begin(), ids.end()), ids.end());
+  return !ids.empty();
+}
+
+void ApplyIdSelection(pqOutputPort* port, const std::vector<vtkIdType>& ids, int fieldType)
+{
+  if (!port)
+  {
+    return;
+  }
+  vtkSMSessionProxyManager* pxm = port->getSource()->proxyManager();
+  if (!pxm)
+  {
+    return;
+  }
+
+  vtkSmartPointer<vtkSMSourceProxy> selectionSource;
+  selectionSource.TakeReference(
+    vtkSMSourceProxy::SafeDownCast(pxm->NewProxy("sources", "IDSelectionSource")));
+  if (!selectionSource)
+  {
+    return;
+  }
+
+  vtkSMPropertyHelper(selectionSource, "FieldType").Set(fieldType);
+  if (selectionSource->GetProperty("NumberOfLayers"))
+  {
+    vtkSMPropertyHelper(selectionSource, "NumberOfLayers").Set(0);
+  }
+
+  std::vector<vtkIdType> idPairs;
+  idPairs.reserve(ids.size() * 2);
+  for (vtkIdType id : ids)
+  {
+    idPairs.push_back(-1);
+    idPairs.push_back(id);
+  }
+  vtkSMPropertyHelper idsHelper(selectionSource, "IDs");
+  if (idPairs.empty())
+  {
+    idsHelper.SetNumberOfElements(0);
+  }
+  else
+  {
+    idsHelper.Set(idPairs.data(), static_cast<unsigned int>(idPairs.size()));
+  }
+  selectionSource->UpdateVTKObjects();
+
+  vtkSmartPointer<vtkSMSourceProxy> newAppendSelections;
+  newAppendSelections.TakeReference(vtkSMSourceProxy::SafeDownCast(
+    vtkSMSelectionHelper::NewAppendSelectionsFromSelectionSource(selectionSource)));
+  if (!newAppendSelections)
+  {
+    return;
+  }
+
+  port->setSelectionInput(newAppendSelections, 0);
+
+  if (pqPVApplicationCore* core = pqPVApplicationCore::instance())
+  {
+    if (pqSelectionManager* selMgr = core->selectionManager())
+    {
+      selMgr->select(port);
+    }
+  }
+  port->renderAllViews();
+}
+
+struct CellDimCache
+{
+  vtkDataSet* ds = nullptr;
+  vtkGenericCell* scratch = nullptr;
+  std::vector<signed char> dim;
+
+  int get(vtkIdType id)
+  {
+    signed char& d = dim[static_cast<size_t>(id)];
+    if (d < 0)
+    {
+      ds->GetCell(id, scratch);
+      d = static_cast<signed char>(scratch->GetCellDimension());
+    }
+    return static_cast<int>(d);
+  }
+};
+
+void AppendSameDimNeighbors(vtkDataSet* ds, vtkIdType cellId, int dim, vtkGenericCell* cell,
+  vtkIdList* sidePts, vtkIdList* nbs, CellDimCache& cache, std::vector<vtkIdType>& out)
+{
+  ds->GetCell(cellId, cell);
+  if (dim <= 0)
+  {
+    return;
+  }
+
+  if (dim == 1)
+  {
+    vtkIdList* pts = cell->GetPointIds();
+    const vtkIdType npts = pts->GetNumberOfIds();
+    for (vtkIdType i = 0; i < npts; ++i)
+    {
+      sidePts->Reset();
+      sidePts->InsertNextId(pts->GetId(i));
+      nbs->Reset();
+      ds->GetCellNeighbors(cellId, sidePts, nbs);
+      const vtkIdType nNb = nbs->GetNumberOfIds();
+      for (vtkIdType k = 0; k < nNb; ++k)
+      {
+        const vtkIdType nid = nbs->GetId(k);
+        if (nid != cellId && cache.get(nid) == dim)
+        {
+          out.push_back(nid);
+        }
+      }
+    }
+    return;
+  }
+
+  const int nSides = (dim == 2) ? cell->GetNumberOfEdges() : cell->GetNumberOfFaces();
+  for (int s = 0; s < nSides; ++s)
+  {
+    vtkCell* side = (dim == 2) ? cell->GetEdge(s) : cell->GetFace(s);
+    if (!side)
+    {
+      continue;
+    }
+    sidePts->DeepCopy(side->GetPointIds());
+    if (sidePts->GetNumberOfIds() == 0)
+    {
+      continue;
+    }
+    nbs->Reset();
+    ds->GetCellNeighbors(cellId, sidePts, nbs);
+    const vtkIdType nNb = nbs->GetNumberOfIds();
+    for (vtkIdType k = 0; k < nNb; ++k)
+    {
+      const vtkIdType nid = nbs->GetId(k);
+      if (nid != cellId && cache.get(nid) == dim)
+      {
+        out.push_back(nid);
+      }
+    }
+  }
+}
+
+void AppendIncidentPoints(
+  vtkDataSet* ds, vtkIdType ptId, vtkIdList* incCells, vtkIdList* cellPts, std::vector<vtkIdType>& out)
+{
+  ds->GetPointCells(ptId, incCells);
+  const vtkIdType nInc = incCells->GetNumberOfIds();
+  for (vtkIdType i = 0; i < nInc; ++i)
+  {
+    ds->GetCellPoints(incCells->GetId(i), cellPts);
+    const vtkIdType npts = cellPts->GetNumberOfIds();
+    for (vtkIdType k = 0; k < npts; ++k)
+    {
+      const vtkIdType pid = cellPts->GetId(k);
+      if (pid != ptId)
+      {
+        out.push_back(pid);
+      }
+    }
+  }
 }
 }
 
@@ -388,40 +608,7 @@ bool pqSHYXGrowSelectionWithSimilarController::resolveActiveSelection(pqOutputPo
 bool pqSHYXGrowSelectionWithSimilarController::collectSelectedCellIds(
   pqOutputPort* port, vtkDataSet* ds, std::vector<vtkIdType>& ids)
 {
-  ids.clear();
-  vtkSMSourceProxy* appendSel = port->getSelectionInput();
-  if (!appendSel)
-  {
-    return false;
-  }
-
-  appendSel->UpdatePipeline();
-  vtkAlgorithm* selAlg = vtkAlgorithm::SafeDownCast(appendSel->GetClientSideObject());
-  if (!selAlg)
-  {
-    return false;
-  }
-  vtkSelection* selection = vtkSelection::SafeDownCast(selAlg->GetOutputDataObject(0));
-  if (!selection)
-  {
-    return false;
-  }
-
-  vtkNew<vtkIdTypeArray> selected;
-  vtkConvertSelection::GetSelectedCells(selection, ds, selected);
-  const vtkIdType n = selected->GetNumberOfTuples();
-  ids.reserve(static_cast<size_t>(n));
-  for (vtkIdType i = 0; i < n; ++i)
-  {
-    const vtkIdType cid = selected->GetValue(i);
-    if (cid >= 0 && cid < ds->GetNumberOfCells())
-    {
-      ids.push_back(cid);
-    }
-  }
-  std::sort(ids.begin(), ids.end());
-  ids.erase(std::unique(ids.begin(), ids.end()), ids.end());
-  return !ids.empty();
+  return CollectSelectedIds(port, ds, vtkSelectionNode::CELL, ids);
 }
 
 //-----------------------------------------------------------------------------
@@ -504,66 +691,7 @@ bool pqSHYXGrowSelectionWithSimilarController::growSimilar(
 void pqSHYXGrowSelectionWithSimilarController::applyCellSelection(
   pqOutputPort* port, const std::vector<vtkIdType>& ids)
 {
-  if (!port)
-  {
-    return;
-  }
-  vtkSMSessionProxyManager* pxm = port->getSource()->proxyManager();
-  if (!pxm)
-  {
-    return;
-  }
-
-  vtkSmartPointer<vtkSMSourceProxy> selectionSource;
-  selectionSource.TakeReference(
-    vtkSMSourceProxy::SafeDownCast(pxm->NewProxy("sources", "IDSelectionSource")));
-  if (!selectionSource)
-  {
-    return;
-  }
-
-  vtkSMPropertyHelper(selectionSource, "FieldType").Set(vtkSelectionNode::CELL);
-  if (selectionSource->GetProperty("NumberOfLayers"))
-  {
-    vtkSMPropertyHelper(selectionSource, "NumberOfLayers").Set(0);
-  }
-
-  std::vector<vtkIdType> idPairs;
-  idPairs.reserve(ids.size() * 2);
-  for (vtkIdType id : ids)
-  {
-    idPairs.push_back(-1);
-    idPairs.push_back(id);
-  }
-  vtkSMPropertyHelper idsHelper(selectionSource, "IDs");
-  if (idPairs.empty())
-  {
-    idsHelper.SetNumberOfElements(0);
-  }
-  else
-  {
-    idsHelper.Set(idPairs.data(), static_cast<unsigned int>(idPairs.size()));
-  }
-  selectionSource->UpdateVTKObjects();
-
-  vtkSmartPointer<vtkSMSourceProxy> newAppendSelections;
-  newAppendSelections.TakeReference(vtkSMSourceProxy::SafeDownCast(
-    vtkSMSelectionHelper::NewAppendSelectionsFromSelectionSource(selectionSource)));
-  if (!newAppendSelections)
-  {
-    return;
-  }
-
-  port->setSelectionInput(newAppendSelections, 0);
-
-  if (pqPVApplicationCore* core = pqPVApplicationCore::instance())
-  {
-    if (pqSelectionManager* selMgr = core->selectionManager())
-    {
-      selMgr->select(port);
-    }
-  }
-  port->renderAllViews();
+  ApplyIdSelection(port, ids, vtkSelectionNode::CELL);
 }
 
 //-----------------------------------------------------------------------------
@@ -646,6 +774,20 @@ bool pqSHYXGrowSelectionWithSimilarController::HasActiveCellSelection(
   }
   std::vector<vtkIdType> ids;
   return collectSelectedCellIds(port, ds, ids);
+}
+
+//-----------------------------------------------------------------------------
+bool pqSHYXGrowSelectionWithSimilarController::HasActivePointSelection(
+  pqDataRepresentation* hintRepresentation)
+{
+  pqOutputPort* port = nullptr;
+  vtkDataSet* ds = nullptr;
+  if (!resolveActiveSelection(port, ds, hintRepresentation, nullptr))
+  {
+    return false;
+  }
+  std::vector<vtkIdType> ids;
+  return CollectSelectedIds(port, ds, vtkSelectionNode::POINT, ids);
 }
 
 //-----------------------------------------------------------------------------
@@ -986,70 +1128,114 @@ pqSHYXGrowSelectionWithSimilarController::SelectConnectedRegion(
   vtkDataSet* ds = nullptr;
   if (!resolveActiveSelection(port, ds, hintRepresentation, nullptr))
   {
-    result.message = tr("SHYX Select All: no active cell selection.");
-    reportToOutputWindow(result.message);
-    return result;
-  }
-
-  auto* pd = vtkPolyData::SafeDownCast(ds);
-  if (!pd)
-  {
-    result.message = tr("SHYX Select All: active data is not vtkPolyData "
-                        "(surface mesh required).");
+    result.message = tr("SHYX Select Connected: no active point or cell selection.");
     reportToOutputWindow(result.message);
     return result;
   }
 
   std::vector<vtkIdType> seed;
-  if (!collectSelectedCellIds(port, ds, seed))
+  const bool cellSeed = collectSelectedCellIds(port, ds, seed);
+  const bool pointSeed = !cellSeed && CollectSelectedIds(port, ds, vtkSelectionNode::POINT, seed);
+  if (!cellSeed && !pointSeed)
   {
-    result.message = tr("SHYX Select All: could not resolve selected cell IDs "
-                        "(need a cell selection).");
+    result.message = tr("SHYX Select Connected: could not resolve selected IDs "
+                        "(need a point or cell selection).");
     reportToOutputWindow(result.message);
     return result;
   }
 
-  pd->BuildLinks();
-  const vtkIdType nCells = pd->GetNumberOfCells();
-  std::vector<char> reached(static_cast<size_t>(nCells), 0);
+  EnsureCellLinks(ds);
+
+  const bool isPoint = pointSeed;
+  const vtkIdType nItems = isPoint ? ds->GetNumberOfPoints() : ds->GetNumberOfCells();
+  if (nItems <= 0)
+  {
+    result.message = tr("SHYX Select Connected: mesh has no %1.")
+                       .arg(isPoint ? tr("points") : tr("cells"));
+    reportToOutputWindow(result.message);
+    return result;
+  }
+
+  std::vector<char> reached(static_cast<size_t>(nItems), 0);
   std::vector<vtkIdType> stack;
   stack.reserve(seed.size());
   for (vtkIdType id : seed)
   {
-    if (id >= 0 && id < nCells && !reached[static_cast<size_t>(id)])
+    if (id >= 0 && id < nItems && !reached[static_cast<size_t>(id)])
     {
       reached[static_cast<size_t>(id)] = 1;
       stack.push_back(id);
     }
   }
 
-  vtkNew<vtkIdList> ptIds;
-  vtkNew<vtkIdList> neighbors;
   vtkIdType nReached = static_cast<vtkIdType>(stack.size());
   const vtkIdType nSeed = nReached;
-
-  while (!stack.empty())
+  if (nSeed == 0)
   {
-    const vtkIdType cell = stack.back();
-    stack.pop_back();
+    result.message = tr("SHYX Select Connected: no valid selected IDs in the active dataset.");
+    reportToOutputWindow(result.message);
+    return result;
+  }
 
-    pd->GetCellPoints(cell, ptIds);
-    const vtkIdType npts = ptIds->GetNumberOfIds();
-    if (npts < 3)
+  vtkNew<vtkIdList> sidePts;
+  vtkNew<vtkIdList> neighbors;
+  std::vector<vtkIdType> nbs;
+  int uniqueDim = -2;
+
+  if (isPoint)
+  {
+    vtkNew<vtkIdList> incCells;
+    vtkNew<vtkIdList> cellPts;
+    nbs.reserve(32);
+    while (!stack.empty())
     {
-      continue;
-    }
-    for (vtkIdType e = 0; e < npts; ++e)
-    {
-      const vtkIdType p0 = ptIds->GetId(e);
-      const vtkIdType p1 = ptIds->GetId((e + 1) % npts);
-      neighbors->Reset();
-      pd->GetCellEdgeNeighbors(cell, p0, p1, neighbors);
-      const vtkIdType nNb = neighbors->GetNumberOfIds();
-      for (vtkIdType i = 0; i < nNb; ++i)
+      const vtkIdType pt = stack.back();
+      stack.pop_back();
+      nbs.clear();
+      AppendIncidentPoints(ds, pt, incCells, cellPts, nbs);
+      for (vtkIdType nid : nbs)
       {
-        const vtkIdType nid = neighbors->GetId(i);
-        if (nid < 0 || nid >= nCells || reached[static_cast<size_t>(nid)])
+        if (nid < 0 || nid >= nItems || reached[static_cast<size_t>(nid)])
+        {
+          continue;
+        }
+        reached[static_cast<size_t>(nid)] = 1;
+        stack.push_back(nid);
+        ++nReached;
+      }
+    }
+  }
+  else
+  {
+    vtkNew<vtkGenericCell> cell;
+    vtkNew<vtkGenericCell> dimScratch;
+    CellDimCache cache;
+    cache.ds = ds;
+    cache.scratch = dimScratch;
+    cache.dim.assign(static_cast<size_t>(nItems), -1);
+    nbs.reserve(32);
+    while (!stack.empty())
+    {
+      const vtkIdType cid = stack.back();
+      stack.pop_back();
+      const int dim = cache.get(cid);
+      if (uniqueDim == -2)
+      {
+        uniqueDim = dim;
+      }
+      else if (uniqueDim != dim)
+      {
+        uniqueDim = -1;
+      }
+      if (dim <= 0)
+      {
+        continue;
+      }
+      nbs.clear();
+      AppendSameDimNeighbors(ds, cid, dim, cell, sidePts, neighbors, cache, nbs);
+      for (vtkIdType nid : nbs)
+      {
+        if (nid < 0 || nid >= nItems || reached[static_cast<size_t>(nid)])
         {
           continue;
         }
@@ -1060,35 +1246,58 @@ pqSHYXGrowSelectionWithSimilarController::SelectConnectedRegion(
     }
   }
 
+  auto entityWord = [&]() {
+    if (isPoint)
+    {
+      return tr("point(s)");
+    }
+    if (uniqueDim == 1)
+    {
+      return tr("line(s)");
+    }
+    if (uniqueDim == 2)
+    {
+      return tr("face(s)");
+    }
+    if (uniqueDim == 3)
+    {
+      return tr("volume(s)");
+    }
+    return tr("cell(s)");
+  };
+
   result.ok = true;
   result.total = nReached;
   const vtkIdType added = nReached - nSeed;
   result.added = added;
   if (added <= 0)
   {
-    result.message = tr("SHYX Select All: selection already covers the connected region "
-                        "(%1 face(s)).")
-                       .arg(nReached);
+    result.message = tr("SHYX Select Connected: selection already covers the connected region "
+                        "(%1 %2).")
+                       .arg(nReached)
+                       .arg(entityWord());
     reportToOutputWindow(result.message);
     return result;
   }
 
   std::vector<vtkIdType> grown;
   grown.reserve(static_cast<size_t>(nReached));
-  for (vtkIdType c = 0; c < nCells; ++c)
+  for (vtkIdType i = 0; i < nItems; ++i)
   {
-    if (reached[static_cast<size_t>(c)])
+    if (reached[static_cast<size_t>(i)])
     {
-      grown.push_back(c);
+      grown.push_back(i);
     }
   }
-  applyCellSelection(port, grown);
+  ApplyIdSelection(
+    port, grown, isPoint ? vtkSelectionNode::POINT : vtkSelectionNode::CELL);
 
   result.grew = true;
   result.message =
-    tr("SHYX Select All: selected connected region (%1 added, total %2).")
+    tr("SHYX Select Connected: selected connected region (%1 added, total %2 %3).")
       .arg(added)
-      .arg(nReached);
+      .arg(nReached)
+      .arg(entityWord());
   reportToOutputWindow(result.message);
   return result;
 }

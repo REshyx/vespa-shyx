@@ -5,7 +5,7 @@
                  name="SHYXTetGen">
       <Documentation
           short_help="SHYX TetGen: Generate tetrahedral volume mesh from a closed surface using TetGen."
-          long_help="This filter takes a closed triangulated surface mesh (vtkPolyData) and generates a tetrahedral volume mesh (vtkUnstructuredGrid) that fills the interior. It uses the TetGen library for constrained Delaunay tetrahedralization. The input surface must be closed (watertight), manifold, and composed of triangles only."/>
+          long_help="This filter takes a closed triangulated surface mesh (vtkPolyData) and generates a tetrahedral volume mesh (vtkUnstructuredGrid) that fills the interior. It uses the TetGen library for constrained Delaunay tetrahedralization. Interior vertices can be quality Steiner points (default), or restricted to the input surface plus an optional pipeline node's points (no new Steiner points). The input surface must be closed (watertight), manifold, and composed of triangles only."/>
 
       <InputProperty name="Input"
                      command="SetInputConnection">
@@ -23,6 +23,104 @@
         </Documentation>
       </InputProperty>
 
+      <IntVectorProperty command="SetInteriorPointMode"
+                         name="InteriorPointMode"
+                         label="Interior vertices"
+                         number_of_elements="1"
+                         default_values="0"
+                         animateable="0">
+        <EnumerationDomain name="enum">
+          <Entry text="Quality (Steiner points)" value="0"/>
+          <Entry text="Prescribed pipeline points" value="1"/>
+        </EnumerationDomain>
+        <Documentation>
+          Where volume-mesh vertices may be placed besides the input surface.
+          Quality (default) is the current TetGen refinement path and inserts interior Steiner
+          points. Prescribed pipeline points tetrahedralizes using the input surface vertices
+          plus points from the Interior points dropdown (leave that empty for surface vertices
+          only), preserves the surface, and forbids Steiner points (-YS0O0). Pick any pipeline
+          node that already has the allowed interior points (for example SHYX Skeleton Extraction);
+          this filter does not compute a centerline itself.
+        </Documentation>
+      </IntVectorProperty>
+
+      <!-- Optional panel pipeline dropdown (same pattern as SHYX SnappyHexMesh Feature edges). -->
+      <InputProperty name="InteriorPoints"
+                     command="SetInputConnection"
+                     port_index="1"
+                     label="Interior points"
+                     panel_widget="input_selector"
+                     null_on_empty="1">
+        <ProxyGroupDomain name="groups">
+          <Group name="sources"/>
+          <Group name="filters"/>
+        </ProxyGroupDomain>
+        <DataTypeDomain name="input_type" composite_data_supported="0">
+          <DataType value="vtkPolyData"/>
+          <DataType value="vtkUnstructuredGrid"/>
+          <DataType value="vtkPointSet"/>
+        </DataTypeDomain>
+        <Documentation>
+          Optional. Pipeline node whose vertices are the only allowed interior points when
+          Interior vertices is Prescribed pipeline points. Typical choice: SHYX Skeleton
+          Extraction (or VMTK Centerlines). Leave as (none) to use surface vertices only.
+        </Documentation>
+        <Hints>
+          <Optional/>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="visibility"
+                                   property="InteriorPointMode"
+                                   value="1"/>
+        </Hints>
+      </InputProperty>
+
+      <IntVectorProperty command="SetConstrainInteriorEdges"
+                         name="ConstrainInteriorEdges"
+                         label="Constrain source edges"
+                         number_of_elements="1"
+                         default_values="1">
+        <BooleanDomain name="bool"/>
+        <Documentation>
+          When the Interior points node has line/polyline cells, pass those segments as TetGen
+          input edges so the source curve is recovered in the volume mesh, not only its vertices.
+        </Documentation>
+        <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="visibility"
+                                   property="InteriorPointMode"
+                                   value="1"/>
+        </Hints>
+      </IntVectorProperty>
+
+      <DoubleVectorProperty command="SetInteriorSurfaceClearance"
+                            name="InteriorSurfaceClearance"
+                            label="Surface clearance"
+                            number_of_elements="1"
+                            default_values="0">
+        <BoundsDomain mode="scaled_extent" name="bounds_interior_clearance" scale_factor="0.001">
+          <RequiredProperties>
+            <Property function="Input" name="Input"/>
+          </RequiredProperties>
+        </BoundsDomain>
+        <Documentation>
+          Drop interior-source points closer than this distance to any surface vertex.
+          Values &lt;= 0 use 0.001 times the longest AABB side (same automatic rule as the
+          BoundsDomain scale). Prevents near-duplicate nodes on the wall.
+        </Documentation>
+        <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="visibility"
+                                   property="InteriorPointMode"
+                                   value="1"/>
+        </Hints>
+      </DoubleVectorProperty>
+
+      <PropertyGroup label="Prescribed interior points">
+        <Property name="InteriorPoints"/>
+        <Property name="ConstrainInteriorEdges"/>
+        <Property name="InteriorSurfaceClearance"/>
+      </PropertyGroup>
+
       <IntVectorProperty command="SetLimitMaxVolume"
                          name="LimitMaxVolume"
                          label="Use max volume"
@@ -33,6 +131,12 @@
           When ON, TetGen applies a maximum tetrahedron volume (-a) if Max volume is positive.
           Default OFF (no volume limit); turn ON and set Max volume to refine by tet size.
         </Documentation>
+        <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="visibility"
+                                   property="InteriorPointMode"
+                                   value="0"/>
+        </Hints>
       </IntVectorProperty>
 
       <DoubleVectorProperty command="SetMaxVolume"
@@ -52,10 +156,18 @@
           (updates when the boundary input changes); use Scale/Reset for a suggested magnitude.
         </Documentation>
         <Hints>
-          <PropertyWidgetDecorator type="GenericDecorator"
-                                   mode="visibility"
-                                   property="LimitMaxVolume"
-                                   value="1"/>
+          <PropertyWidgetDecorator type="CompositeDecorator">
+            <Expression type="and">
+              <PropertyWidgetDecorator type="GenericDecorator"
+                                       mode="visibility"
+                                       property="LimitMaxVolume"
+                                       value="1"/>
+              <PropertyWidgetDecorator type="GenericDecorator"
+                                       mode="visibility"
+                                       property="InteriorPointMode"
+                                       value="0"/>
+            </Expression>
+          </PropertyWidgetDecorator>
         </Hints>
       </DoubleVectorProperty>
 
@@ -68,6 +180,12 @@
         <Documentation>
           Maximum radius-edge ratio for quality meshing (TetGen -q). Default 1.8. When > 0, must be >= 1.2. Set to 0 for no limit on radius ratio (but quality meshing still enabled if Min Dihedral Angle > 0).
         </Documentation>
+        <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="visibility"
+                                   property="InteriorPointMode"
+                                   value="0"/>
+        </Hints>
       </DoubleVectorProperty>
 
       <DoubleVectorProperty command="SetMinDihedralAngle"
@@ -79,6 +197,12 @@
         <Documentation>
           Minimum dihedral angle (degrees) for quality meshing (TetGen -q). Default 0 (no limit on dihedral angle). When > 0, enables quality mesh generation with this constraint. Set to 0 for no limit on dihedral angle.
         </Documentation>
+        <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="visibility"
+                                   property="InteriorPointMode"
+                                   value="0"/>
+        </Hints>
       </DoubleVectorProperty>
 
       <IntVectorProperty command="SetNobisect"
@@ -89,7 +213,14 @@
         <BooleanDomain name="bool"/>
         <Documentation>
           When ON, TetGen does not insert Steiner points on the boundary (-Y). The input surface mesh is preserved without modification. Incompatible with CDT.
+          Forced ON when Interior vertices is Surface vertices only or On extracted skeleton.
         </Documentation>
+        <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="visibility"
+                                   property="InteriorPointMode"
+                                   value="0"/>
+        </Hints>
       </IntVectorProperty>
 
       <IntVectorProperty command="SetDoCheck"
@@ -114,6 +245,12 @@
         <Documentation>
           Use constrained Delaunay refinement (-D). Incompatible with Preserve Surface.
         </Documentation>
+        <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="visibility"
+                                   property="InteriorPointMode"
+                                   value="0"/>
+        </Hints>
       </IntVectorProperty>
 
       <IntVectorProperty command="SetCDTRefine"
@@ -126,6 +263,12 @@
         <Documentation>
           CDT refinement scheme 1-7 (-D#). Only used when Use CDT is ON.
         </Documentation>
+        <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="visibility"
+                                   property="InteriorPointMode"
+                                   value="0"/>
+        </Hints>
       </IntVectorProperty>
 
       <DoubleVectorProperty command="SetEpsilon"
@@ -233,6 +376,12 @@
           the input surface is already adaptively remeshed (fine where curved, coarse elsewhere).
           Incompatible with neither quality meshing nor -m; -q is enabled automatically if needed.
         </Documentation>
+        <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="visibility"
+                                   property="InteriorPointMode"
+                                   value="0"/>
+        </Hints>
       </IntVectorProperty>
 
       <DoubleVectorProperty command="SetSurfaceSizingScale"
@@ -247,10 +396,18 @@
           the surface triangle size.
         </Documentation>
         <Hints>
-          <PropertyWidgetDecorator type="GenericDecorator"
-                                   mode="visibility"
-                                   property="UseSurfaceDensitySizing"
-                                   value="1"/>
+          <PropertyWidgetDecorator type="CompositeDecorator">
+            <Expression type="and">
+              <PropertyWidgetDecorator type="GenericDecorator"
+                                       mode="visibility"
+                                       property="UseSurfaceDensitySizing"
+                                       value="1"/>
+              <PropertyWidgetDecorator type="GenericDecorator"
+                                       mode="visibility"
+                                       property="InteriorPointMode"
+                                       value="0"/>
+            </Expression>
+          </PropertyWidgetDecorator>
         </Hints>
       </DoubleVectorProperty>
 

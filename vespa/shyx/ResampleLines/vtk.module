@@ -1,0 +1,13 @@
+NAME
+  vtkSHYXResampleLines
+DESCRIPTION
+  "Resample a polyline network at a fixed spacing, preserving degree != 2 feature vertices."
+GROUPS
+  Meshing
+DEPENDS
+  VTK::FiltersCore
+PRIVATE_DEPENDS
+  VTK::CommonCore
+  VTK::CommonDataModel
+  VTK::CommonExecutionModel
+  VTK::CommonMath

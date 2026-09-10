@@ -1,15 +1,16 @@
 NAME
   vtkSHYXAutoMeshRepair
 DESCRIPTION
-  "SHYX: detect self-intersecting face clusters, dilate each, local hole-fill + Alpha Wrap + union + bridge remesh/smooth."
+  "SHYX: Mesh Checker diagnostics + soup repair; optional two-stage extract/Alpha Wrap then union of self-intersection clusters."
 GROUPS
   Meshing
 DEPENDS
   vtkCGALAlgorithm
   vtkCGALPMP
+  vtkSHYXMeshChecker
+  vtkSHYXHoleFillFilter
   vtkSHYXSelectionFillAlphaReunionFilter
   VTK::FiltersCore
-  VTK::FiltersGeometry
 PRIVATE_DEPENDS
   VTK::CommonCore
   VTK::CommonDataModel

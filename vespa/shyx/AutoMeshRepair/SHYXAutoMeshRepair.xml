@@ -3,18 +3,20 @@
     <SourceProxy name="SHYXAutoMeshRepair"
                  class="vtkSHYXAutoMeshRepair"
                  label="SHYX Auto Mesh Repair">
-      <Documentation short_help="SHYX Auto Mesh Repair: cluster self-intersections, dilate, local Alpha Wrap + smooth (Mesh Checker follow-up).">
-        Further step after SHYX Mesh Checker for self-intersecting faces. Detects CGAL PMP
-        self-intersections, groups each connected location into its own cell selection, expands
-        by Dilate Layers, then runs the same local pipeline as SHYX Selection: Fill, Alpha Wrap,
-        Union (hole-fill both sides, Alpha Wrap the patch, CGAL boolean union, optional bridge
-        remesh + smooth/fair). One cluster is repaired per pass, then intersections are
-        re-detected, up to Max Passes. Port 0 is the repaired mesh. Port 1 is first-pass
-        intersecting triangles with SHYX_ClusterId. Requires CGAL 5.5+ (Alpha Wrapping).
+      <Documentation short_help="SHYX Auto Mesh Repair: Mesh Checker diagnostics; optional extract/Alpha Wrap then union of self-intersections.">
+        Front half is SHYX Mesh Checker: soup / boundary / self-intersection diagnostics and
+        combinatorial soup repair (orient + repair_polygon_soup). Self-intersection repair is off
+        by default. When &quot;Repair self-intersections&quot; is on, Repair stage defaults to
+        extract + Alpha Wrap only (port 0 remainder, port 2 wrapped patches) so CGAL union is not
+        run in the same Apply. Add a second Auto Mesh Repair with stage Union: Input = remainder,
+        Wrapped patches = port 2. One-shot extract+wrap+union per cluster is still available and
+        can hang on corefinement. Port 1 is Mesh Checker illegal primitives (SHYX_CheckReason 1/2/3).
+        Requires CGAL 5.5+ (Alpha Wrapping).
       </Documentation>
 
-      <OutputPort name="Repaired mesh" index="0" id="port0" />
-      <OutputPort name="Intersection clusters" index="1" id="port1" />
+      <OutputPort name="Remainder / repaired mesh" index="0" id="port0" />
+      <OutputPort name="Illegal primitives" index="1" id="port1" />
+      <OutputPort name="Alpha-wrapped patches" index="2" id="port2" />
 
       <InputProperty name="Input" command="SetInputConnection">
         <ProxyGroupDomain name="groups">
@@ -24,7 +26,130 @@
         <DataTypeDomain name="input_type">
           <DataType value="vtkPolyData"/>
         </DataTypeDomain>
+        <Documentation>
+          Extract stage: surface to diagnose / extract from.
+          Union stage: hole-filled remainder (port 0 of an extract Auto Mesh Repair).
+        </Documentation>
       </InputProperty>
+
+      <InputProperty name="WrappedPatches" command="SetInputConnection"
+                     port_index="1"
+                     label="Wrapped patches"
+                     panel_widget="input_selector"
+                     null_on_empty="1">
+        <ProxyGroupDomain name="groups">
+          <Group name="sources"/>
+          <Group name="filters"/>
+        </ProxyGroupDomain>
+        <DataTypeDomain name="input_type">
+          <DataType value="vtkPolyData"/>
+        </DataTypeDomain>
+        <Documentation>
+          Union stage only. Connect Alpha-wrapped patches (port 2 of an extract Auto Mesh Repair).
+        </Documentation>
+        <Hints>
+          <Optional/>
+          <PropertyWidgetDecorator type="CompositeDecorator">
+            <Expression type="and">
+              <PropertyWidgetDecorator type="GenericDecorator"
+                                       mode="visibility"
+                                       property="RepairSelfIntersections"
+                                       value="1"/>
+              <PropertyWidgetDecorator type="GenericDecorator"
+                                       mode="visibility"
+                                       property="RepairStage"
+                                       value="1"/>
+            </Expression>
+          </PropertyWidgetDecorator>
+        </Hints>
+      </InputProperty>
+
+      <IntVectorProperty name="CheckSoupEdges"
+                         label="Check soup (>2 faces / edge)"
+                         command="SetCheckSoupEdges"
+                         number_of_elements="1"
+                         default_values="1">
+        <BooleanDomain name="bool"/>
+      </IntVectorProperty>
+
+      <IntVectorProperty name="CheckBoundary"
+                         label="Check boundary (holes)"
+                         command="SetCheckBoundary"
+                         number_of_elements="1"
+                         default_values="1">
+        <BooleanDomain name="bool"/>
+      </IntVectorProperty>
+
+      <IntVectorProperty name="CheckSelfIntersection"
+                         label="Check self-intersection"
+                         command="SetCheckSelfIntersection"
+                         number_of_elements="1"
+                         default_values="1">
+        <BooleanDomain name="bool"/>
+      </IntVectorProperty>
+
+      <IntVectorProperty name="CheckOrient"
+                         label="Check / unify orientation (orient_polygon_soup)"
+                         command="SetCheckOrient"
+                         number_of_elements="1"
+                         default_values="1">
+        <BooleanDomain name="bool"/>
+        <Documentation>
+          When on, runs CGAL orient_polygon_soup on the polygon soup before the combinatorial mesh test.
+        </Documentation>
+      </IntVectorProperty>
+
+      <IntVectorProperty name="AttemptOrientRepair"
+                         label="Attempt soup repair (repair_polygon_soup)"
+                         command="SetAttemptOrientRepair"
+                         number_of_elements="1"
+                         default_values="1">
+        <BooleanDomain name="bool"/>
+        <Documentation>
+          When on, runs CGAL repair_polygon_soup after optional orient (splits non-manifold vertices, etc.)
+          to improve chances that polygon_soup_to_polygon_mesh succeeds.
+        </Documentation>
+      </IntVectorProperty>
+
+      <IntVectorProperty name="RepairSelfIntersections"
+                         label="Repair self-intersections (local Alpha Wrap)"
+                         command="SetRepairSelfIntersections"
+                         number_of_elements="1"
+                         default_values="0"
+                         animateable="0">
+        <BooleanDomain name="bool"/>
+        <Documentation>
+          Off (default): Mesh Checker diagnostics and soup repair only.
+          On: run Repair stage — extract + Alpha Wrap, union remainder with wrapped patches,
+          or legacy one-shot fill + wrap + union.
+        </Documentation>
+      </IntVectorProperty>
+
+      <IntVectorProperty name="RepairStage"
+                         label="Repair stage"
+                         command="SetRepairStage"
+                         number_of_elements="1"
+                         default_values="0"
+                         animateable="0">
+        <EnumerationDomain name="enum">
+          <Entry text="Extract and Alpha Wrap" value="0"/>
+          <Entry text="Union remainder + wrapped" value="1"/>
+          <Entry text="One-shot (extract + wrap + union)" value="2"/>
+        </EnumerationDomain>
+        <Documentation>
+          Extract and Alpha Wrap: detect clusters, dilate, hole-fill + Alpha Wrap each patch.
+          Port 0 is the hole-filled remainder; port 2 is the wrapped patches. Does not boolean-union.
+          Union: Input = remainder, Wrapped patches = port 2 of the extract filter; CGAL union +
+          optional bridge remesh/smooth.
+          One-shot: old behavior (one cluster per pass, re-detect). Can hang on CGAL corefinement.
+        </Documentation>
+        <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="enabled_state"
+                                   property="RepairSelfIntersections"
+                                   value="1"/>
+        </Hints>
+      </IntVectorProperty>
 
       <IntVectorProperty name="DilateLayers"
                          label="Dilate layers (per cluster)"
@@ -36,31 +161,48 @@
         <Documentation>
           Face-ring expansion of each intersecting-face cluster before local Alpha Wrap.
         </Documentation>
+        <Hints>
+          <PropertyWidgetDecorator type="CompositeDecorator">
+            <Expression type="and">
+              <PropertyWidgetDecorator type="GenericDecorator"
+                                       mode="enabled_state"
+                                       property="RepairSelfIntersections"
+                                       value="1"/>
+              <PropertyWidgetDecorator type="GenericDecorator"
+                                       mode="enabled_state"
+                                       property="RepairStage"
+                                       values="0 2"/>
+            </Expression>
+          </PropertyWidgetDecorator>
+        </Hints>
       </IntVectorProperty>
 
       <IntVectorProperty name="MaxPasses"
-                         label="Max repair passes"
+                         label="Max clusters / passes"
                          command="SetMaxPasses"
                          number_of_elements="1"
                          default_values="32"
                          animateable="0">
         <IntRangeDomain name="range" min="1" max="256"/>
         <Documentation>
-          One intersecting cluster is repaired per pass, then self-intersections are detected
-          again. Stops early when none remain or a pass cannot repair any cluster.
+          Extract stage: wrap at most this many dilated clusters (largest first).
+          One-shot stage: one intersecting cluster is repaired per pass, then self-intersections
+          are detected again. Stops early when none remain or a pass cannot repair any cluster.
         </Documentation>
-      </IntVectorProperty>
-
-      <IntVectorProperty name="AttemptSoupRepair"
-                         label="Soup repair first (orient + repair_polygon_soup)"
-                         command="SetAttemptSoupRepair"
-                         number_of_elements="1"
-                         default_values="1"
-                         animateable="0">
-        <BooleanDomain name="bool"/>
-        <Documentation>
-          Same combinatorial soup repair as SHYX Mesh Checker before intersection detection.
-        </Documentation>
+        <Hints>
+          <PropertyWidgetDecorator type="CompositeDecorator">
+            <Expression type="and">
+              <PropertyWidgetDecorator type="GenericDecorator"
+                                       mode="enabled_state"
+                                       property="RepairSelfIntersections"
+                                       value="1"/>
+              <PropertyWidgetDecorator type="GenericDecorator"
+                                       mode="enabled_state"
+                                       property="RepairStage"
+                                       values="0 2"/>
+            </Expression>
+          </PropertyWidgetDecorator>
+        </Hints>
       </IntVectorProperty>
 
       <IntVectorProperty command="SetFairingContinuity"
@@ -73,6 +215,12 @@
         <Documentation>
           Continuity for CGAL hole fill on both sub-meshes (0 / 1 / 2), same as SHYX Hole Fill.
         </Documentation>
+        <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="enabled_state"
+                                   property="RepairSelfIntersections"
+                                   value="1"/>
+        </Hints>
       </IntVectorProperty>
 
       <IntVectorProperty command="SetSkipAlphaWrapping"
@@ -83,9 +231,16 @@
                          panel_visibility="advanced"
                          animateable="0">
         <BooleanDomain name="bool"/>
-        <Documentation>
-          If on, each cluster is only hole-filled (no Alpha Wrapping).
-        </Documentation>
+        <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="enabled_state"
+                                   property="RepairSelfIntersections"
+                                   value="1"/>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="enabled_state"
+                                   property="RepairStage"
+                                   values="0 2"/>
+        </Hints>
       </IntVectorProperty>
 
       <IntVectorProperty command="SetAbsoluteThresholds"
@@ -96,9 +251,16 @@
                          panel_visibility="advanced"
                          animateable="0">
         <BooleanDomain name="bool"/>
-        <Documentation>
-          If off, Alpha and Offset are percentages of the mesh length (see VESPA Alpha Wrapping).
-        </Documentation>
+        <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="enabled_state"
+                                   property="RepairSelfIntersections"
+                                   value="1"/>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="enabled_state"
+                                   property="RepairStage"
+                                   values="0 2"/>
+        </Hints>
       </IntVectorProperty>
 
       <DoubleVectorProperty command="SetAlpha"
@@ -108,7 +270,16 @@
                             default_values="4.0"
                             panel_visibility="advanced"
                             animateable="1">
-        <Documentation>Alpha wrap parameter (maximum circumradius of faces in the result).</Documentation>
+        <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="enabled_state"
+                                   property="RepairSelfIntersections"
+                                   value="1"/>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="enabled_state"
+                                   property="RepairStage"
+                                   values="0 2"/>
+        </Hints>
       </DoubleVectorProperty>
 
       <DoubleVectorProperty command="SetOffset"
@@ -118,7 +289,16 @@
                             default_values="0.05"
                             panel_visibility="advanced"
                             animateable="1">
-        <Documentation>Alpha wrap offset (dilatation / shrink factor depending on context).</Documentation>
+        <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="enabled_state"
+                                   property="RepairSelfIntersections"
+                                   value="1"/>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="enabled_state"
+                                   property="RepairStage"
+                                   values="0 2"/>
+        </Hints>
       </DoubleVectorProperty>
 
       <IntVectorProperty command="SetThrowOnSelfIntersection"
@@ -129,6 +309,16 @@
                          panel_visibility="advanced"
                          animateable="0">
         <BooleanDomain name="bool"/>
+        <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="enabled_state"
+                                   property="RepairSelfIntersections"
+                                   value="1"/>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="enabled_state"
+                                   property="RepairStage"
+                                   values="1 2"/>
+        </Hints>
       </IntVectorProperty>
 
       <IntVectorProperty command="SetOrientToBoundVolumeWhenNeeded"
@@ -139,6 +329,16 @@
                          panel_visibility="advanced"
                          animateable="0">
         <BooleanDomain name="bool"/>
+        <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="enabled_state"
+                                   property="RepairSelfIntersections"
+                                   value="1"/>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="enabled_state"
+                                   property="RepairStage"
+                                   values="1 2"/>
+        </Hints>
       </IntVectorProperty>
 
       <IntVectorProperty name="UseUpdateAttributes"
@@ -158,10 +358,69 @@
                          default_values="1"
                          animateable="0">
         <BooleanDomain name="bool"/>
+        <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="enabled_state"
+                                   property="RepairSelfIntersections"
+                                   value="1"/>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="enabled_state"
+                                   property="RepairStage"
+                                   values="1 2"/>
+        </Hints>
+      </IntVectorProperty>
+
+      <IntVectorProperty command="SetEnableBridgeRemesh"
+                         name="EnableBridgeRemesh"
+                         label="Bridge: remesh"
+                         number_of_elements="1"
+                         default_values="1"
+                         animateable="0">
+        <BooleanDomain name="bool"/>
         <Documentation>
-          After each local CGAL union, remesh + smooth/fair the Alpha-Wrap / original bridge,
-          same as SHYX Selection: Fill, Alpha Wrap, Union.
+          Local CGAL isotropic remesh on the cleanup patch. Independent of Bridge: smooth — uncheck
+          smooth to remesh only.
         </Documentation>
+        <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="enabled_state"
+                                   property="RepairSelfIntersections"
+                                   value="1"/>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="enabled_state"
+                                   property="RepairStage"
+                                   values="1 2"/>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="enabled_state"
+                                   property="EnableBridgeCleanup"
+                                   value="1"/>
+        </Hints>
+      </IntVectorProperty>
+
+      <IntVectorProperty command="SetEnableBridgeSmooth"
+                         name="EnableBridgeSmooth"
+                         label="Bridge: smooth"
+                         number_of_elements="1"
+                         default_values="1"
+                         animateable="0">
+        <BooleanDomain name="bool"/>
+        <Documentation>
+          Constrained CGAL smooth_shape (MCF) or fair on the cleanup patch. Independent of remesh.
+        </Documentation>
+        <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="enabled_state"
+                                   property="RepairSelfIntersections"
+                                   value="1"/>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="enabled_state"
+                                   property="RepairStage"
+                                   values="1 2"/>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="enabled_state"
+                                   property="EnableBridgeCleanup"
+                                   value="1"/>
+        </Hints>
       </IntVectorProperty>
 
       <IntVectorProperty command="SetBridgeDilateFromSeam"
@@ -174,6 +433,14 @@
         <Hints>
           <PropertyWidgetDecorator type="GenericDecorator"
                                    mode="enabled_state"
+                                   property="RepairSelfIntersections"
+                                   value="1"/>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="enabled_state"
+                                   property="RepairStage"
+                                   values="1 2"/>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="enabled_state"
                                    property="EnableBridgeCleanup"
                                    value="1"/>
         </Hints>
@@ -183,10 +450,18 @@
                          name="BridgeDilateLayers"
                          label="Bridge: dilate layers"
                          number_of_elements="1"
-                         default_values="3"
+                         default_values="2"
                          animateable="0">
         <IntRangeDomain name="range" min="0" max="64"/>
         <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="enabled_state"
+                                   property="RepairSelfIntersections"
+                                   value="1"/>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="enabled_state"
+                                   property="RepairStage"
+                                   values="1 2"/>
           <PropertyWidgetDecorator type="GenericDecorator"
                                    mode="enabled_state"
                                    property="EnableBridgeCleanup"
@@ -201,14 +476,22 @@
                             default_values="-1"
                             panel_visibility="advanced"
                             animateable="0">
-        <Documentation>
-          Target edge length for local isotropic remesh. &lt;= 0 uses the mean edge length of the
-          dilated cleanup patch.
-        </Documentation>
         <Hints>
           <PropertyWidgetDecorator type="GenericDecorator"
                                    mode="enabled_state"
+                                   property="RepairSelfIntersections"
+                                   value="1"/>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="enabled_state"
+                                   property="RepairStage"
+                                   values="1 2"/>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="enabled_state"
                                    property="EnableBridgeCleanup"
+                                   value="1"/>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="enabled_state"
+                                   property="EnableBridgeRemesh"
                                    value="1"/>
         </Hints>
       </DoubleVectorProperty>
@@ -224,7 +507,19 @@
         <Hints>
           <PropertyWidgetDecorator type="GenericDecorator"
                                    mode="enabled_state"
+                                   property="RepairSelfIntersections"
+                                   value="1"/>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="enabled_state"
+                                   property="RepairStage"
+                                   values="1 2"/>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="enabled_state"
                                    property="EnableBridgeCleanup"
+                                   value="1"/>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="enabled_state"
+                                   property="EnableBridgeRemesh"
                                    value="1"/>
         </Hints>
       </IntVectorProperty>
@@ -240,27 +535,51 @@
         <Hints>
           <PropertyWidgetDecorator type="GenericDecorator"
                                    mode="enabled_state"
+                                   property="RepairSelfIntersections"
+                                   value="1"/>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="enabled_state"
+                                   property="RepairStage"
+                                   values="1 2"/>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="enabled_state"
                                    property="EnableBridgeCleanup"
+                                   value="1"/>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="enabled_state"
+                                   property="EnableBridgeRemesh"
                                    value="1"/>
         </Hints>
       </IntVectorProperty>
 
       <IntVectorProperty command="SetBridgeSmoothMethod"
                          name="BridgeSmoothMethod"
-                         label="Bridge: post-remesh method"
+                         label="Bridge: smooth method"
                          number_of_elements="1"
                          default_values="2"
                          panel_visibility="advanced"
                          animateable="0">
         <EnumerationDomain name="enum">
-          <Entry text="None (remesh only)" value="0"/>
+          <Entry text="None" value="0"/>
           <Entry text="Shape MCF (smooth_shape)" value="1"/>
           <Entry text="Fair" value="2"/>
         </EnumerationDomain>
         <Hints>
           <PropertyWidgetDecorator type="GenericDecorator"
                                    mode="enabled_state"
+                                   property="RepairSelfIntersections"
+                                   value="1"/>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="enabled_state"
+                                   property="RepairStage"
+                                   values="1 2"/>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="enabled_state"
                                    property="EnableBridgeCleanup"
+                                   value="1"/>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="enabled_state"
+                                   property="EnableBridgeSmooth"
                                    value="1"/>
         </Hints>
       </IntVectorProperty>
@@ -276,7 +595,19 @@
         <Hints>
           <PropertyWidgetDecorator type="GenericDecorator"
                                    mode="enabled_state"
+                                   property="RepairSelfIntersections"
+                                   value="1"/>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="enabled_state"
+                                   property="RepairStage"
+                                   values="1 2"/>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="enabled_state"
                                    property="EnableBridgeCleanup"
+                                   value="1"/>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="enabled_state"
+                                   property="EnableBridgeSmooth"
                                    value="1"/>
           <PropertyWidgetDecorator type="GenericDecorator"
                                    mode="visibility"
@@ -295,7 +626,19 @@
         <Hints>
           <PropertyWidgetDecorator type="GenericDecorator"
                                    mode="enabled_state"
+                                   property="RepairSelfIntersections"
+                                   value="1"/>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="enabled_state"
+                                   property="RepairStage"
+                                   values="1 2"/>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="enabled_state"
                                    property="EnableBridgeCleanup"
+                                   value="1"/>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="enabled_state"
+                                   property="EnableBridgeSmooth"
                                    value="1"/>
           <PropertyWidgetDecorator type="GenericDecorator"
                                    mode="visibility"
@@ -319,7 +662,19 @@
         <Hints>
           <PropertyWidgetDecorator type="GenericDecorator"
                                    mode="enabled_state"
+                                   property="RepairSelfIntersections"
+                                   value="1"/>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="enabled_state"
+                                   property="RepairStage"
+                                   values="1 2"/>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="enabled_state"
                                    property="EnableBridgeCleanup"
+                                   value="1"/>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="enabled_state"
+                                   property="EnableBridgeSmooth"
                                    value="1"/>
           <PropertyWidgetDecorator type="GenericDecorator"
                                    mode="visibility"
@@ -335,19 +690,28 @@
                          default_values="1"
                          panel_visibility="advanced">
         <BooleanDomain name="bool"/>
-        <Documentation>
-          When on, prints per-pass diagnostics to the ParaView Output Messages window.
-        </Documentation>
       </IntVectorProperty>
 
-      <PropertyGroup label="Intersection clusters">
+      <PropertyGroup label="Diagnostics (Mesh Checker)">
+        <Property name="CheckSoupEdges"/>
+        <Property name="CheckBoundary"/>
+        <Property name="CheckSelfIntersection"/>
+        <Property name="CheckOrient"/>
+        <Property name="AttemptOrientRepair"/>
+      </PropertyGroup>
+
+      <PropertyGroup label="Self-intersection repair">
+        <Property name="RepairSelfIntersections"/>
+        <Property name="RepairStage"/>
         <Property name="DilateLayers"/>
         <Property name="MaxPasses"/>
-        <Property name="AttemptSoupRepair"/>
+        <Property name="FairingContinuity"/>
       </PropertyGroup>
 
       <PropertyGroup label="Bridge cleanup (after each local union)">
         <Property name="EnableBridgeCleanup"/>
+        <Property name="EnableBridgeRemesh"/>
+        <Property name="EnableBridgeSmooth"/>
         <Property name="BridgeDilateFromSeam"/>
         <Property name="BridgeDilateLayers"/>
         <Property name="BridgeTargetEdgeLength"/>

@@ -27,7 +27,7 @@ description: >-
   - **Display 表示**：`PulseGlyphRepresentation` / `AnimatedStreamlineRepresentation` / `PointLabelRepresentation`，挂在 Display 下拉框，不是 pipeline 节点。
   - **RenderView 标题栏选择工具**：`ParaViewPlugin/selection/SphereSelection/`、`GrowSelectionWithSimilar/`、`ProximityGapSelection/`，纯客户端 Qt，**没有** SM proxy。
   - **RenderView block 右键**：`ParaViewPlugin/selection/SelectBlock/`（`pqContextMenuInterface`），在复合数据块菜单里加 **Select Block**，先清当前选择再选中该 block 的全部 cell；同样无 SM proxy。
-  - **RenderView 选择右键**：`ParaViewPlugin/selection/SelectSimilar/`，有 cell 选择时加 **Select All**（当前选区所在连通区域）、**Invert Selection**（反选）、**Select Similar** 子菜单（现有 **By Normal**）和 **Fill Interior**。By Normal 一次扩到没有相似邻面为止，复用 `GrowSelectionWithSimilar` 的二面角阈值，不是标题栏那种一环一环点。Fill Interior 把被当前选区完全围住的未选面补进选择（开放网格上仍连到开口的区域不填）。
+  - **RenderView 选择右键**：`ParaViewPlugin/selection/SelectSimilar/`，有点或 cell 选择时加 **Select Connected**（当前选区所在连通区域：点沿网格、线共顶点、面共边、体共面）、有 cell 选择时还有 **Invert Selection**（反选）、**Select Similar** 子菜单（现有 **By Normal**）和 **Fill Interior**。By Normal 一次扩到没有相似邻面为止，复用 `GrowSelectionWithSimilar` 的二面角阈值，不是标题栏那种一环一环点。Fill Interior 把被当前选区完全围住的未选面补进选择（开放网格上仍连到开口的区域不填）。
   - **3D widget 表示**：支架/圆柱（`SHYX*WidgetRepresentation.xml`，与对应滤镜同目录），不是 Display 下拉项。
   - **View 停靠窗**：SHYX AI Assistant（`ParaViewPlugin/AIAssistant/pqSHYXAI*`），不是 pipeline filter。
 - **SHYX 实现**：每个 **VTK 算子或表示** 在 `vespa/shyx/<FeatureName>/` 下；至少包含 `vtk.module`、`CMakeLists.txt`（`vtk_module_add_module`，`shyx` 里通常带 `FORCE_STATIC`）和 `SHYX*.xml`（`vespa_plugin_xml(...)`）。标题栏选择工具只有 `ParaViewPlugin/selection/` 下的 `pq*`。AI 面板 UI 是 `ParaViewPlugin/AIAssistant/pqSHYXAI*`（`vespa/shyx/AIAssistant/` 只有 README，没有 VTK 模块或 SM XML）；不要 `SHYXAIAssistant()`。
@@ -54,7 +54,7 @@ description: >-
 | 菜单/图标 | XML 里 `<Hints><ShowInMenu category="SHYX" .../></Hints>`；资源常挂在 `ParaViewPlugin/VESPAIcons.qrc` |
 | 某输出端口默认表示法（如 Point Gaussian） | `<Hints>` 里 `<RepresentationType view="RenderView" type="..." port="N"/>`；**§8.6.7** |
 | 需要 Qt 的客户端逻辑 | `ParaViewPlugin/widgets/`、`selection/`、`AIAssistant/`、`Representations/`；用 `ParaViewPlugin/cmake/PropertyWidgets.cmake` 与 `ClientInterfaces.cmake` |
-| SHYX AI Assistant 能力目录与参数查询 | `ParaViewPlugin/AIAssistant/pqSHYXAIAgentTools.cxx`（`list_filters` / `lookup_shyx_docs` / `describe_proxy`）；系统提示 `pqSHYXAIAssistantPanel.cxx` 的 `kSystemPrompt`；**§9** |
+| SHYX AI Assistant 能力目录与参数查询 | `ParaViewPlugin/AIAssistant/pqSHYXAIAgentTools.cxx`（`list_filters` / `lookup_shyx_docs` / `describe_proxy`；现场状态 `inspect_pipeline` / `inspect_selection` / `inspect_view`）；系统提示 `pqSHYXAIAssistantPanel.cxx` 的 `kSystemPrompt`；**§9** |
 | 上游 VESPA 的聚合 XML | `ParaViewPlugin/smxml/VESPAFilters.xml` 只注册 Kitware 原版滤镜；**不要**把 SHYX 代理再塞回去。SHYX 一律模块目录里的 `SHYX*.xml` |
 
 **搜索技巧**：在仓库内 `rg "vtkSHYX"`, `rg "SHYX" ParaViewPlugin`, `rg "vtk_module_add_module" vespa/shyx` 可快速定位命名与已接入项。
@@ -342,7 +342,7 @@ description: >-
 | 新功能类型 | SM 里有没有 | 只加 XML/C++ 够不够 | 还必须改 |
 |------------|-------------|---------------------|----------|
 | Pipeline filter / source | `filters` / `sources` | **参数**：`describe_proxy('XML名')` 一般能扫到 | `INVENTORY.md`；有用法偏好时加 `kShyxExtra`（血管顺序、多端口、与 VESPA 成对选用） |
-| Display 表示 | `representations` + GeometryRepresentation `Extension` + `exposed_name` | **不够**。空目录看不到；即使用 XML 名查到，列的是 `Animate` 不是 `PG_Animate` | `isShyxDisplayRepresentation`、`representationDisplayName`（下拉框文案，如 `Pulse Glyphs`）；确认 `exposedNamesForSubproxy` 能从 Extension 读到 `exposed_name`；`kShyxExtra`；`kSystemPrompt` 举例；`get_display` 的 `PG_`/`AS_`/`PL_` 前缀若换了也要加 |
+| Display 表示 | `representations` + GeometryRepresentation `Extension` + `exposed_name` | **不够**。空目录看不到；即使用 XML 名查到，列的是 `Animate` 不是 `PG_Animate` | `isShyxDisplayRepresentation`、`representationDisplayName`（下拉框文案，如 `Pulse Glyphs`）；确认 `exposedNamesForSubproxy` 能从 Extension 读到 `exposed_name`；`kShyxExtra`；`kSystemPrompt` 举例；`inspect_view` 的 `PG_`/`AS_`/`PL_` 前缀若换了也要加 |
 | 标题栏 / 纯 Qt 工具 | **无 proxy** | **完全不够**。`describe_proxy` 会报找不到 | `describeClientTool()`（交互与参数，如 `DihedralThresholdDegrees`）；`kShyxExtra`；空查询 `list_filters`/`lookup_shyx_docs` 的目录句；`kSystemPrompt` |
 | 3D widget 表示 | `representations` / `3d_widget_representations` | 精确 XML 名也许能 dump，但不是 Display 下拉 | `kShyxExtra` 标明「支架 widget，不是 Representation 下拉」 |
 
@@ -353,7 +353,7 @@ description: >-
 - 目录：空查询 `lookup_shyx_docs` + `list_filters`。
 - Filter 参数：`describe_proxy('SHYXMeshChecker')` → Python `Name(Input=..., registrationName='...')`。
 - Display 参数：`describe_proxy('Pulse Glyphs')` → `GetDisplayProperties().Representation = 'Pulse Glyphs'`，属性用 **exposed 名**（`disp.PG_Animate`）。**不要** `PulseGlyphRepresentation()`。
-- 无 proxy 工具：`describe_proxy('sphere')` / `describe_proxy('grow')` / `describe_proxy('proximity gap')` / `describe_proxy('select block')` / `describe_proxy('select similar')` / `describe_proxy('fill interior')` / `describe_proxy('select all')` / `describe_proxy('invert')`；用完 `get_selection_ids`。
+- 无 proxy 工具：`describe_proxy('sphere')` / `describe_proxy('grow')` / `describe_proxy('proximity gap')` / `describe_proxy('select block')` / `describe_proxy('select similar')` / `describe_proxy('fill interior')` / `describe_proxy('select connected')` / `describe_proxy('invert')`；用完 `inspect_selection`。
 
 ### 9.3 检查（加完功能后）
 

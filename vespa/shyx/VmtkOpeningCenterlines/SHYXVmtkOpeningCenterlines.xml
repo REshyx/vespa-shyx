@@ -4,26 +4,32 @@
     <SourceProxy name="SHYXVmtkOpeningCenterlines"
                  class="vtkSHYXVmtkOpeningCenterlines"
                  label="SHYX VMTK Opening Centerlines">
-      <Documentation short_help="SHYX VMTK Opening Centerlines: Threshold openings, pick inlets/outlets, optional VMTK centerlines.">
+      <Documentation short_help="SHYX VMTK Opening Centerlines: Threshold openings, Voronoi tree or Network (punch caps).">
         Single surface input. Cells whose chosen scalar magnitude is **greater than 0** are extracted
         (fixed threshold rule; only the array may be chosen). Each connected component defines one opening.
         The representative point is the mesh vertex closest to that patch centroid (for disk-like inlets/outlets).
 
-        The **Inlets (openings)** list is filled after Apply. Each row is keyed as **SeedPoint: &lt;SurfacePointId&gt;**
+        The **Inlets (openings)** list is filled after Apply, sorted by **SurfacePointId**. Each row is keyed as **SeedPoint: &lt;SurfacePointId&gt;**
         (representative surface vertex id); identical ids get **#2**, **#3** suffixes. Check entries that are **inlets** (VMTK source seeds); unchecked openings are
         **outlets** (targets). Turn **Calculate centerline** on only after marking inlets so
         centerlines are not computed during exploration.
 
-        The **Remove openings** list mirrors each discovery row; checked openings are skipped on output
+        The **Remove openings** list mirrors the same SurfacePointId-sorted rows; checked openings are skipped on output
         port 1 (seed points) and excluded from centerline seeds (treated as deleted). Assign **Inlets** only among
         openings that remain unchecked here.
 
         Changing **Threshold array** clears prior inlet/outlet and remove checks and rebuilds the opening
         list on the next Apply/update.
 
-        Output 0 is VMTK centerline polydata when **Calculate centerline** is on and at least one
-        checked inlet and one unchecked outlet exist among non-removed openings; otherwise empty
-        (the filter shallow-copies the input internally for VMTK with point GlobalIds).
+        Output 0 is VMTK geometry when **Calculate centerline** is on. **Centerline method**
+        **Voronoi tree** needs at least one checked inlet and one unchecked outlet among
+        non-removed openings (closed surface; source–target tree, loops drop the cheaper arm).
+        **Network** deletes every cell that passed the threshold (typically **EndpointIndex**
+        caps) so each patch becomes a boundary ring, then runs vtkvmtkPolyDataNetworkExtraction
+        (keeps loops; inlet checks are unused). Otherwise output 0 is empty.
+
+        Optional **Centerline post-process** checkboxes (only when Calculate centerline is on)
+        run VMTK filters on port 0, in order: attributes, branch extractor, geometry.
 
         Output 1 is one vertex per **non-removed** opening with arrays OpeningArrayValue,
         OpeningIndex, SurfacePointId, IsInlet; **SurfacePointId** is the active scalars array for display.
@@ -64,6 +70,8 @@
           Default: **EndpointIndex** on **Cell Data** (e.g. vtkCGALVesselEndClipper caps). The array
           list is restricted to cell arrays so ParaView does not pick a same-named point array by
           default when both exist. Threshold rule is fixed: tuple magnitude **&gt; 0** (not adjustable).
+          Those cells are the opening patches (port 1 seeds). **Network** centerline method also
+          **deletes** them from a copy of the surface so each patch becomes a geometric boundary ring.
         </Documentation>
         <Hints>
           <ArraySelectionWidget/>
@@ -105,9 +113,10 @@
           </RequiredProperties>
         </ArraySelectionDomain>
         <Documentation>
-          One entry per connected component after thresholding. Apply once to populate the list.
+          One entry per connected component after thresholding, sorted by SurfacePointId. Apply once to populate the list.
           Checked = inlet (VMTK source seed); unchecked = outlet (target). Names reflect threshold
-          array magnitudes (mean per patch). Needs at least one of each when Calculate centerline is on.
+          array magnitudes (mean per patch). Voronoi method needs at least one of each when
+          Calculate centerline is on. Network method ignores these checks.
         </Documentation>
       </StringVectorProperty>
 
@@ -127,8 +136,9 @@
           </RequiredProperties>
         </ArraySelectionDomain>
         <Documentation>
-          Checked openings are omitted from output seed points and from centerline source/target seeds
-          (treated as deleted). Unchecked openings remain available for inlet/outlet assignment.
+          Checked openings are omitted from output seed points and from Voronoi source/target seeds
+          (treated as deleted). They are still punched for the Network method (all Threshold cells
+          are deleted). Unchecked openings remain available for inlet/outlet assignment.
         </Documentation>
       </StringVectorProperty>
 
@@ -145,8 +155,37 @@
         <BooleanDomain name="bool"/>
         <Documentation>
           When off (default), only seed glyphs (port 1) and the opening lists are produced.
-          When on, runs vtkvmtkPolyDataCenterlines using non-removed checked openings as sources and non-removed unchecked as targets.
+          When on, runs the algorithm selected by **Centerline method**.
         </Documentation>
+      </IntVectorProperty>
+
+      <IntVectorProperty name="CenterlineMethod"
+                         label="Centerline method"
+                         command="SetCenterlineMethod"
+                         number_of_elements="1"
+                         default_values="0"
+                         animateable="0">
+        <EnumerationDomain name="enum">
+          <Entry text="Voronoi tree (source–target)" value="0"/>
+          <Entry text="Network (punch openings, keep loops)" value="1"/>
+        </EnumerationDomain>
+        <Documentation>
+          Voronoi tree: vtkvmtkPolyDataCenterlines on the closed input. Checked openings are
+          sources (inlets), unchecked are targets. A vascular loop keeps only the cheaper arm.
+
+          Network: delete every cell whose Threshold array magnitude is &gt; 0 (the same patches
+          listed as openings, typically EndpointIndex caps on a watertight Clipper output).
+          Remaining wall triangles have a boundary ring at each former cap. Then
+          vtkvmtkPolyDataNetworkExtraction traces the full graph, including loops.
+          Inlet / outlet checks are not used. Surface must have at least one hole after punching.
+        </Documentation>
+        <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="enabled_state"
+                                   property="CalculateCenterline"
+                                   value="0"
+                                   inverse="1"/>
+        </Hints>
       </IntVectorProperty>
 
       <IntVectorProperty name="AppendEndPointsToCenterlines"
@@ -158,13 +197,22 @@
         <Documentation>
           When on (default), VMTK appends line segments from each inlet/outlet seed on the surface to the
           corresponding centerline endpoint (Voronoi pole). When off, centerlines stop at poles only.
+          Voronoi method only.
         </Documentation>
         <Hints>
-          <PropertyWidgetDecorator type="GenericDecorator"
-                                   mode="enabled_state"
-                                   property="CalculateCenterline"
-                                   value="0"
-                                   inverse="1"/>
+          <PropertyWidgetDecorator type="CompositeDecorator">
+            <Expression type="and">
+              <PropertyWidgetDecorator type="GenericDecorator"
+                                       mode="visibility"
+                                       property="CenterlineMethod"
+                                       value="0"/>
+              <PropertyWidgetDecorator type="GenericDecorator"
+                                       mode="enabled_state"
+                                       property="CalculateCenterline"
+                                       value="0"
+                                       inverse="1"/>
+            </Expression>
+          </PropertyWidgetDecorator>
         </Hints>
       </IntVectorProperty>
 
@@ -176,11 +224,19 @@
                          panel_visibility="advanced">
         <BooleanDomain name="bool"/>
         <Hints>
-          <PropertyWidgetDecorator type="GenericDecorator"
-                                   mode="enabled_state"
-                                   property="CalculateCenterline"
-                                   value="0"
-                                   inverse="1"/>
+          <PropertyWidgetDecorator type="CompositeDecorator">
+            <Expression type="and">
+              <PropertyWidgetDecorator type="GenericDecorator"
+                                       mode="visibility"
+                                       property="CenterlineMethod"
+                                       value="0"/>
+              <PropertyWidgetDecorator type="GenericDecorator"
+                                       mode="enabled_state"
+                                       property="CalculateCenterline"
+                                       value="0"
+                                       inverse="1"/>
+            </Expression>
+          </PropertyWidgetDecorator>
         </Hints>
       </IntVectorProperty>
 
@@ -192,6 +248,106 @@
                          panel_visibility="advanced">
         <BooleanDomain name="bool"/>
         <Hints>
+          <PropertyWidgetDecorator type="CompositeDecorator">
+            <Expression type="and">
+              <PropertyWidgetDecorator type="GenericDecorator"
+                                       mode="visibility"
+                                       property="CenterlineMethod"
+                                       value="0"/>
+              <PropertyWidgetDecorator type="GenericDecorator"
+                                       mode="enabled_state"
+                                       property="CalculateCenterline"
+                                       value="0"
+                                       inverse="1"/>
+            </Expression>
+          </PropertyWidgetDecorator>
+        </Hints>
+      </IntVectorProperty>
+
+      <DoubleVectorProperty name="AdvancementRatio"
+                            label="Advancement Ratio"
+                            command="SetAdvancementRatio"
+                            number_of_elements="1"
+                            default_values="1.02"
+                            animateable="0">
+        <DoubleRangeDomain name="range" min="1.0" max="10.0"/>
+        <Documentation>
+          vtkvmtkPolyDataNetworkExtraction: virtual-sphere radius = (current profile max radius)
+          times this ratio. Must be &gt; 1 so the sphere sticks out past the current ring and
+          cuts the next section. Below 1 the sphere sits inside the opening, does not advance,
+          and this filter clamps to 1. Larger values take longer strides (coarser network).
+          Network method only. Default 1.02.
+        </Documentation>
+        <Hints>
+          <PropertyWidgetDecorator type="CompositeDecorator">
+            <Expression type="and">
+              <PropertyWidgetDecorator type="GenericDecorator"
+                                       mode="visibility"
+                                       property="CenterlineMethod"
+                                       value="1"/>
+              <PropertyWidgetDecorator type="GenericDecorator"
+                                       mode="enabled_state"
+                                       property="CalculateCenterline"
+                                       value="0"
+                                       inverse="1"/>
+            </Expression>
+          </PropertyWidgetDecorator>
+        </Hints>
+      </DoubleVectorProperty>
+
+      <IntVectorProperty name="ComputeCenterlineAttributes"
+                         label="Compute attributes"
+                         command="SetComputeCenterlineAttributes"
+                         number_of_elements="1"
+                         default_values="0">
+        <BooleanDomain name="bool"/>
+        <Documentation>
+          vtkvmtkCenterlineAttributesFilter on port 0. Adds point data **Abscissas** (arc length
+          from each cell start) and **ParallelTransportNormals**. Run before **Extract branches**
+          so abscissas continue through split tracts instead of restarting at 0 on every tract.
+        </Documentation>
+        <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="enabled_state"
+                                   property="CalculateCenterline"
+                                   value="0"
+                                   inverse="1"/>
+        </Hints>
+      </IntVectorProperty>
+
+      <IntVectorProperty name="ExtractCenterlineBranches"
+                         label="Extract branches"
+                         command="SetExtractCenterlineBranches"
+                         number_of_elements="1"
+                         default_values="0">
+        <BooleanDomain name="bool"/>
+        <Documentation>
+          vtkvmtkCenterlineBranchExtractor. Splits overlapping source–target paths and writes cell
+          data **CenterlineIds**, **TractIds**, **GroupIds**, and **Blanking** (1 = bifurcation
+          region). Intended for **Voronoi tree**. On **Network** the cells are already separate
+          branches; this rebuilds cells and drops **Topology**.
+        </Documentation>
+        <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="enabled_state"
+                                   property="CalculateCenterline"
+                                   value="0"
+                                   inverse="1"/>
+        </Hints>
+      </IntVectorProperty>
+
+      <IntVectorProperty name="ComputeCenterlineGeometry"
+                         label="Compute geometry"
+                         command="SetComputeCenterlineGeometry"
+                         number_of_elements="1"
+                         default_values="0">
+        <BooleanDomain name="bool"/>
+        <Documentation>
+          vtkvmtkCenterlineGeometry on the current lines (after optional split). Cell data
+          **Length**, **Curvature**, **Torsion**, **Tortuosity**; point data **FrenetTangent**,
+          **FrenetNormal**, **FrenetBinormal**. Applied last.
+        </Documentation>
+        <Hints>
           <PropertyWidgetDecorator type="GenericDecorator"
                                    mode="enabled_state"
                                    property="CalculateCenterline"
@@ -202,9 +358,17 @@
 
       <PropertyGroup label="VMTK centerline (optional)">
         <Property name="CalculateCenterline"/>
+        <Property name="CenterlineMethod"/>
         <Property name="AppendEndPointsToCenterlines"/>
         <Property name="FlipNormals"/>
         <Property name="StopFastMarchingOnReachingTarget"/>
+        <Property name="AdvancementRatio"/>
+      </PropertyGroup>
+
+      <PropertyGroup label="Centerline post-process">
+        <Property name="ComputeCenterlineAttributes"/>
+        <Property name="ExtractCenterlineBranches"/>
+        <Property name="ComputeCenterlineGeometry"/>
       </PropertyGroup>
 
       <Hints>

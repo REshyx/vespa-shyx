@@ -61,14 +61,14 @@
                             number_of_elements="1"
                             default_values="0"
                             panel_visibility="advanced">
-        <BoundsDomain mode="scaled_extent" name="bounds" scale_factor="0.002">
+        <BoundsDomain mode="scaled_extent" name="bounds" scale_factor="0.001">
           <RequiredProperties>
             <Property function="Input" name="Input" />
           </RequiredProperties>
         </BoundsDomain>
         <Documentation>
           Local remeshing parameter for skeleton extraction (CGAL min_edge_length).
-          Values &lt;= 0 use 0.002 times the longest AABB side.
+          Values &lt;= 0 use 0.001 times the longest AABB side.
         </Documentation>
       </DoubleVectorProperty>
 

@@ -8,17 +8,31 @@
  * \c SetInputArrayToProcess (ParaView array picker).
  * Each resulting connected component yields one representative surface point (closest mesh
  * vertex to the patch centroid). Each opening’s list entry is keyed by **SeedPoint: &lt;SurfacePointId&gt;**
- * (the representative surface vertex id); duplicate labels get **#2**, **#3** suffixes.
+ * (the representative surface vertex id), listed in ascending SurfacePointId order so the panel
+ * matches Point Label numbering; duplicate labels get **#2**, **#3** suffixes.
  * vtkDataArraySelection \c InletSelection — checked entries are VMTK source seeds (inlets);
  * unchecked entries are targets (outlets). \c ExcludedOpeningSelection — checked entries are omitted
  * from seed output and from centerline seeds (deleted openings). Changing the threshold array
  * clears prior checks and rebuilds the lists on the next RequestData.
  *
+ * CenterlineMethod (when CalculateCenterline is on):
+ * - 0 Voronoi: vtkvmtkPolyDataCenterlines on the closed input (source = checked inlets,
+ *   target = unchecked outlets). Tree topology; loops keep only the cheaper arm.
+ * - 1 Network: delete every cell that passed the threshold (typically EndpointIndex caps),
+ *   leaving boundary rings, then vtkvmtkPolyDataNetworkExtraction. No inlet/outlet seeds.
+ *
+ * Optional post-process (when CalculateCenterline is on), matching the usual VMTK pipe
+ * vmtkcenterlineattributes → vmtkbranchextractor → vmtkcenterlinegeometry:
+ * - ComputeCenterlineAttributes: Abscissas, ParallelTransportNormals (point data).
+ * - ExtractCenterlineBranches: CenterlineIds, TractIds, GroupIds, Blanking (cell data).
+ *   Intended for Voronoi overlapping source–target paths; Network Topology is not preserved.
+ * - ComputeCenterlineGeometry: Length/Curvature/Torsion/Tortuosity (cell) and Frenet frames (point).
+ *
  * Outputs:
- * - Port 0: vtkvmtkPolyDataCenterlines result when CalculateCenterline is on and seeds valid;
- *   otherwise empty polydata. (Input surface is shallow-copied internally for VMTK with point GlobalIds.)
+ * - Port 0: centerline/network polydata when CalculateCenterline is on and the chosen method
+ *   has valid input; otherwise empty. Voronoi shallow-copies the input with point GlobalIds.
  * - Port 1: one vertex per non-excluded opening with PointData OpeningArrayValue (mean magnitude),
- *   OpeningIndex (processing order among emitted openings), SurfacePointId, IsInlet.
+ *   OpeningIndex (0-based among emitted openings after SurfacePointId sort), SurfacePointId, IsInlet.
  */
 
 #ifndef vtkSHYXVmtkOpeningCenterlines_h
@@ -46,6 +60,10 @@ public:
   vtkGetMacro(CalculateCenterline, int);
   vtkBooleanMacro(CalculateCenterline, int);
 
+  /** 0 = vtkvmtkPolyDataCenterlines (source–target tree); 1 = punch threshold cells + network. */
+  vtkSetClampMacro(CenterlineMethod, int, 0, 1);
+  vtkGetMacro(CenterlineMethod, int);
+
   vtkSetMacro(FlipNormals, int);
   vtkGetMacro(FlipNormals, int);
   vtkBooleanMacro(FlipNormals, int);
@@ -57,6 +75,25 @@ public:
   vtkSetMacro(AppendEndPointsToCenterlines, int);
   vtkGetMacro(AppendEndPointsToCenterlines, int);
   vtkBooleanMacro(AppendEndPointsToCenterlines, int);
+
+  /** Sphere step / local max radius for vtkvmtkPolyDataNetworkExtraction (must be >= 1). */
+  vtkSetClampMacro(AdvancementRatio, double, 1.0, 10.0);
+  vtkGetMacro(AdvancementRatio, double);
+
+  /** vtkvmtkCenterlineAttributesFilter: Abscissas + ParallelTransportNormals. */
+  vtkSetMacro(ComputeCenterlineAttributes, int);
+  vtkGetMacro(ComputeCenterlineAttributes, int);
+  vtkBooleanMacro(ComputeCenterlineAttributes, int);
+
+  /** vtkvmtkCenterlineBranchExtractor: CenterlineIds, TractIds, GroupIds, Blanking. */
+  vtkSetMacro(ExtractCenterlineBranches, int);
+  vtkGetMacro(ExtractCenterlineBranches, int);
+  vtkBooleanMacro(ExtractCenterlineBranches, int);
+
+  /** vtkvmtkCenterlineGeometry: Length/Curvature/Torsion/Tortuosity + Frenet frames. */
+  vtkSetMacro(ComputeCenterlineGeometry, int);
+  vtkGetMacro(ComputeCenterlineGeometry, int);
+  vtkBooleanMacro(ComputeCenterlineGeometry, int);
 
   vtkDataArraySelection* GetInletSelection();
   vtkDataArraySelection* GetExcludedOpeningSelection();
@@ -80,12 +117,19 @@ private:
 
   static void ClearAllArrays(vtkDataArraySelection* sel);
   void InvalidateInletSelectionIfOpeningThresholdChanged();
+  void ApplyCenterlinePostProcess(vtkPolyData* centerlines);
 
   int CalculateCenterline = 0;
+  int CenterlineMethod = 0;
 
   int FlipNormals = 0;
   int StopFastMarchingOnReachingTarget = 0;
   int AppendEndPointsToCenterlines = 1;
+  double AdvancementRatio = 1.02;
+
+  int ComputeCenterlineAttributes = 0;
+  int ExtractCenterlineBranches = 0;
+  int ComputeCenterlineGeometry = 0;
 
   vtkSmartPointer<vtkDataArraySelection> InletSelection;
   vtkSmartPointer<vtkDataArraySelection> ExcludedOpeningSelection;
