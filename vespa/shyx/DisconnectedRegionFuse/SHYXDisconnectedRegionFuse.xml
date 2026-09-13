@@ -56,7 +56,8 @@
           count). Construct primitives: do not merge or delete points; add a line between line
           endpoints, or two triangles that zip the nearest incident edges of two surfaces
           (quad split on the shorter diagonal). If a face bridge cannot be built, a line is
-          added instead.
+          added instead. Output cell array SHYXFuseMark is 0 unchanged, 1 original cell
+          incident to a fused vertex, 2 newly constructed primitive.
         </Documentation>
       </IntVectorProperty>
 

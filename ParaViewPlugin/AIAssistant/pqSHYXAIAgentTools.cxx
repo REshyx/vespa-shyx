@@ -2243,6 +2243,8 @@ const ShyxExtra kShyxExtra[] = {
     "1 Snap small to large (keep the larger region's vertex; size is point count), "
     "2 Construct primitives (keep all points; lines get a new segment, surfaces get two "
     "triangles zipping the nearest incident edges, else a fallback line). "
+    "Cell array SHYXFuseMark: 0 unchanged, 1 original cell incident to a fused vertex, "
+    "2 new primitive (set as active cell scalars). "
     "Two regions join at one place only; "
     "a long seam is not stitched vertex-by-vertex. Triangle strips affect connectivity only." },
   { "SHYXSurfaceToVolumeMesh", "CGAL Mesh_3 tets from closed surface (alternative to TetGen)." },

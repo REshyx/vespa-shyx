@@ -17,6 +17,8 @@
  * the fused points and written to the output. Degenerate cells after fusion are
  * dropped (verts with no points, lines with fewer than 2 points, polys with
  * fewer than 3). Triangle strips are used only for connectivity, not output.
+ * Cell array SHYXFuseMark: 0 unchanged, 1 original cell incident to a fused
+ * vertex, 2 newly constructed primitive.
  *
  * @sa
  * vtkCleanPolyData

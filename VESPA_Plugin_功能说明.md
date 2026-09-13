@@ -621,6 +621,8 @@
 | **Fuse Lines** | bool | 开 | 把 line / polyline 写入输出；Construct 时断线之间加新线。 |
 | **Fuse Polys** | bool | 开 | 把多边形写入输出；Construct 时用两个三角形桥接最近邻边。 |
 
+输出 CellData **`SHYXFuseMark`**：`0` 未改，`1` 原单元碰到合点，`2` 新加的桥接线/三角形。Apply 后默认按此数组上色。
+
 ---
 
 ### 29a. SHYX Selection Append Patches（`vtkSHYXSelectionAppendPatches`）

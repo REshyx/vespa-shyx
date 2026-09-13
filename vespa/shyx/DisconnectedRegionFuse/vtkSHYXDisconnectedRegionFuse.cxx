@@ -5,6 +5,7 @@
 #include <vtkIdList.h>
 #include <vtkInformation.h>
 #include <vtkInformationVector.h>
+#include <vtkIntArray.h>
 #include <vtkObjectFactory.h>
 #include <vtkPointData.h>
 #include <vtkStaticPointLocator.h>  // faster than vtkPointLocator
@@ -30,9 +31,17 @@ VTK_ABI_NAMESPACE_BEGIN
 
 vtkStandardNewMacro(vtkSHYXDisconnectedRegionFuse);
 
-// Union-Find for vertex equivalence class merging
 namespace
 {
+constexpr const char* kFuseMarkArrayName = "SHYXFuseMark";
+enum FuseMarkValue
+{
+    FUSE_MARK_UNCHANGED = 0,
+    FUSE_MARK_REMAPPED = 1,
+    FUSE_MARK_NEW = 2
+};
+
+// Union-Find for vertex equivalence class merging
 class UnionFind
 {
 public:
@@ -110,7 +119,9 @@ void RemapCellArray(
     vtkIdType minKeep,
     int inp,
     vtkIdType cellIdOffset,
-    std::vector<std::pair<int, vtkIdType>>& keptCellSource)
+    const std::vector<char>& pointFused,
+    std::vector<std::pair<int, vtkIdType>>& keptCellSource,
+    std::vector<int>& cellMarks)
 {
     if (!inCells)
     {
@@ -121,9 +132,15 @@ void RemapCellArray(
     {
         std::vector<vtkIdType> newIds;
         newIds.reserve(static_cast<size_t>(cellPts->GetNumberOfIds()));
+        int mark = FUSE_MARK_UNCHANGED;
         for (vtkIdType k = 0; k < cellPts->GetNumberOfIds(); ++k)
         {
             const vtkIdType oldGlobal = ptOffset + cellPts->GetId(k);
+            if (oldGlobal >= 0 && static_cast<size_t>(oldGlobal) < pointFused.size() &&
+                pointFused[static_cast<size_t>(oldGlobal)])
+            {
+                mark = FUSE_MARK_REMAPPED;
+            }
             const vtkIdType root = uf.find(oldGlobal);
             const auto found = rootToNewId.find(root);
             if (found == rootToNewId.end())
@@ -144,6 +161,7 @@ void RemapCellArray(
         {
             outCells->InsertNextCell(static_cast<vtkIdType>(newIds.size()), newIds.data());
             keptCellSource.emplace_back(inp, cellIdOffset + localCellId);
+            cellMarks.push_back(mark);
         }
     }
 }
@@ -219,7 +237,7 @@ vtkIdType BestNeighborToward(
 }
 
 void InsertLineCell(vtkCellArray* lines, vtkIdType a, vtkIdType b,
-    std::vector<std::pair<int, vtkIdType>>& keptCellSource)
+    std::vector<std::pair<int, vtkIdType>>& keptCellSource, std::vector<int>& cellMarks)
 {
     if (a == b)
     {
@@ -228,10 +246,11 @@ void InsertLineCell(vtkCellArray* lines, vtkIdType a, vtkIdType b,
     const vtkIdType ids[2] = {a, b};
     lines->InsertNextCell(2, ids);
     keptCellSource.emplace_back(-1, 0);
+    cellMarks.push_back(FUSE_MARK_NEW);
 }
 
 void InsertTriangleCell(vtkCellArray* polys, vtkIdType a, vtkIdType b, vtkIdType c,
-    std::vector<std::pair<int, vtkIdType>>& keptCellSource)
+    std::vector<std::pair<int, vtkIdType>>& keptCellSource, std::vector<int>& cellMarks)
 {
     if (a == b || b == c || a == c)
     {
@@ -240,6 +259,7 @@ void InsertTriangleCell(vtkCellArray* polys, vtkIdType a, vtkIdType b, vtkIdType
     const vtkIdType ids[3] = {a, b, c};
     polys->InsertNextCell(3, ids);
     keptCellSource.emplace_back(-1, 0);
+    cellMarks.push_back(FUSE_MARK_NEW);
 }
 } 
 
@@ -545,6 +565,18 @@ int vtkSHYXDisconnectedRegionFuse::RequestData(
         clusters[rootToNewId[root]].push_back(i);
     }
 
+    std::vector<char> pointFused(static_cast<size_t>(nPoints), 0);
+    for (const auto& members : clusters)
+    {
+        if (members.size() > 1)
+        {
+            for (vtkIdType oldId : members)
+            {
+                pointFused[static_cast<size_t>(oldId)] = 1;
+            }
+        }
+    }
+
     vtkSmartPointer<vtkPoints> newPoints = vtkSmartPointer<vtkPoints>::New();
     newPoints->SetDataTypeToDouble();
     newPoints->SetNumberOfPoints(newPointCount);
@@ -597,6 +629,7 @@ int vtkSHYXDisconnectedRegionFuse::RequestData(
     vtkSmartPointer<vtkCellArray> newPolys = vtkSmartPointer<vtkCellArray>::New();
     vtkSmartPointer<vtkIdList> cellPts = vtkSmartPointer<vtkIdList>::New();
     std::vector<std::pair<int, vtkIdType>> keptCellSource;
+    std::vector<int> cellMarks;
 
     for (int inp = 0; inp < nInputs; ++inp)
     {
@@ -606,7 +639,7 @@ int vtkSHYXDisconnectedRegionFuse::RequestData(
             continue;
         }
         RemapCellArray(pd->GetVerts(), newVerts, cellPts, ptOffset[static_cast<size_t>(inp)], uf,
-            rootToNewId, 1, inp, 0, keptCellSource);
+            rootToNewId, 1, inp, 0, pointFused, keptCellSource, cellMarks);
     }
     for (int inp = 0; inp < nInputs; ++inp)
     {
@@ -616,7 +649,7 @@ int vtkSHYXDisconnectedRegionFuse::RequestData(
             continue;
         }
         RemapCellArray(pd->GetLines(), newLines, cellPts, ptOffset[static_cast<size_t>(inp)], uf,
-            rootToNewId, 2, inp, pd->GetNumberOfVerts(), keptCellSource);
+            rootToNewId, 2, inp, pd->GetNumberOfVerts(), pointFused, keptCellSource, cellMarks);
     }
 
     std::vector<std::pair<vtkIdType, vtkIdType>> lineBridges;
@@ -744,7 +777,7 @@ int vtkSHYXDisconnectedRegionFuse::RequestData(
         }
         for (const auto& lb : lineBridges)
         {
-            InsertLineCell(newLines, lb.first, lb.second, keptCellSource);
+            InsertLineCell(newLines, lb.first, lb.second, keptCellSource, cellMarks);
         }
     }
     for (int inp = 0; inp < nInputs; ++inp)
@@ -755,11 +788,12 @@ int vtkSHYXDisconnectedRegionFuse::RequestData(
             continue;
         }
         RemapCellArray(pd->GetPolys(), newPolys, cellPts, ptOffset[static_cast<size_t>(inp)], uf,
-            rootToNewId, 3, inp, pd->GetNumberOfVerts() + pd->GetNumberOfLines(), keptCellSource);
+            rootToNewId, 3, inp, pd->GetNumberOfVerts() + pd->GetNumberOfLines(), pointFused,
+            keptCellSource, cellMarks);
     }
     for (const auto& tri : triBridges)
     {
-        InsertTriangleCell(newPolys, tri[0], tri[1], tri[2], keptCellSource);
+        InsertTriangleCell(newPolys, tri[0], tri[1], tri[2], keptCellSource, cellMarks);
     }
 
     output->SetPoints(newPoints);
@@ -823,6 +857,21 @@ int vtkSHYXDisconnectedRegionFuse::RequestData(
             outCD->CopyData(srcPd->GetCellData(), srcCell, i);
         }
     }
+
+    vtkSmartPointer<vtkIntArray> fuseMark = vtkSmartPointer<vtkIntArray>::New();
+    fuseMark->SetName(kFuseMarkArrayName);
+    fuseMark->SetNumberOfComponents(1);
+    const vtkIdType nOutCells = static_cast<vtkIdType>(keptCellSource.size());
+    fuseMark->SetNumberOfTuples(nOutCells);
+    for (vtkIdType i = 0; i < nOutCells; ++i)
+    {
+        const int mark =
+            (static_cast<size_t>(i) < cellMarks.size()) ? cellMarks[static_cast<size_t>(i)]
+                                                        : FUSE_MARK_UNCHANGED;
+        fuseMark->SetValue(i, mark);
+    }
+    outCD->AddArray(fuseMark);
+    outCD->SetScalars(fuseMark);
 
     return 1;
 }
