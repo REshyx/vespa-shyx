@@ -4,7 +4,7 @@
                  class="vtkSHYXDisconnectedRegionFuse"
                  label="SHYX Disconnected Region Fuse">
       <Documentation
-          long_help="Join disconnected regions of vtkPolyData at their closest vertices when that gap is at most Fuse Threshold. Fuse Method is Average (midpoint), Snap small to large (keep the larger region's vertex), or Construct primitives (keep all points; add a line or two triangles at the gap). Raising the threshold does not move welds that already passed. Fuse Verts / Lines / Polys choose which cell arrays are written."
+          long_help="Join disconnected regions of vtkPolyData when the gap is at most Fuse Threshold. Compliance Weight blends nearest-distance (0) with geometric compliance (1): lines prefer tip-to-tip, surfaces prefer tangent-plane connections. Fuse Method is Average, Snap small to large, or Construct primitives. Cell array SHYXFuseMark marks changes."
           short_help="SHYX Disconnected Region Fuse: Fuse nearby vertices across disconnected verts/lines/polys."/>
 
       <!-- Same VTK input port (0), multiple connections: must use AddInputConnection (Set replaces). -->
@@ -30,6 +30,18 @@
           closest vertices, and only if that gap is at most this value. Raising the
           threshold does not move welds that already passed; it only allows farther
           region pairs to join. Lowering it below a gap breaks that join.
+        </Documentation>
+      </DoubleVectorProperty>
+
+      <DoubleVectorProperty name="ComplianceWeight" label="Compliance Weight"
+          command="SetComplianceWeight" number_of_elements="1" default_values="0" animateable="0">
+        <DoubleRangeDomain name="range" min="0" max="1"/>
+        <Documentation>
+          Blend between nearest-distance (0) and geometric compliance (1). Distance is still
+          capped by Fuse Threshold. Lines prefer tip-to-tip along the outward tangent.
+          Surfaces prefer a connection lying in the tangent plane (not along the normal).
+          Construct-primitives neighbor edges use the same blend (tangential in-plane for
+          faces; toward an endpoint for lines).
         </Documentation>
       </DoubleVectorProperty>
 

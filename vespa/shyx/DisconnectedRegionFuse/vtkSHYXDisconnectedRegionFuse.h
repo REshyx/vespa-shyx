@@ -10,8 +10,9 @@
  * if that gap is <= FuseThreshold. FusePositionMode is Average (midpoint of the
  * welded vertices), Snap small to large (keep the larger region's vertex;
  * region size is its point count), or Construct primitives (keep all points and
- * add a line or two triangles at the closest gap). Raising the threshold does not
- * move welds that already passed; it only allows farther region pairs to join.
+ * add a line or two triangles at the closest gap). ComplianceWeight blends Euclidean
+ * distance with a geometric prior: lines prefer tip-to-tip along the outward
+ * tangent; surfaces prefer connections in the tangent plane. 0 is distance only.
  *
  * FuseVerts / FuseLines / FusePolys choose which cell arrays are remapped onto
  * the fused points and written to the output. Degenerate cells after fusion are
@@ -56,6 +57,9 @@ public:
     vtkGetMacro(FusePositionMode, int);
     vtkSetClampMacro(FusePositionMode, int, 0, 2);
 
+    vtkSetClampMacro(ComplianceWeight, double, 0.0, 1.0);
+    vtkGetMacro(ComplianceWeight, double);
+
     vtkSetMacro(FuseVerts, bool);
     vtkGetMacro(FuseVerts, bool);
     vtkBooleanMacro(FuseVerts, bool);
@@ -78,6 +82,7 @@ protected:
     double FuseThreshold = 0.01;
     bool FuseWithinInput = true;
     int FusePositionMode = FUSE_POSITION_AVERAGE;
+    double ComplianceWeight = 0.0;
     bool FuseVerts = true;
     bool FuseLines = true;
     bool FusePolys = true;

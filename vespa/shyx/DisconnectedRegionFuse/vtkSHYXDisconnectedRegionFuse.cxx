@@ -181,6 +181,229 @@ double Dist2(const std::array<double, 3>& a, const std::array<double, 3>& b)
     return dx * dx + dy * dy + dz * dz;
 }
 
+double Clamp01(double x)
+{
+    return x < 0.0 ? 0.0 : (x > 1.0 ? 1.0 : x);
+}
+
+double Dot3(const std::array<double, 3>& a, const std::array<double, 3>& b)
+{
+    return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+}
+
+bool Normalize3(std::array<double, 3>& v)
+{
+    const double n = std::sqrt(v[0] * v[0] + v[1] * v[1] + v[2] * v[2]);
+    if (n < 1e-18)
+    {
+        return false;
+    }
+    v[0] /= n;
+    v[1] /= n;
+    v[2] /= n;
+    return true;
+}
+
+struct PointHint
+{
+    int lineDegree = 0;
+    std::array<double, 3> outward = {0, 0, 0};
+    bool hasOutward = false;
+    std::array<double, 3> normal = {0, 0, 0};
+    bool hasNormal = false;
+};
+
+void BuildPointHints(
+    const std::vector<vtkPolyData*>& pdIn,
+    const std::vector<vtkIdType>& ptOffset,
+    int nInputs,
+    vtkIdType nPoints,
+    const std::vector<std::array<double, 3>>& globalPos,
+    std::vector<PointHint>& hints)
+{
+    hints.assign(static_cast<size_t>(nPoints), PointHint{});
+    std::vector<std::vector<vtkIdType>> lineNbr(static_cast<size_t>(nPoints));
+    vtkSmartPointer<vtkIdList> walk = vtkSmartPointer<vtkIdList>::New();
+
+    for (int inp = 0; inp < nInputs; ++inp)
+    {
+        vtkPolyData* pd = pdIn[static_cast<size_t>(inp)];
+        if (!pd)
+        {
+            continue;
+        }
+        const vtkIdType off = ptOffset[static_cast<size_t>(inp)];
+        if (pd->GetLines())
+        {
+            for (pd->GetLines()->InitTraversal(); pd->GetLines()->GetNextCell(walk);)
+            {
+                const vtkIdType n = walk->GetNumberOfIds();
+                for (vtkIdType k = 1; k < n; ++k)
+                {
+                    const vtkIdType a = off + walk->GetId(k - 1);
+                    const vtkIdType b = off + walk->GetId(k);
+                    if (a == b)
+                    {
+                        continue;
+                    }
+                    lineNbr[static_cast<size_t>(a)].push_back(b);
+                    lineNbr[static_cast<size_t>(b)].push_back(a);
+                }
+            }
+        }
+        if (pd->GetPolys())
+        {
+            for (pd->GetPolys()->InitTraversal(); pd->GetPolys()->GetNextCell(walk);)
+            {
+                const vtkIdType n = walk->GetNumberOfIds();
+                if (n < 3)
+                {
+                    continue;
+                }
+                std::array<double, 3> nrm = {0, 0, 0};
+                for (vtkIdType k = 0; k < n; ++k)
+                {
+                    const auto& cur = globalPos[static_cast<size_t>(off + walk->GetId(k))];
+                    const auto& nxt = globalPos[static_cast<size_t>(off + walk->GetId((k + 1) % n))];
+                    nrm[0] += (cur[1] - nxt[1]) * (cur[2] + nxt[2]);
+                    nrm[1] += (cur[2] - nxt[2]) * (cur[0] + nxt[0]);
+                    nrm[2] += (cur[0] - nxt[0]) * (cur[1] + nxt[1]);
+                }
+                const double area = std::sqrt(nrm[0] * nrm[0] + nrm[1] * nrm[1] + nrm[2] * nrm[2]);
+                if (area < 1e-18 || !Normalize3(nrm))
+                {
+                    continue;
+                }
+                for (vtkIdType k = 0; k < n; ++k)
+                {
+                    PointHint& h = hints[static_cast<size_t>(off + walk->GetId(k))];
+                    h.normal[0] += nrm[0] * area;
+                    h.normal[1] += nrm[1] * area;
+                    h.normal[2] += nrm[2] * area;
+                    h.hasNormal = true;
+                }
+            }
+        }
+    }
+
+    for (vtkIdType i = 0; i < nPoints; ++i)
+    {
+        PointHint& h = hints[static_cast<size_t>(i)];
+        auto& nbrs = lineNbr[static_cast<size_t>(i)];
+        std::sort(nbrs.begin(), nbrs.end());
+        nbrs.erase(std::unique(nbrs.begin(), nbrs.end()), nbrs.end());
+        h.lineDegree = static_cast<int>(nbrs.size());
+        if (h.lineDegree == 1)
+        {
+            const auto& p = globalPos[static_cast<size_t>(i)];
+            const auto& q = globalPos[static_cast<size_t>(nbrs[0])];
+            h.outward = {p[0] - q[0], p[1] - q[1], p[2] - q[2]};
+            h.hasOutward = Normalize3(h.outward);
+        }
+        if (h.hasNormal && !Normalize3(h.normal))
+        {
+            h.hasNormal = false;
+        }
+    }
+}
+
+double PointComplianceToward(const PointHint& h, const std::array<double, 3>& dirFromThis)
+{
+    double c = 0.0;
+    int n = 0;
+    if (h.lineDegree > 0)
+    {
+        double lineC = 0.0;
+        if (h.hasOutward)
+        {
+            lineC = Clamp01(Dot3(dirFromThis, h.outward));
+        }
+        const double endness = (h.lineDegree == 1) ? 1.0 : 0.15;
+        c += lineC * endness;
+        ++n;
+    }
+    if (h.hasNormal)
+    {
+        c += 1.0 - std::abs(Dot3(dirFromThis, h.normal));
+        ++n;
+    }
+    if (n == 0)
+    {
+        return 1.0;
+    }
+    return c / static_cast<double>(n);
+}
+
+double PairCompliance(vtkIdType i, vtkIdType j, const std::vector<PointHint>& hints,
+    const std::vector<std::array<double, 3>>& globalPos)
+{
+    std::array<double, 3> dir = {globalPos[static_cast<size_t>(j)][0] - globalPos[static_cast<size_t>(i)][0],
+        globalPos[static_cast<size_t>(j)][1] - globalPos[static_cast<size_t>(i)][1],
+        globalPos[static_cast<size_t>(j)][2] - globalPos[static_cast<size_t>(i)][2]};
+    if (!Normalize3(dir))
+    {
+        return 0.0;
+    }
+    const std::array<double, 3> back = {-dir[0], -dir[1], -dir[2]};
+    return 0.5 * (PointComplianceToward(hints[static_cast<size_t>(i)], dir) +
+        PointComplianceToward(hints[static_cast<size_t>(j)], back));
+}
+
+double PairCost(vtkIdType i, vtkIdType j, double dist, double weight, double threshold,
+    const std::vector<PointHint>& hints, const std::vector<std::array<double, 3>>& globalPos)
+{
+    const double w = Clamp01(weight);
+    if (w <= 0.0 || hints.empty())
+    {
+        return dist;
+    }
+    const double compliance = PairCompliance(i, j, hints, globalPos);
+    return (1.0 - w) * dist + w * threshold * (1.0 - compliance);
+}
+
+double NeighborCompliance(vtkIdType from, vtkIdType other, vtkIdType toward,
+    const std::vector<PointHint>& hints, const std::vector<std::array<double, 3>>& globalPos)
+{
+    std::array<double, 3> toTarget = {
+        globalPos[static_cast<size_t>(toward)][0] - globalPos[static_cast<size_t>(from)][0],
+        globalPos[static_cast<size_t>(toward)][1] - globalPos[static_cast<size_t>(from)][1],
+        globalPos[static_cast<size_t>(toward)][2] - globalPos[static_cast<size_t>(from)][2]};
+    std::array<double, 3> alongEdge = {
+        globalPos[static_cast<size_t>(other)][0] - globalPos[static_cast<size_t>(from)][0],
+        globalPos[static_cast<size_t>(other)][1] - globalPos[static_cast<size_t>(from)][1],
+        globalPos[static_cast<size_t>(other)][2] - globalPos[static_cast<size_t>(from)][2]};
+    if (!Normalize3(alongEdge))
+    {
+        return 0.0;
+    }
+    const PointHint& h = hints[static_cast<size_t>(from)];
+    const PointHint& ho = hints[static_cast<size_t>(other)];
+    if (h.hasNormal)
+    {
+        const double dn = Dot3(toTarget, h.normal);
+        std::array<double, 3> tang = {toTarget[0] - h.normal[0] * dn, toTarget[1] - h.normal[1] * dn,
+            toTarget[2] - h.normal[2] * dn};
+        if (Normalize3(tang))
+        {
+            return Clamp01(Dot3(alongEdge, tang));
+        }
+    }
+    if (h.lineDegree > 0)
+    {
+        const double endness = (ho.lineDegree == 1) ? 1.0 : 0.15;
+        if (Normalize3(toTarget))
+        {
+            return Clamp01(0.5 * endness + 0.5 * Clamp01(Dot3(alongEdge, toTarget)));
+        }
+        return endness;
+    }
+    if (Normalize3(toTarget))
+    {
+        return Clamp01(Dot3(alongEdge, toTarget));
+    }
+    return 0.0;
+}
+
 void CountPolyEdgeUses(vtkCellArray* polys, vtkIdList* cellPts, std::map<EdgeKey, int>& uses)
 {
     if (!polys)
@@ -215,21 +438,31 @@ vtkIdType BestNeighborToward(
     const std::vector<vtkIdType>& nbrs,
     vtkIdType from,
     vtkIdType toward,
-    const std::vector<std::array<double, 3>>& globalPos)
+    const std::vector<std::array<double, 3>>& globalPos,
+    const std::vector<PointHint>& hints,
+    double weight,
+    double threshold)
 {
     vtkIdType best = -1;
-    double bestD = std::numeric_limits<double>::infinity();
+    double bestCost = std::numeric_limits<double>::infinity();
     const auto& t = globalPos[static_cast<size_t>(toward)];
+    const double w = Clamp01(weight);
     for (vtkIdType other : nbrs)
     {
         if (other == from || other == toward)
         {
             continue;
         }
-        const double d = Dist2(globalPos[static_cast<size_t>(other)], t);
-        if (d < bestD)
+        const double d = std::sqrt(Dist2(globalPos[static_cast<size_t>(other)], t));
+        double cost = d;
+        if (w > 0.0 && !hints.empty())
         {
-            bestD = d;
+            const double c = NeighborCompliance(from, other, toward, hints, globalPos);
+            cost = (1.0 - w) * d + w * threshold * (1.0 - c);
+        }
+        if (cost < bestCost)
+        {
+            bestCost = cost;
             best = other;
         }
     }
@@ -394,7 +627,14 @@ int vtkSHYXDisconnectedRegionFuse::RequestData(
         return 1;
     }
 
-    // Closest gap per region pair, then Kruskal: weld that pair iff dist <= T.
+    std::vector<PointHint> pointHints;
+    const double complianceWeight = this->ComplianceWeight;
+    if (complianceWeight > 0.0)
+    {
+        BuildPointHints(pdIn, ptOffset, nInputs, nPoints, globalPos, pointHints);
+    }
+
+    // Closest (or compliance-blended) gap per region pair, then Kruskal.
     // Raising T keeps already-accepted welds; it only adds farther region-region joins.
     std::vector<std::pair<vtkIdType, vtkIdType>> mergePairs;
     if (nComponents > 1 && this->FuseThreshold > 0.0)
@@ -418,6 +658,7 @@ int vtkSHYXDisconnectedRegionFuse::RequestData(
             vtkIdType i = -1;
             vtkIdType j = -1;
             double dist = 0.0;
+            double cost = 0.0;
             int ci = 0;
             int cj = 0;
         };
@@ -428,7 +669,8 @@ int vtkSHYXDisconnectedRegionFuse::RequestData(
             const int ci = componentOfPoint[static_cast<size_t>(i)];
             const auto& pi = globalPos[static_cast<size_t>(i)];
             vtkIdType bestJ = -1;
-            double bestD = std::numeric_limits<double>::infinity();
+            double bestCost = std::numeric_limits<double>::infinity();
+            double bestDist = 0.0;
             int bestCj = ci;
             for (vtkIdType k = 0; k < ids->GetNumberOfIds(); ++k)
             {
@@ -447,16 +689,19 @@ int vtkSHYXDisconnectedRegionFuse::RequestData(
                 const double dy = pi[1] - pj[1];
                 const double dz = pi[2] - pj[2];
                 const double d = std::sqrt(dx * dx + dy * dy + dz * dz);
-                if (d < bestD)
+                const double cost =
+                    PairCost(i, j, d, complianceWeight, this->FuseThreshold, pointHints, globalPos);
+                if (cost < bestCost)
                 {
-                    bestD = d;
+                    bestCost = cost;
+                    bestDist = d;
                     bestJ = j;
                     bestCj = cj;
                 }
             }
             if (bestJ >= 0)
             {
-                out.push_back({i, bestJ, bestD, ci, bestCj});
+                out.push_back({i, bestJ, bestDist, bestCost, ci, bestCj});
             }
         };
 
@@ -493,6 +738,7 @@ int vtkSHYXDisconnectedRegionFuse::RequestData(
             vtkIdType a = -1;
             vtkIdType b = -1;
             double dist = std::numeric_limits<double>::infinity();
+            double cost = std::numeric_limits<double>::infinity();
         };
         std::map<std::pair<int, int>, BestEdge> bestBetween;
         for (const NearHit& hit : nearestForeign)
@@ -500,11 +746,12 @@ int vtkSHYXDisconnectedRegionFuse::RequestData(
             const int lo = std::min(hit.ci, hit.cj);
             const int hi = std::max(hit.ci, hit.cj);
             BestEdge& slot = bestBetween[{lo, hi}];
-            if (hit.dist < slot.dist)
+            if (hit.cost < slot.cost)
             {
                 slot.a = hit.i;
                 slot.b = hit.j;
                 slot.dist = hit.dist;
+                slot.cost = hit.cost;
             }
         }
 
@@ -518,7 +765,7 @@ int vtkSHYXDisconnectedRegionFuse::RequestData(
             }
         }
         std::sort(edges.begin(), edges.end(),
-            [](const BestEdge& x, const BestEdge& y) { return x.dist < y.dist; });
+            [](const BestEdge& x, const BestEdge& y) { return x.cost < y.cost; });
 
         UnionFind regionUF(nComponents);
         for (const BestEdge& e : edges)
@@ -712,15 +959,17 @@ int vtkSHYXDisconnectedRegionFuse::RequestData(
         }
 
         auto pickToward = [&](vtkIdType from, vtkIdType toward) -> vtkIdType {
-            vtkIdType n = BestNeighborToward(
-                polyBdryAdj[static_cast<size_t>(from)], from, toward, globalPos);
+            vtkIdType n = BestNeighborToward(polyBdryAdj[static_cast<size_t>(from)], from, toward,
+                globalPos, pointHints, complianceWeight, this->FuseThreshold);
             if (n < 0)
             {
-                n = BestNeighborToward(polyAdj[static_cast<size_t>(from)], from, toward, globalPos);
+                n = BestNeighborToward(polyAdj[static_cast<size_t>(from)], from, toward, globalPos,
+                    pointHints, complianceWeight, this->FuseThreshold);
             }
             if (n < 0)
             {
-                n = BestNeighborToward(lineAdj[static_cast<size_t>(from)], from, toward, globalPos);
+                n = BestNeighborToward(lineAdj[static_cast<size_t>(from)], from, toward, globalPos,
+                    pointHints, complianceWeight, this->FuseThreshold);
             }
             return n;
         };
@@ -895,6 +1144,7 @@ void vtkSHYXDisconnectedRegionFuse::PrintSelf(ostream& os, vtkIndent indent)
     {
         os << " (Average)\n";
     }
+    os << indent << "ComplianceWeight: " << this->ComplianceWeight << "\n";
     os << indent << "FuseVerts: " << (this->FuseVerts ? "On\n" : "Off\n");
     os << indent << "FuseLines: " << (this->FuseLines ? "On\n" : "Off\n");
     os << indent << "FusePolys: " << (this->FusePolys ? "On\n" : "Off\n");

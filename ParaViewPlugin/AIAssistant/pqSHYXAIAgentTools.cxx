@@ -2235,8 +2235,10 @@ const ShyxExtra kShyxExtra[] = {
     "endpoints stay as one segment; short branches are not deleted. Closed all-degree-2 "
     "loops are resampled around the cycle." },
   { "SHYXDisconnectedRegionFuse",
-    "Join disconnected regions at their closest vertex pair if that gap <= FuseThreshold "
-    "(Kruskal). Raising T does not move welds that already passed; it only joins farther "
+    "Join disconnected regions at a vertex pair with gap <= FuseThreshold (Kruskal). "
+    "ComplianceWeight 0 = Euclidean nearest (default); 1 = among pairs inside T, prefer "
+    "line tip-to-tip along outward tangent and surface connections in the tangent plane. "
+    "Raising T does not move welds that already passed; it only joins farther "
     "region pairs. FuseWithinInput (default on): components inside one input are regions. "
     "Off: each port-0 connection is one region (AddInputConnection for extra pieces). "
     "FuseVerts / FuseLines / FusePolys (default all on). FusePositionMode 0 Average (midpoint), "

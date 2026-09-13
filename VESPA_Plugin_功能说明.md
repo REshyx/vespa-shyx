@@ -614,7 +614,8 @@
 | 参数 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
 | **Input** | vtkPolyData（可多路） | — | 可再 Add 其它管线节点。 |
-| **Fuse Threshold** | double | 0.01 | 允许桥接的最大缝宽。两域只接最近顶点对；调大不移动已通过的连接。 |
+| **Fuse Threshold** | double | 0.01 | 允许桥接的最大缝宽。两域只接最近（或顺应性加权）顶点对。 |
+| **Compliance Weight** | double | 0 | 0=纯距离，1=阈值内纯顺应性（线末端、面切向）。 |
 | **Fuse Within Input** | bool | 开 | 开：单路里的断片按连通域融合。关：单路内部不合，只缝多路输入。 |
 | **Fuse Method** | enum | Average | Average：两点中点。Snap small to large：小域贴大域。Construct primitives：不删点，加线或两个三角形。 |
 | **Fuse Verts** | bool | 开 | 把 vertex / polyvertex 映射到融合后的点并保留。 |
