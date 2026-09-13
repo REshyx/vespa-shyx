@@ -6,8 +6,12 @@
  * (repeatable). When FuseWithinInput is on (default), connected components (from
  * verts, lines, polys, and strips) are fuse regions. When it is off, each input
  * connection is one region and disconnected pieces inside that connection are not
- * merged. Vertices from different regions may merge when within FuseThreshold;
- * vertices in the same region are never merged directly.
+ * merged. Each pair of regions is joined only at its closest vertices, and only
+ * if that gap is <= FuseThreshold. FusePositionMode is Average (midpoint of the
+ * welded vertices), Snap small to large (keep the larger region's vertex;
+ * region size is its point count), or Construct primitives (keep all points and
+ * add a line or two triangles at the closest gap). Raising the threshold does not
+ * move welds that already passed; it only allows farther region pairs to join.
  *
  * FuseVerts / FuseLines / FusePolys choose which cell arrays are remapped onto
  * the fused points and written to the output. Degenerate cells after fusion are
@@ -40,6 +44,16 @@ public:
     vtkGetMacro(FuseWithinInput, bool);
     vtkBooleanMacro(FuseWithinInput, bool);
 
+    enum FusePositionModeType
+    {
+        FUSE_POSITION_AVERAGE = 0,
+        FUSE_POSITION_SNAP_SMALL_TO_LARGE = 1,
+        FUSE_POSITION_CONSTRUCT_PRIMITIVES = 2
+    };
+
+    vtkGetMacro(FusePositionMode, int);
+    vtkSetClampMacro(FusePositionMode, int, 0, 2);
+
     vtkSetMacro(FuseVerts, bool);
     vtkGetMacro(FuseVerts, bool);
     vtkBooleanMacro(FuseVerts, bool);
@@ -61,6 +75,7 @@ protected:
 
     double FuseThreshold = 0.01;
     bool FuseWithinInput = true;
+    int FusePositionMode = FUSE_POSITION_AVERAGE;
     bool FuseVerts = true;
     bool FuseLines = true;
     bool FusePolys = true;

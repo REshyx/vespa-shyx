@@ -4,7 +4,7 @@
                  class="vtkSHYXDisconnectedRegionFuse"
                  label="SHYX Disconnected Region Fuse">
       <Documentation
-          long_help="Fuse nearby vertices across regions of vtkPolyData. With Fuse Within Input on (default), connected components are regions, so disconnected pieces in one dataset can merge. With it off, each input connection is one region and pieces inside that connection are not merged. Fuse Verts / Lines / Polys choose which cell arrays are written."
+          long_help="Join disconnected regions of vtkPolyData at their closest vertices when that gap is at most Fuse Threshold. Fuse Method is Average (midpoint), Snap small to large (keep the larger region's vertex), or Construct primitives (keep all points; add a line or two triangles at the gap). Raising the threshold does not move welds that already passed. Fuse Verts / Lines / Polys choose which cell arrays are written."
           short_help="SHYX Disconnected Region Fuse: Fuse nearby vertices across disconnected verts/lines/polys."/>
 
       <!-- Same VTK input port (0), multiple connections: must use AddInputConnection (Set replaces). -->
@@ -26,8 +26,10 @@
       <DoubleVectorProperty name="FuseThreshold" label="Fuse Threshold" command="SetFuseThreshold"
           number_of_elements="1" default_values="0.01" animateable="0">
         <Documentation>
-          Distance threshold for vertex fusion. Vertices from different regions that are
-          within this distance will be merged. Vertices in the same region are not.
+          Distance threshold: each pair of disconnected regions is joined only at their
+          closest vertices, and only if that gap is at most this value. Raising the
+          threshold does not move welds that already passed; it only allows farther
+          region pairs to join. Lowering it below a gap breaks that join.
         </Documentation>
       </DoubleVectorProperty>
 
@@ -38,6 +40,23 @@
           On: disconnected pieces inside one input are separate fuse regions (a single
           dataset of broken lines/surfaces can weld). Off: each input connection is one
           region; pieces inside that connection are never merged.
+        </Documentation>
+      </IntVectorProperty>
+
+      <IntVectorProperty name="FusePositionMode" label="Fuse Method" command="SetFusePositionMode"
+          number_of_elements="1" default_values="0" animateable="0">
+        <EnumerationDomain name="enum">
+          <Entry text="Average" value="0"/>
+          <Entry text="Snap small to large" value="1"/>
+          <Entry text="Construct primitives" value="2"/>
+        </EnumerationDomain>
+        <Documentation>
+          How regions are joined at the closest gap. Average: merge the two vertices at their
+          midpoint. Snap small to large: merge onto the larger region's vertex (size is point
+          count). Construct primitives: do not merge or delete points; add a line between line
+          endpoints, or two triangles that zip the nearest incident edges of two surfaces
+          (quad split on the shorter diagonal). If a face bridge cannot be built, a line is
+          added instead.
         </Documentation>
       </IntVectorProperty>
 

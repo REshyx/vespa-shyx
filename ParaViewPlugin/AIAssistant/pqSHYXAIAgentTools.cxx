@@ -2235,12 +2235,16 @@ const ShyxExtra kShyxExtra[] = {
     "endpoints stay as one segment; short branches are not deleted. Closed all-degree-2 "
     "loops are resampled around the cycle." },
   { "SHYXDisconnectedRegionFuse",
-    "Fuse nearby vertices across regions. FuseWithinInput (default on): connected components "
-    "inside one input can weld (broken lines in a single dataset). Off: each port-0 connection "
-    "is one region; same-input pieces never merge (AddInputConnection for extra pieces). "
-    "FuseVerts / FuseLines / FusePolys (default all on) remap those cell arrays onto fused "
-    "points. Nearby line endpoints from different regions share a vertex but are not concatenated "
-    "into one polyline. Triangle strips affect connectivity only, not output." },
+    "Join disconnected regions at their closest vertex pair if that gap <= FuseThreshold "
+    "(Kruskal). Raising T does not move welds that already passed; it only joins farther "
+    "region pairs. FuseWithinInput (default on): components inside one input are regions. "
+    "Off: each port-0 connection is one region (AddInputConnection for extra pieces). "
+    "FuseVerts / FuseLines / FusePolys (default all on). FusePositionMode 0 Average (midpoint), "
+    "1 Snap small to large (keep the larger region's vertex; size is point count), "
+    "2 Construct primitives (keep all points; lines get a new segment, surfaces get two "
+    "triangles zipping the nearest incident edges, else a fallback line). "
+    "Two regions join at one place only; "
+    "a long seam is not stitched vertex-by-vertex. Triangle strips affect connectivity only." },
   { "SHYXSurfaceToVolumeMesh", "CGAL Mesh_3 tets from closed surface (alternative to TetGen)." },
   { "SHYXSnappyHexMesh",
     "Hex-dominant volume mesh. Input is vtkPartitionedDataSetCollection (each partition = one STL "

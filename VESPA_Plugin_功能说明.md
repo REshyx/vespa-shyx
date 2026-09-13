@@ -609,16 +609,17 @@
 
 ### 29. SHYX Disconnected Region Fuse
 
-**功能**：按域融合近处顶点。勾选 **Fuse Within Input**（默认开）时，一路输入里的不连通片按连通域缝上；关掉则一路一个域，只缝不同输入。同一域内的点不合并。**Fuse Verts / Fuse Lines / Fuse Polys** 决定哪些单元写入输出（默认全开）。
+**功能**：把不连通的片在**最近处**按阈值接上。**Fuse Method**：Average（合点中点）、Snap small to large（小域贴大域）、Construct primitives（不删点；线加一段，面用两侧邻边拆成两个三角形）。勾选 **Fuse Within Input**（默认开）时，一路里的断片按连通域分域。
 
 | 参数 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
 | **Input** | vtkPolyData（可多路） | — | 可再 Add 其它管线节点。 |
-| **Fuse Threshold** | double | 0.01 | 跨域顶点融合距离。同域不合并。 |
+| **Fuse Threshold** | double | 0.01 | 允许桥接的最大缝宽。两域只接最近顶点对；调大不移动已通过的连接。 |
 | **Fuse Within Input** | bool | 开 | 开：单路里的断片按连通域融合。关：单路内部不合，只缝多路输入。 |
+| **Fuse Method** | enum | Average | Average：两点中点。Snap small to large：小域贴大域。Construct primitives：不删点，加线或两个三角形。 |
 | **Fuse Verts** | bool | 开 | 把 vertex / polyvertex 映射到融合后的点并保留。 |
-| **Fuse Lines** | bool | 开 | 把 line / polyline 映射到融合后的点并保留；不同域够近的端点会共用顶点。 |
-| **Fuse Polys** | bool | 开 | 把多边形映射到融合后的点并保留。Triangle strips 不写入输出。 |
+| **Fuse Lines** | bool | 开 | 把 line / polyline 写入输出；Construct 时断线之间加新线。 |
+| **Fuse Polys** | bool | 开 | 把多边形写入输出；Construct 时用两个三角形桥接最近邻边。 |
 
 ---
 
@@ -754,7 +755,7 @@
 - **SHYX Bidirectional Streamline Merge** 适用于 **Stream Tracer** 等产生的双向折线，需正确设置 **SeedIds** 数组（单元或点数据）。
 - **SHYX Resample Lines** 用于骨架/中心线等多分支折线：先可选 **Fuse**（默认开，容差 1e-6×包围盒最长边）保证近点连通，再按 **Sample Distance** 在各分支上等距重采样；分叉与端点（线度数 ≠ 2）保留；短于间距的分支只留两端，不会被删。
 - **SHYX Vector Field Topology**、**SHYX Vortex Criteria**、**SHYX FTLE**、**SHYX Clebsch Map** 等流场工具对数据类型与数组名要求不同，请以各节说明与 ParaView 属性面板为准。
-- **SHYX Disconnected Region Fuse** 缝近处顶点。默认 **Fuse Within Input** 开：一路里互不连通的线/面按连通域焊；关掉则单路内部不合、只缝多路输入。默认处理 verts / lines / polys；按模型尺度调 Fuse Threshold。
+- **SHYX Disconnected Region Fuse** 在不连通域的最近处连接。**Fuse Method** 可选合点中点、小域贴大域、或不删点而加线/两个桥接三角形。默认 **Fuse Within Input** 开。
 - **SHYX Point Cloud Surface SDF** 在**点云**上写 **SDF**；若要在**规则体素网格**上对**封闭**三角网格求有符号距离场（`vtkImageData`），应使用 CGAL 管线中的 **`vtkCGALSignedDistanceFunction`**（见 CGAL / PMP 模块文档或源码），二者勿混淆。
 - **SHYX Radius Neighbor Count** 用于点云或网格顶点上的**局部密度/邻域规模**分析；半径需与点间距尺度匹配。并行行为由 VTK SMP 后端决定（如与 ParaView 一同构建的 TBB 等）。
 - **SHYX Surface Thickness** 在表面顶点上写壁厚。交叉/kissing 用默认 **Self-proximity**，不要用射线法；找扁掉的小血管看 **ThicknessOverEdgeLength**，不要看绝对 Thickness。

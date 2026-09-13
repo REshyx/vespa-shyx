@@ -19,6 +19,9 @@
 
 #include <algorithm>
 #include <array>
+#include <cmath>
+#include <limits>
+#include <map>
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -144,6 +147,100 @@ void RemapCellArray(
         }
     }
 }
+
+using EdgeKey = std::pair<vtkIdType, vtkIdType>;
+
+EdgeKey MakeEdge(vtkIdType a, vtkIdType b)
+{
+    return a < b ? EdgeKey{a, b} : EdgeKey{b, a};
+}
+
+double Dist2(const std::array<double, 3>& a, const std::array<double, 3>& b)
+{
+    const double dx = a[0] - b[0];
+    const double dy = a[1] - b[1];
+    const double dz = a[2] - b[2];
+    return dx * dx + dy * dy + dz * dz;
+}
+
+void CountPolyEdgeUses(vtkCellArray* polys, vtkIdList* cellPts, std::map<EdgeKey, int>& uses)
+{
+    if (!polys)
+    {
+        return;
+    }
+    for (polys->InitTraversal(); polys->GetNextCell(cellPts);)
+    {
+        const vtkIdType n = cellPts->GetNumberOfIds();
+        if (n < 3)
+        {
+            continue;
+        }
+        for (vtkIdType k = 0; k < n; ++k)
+        {
+            ++uses[MakeEdge(cellPts->GetId(k), cellPts->GetId((k + 1) % n))];
+        }
+    }
+}
+
+void AddAdj(std::vector<std::vector<vtkIdType>>& adj, vtkIdType a, vtkIdType b)
+{
+    if (a == b)
+    {
+        return;
+    }
+    adj[static_cast<size_t>(a)].push_back(b);
+    adj[static_cast<size_t>(b)].push_back(a);
+}
+
+vtkIdType BestNeighborToward(
+    const std::vector<vtkIdType>& nbrs,
+    vtkIdType from,
+    vtkIdType toward,
+    const std::vector<std::array<double, 3>>& globalPos)
+{
+    vtkIdType best = -1;
+    double bestD = std::numeric_limits<double>::infinity();
+    const auto& t = globalPos[static_cast<size_t>(toward)];
+    for (vtkIdType other : nbrs)
+    {
+        if (other == from || other == toward)
+        {
+            continue;
+        }
+        const double d = Dist2(globalPos[static_cast<size_t>(other)], t);
+        if (d < bestD)
+        {
+            bestD = d;
+            best = other;
+        }
+    }
+    return best;
+}
+
+void InsertLineCell(vtkCellArray* lines, vtkIdType a, vtkIdType b,
+    std::vector<std::pair<int, vtkIdType>>& keptCellSource)
+{
+    if (a == b)
+    {
+        return;
+    }
+    const vtkIdType ids[2] = {a, b};
+    lines->InsertNextCell(2, ids);
+    keptCellSource.emplace_back(-1, 0);
+}
+
+void InsertTriangleCell(vtkCellArray* polys, vtkIdType a, vtkIdType b, vtkIdType c,
+    std::vector<std::pair<int, vtkIdType>>& keptCellSource)
+{
+    if (a == b || b == c || a == c)
+    {
+        return;
+    }
+    const vtkIdType ids[3] = {a, b, c};
+    polys->InsertNextCell(3, ids);
+    keptCellSource.emplace_back(-1, 0);
+}
 } 
 
 //------------------------------------------------------------------------------
@@ -258,6 +355,12 @@ int vtkSHYXDisconnectedRegionFuse::RequestData(
         }
     }
 
+    std::vector<vtkIdType> componentPointCount(static_cast<size_t>(nComponents), 0);
+    for (vtkIdType i = 0; i < nPoints; ++i)
+    {
+        ++componentPointCount[static_cast<size_t>(componentOfPoint[static_cast<size_t>(i)])];
+    }
+
     const bool passthrough = (nInputs == 1 && nComponents <= 1 && this->FuseVerts &&
         this->FuseLines && this->FusePolys);
     if (passthrough)
@@ -271,7 +374,8 @@ int vtkSHYXDisconnectedRegionFuse::RequestData(
         return 1;
     }
 
-    // Cross-component pairs within FuseThreshold (one locator; skip same component).
+    // Closest gap per region pair, then Kruskal: weld that pair iff dist <= T.
+    // Raising T keeps already-accepted welds; it only adds farther region-region joins.
     std::vector<std::pair<vtkIdType, vtkIdType>> mergePairs;
     if (nComponents > 1 && this->FuseThreshold > 0.0)
     {
@@ -289,34 +393,69 @@ int vtkSHYXDisconnectedRegionFuse::RequestData(
         locator->SetDataSet(locPd);
         locator->BuildLocator();
 
+        struct NearHit
+        {
+            vtkIdType i = -1;
+            vtkIdType j = -1;
+            double dist = 0.0;
+            int ci = 0;
+            int cj = 0;
+        };
+        std::vector<NearHit> nearestForeign;
+
+        auto considerHits = [&](vtkIdType i, vtkIdList* ids, std::vector<NearHit>& out)
+        {
+            const int ci = componentOfPoint[static_cast<size_t>(i)];
+            const auto& pi = globalPos[static_cast<size_t>(i)];
+            vtkIdType bestJ = -1;
+            double bestD = std::numeric_limits<double>::infinity();
+            int bestCj = ci;
+            for (vtkIdType k = 0; k < ids->GetNumberOfIds(); ++k)
+            {
+                const vtkIdType j = ids->GetId(k);
+                if (j == i)
+                {
+                    continue;
+                }
+                const int cj = componentOfPoint[static_cast<size_t>(j)];
+                if (cj == ci)
+                {
+                    continue;
+                }
+                const auto& pj = globalPos[static_cast<size_t>(j)];
+                const double dx = pi[0] - pj[0];
+                const double dy = pi[1] - pj[1];
+                const double dz = pi[2] - pj[2];
+                const double d = std::sqrt(dx * dx + dy * dy + dz * dz);
+                if (d < bestD)
+                {
+                    bestD = d;
+                    bestJ = j;
+                    bestCj = cj;
+                }
+            }
+            if (bestJ >= 0)
+            {
+                out.push_back({i, bestJ, bestD, ci, bestCj});
+            }
+        };
+
 #ifdef VESPA_USE_SMP
-        vtkSMPThreadLocal<std::vector<std::pair<vtkIdType, vtkIdType>>> threadPairs;
+        vtkSMPThreadLocal<std::vector<NearHit>> threadHits;
         vtkSMPTools::For(0, nPoints, [&](vtkIdType begin, vtkIdType end) {
-            auto& local = threadPairs.Local();
+            auto& local = threadHits.Local();
             vtkSmartPointer<vtkIdList> ids = vtkSmartPointer<vtkIdList>::New();
             for (vtkIdType i = begin; i < end; ++i)
             {
                 ids->Reset();
                 locator->FindPointsWithinRadius(
                     this->FuseThreshold, globalPos[static_cast<size_t>(i)].data(), ids);
-                const int ci = componentOfPoint[static_cast<size_t>(i)];
-                for (vtkIdType k = 0; k < ids->GetNumberOfIds(); ++k)
-                {
-                    const vtkIdType j = ids->GetId(k);
-                    if (j <= i)
-                    {
-                        continue;
-                    }
-                    if (componentOfPoint[static_cast<size_t>(j)] != ci)
-                    {
-                        local.emplace_back(i, j);
-                    }
-                }
+                considerHits(i, ids, local);
             }
         });
-        for (auto it = threadPairs.begin(); it != threadPairs.end(); ++it)
+        for (auto it = threadHits.begin(); it != threadHits.end(); ++it)
         {
-            mergePairs.insert(mergePairs.end(), it->begin(), it->end());
+            nearestForeign.insert(nearestForeign.end(), it->begin(), it->end());
         }
 #else
         vtkSmartPointer<vtkIdList> ids = vtkSmartPointer<vtkIdList>::New();
@@ -325,25 +464,70 @@ int vtkSHYXDisconnectedRegionFuse::RequestData(
             ids->Reset();
             locator->FindPointsWithinRadius(
                 this->FuseThreshold, globalPos[static_cast<size_t>(i)].data(), ids);
-            const int ci = componentOfPoint[static_cast<size_t>(i)];
-            for (vtkIdType k = 0; k < ids->GetNumberOfIds(); ++k)
-            {
-                const vtkIdType j = ids->GetId(k);
-                if (j <= i)
-                {
-                    continue;
-                }
-                if (componentOfPoint[static_cast<size_t>(j)] != ci)
-                {
-                    mergePairs.emplace_back(i, j);
-                }
-            }
+            considerHits(i, ids, nearestForeign);
         }
 #endif
+
+        struct BestEdge
+        {
+            vtkIdType a = -1;
+            vtkIdType b = -1;
+            double dist = std::numeric_limits<double>::infinity();
+        };
+        std::map<std::pair<int, int>, BestEdge> bestBetween;
+        for (const NearHit& hit : nearestForeign)
+        {
+            const int lo = std::min(hit.ci, hit.cj);
+            const int hi = std::max(hit.ci, hit.cj);
+            BestEdge& slot = bestBetween[{lo, hi}];
+            if (hit.dist < slot.dist)
+            {
+                slot.a = hit.i;
+                slot.b = hit.j;
+                slot.dist = hit.dist;
+            }
+        }
+
+        std::vector<BestEdge> edges;
+        edges.reserve(bestBetween.size());
+        for (const auto& kv : bestBetween)
+        {
+            if (kv.second.a >= 0)
+            {
+                edges.push_back(kv.second);
+            }
+        }
+        std::sort(edges.begin(), edges.end(),
+            [](const BestEdge& x, const BestEdge& y) { return x.dist < y.dist; });
+
+        UnionFind regionUF(nComponents);
+        for (const BestEdge& e : edges)
+        {
+            if (e.dist > this->FuseThreshold)
+            {
+                continue;
+            }
+            const int ca = componentOfPoint[static_cast<size_t>(e.a)];
+            const int cb = componentOfPoint[static_cast<size_t>(e.b)];
+            if (regionUF.find(ca) == regionUF.find(cb))
+            {
+                continue;
+            }
+            regionUF.unite(ca, cb);
+            mergePairs.emplace_back(e.a, e.b);
+        }
     }
 
     UnionFind uf(nPoints);
-    for (const auto& pair : mergePairs) uf.unite(pair.first, pair.second);
+    const bool constructPrimitives =
+        (this->FusePositionMode == FUSE_POSITION_CONSTRUCT_PRIMITIVES);
+    if (!constructPrimitives)
+    {
+        for (const auto& pair : mergePairs)
+        {
+            uf.unite(pair.first, pair.second);
+        }
+    }
 
     // Compute new point coords (centroid of each equivalence class)
     std::unordered_map<vtkIdType, vtkIdType> rootToNewId;
@@ -364,18 +548,47 @@ int vtkSHYXDisconnectedRegionFuse::RequestData(
     vtkSmartPointer<vtkPoints> newPoints = vtkSmartPointer<vtkPoints>::New();
     newPoints->SetDataTypeToDouble();
     newPoints->SetNumberOfPoints(newPointCount);
+    std::vector<vtkIdType> clusterRep(static_cast<size_t>(newPointCount), 0);
 
+    const bool snapSmallToLarge =
+        (this->FusePositionMode == FUSE_POSITION_SNAP_SMALL_TO_LARGE);
     for (vtkIdType i = 0; i < newPointCount; ++i)
     {
-        double center[3] = {0, 0, 0};
-        for (vtkIdType oldId : clusters[i])
+        const auto& members = clusters[static_cast<size_t>(i)];
+        vtkIdType rep = members[0];
+        if (snapSmallToLarge && members.size() > 1)
         {
-            const auto& p = globalPos[static_cast<size_t>(oldId)];
-            center[0] += p[0]; center[1] += p[1]; center[2] += p[2];
+            vtkIdType bestSize = componentPointCount[static_cast<size_t>(
+                componentOfPoint[static_cast<size_t>(rep)])];
+            for (vtkIdType oldId : members)
+            {
+                const vtkIdType sz = componentPointCount[static_cast<size_t>(
+                    componentOfPoint[static_cast<size_t>(oldId)])];
+                if (sz > bestSize)
+                {
+                    bestSize = sz;
+                    rep = oldId;
+                }
+            }
+            newPoints->SetPoint(i, globalPos[static_cast<size_t>(rep)].data());
         }
-        double size = static_cast<double>(clusters[i].size());
-        center[0] /= size; center[1] /= size; center[2] /= size;
-        newPoints->SetPoint(i, center);
+        else
+        {
+            double center[3] = {0, 0, 0};
+            for (vtkIdType oldId : members)
+            {
+                const auto& p = globalPos[static_cast<size_t>(oldId)];
+                center[0] += p[0];
+                center[1] += p[1];
+                center[2] += p[2];
+            }
+            const double size = static_cast<double>(members.size());
+            center[0] /= size;
+            center[1] /= size;
+            center[2] /= size;
+            newPoints->SetPoint(i, center);
+        }
+        clusterRep[static_cast<size_t>(i)] = rep;
     }
 
     // 5. Remap enabled cell arrays (VTK order: verts, lines, polys). Drop degenerates.
@@ -405,6 +618,135 @@ int vtkSHYXDisconnectedRegionFuse::RequestData(
         RemapCellArray(pd->GetLines(), newLines, cellPts, ptOffset[static_cast<size_t>(inp)], uf,
             rootToNewId, 2, inp, pd->GetNumberOfVerts(), keptCellSource);
     }
+
+    std::vector<std::pair<vtkIdType, vtkIdType>> lineBridges;
+    std::vector<std::array<vtkIdType, 3>> triBridges;
+    if (constructPrimitives && !mergePairs.empty())
+    {
+        auto toNewId = [&](vtkIdType gid) -> vtkIdType {
+            const auto found = rootToNewId.find(uf.find(gid));
+            return found == rootToNewId.end() ? vtkIdType{-1} : found->second;
+        };
+
+        std::vector<std::vector<vtkIdType>> polyBdryAdj(static_cast<size_t>(nPoints));
+        std::vector<std::vector<vtkIdType>> polyAdj(static_cast<size_t>(nPoints));
+        std::vector<std::vector<vtkIdType>> lineAdj(static_cast<size_t>(nPoints));
+        vtkSmartPointer<vtkIdList> walk = vtkSmartPointer<vtkIdList>::New();
+        for (int inp = 0; inp < nInputs; ++inp)
+        {
+            vtkPolyData* pd = pdIn[static_cast<size_t>(inp)];
+            if (!pd)
+            {
+                continue;
+            }
+            const vtkIdType off = ptOffset[static_cast<size_t>(inp)];
+            std::map<EdgeKey, int> uses;
+            CountPolyEdgeUses(pd->GetPolys(), walk, uses);
+            if (pd->GetPolys())
+            {
+                for (pd->GetPolys()->InitTraversal(); pd->GetPolys()->GetNextCell(walk);)
+                {
+                    const vtkIdType n = walk->GetNumberOfIds();
+                    if (n < 3)
+                    {
+                        continue;
+                    }
+                    for (vtkIdType k = 0; k < n; ++k)
+                    {
+                        const vtkIdType la = walk->GetId(k);
+                        const vtkIdType lb = walk->GetId((k + 1) % n);
+                        const vtkIdType ga = off + la;
+                        const vtkIdType gb = off + lb;
+                        AddAdj(polyAdj, ga, gb);
+                        if (uses[MakeEdge(la, lb)] == 1)
+                        {
+                            AddAdj(polyBdryAdj, ga, gb);
+                        }
+                    }
+                }
+            }
+            if (pd->GetLines())
+            {
+                for (pd->GetLines()->InitTraversal(); pd->GetLines()->GetNextCell(walk);)
+                {
+                    const vtkIdType n = walk->GetNumberOfIds();
+                    for (vtkIdType k = 1; k < n; ++k)
+                    {
+                        AddAdj(lineAdj, off + walk->GetId(k - 1), off + walk->GetId(k));
+                    }
+                }
+            }
+        }
+
+        auto pickToward = [&](vtkIdType from, vtkIdType toward) -> vtkIdType {
+            vtkIdType n = BestNeighborToward(
+                polyBdryAdj[static_cast<size_t>(from)], from, toward, globalPos);
+            if (n < 0)
+            {
+                n = BestNeighborToward(polyAdj[static_cast<size_t>(from)], from, toward, globalPos);
+            }
+            if (n < 0)
+            {
+                n = BestNeighborToward(lineAdj[static_cast<size_t>(from)], from, toward, globalPos);
+            }
+            return n;
+        };
+
+        for (const auto& pair : mergePairs)
+        {
+            const vtkIdType a = toNewId(pair.first);
+            const vtkIdType b = toNewId(pair.second);
+            if (a < 0 || b < 0 || a == b)
+            {
+                continue;
+            }
+
+            bool addedFace = false;
+            if (this->FusePolys)
+            {
+                const vtkIdType a2 = pickToward(pair.first, pair.second);
+                const vtkIdType b2 = pickToward(pair.second, pair.first);
+                const vtkIdType na2 = a2 >= 0 ? toNewId(a2) : vtkIdType{-1};
+                const vtkIdType nb2 = b2 >= 0 ? toNewId(b2) : vtkIdType{-1};
+                if (na2 >= 0 && nb2 >= 0 && na2 != nb2 && na2 != b && nb2 != a)
+                {
+                    const auto& pa = globalPos[static_cast<size_t>(pair.first)];
+                    const auto& pb = globalPos[static_cast<size_t>(pair.second)];
+                    const auto& pa2 = globalPos[static_cast<size_t>(a2)];
+                    const auto& pb2 = globalPos[static_cast<size_t>(b2)];
+                    if (Dist2(pa, pb2) <= Dist2(pa2, pb))
+                    {
+                        triBridges.push_back({a, na2, nb2});
+                        triBridges.push_back({a, nb2, b});
+                    }
+                    else
+                    {
+                        triBridges.push_back({a, na2, b});
+                        triBridges.push_back({na2, nb2, b});
+                    }
+                    addedFace = true;
+                }
+                else if (na2 >= 0 && na2 != b)
+                {
+                    triBridges.push_back({a, na2, b});
+                    addedFace = true;
+                }
+                else if (nb2 >= 0 && nb2 != a)
+                {
+                    triBridges.push_back({a, b, nb2});
+                    addedFace = true;
+                }
+            }
+            if (!addedFace && (this->FuseLines || this->FusePolys))
+            {
+                lineBridges.emplace_back(a, b);
+            }
+        }
+        for (const auto& lb : lineBridges)
+        {
+            InsertLineCell(newLines, lb.first, lb.second, keptCellSource);
+        }
+    }
     for (int inp = 0; inp < nInputs; ++inp)
     {
         vtkPolyData* pd = pdIn[static_cast<size_t>(inp)];
@@ -414,6 +756,10 @@ int vtkSHYXDisconnectedRegionFuse::RequestData(
         }
         RemapCellArray(pd->GetPolys(), newPolys, cellPts, ptOffset[static_cast<size_t>(inp)], uf,
             rootToNewId, 3, inp, pd->GetNumberOfVerts() + pd->GetNumberOfLines(), keptCellSource);
+    }
+    for (const auto& tri : triBridges)
+    {
+        InsertTriangleCell(newPolys, tri[0], tri[1], tri[2], keptCellSource);
     }
 
     output->SetPoints(newPoints);
@@ -439,7 +785,7 @@ int vtkSHYXDisconnectedRegionFuse::RequestData(
     }
     for (vtkIdType i = 0; i < newPointCount; ++i)
     {
-        const vtkIdType gid = clusters[static_cast<size_t>(i)][0];
+        const vtkIdType gid = clusterRep[static_cast<size_t>(i)];
         const int srcInp = globalInputOfPoint[static_cast<size_t>(gid)];
         const vtkIdType srcPt = globalLocalId[static_cast<size_t>(gid)];
         vtkPolyData* srcPd = pdIn[static_cast<size_t>(srcInp)];
@@ -467,6 +813,10 @@ int vtkSHYXDisconnectedRegionFuse::RequestData(
     {
         const int srcInp = keptCellSource[static_cast<size_t>(i)].first;
         const vtkIdType srcCell = keptCellSource[static_cast<size_t>(i)].second;
+        if (srcInp < 0)
+        {
+            continue;
+        }
         vtkPolyData* srcPd = pdIn[static_cast<size_t>(srcInp)];
         if (srcPd)
         {
@@ -483,6 +833,19 @@ void vtkSHYXDisconnectedRegionFuse::PrintSelf(ostream& os, vtkIndent indent)
     this->Superclass::PrintSelf(os, indent);
     os << indent << "FuseThreshold: " << this->FuseThreshold << "\n";
     os << indent << "FuseWithinInput: " << (this->FuseWithinInput ? "On\n" : "Off\n");
+    os << indent << "FusePositionMode: " << this->FusePositionMode;
+    if (this->FusePositionMode == FUSE_POSITION_SNAP_SMALL_TO_LARGE)
+    {
+        os << " (Snap small to large)\n";
+    }
+    else if (this->FusePositionMode == FUSE_POSITION_CONSTRUCT_PRIMITIVES)
+    {
+        os << " (Construct primitives)\n";
+    }
+    else
+    {
+        os << " (Average)\n";
+    }
     os << indent << "FuseVerts: " << (this->FuseVerts ? "On\n" : "Off\n");
     os << indent << "FuseLines: " << (this->FuseLines ? "On\n" : "Off\n");
     os << indent << "FusePolys: " << (this->FusePolys ? "On\n" : "Off\n");
