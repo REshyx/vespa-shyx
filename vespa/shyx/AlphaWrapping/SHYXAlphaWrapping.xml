@@ -1,0 +1,81 @@
+<?xml version="1.0" ?>
+<ServerManagerConfiguration>
+  <ProxyGroup name="filters">
+    <SourceProxy name="SHYXAlphaWrapping"
+                 class="vtkSHYXAlphaWrapping"
+                 label="SHYX Alpha Wrapping">
+      <Documentation short_help="SHYX Alpha Wrapping: Watertight 2-manifold wrap (CGAL); Alpha/Offset follow the mesh size.">
+        CGAL alpha wrapping of a point cloud or triangle soup into a watertight, orientable
+        2-manifold that strictly encloses the input (same backend as VESPA Alpha Wrapping).
+        Alpha and Offset are absolute lengths. 0 (default) uses 5% and 3% of the longest
+        AABB side (BoundsDomain scaled_extent); Scale/Reset next to the properties fills
+        that suggestion. Unlike VESPA, there is no percentage-of-diagonal mode.
+        Field data SHYXAlphaWrappingAlpha / SHYXAlphaWrappingOffset record the values used.
+      </Documentation>
+
+      <InputProperty name="Input" command="SetInputConnection">
+        <ProxyGroupDomain name="groups">
+          <Group name="sources"/>
+          <Group name="filters"/>
+        </ProxyGroupDomain>
+        <DataTypeDomain name="input_type">
+          <DataType value="vtkPolyData"/>
+        </DataTypeDomain>
+      </InputProperty>
+
+      <DoubleVectorProperty name="Alpha"
+                            label="Alpha"
+                            command="SetAlpha"
+                            number_of_elements="1"
+                            default_values="0"
+                            animateable="0">
+        <BoundsDomain mode="scaled_extent" name="bounds" scale_factor="0.05">
+          <RequiredProperties>
+            <Property function="Input" name="Input"/>
+          </RequiredProperties>
+        </BoundsDomain>
+        <Documentation>
+          Maximum circumradius of wrap faces. 0 (default) uses 0.05 times the longest side
+          of the input axis-aligned bounding box (BoundsDomain scaled_extent). Smaller
+          values follow concavities more closely. The panel Scale/Reset controls fill that
+          suggestion.
+        </Documentation>
+      </DoubleVectorProperty>
+
+      <DoubleVectorProperty name="Offset"
+                            label="Offset"
+                            command="SetOffset"
+                            number_of_elements="1"
+                            default_values="0"
+                            animateable="0">
+        <BoundsDomain mode="scaled_extent" name="bounds" scale_factor="0.03">
+          <RequiredProperties>
+            <Property function="Input" name="Input"/>
+          </RequiredProperties>
+        </BoundsDomain>
+        <Documentation>
+          Dilatation of the wrap relative to the input. Must stay positive after auto-resolve.
+          0 (default) uses 0.03 times the longest AABB side (BoundsDomain scaled_extent).
+          The panel Scale/Reset controls fill that suggestion.
+        </Documentation>
+      </DoubleVectorProperty>
+
+      <IntVectorProperty name="UpdateAttributes"
+                         command="SetUpdateAttributes"
+                         label="Interpolate attributes"
+                         number_of_elements="1"
+                         default_values="1"
+                         panel_visibility="advanced"
+                         animateable="0">
+        <BooleanDomain name="bool"/>
+        <Documentation>
+          If ON, interpolate input point/cell attributes onto the wrap (vtkCGALPolyDataAlgorithm).
+        </Documentation>
+      </IntVectorProperty>
+
+      <Hints>
+        <ShowInMenu category="SHYX" icon=":/VESPA/SHYX_Alpha_Wrapping.png"/>
+      </Hints>
+    </SourceProxy>
+  </ProxyGroup>
+</ServerManagerConfiguration>

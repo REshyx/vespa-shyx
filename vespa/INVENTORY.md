@@ -38,11 +38,13 @@ Kitware 原版 CGAL 滤镜，全部需 **`VESPA_USE_CGAL`**，只作保留（对
 |----------|----|------|-----|------|--------|------|
 | SHYX Mesh Checker | `vtkSHYXMeshChecker` | MeshChecker | SHYXMeshChecker.xml | 自有 | [有](shyx/MeshChecker/README.md) | CGAL |
 | SHYX Auto Mesh Repair | `vtkSHYXAutoMeshRepair` | AutoMeshRepair | SHYXAutoMeshRepair.xml | 自有（复用 Fill Alpha 图） | [有](shyx/AutoMeshRepair/README.md) | CGAL ≥ 5.5 |
+| SHYX Alpha Wrapping | `vtkSHYXAlphaWrapping` | AlphaWrapping | SHYXAlphaWrapping.xml | 复用 VESPA Alpha Wrapping 图 | [有](shyx/AlphaWrapping/README.md) | CGAL ≥ 5.5 |
 | SHYX Hole Fill (CGAL) | `vtkSHYXHoleFillFilter` | HoleFill | SHYXHoleFillFilter.xml | 自有 | [有](shyx/HoleFill/README.md) | CGAL |
 | SHYX Repair Degeneracies (CGAL) | `vtkSHYXRepairDegeneracies` | RepairDegeneracies | SHYXRepairDegeneracies.xml | 自有 | [有](shyx/RepairDegeneracies/README.md) | CGAL |
 | SHYX Boolean (CGAL, relaxed) | `vtkSHYXBooleanOperationFilter` | BooleanOperation | SHYXBooleanOperationFilter.xml | 自有 | [有](shyx/BooleanOperation/README.md) | CGAL |
 | SHYX Shape Smoothing | `vtkSHYXShapeSmoothing` | ShapeSmoothing | SHYXShapeSmoothing.xml | 自有 | [有](shyx/ShapeSmoothing/README.md) | CGAL |
 | SHYX Edge Collapse (CGAL) | `vtkSHYXEdgeCollapse` | EdgeCollapse | SHYXEdgeCollapse.xml | 自有 | [有](shyx/EdgeCollapse/README.md) | CGAL |
+| SHYX Subset Coarsen | `vtkSHYXSubsetCoarsen` | SubsetCoarsen | SHYXSubsetCoarsen.xml | 自有（复用 Edge Collapse 图） | [有](shyx/SubsetCoarsen/README.md) | CGAL |
 | SHYX Adaptive Isotropic Remesher | `vtkSHYXAdaptiveIsotropicRemesher` | AdaptiveIsotropicRemesher | SHYXAdaptiveIsotropicRemesher.xml | 自有 | [有](shyx/AdaptiveIsotropicRemesher/README.md) | CGAL ≥ 6 |
 | SHYX Remesh With Endpoint | `vtkSHYXRemeshWithEndpoint` | 同上模块 | SHYXRemeshWithEndpoint.xml | fluent | （同 Remesher README） | CGAL ≥ 6 |
 | SHYX Convex Hull | `vtkSHYXConvexHullFilter` | ConvexHullFilter | SHYXConvexHullFilter.xml | 自有 | [有](shyx/ConvexHullFilter/README.md) | VTK |
@@ -57,6 +59,7 @@ Kitware 原版 CGAL 滤镜，全部需 **`VESPA_USE_CGAL`**，只作保留（对
 | SHYX Selection: Fill, Alpha Wrap, Union | `vtkSHYXSelectionFillAlphaReunionFilter` | SelectionFillAlphaReunion | SHYXSelectionFillAlphaReunionFilter.xml | 自有 | [有](shyx/SelectionFillAlphaReunion/README.md) | CGAL ≥ 5.5 |
 | SHYX Minimum OBB | `vtkSHYXMinimumOBBFilter` | MinimumOBB | SHYXMinimumOBB.xml | 自有 | [有](shyx/MinimumOBB/README.md) | CGAL |
 | SHYX Enhanced Ruler | `vtkSHYXEnhancedRuler` | EnhancedRuler | SHYXEnhancedRuler.xml | 自有 | [有](shyx/EnhancedRuler/README.md) | VTK |
+| SHYX Surface Thickness | `vtkSHYXSurfaceThickness` | SurfaceThickness | SHYXSurfaceThickness.xml | 复用 Geodesic Distance | [有](shyx/SurfaceThickness/README.md) | VTK |
 
 ### 血管 / 体积网格（含 Vascular 工具条）
 
@@ -127,6 +130,8 @@ Vascular 顺序（[`VESPAVascularCategory.xml`](../ParaViewPlugin/smxml/VESPAVas
 | Animated Streamline | `vtkAnimatedStreamlineRepresentation` | AnimatedStreamlineRepresentation | AnimatedStreamlineRepresentation.xml | [有](shyx/AnimatedStreamlineRepresentation/README.md) |
 | Point Label | `vtkPointLabelRepresentation` | PointLabelRepresentation | PointLabelRepresentation.xml | [有](shyx/PointLabelRepresentation/README.md) |
 
+自定义 SM Domain（无菜单项）：`vtkSMSHYXSelectionBoundsDomain`（[`SelectionBoundsDomain/`](shyx/SelectionBoundsDomain/)），XML 标签 `SHYXSelectionBoundsDomain`。给 Alpha/Offset 的 Reset 按**选区** AABB 刷新（`SHYXSelectionFillAlphaReunionFilter`）。无 ParaView 插件构建时与 Representation 一并排除。
+
 ---
 
 ## 仅客户端 Qt（无 VTK 模块）
@@ -147,4 +152,4 @@ Vascular 顺序（[`VESPAVascularCategory.xml`](../ParaViewPlugin/smxml/VESPAVas
 
 ## 上游 VESPA 与 SHYX
 
-**Filters → VESPA** 是 Kitware 原版滤镜，只作保留（对照上游行为与测试）；同类任务一般用 **SHYX**，多为升级版（诊断更细、开放网格布尔、多算法平滑、曲率自适应重网格等）。体积网格、流场、点云、选择工具等只有 SHYX。血管 CFD 主路径走 **Filters → Vascular**。
+**Filters → VESPA** 是 Kitware 原版滤镜，只作保留（对照上游行为与测试）；同类任务一般用 **SHYX**，多为升级版（诊断更细、开放网格布尔、多算法平滑、曲率自适应重网格、Alpha Wrap 按包围盒给 Alpha/Offset 等）。体积网格、流场、点云、选择工具等只有 SHYX。血管 CFD 主路径走 **Filters → Vascular**。

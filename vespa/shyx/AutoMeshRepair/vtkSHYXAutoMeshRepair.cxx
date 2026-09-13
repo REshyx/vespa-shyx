@@ -45,6 +45,31 @@ vtkStandardNewMacro(vtkSHYXAutoMeshRepair);
 namespace
 {
 
+constexpr double kSelectionWrapScale = 0.1;
+
+double LongestAabbSide(vtkPolyData* mesh)
+{
+  if (!mesh)
+  {
+    return 0.0;
+  }
+  double b[6];
+  mesh->GetBounds(b);
+  const double dx = b[1] - b[0];
+  const double dy = b[3] - b[2];
+  const double dz = b[5] - b[4];
+  return std::max(dx, std::max(dy, dz));
+}
+
+double ResolveWrapLength(double value, double longest)
+{
+  if (value > 0.0)
+  {
+    return value;
+  }
+  return kSelectionWrapScale * longest;
+}
+
 void SetFieldInt(vtkPolyData* pd, const char* name, int value)
 {
   if (!pd || !name)
@@ -380,8 +405,8 @@ vtkSmartPointer<vtkPolyData> ExtractMaskedCells(
   return out;
 }
 
-vtkSmartPointer<vtkPolyData> FillThenWrap(vtkPolyData* patch, int fairingContinuity, bool skipWrap,
-  bool absoluteThresholds, double alpha, double offset)
+vtkSmartPointer<vtkPolyData> FillThenWrap(
+  vtkPolyData* patch, int fairingContinuity, bool skipWrap, double alpha, double offset)
 {
   if (!patch || patch->GetNumberOfCells() == 0)
   {
@@ -418,9 +443,16 @@ vtkSmartPointer<vtkPolyData> FillThenWrap(vtkPolyData* patch, int fairingContinu
   }
 
   vtkNew<vtkCGALAlphaWrapping> aw;
-  aw->SetAbsoluteThresholds(absoluteThresholds);
-  aw->SetAlpha(alpha);
-  aw->SetOffset(offset);
+  const double longest = LongestAabbSide(filled);
+  const double resolvedAlpha = ResolveWrapLength(alpha, longest);
+  const double resolvedOffset = ResolveWrapLength(offset, longest);
+  if (!(resolvedAlpha > 0.0) || !(resolvedOffset > 0.0))
+  {
+    return nullptr;
+  }
+  aw->SetAbsoluteThresholds(true);
+  aw->SetAlpha(resolvedAlpha);
+  aw->SetOffset(resolvedOffset);
   aw->SetInputData(filled);
   aw->SetUpdateAttributes(false);
   aw->Update();
@@ -530,7 +562,6 @@ void MergeDilatedClusters(vtkPolyData* mesh, const std::vector<std::vector<vtkId
 void ConfigureReunion(vtkSHYXSelectionFillAlphaReunionFilter* reunion, vtkSHYXAutoMeshRepair* self)
 {
   reunion->SetFairingContinuity(self->GetFairingContinuity());
-  reunion->SetAbsoluteThresholds(self->GetAbsoluteThresholds());
   reunion->SetAlpha(self->GetAlpha());
   reunion->SetOffset(self->GetOffset());
   reunion->SetSkipAlphaWrapping(self->GetSkipAlphaWrapping());
@@ -603,7 +634,6 @@ void vtkSHYXAutoMeshRepair::PrintSelf(ostream& os, vtkIndent indent)
   os << indent << "MaxPasses: " << this->MaxPasses << "\n";
   os << indent << "LogSteps: " << (this->LogSteps ? "on" : "off") << "\n";
   os << indent << "FairingContinuity: " << this->FairingContinuity << "\n";
-  os << indent << "AbsoluteThresholds: " << (this->AbsoluteThresholds ? "on" : "off") << "\n";
   os << indent << "Alpha: " << this->Alpha << "\n";
   os << indent << "Offset: " << this->Offset << "\n";
   os << indent << "SkipAlphaWrapping: " << (this->SkipAlphaWrapping ? "on" : "off") << "\n";
@@ -866,8 +896,8 @@ int vtkSHYXAutoMeshRepair::RequestData(
                          << " covers the whole mesh; Alpha Wrap will run on the entire surface.");
       }
 
-      vtkSmartPointer<vtkPolyData> wrapped = FillThenWrap(patch, this->FairingContinuity,
-        this->SkipAlphaWrapping, this->AbsoluteThresholds, this->Alpha, this->Offset);
+      vtkSmartPointer<vtkPolyData> wrapped =
+        FillThenWrap(patch, this->FairingContinuity, this->SkipAlphaWrapping, this->Alpha, this->Offset);
       if (!wrapped || wrapped->GetNumberOfCells() == 0)
       {
         if (this->LogSteps)

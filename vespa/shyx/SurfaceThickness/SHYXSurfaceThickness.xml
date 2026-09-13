@@ -1,0 +1,215 @@
+<?xml version="1.0" ?>
+<ServerManagerConfiguration>
+  <ProxyGroup name="filters">
+    <SourceProxy name="SHYXSurfaceThickness"
+                 class="vtkSHYXSurfaceThickness"
+                 label="SHYX Surface Thickness">
+      <Documentation short_help="SHYX Surface Thickness: Per-vertex wall thickness (self-proximity default, or inward ray / shape diameter).">
+        Copies the input surface and writes point arrays Thickness, ThicknessOverEdgeLength,
+        ThicknessValid, and LocalEdgeLength. Color by Thickness (or ThicknessOverEdgeLength for
+        collapse relative to the mesh size). Thickness = 0 with ThicknessValid = 1 is coincident
+        kissing / crossing; Thickness = -1 with ThicknessValid = 0 means no opposite was found
+        inside Max Distance.
+
+        Self-proximity (default) does not ray-cast, so crossing faces still give a usable value
+        (nearest Euclidean neighbor outside a small geodesic ring, optionally in the inward
+        half-space). Ray along normal and Shape diameter shoot inward and are unreliable on
+        self-intersections.
+
+        Max Distance 0 uses 5% of the longest AABB side (BoundsDomain scaled_extent 0.05);
+        use Scale/Reset next to the property.
+      </Documentation>
+
+      <InputProperty name="Input" command="SetInputConnection">
+        <ProxyGroupDomain name="groups">
+          <Group name="sources"/>
+          <Group name="filters"/>
+        </ProxyGroupDomain>
+        <DataTypeDomain name="input_type">
+          <DataType value="vtkPolyData"/>
+        </DataTypeDomain>
+      </InputProperty>
+
+      <IntVectorProperty name="Method"
+                         label="Method"
+                         command="SetMethod"
+                         number_of_elements="1"
+                         default_values="0"
+                         animateable="0">
+        <EnumerationDomain name="enum">
+          <Entry text="Self-proximity" value="0"/>
+          <Entry text="Ray along normal" value="1"/>
+          <Entry text="Shape diameter (cone)" value="2"/>
+        </EnumerationDomain>
+        <Documentation>
+          Self-proximity: nearest Euclidean neighbor that is outside Geodesic Rings hops
+          (works with crossing faces). Ray along normal: first inward hit. Shape diameter:
+          median of cone rays around the inward axis.
+        </Documentation>
+      </IntVectorProperty>
+
+      <DoubleVectorProperty name="MaxDistance"
+                            label="Max Distance"
+                            command="SetMaxDistance"
+                            number_of_elements="1"
+                            default_values="0"
+                            animateable="0">
+        <BoundsDomain mode="scaled_extent" name="bounds" scale_factor="0.05">
+          <RequiredProperties>
+            <Property function="Input" name="Input"/>
+          </RequiredProperties>
+        </BoundsDomain>
+        <Documentation>
+          Search / ray length. 0 (default) uses 0.05 times the longest side of the input
+          axis-aligned bounding box (BoundsDomain scaled_extent). The panel Scale/Reset
+          controls fill that suggestion.
+        </Documentation>
+      </DoubleVectorProperty>
+
+      <IntVectorProperty name="FlipNormals"
+                         label="Flip Normals"
+                         command="SetFlipNormals"
+                         number_of_elements="1"
+                         default_values="0"
+                         animateable="0">
+        <BooleanDomain name="bool"/>
+        <Documentation>
+          Treat the mesh winding as inward-pointing (inward = +n instead of -n). Use when
+          Thickness looks like it was measured outward into empty space.
+        </Documentation>
+      </IntVectorProperty>
+
+      <IntVectorProperty name="GeodesicRings"
+                         label="Geodesic Rings"
+                         command="SetGeodesicRings"
+                         number_of_elements="1"
+                         default_values="2"
+                         animateable="0">
+        <IntRangeDomain name="range" min="1" max="32"/>
+        <Documentation>
+          Self-proximity: ignore vertices within this many edge hops so the same wall is not
+          treated as the opposite wall. Keep small (2) so a coarse tube's opposite side is
+          not excluded.
+        </Documentation>
+        <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="visibility"
+                                   property="Method"
+                                   value="0"/>
+        </Hints>
+      </IntVectorProperty>
+
+      <IntVectorProperty name="InwardOnly"
+                         label="Inward Only"
+                         command="SetInwardOnly"
+                         number_of_elements="1"
+                         default_values="1"
+                         animateable="0">
+        <BooleanDomain name="bool"/>
+        <Documentation>
+          Self-proximity: only accept neighbors in the inward half-space (within 75 degrees of
+          the inward axis). Turns off if normals are unusable; then coincident / kissing
+          points still report Thickness 0.
+        </Documentation>
+        <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="visibility"
+                                   property="Method"
+                                   value="0"/>
+        </Hints>
+      </IntVectorProperty>
+
+      <DoubleVectorProperty name="RayOffset"
+                            label="Ray Offset"
+                            command="SetRayOffset"
+                            number_of_elements="1"
+                            default_values="0"
+                            animateable="0">
+        <DoubleRangeDomain name="range" min="0" max="1e12"/>
+        <Documentation>
+          Inward start offset so the ray does not immediately hit the source face. 0 uses
+          0.25 times that vertex's mean incident edge length. If the wall is thinner than
+          the offset, the ray can miss.
+        </Documentation>
+        <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="visibility"
+                                   property="Method"
+                                   values="1 2"/>
+        </Hints>
+      </DoubleVectorProperty>
+
+      <IntVectorProperty name="RequireOppositeNormal"
+                         label="Require Opposite Normal"
+                         command="SetRequireOppositeNormal"
+                         number_of_elements="1"
+                         default_values="1"
+                         animateable="0">
+        <BooleanDomain name="bool"/>
+        <Documentation>
+          Ray methods: skip hits whose face normal points the same way as the query
+          (grazing the same wall).
+        </Documentation>
+        <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="visibility"
+                                   property="Method"
+                                   values="1 2"/>
+        </Hints>
+      </IntVectorProperty>
+
+      <IntVectorProperty name="NumberOfRays"
+                         label="Number Of Rays"
+                         command="SetNumberOfRays"
+                         number_of_elements="1"
+                         default_values="9"
+                         animateable="0">
+        <IntRangeDomain name="range" min="1" max="64"/>
+        <Documentation>
+          Shape diameter: rays in the cone, including the inward axis. Thickness is the
+          median of successful hits.
+        </Documentation>
+        <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="visibility"
+                                   property="Method"
+                                   value="2"/>
+        </Hints>
+      </IntVectorProperty>
+
+      <DoubleVectorProperty name="ConeAngle"
+                            label="Cone Angle (deg)"
+                            command="SetConeAngle"
+                            number_of_elements="1"
+                            default_values="30"
+                            animateable="0">
+        <DoubleRangeDomain name="range" min="0" max="89"/>
+        <Documentation>
+          Shape diameter cone half-angle in degrees around the inward axis. Ignored when
+          Number Of Rays is 1.
+        </Documentation>
+        <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="visibility"
+                                   property="Method"
+                                   value="2"/>
+        </Hints>
+      </DoubleVectorProperty>
+
+      <PropertyGroup label="Self-proximity">
+        <Property name="GeodesicRings"/>
+        <Property name="InwardOnly"/>
+      </PropertyGroup>
+      <PropertyGroup label="Ray / shape diameter">
+        <Property name="RayOffset"/>
+        <Property name="RequireOppositeNormal"/>
+        <Property name="NumberOfRays"/>
+        <Property name="ConeAngle"/>
+      </PropertyGroup>
+
+      <Hints>
+        <ShowInMenu category="SHYX" icon=":/VESPA/SHYX_Surface_Thickness.png"/>
+      </Hints>
+    </SourceProxy>
+  </ProxyGroup>
+</ServerManagerConfiguration>

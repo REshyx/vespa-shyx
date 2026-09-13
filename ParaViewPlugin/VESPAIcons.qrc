@@ -1,6 +1,7 @@
 <RCC>
   <qresource prefix="/VESPA">
     <file alias="SHYX_Adaptive_Isotropic_Remesher.png">../icon/SHYX_Adaptive_Isotropic_Remesher.png</file>
+    <file alias="SHYX_Alpha_Wrapping.png">../icon/VESPA_Alpha_Wrapping.png</file>
     <file alias="SHYX_Array_Curve_Mapper.png">../icon/SHYX_Array_Curve_Mapper.png</file>
     <file alias="SHYX_Array_Probability_Point_Cull.png">../icon/SHYX_Array_Probability_Point_Cull.png</file>
     <file alias="SHYX_Auto_Mesh_Repair.png">../icon/SHYX_Selection_Fill_Alpha_Reunion.png</file>
@@ -14,6 +15,7 @@
     <file alias="SHYX_Density_Based_Volume_Sampler.png">../icon/SHYX_Density_Based_Volume_Sampler.png</file>
     <file alias="SHYX_Disconnected_Region_Fuse.png">../icon/SHYX_Disconnected_Region_Fuse.png</file>
     <file alias="SHYX_Edge_Collapse.png">../icon/SHYX_Edge_Collapse.png</file>
+    <file alias="SHYX_Subset_Coarsen.png">../icon/SHYX_Edge_Collapse.png</file>
     <file alias="SHYX_Endpoint_Stent_Placement.png">../icon/SHYX_Endpoint_Stent_Placement.png</file>
     <file alias="SHYX_Enhanced_Ruler.png">../icon/SHYX_Enhanced_Ruler.png</file>
     <file alias="SHYX_Extract_Selected_Cells.png">../icon/SHYX_Extract_Selected_Cells.png</file>
@@ -41,6 +43,7 @@
     <file alias="SHYX_Proximity_Gap_Selection.svg">../icon/SHYX_Proximity_Gap_Selection.svg</file>
     <file alias="SHYX_SnappyHexMesh.png">../icon/SHYX_SnappyHexMesh.png</file>
     <file alias="SHYX_Sphere_Selection.svg">../icon/SHYX_Sphere_Selection.svg</file>
+    <file alias="SHYX_Surface_Thickness.png">../icon/SHYX_Geodesic_Distance.png</file>
     <file alias="SHYX_Surface_Tip_Extractor.png">../icon/SHYX_Surface_Tip_Extractor.png</file>
     <file alias="SHYX_Surface_to_Volume_Mesh.png">../icon/SHYX_Surface_to_Volume_Mesh.png</file>
     <file alias="SHYX_TetGen.png">../icon/SHYX_TetGen_fluent.png</file>

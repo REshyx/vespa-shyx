@@ -49,6 +49,8 @@
 
 #include "vtkSHYXAdaptiveIsotropicRemesherModule.h"
 
+#include <vector>
+
 class vtkAlgorithmOutput;
 class vtkInformation;
 
@@ -327,6 +329,31 @@ public:
   vtkBooleanMacro(FeatureMaskAllScalars, bool);
   //@}
 
+  //@{
+  /**
+   * When ON (default), run CGAL isotropic remesh. When OFF, skip remesh and feature-edge outputs
+   * but still compute the first ICC sizing pass (port 3 preview + uncapped histogram). Not exposed
+   * in ParaView XML; the Properties histogram panel uses this for a live pre-Apply preview.
+   */
+  vtkGetMacro(EnableRemesh, bool);
+  vtkSetMacro(EnableRemesh, bool);
+  vtkBooleanMacro(EnableRemesh, bool);
+  //@}
+
+  //@{
+  /**
+   * Static histogram of the **pre-remesh** uncapped ICC sizing field (same formula as
+   * VespaAdaptiveSizeGlobalUncapped). Filled once at the start of RequestData and not refreshed
+   * across remesh iterations. Panel-only; not linked to Min/Max edge length.
+   */
+  static constexpr int UncappedSizeHistBinCount = 64;
+  /** Manual getters (not vtkGetVectorMacro) so create-time SM info pulls can be logged. */
+  double* GetUncappedSizeHistCenters();
+  double* GetUncappedSizeHistCounts();
+  double* GetUncappedSizeHistRange();
+  int GetUncappedSizeHistSampleCount();
+  //@}
+
 protected:
   vtkSHYXAdaptiveIsotropicRemesher();
   ~vtkSHYXAdaptiveIsotropicRemesher() override;
@@ -334,6 +361,9 @@ protected:
   int RequestData(vtkInformation*, vtkInformationVector**, vtkInformationVector*) override;
   int FillInputPortInformation(int port, vtkInformation* info) override;
   int FillOutputPortInformation(int port, vtkInformation* info) override;
+
+  void ClearUncappedSizeHistogram();
+  void FillUncappedSizeHistogram(const std::vector<double>& uncappedSizes);
 
   double MinEdgeLength       = 0.0;
   double MaxEdgeLength       = 0.0;
@@ -363,6 +393,13 @@ protected:
   double RemeshRangeMin          = 0.0;
   double RemeshRangeMax          = 1.0;
   bool   RemeshRangeAllScalars   = false;
+
+  bool   EnableRemesh            = true;
+
+  double UncappedSizeHistCenters[UncappedSizeHistBinCount] = {};
+  double UncappedSizeHistCounts[UncappedSizeHistBinCount] = {};
+  double UncappedSizeHistRange[2] = { 0.0, 0.0 };
+  int UncappedSizeHistSampleCount = 0;
 
 private:
   vtkSHYXAdaptiveIsotropicRemesher(const vtkSHYXAdaptiveIsotropicRemesher&) = delete;

@@ -54,16 +54,23 @@ public:
   vtkGetMacro(FairingContinuity, int);
   vtkSetClampMacro(FairingContinuity, int, 0, 2);
 
-  /** Parameters for CGAL Alpha Wrapping on the selected part (see vtkCGALAlphaWrapping). */
-  vtkGetMacro(AbsoluteThresholds, bool);
-  vtkSetMacro(AbsoluteThresholds, bool);
-  vtkBooleanMacro(AbsoluteThresholds, bool);
-
+  //@{
+  /**
+   * Maximum circumradius of wrap faces on the selected part (absolute length).
+   * <= 0 means 0.1 times the longest AABB side of the selected cells.
+   */
   vtkGetMacro(Alpha, double);
   vtkSetMacro(Alpha, double);
+  //@}
 
+  //@{
+  /**
+   * Dilatation of the wrap relative to the selected part (absolute length, must stay > 0
+   * after auto-resolve). <= 0 means 0.1 times the longest AABB side of the selected cells.
+   */
   vtkGetMacro(Offset, double);
   vtkSetMacro(Offset, double);
+  //@}
 
   /** If true, only hole-fill the selected part (skip Alpha Wrapping). */
   vtkGetMacro(SkipAlphaWrapping, bool);
@@ -205,9 +212,8 @@ protected:
   int FillInputPortInformation(int port, vtkInformation* info) override;
 
   int FairingContinuity = 1;
-  bool AbsoluteThresholds = false;
-  double Alpha = 4.0;
-  double Offset = 0.05;
+  double Alpha = 0.0;
+  double Offset = 0.0;
   bool SkipAlphaWrapping = false;
   bool ThrowOnSelfIntersection = false;
   bool OrientToBoundVolumeWhenNeeded = true;

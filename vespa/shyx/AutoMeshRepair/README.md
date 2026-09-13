@@ -8,7 +8,7 @@
 2. **Union remainder + wrapped**：再加一个 Auto Mesh Repair，Input 接上一步端口 0，**Wrapped patches** 接端口 2，做 CGAL union + 可选接缝 remesh / smooth（与 [Selection: Fill, Alpha Wrap, Union](../SelectionFillAlphaReunion/README.md) 相同）。
 3. **One-shot**：旧行为（每 pass 修一簇再重检）。大网格上 union 仍可能卡住。
 
-需要 CGAL ≥ 5.5（内部 `VESPA_ALPHA_WRAPPING`）。
+需要 CGAL ≥ 5.5（内部 `VESPA_ALPHA_WRAPPING`）。Alpha / Offset 与 [Selection: Fill, Alpha Wrap, Union](../SelectionFillAlphaReunion/README.md) 相同：绝对长度，默认 0 = 被包裹补丁 AABB 最长边的 10%。
 
 **端口 0**：汤修复网格；extract 阶段为 remainder；union / one-shot 为并回结果。Field data：`SHYXAutoMeshRepairStage`、`SHYXAutoMeshRepairFirstPassClusters`、`SHYXAutoMeshRepairClustersRepaired`、`SHYXAutoMeshRepairRemainingClusters`。  
 **端口 1**：与 Mesh Checker 相同的非法图元（`SHYX_CheckReason` 1/2/3）。  

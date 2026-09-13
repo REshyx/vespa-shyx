@@ -1,0 +1,14 @@
+NAME
+  vtkSMSHYXSelectionBoundsDomain
+DESCRIPTION
+  "ParaView SM domain: Scale/Reset Alpha/Offset from selected-cell AABB (not the full Input)."
+GROUPS
+  ParaView
+DEPENDS
+  ParaView::RemotingServerManager
+  ParaView::RemotingCore
+PRIVATE_DEPENDS
+  VTK::CommonCore
+  VTK::CommonDataModel
+  VTK::CommonExecutionModel
+  VTK::FiltersExtraction

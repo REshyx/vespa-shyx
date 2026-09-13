@@ -11,14 +11,16 @@ SHYX 是本仓库里 **一个作者命名空间**（[`vespa/shyx/`](.)），不�
 * [**Adaptive Isotropic Remesher**](./AdaptiveIsotropicRemesher/README.md) — 曲率自适应各向同性重网格（CGAL ≥ 6）；同模块含 **Remesh With Endpoint**
 * [**Mesh Checker**](./MeshChecker/README.md) — 汤边 / 边界环 / 自交诊断，可选修复
 * [**Auto Mesh Repair**](./AutoMeshRepair/README.md) — 前半段同 Mesh Checker；勾选后默认先抽出做 Alpha Wrap（port 2），再另一步 union 回去（CGAL ≥ 5.5）
-* [**Hole Fill**](./HoleFill/README.md) / [**Repair Degeneracies**](./RepairDegeneracies/README.md) / [**Edge Collapse**](./EdgeCollapse/README.md) / [**Boolean (relaxed)**](./BooleanOperation/README.md) / [**Shape Smoothing**](./ShapeSmoothing/README.md) — CGAL PMP
+* [**Alpha Wrapping**](./AlphaWrapping/README.md) — 点云/三角汤 → 水密 2-流形；Alpha/Offset 默认按包围盒最长边刷新（CGAL ≥ 5.5）
+* [**Hole Fill**](./HoleFill/README.md) / [**Repair Degeneracies**](./RepairDegeneracies/README.md) / [**Edge Collapse**](./EdgeCollapse/README.md) / [**Subset Coarsen**](./SubsetCoarsen/README.md) / [**Boolean (relaxed)**](./BooleanOperation/README.md) / [**Shape Smoothing**](./ShapeSmoothing/README.md) — CGAL PMP
 * [**Convex Hull**](./ConvexHullFilter/README.md)
 * [**Resample Lines**](./ResampleLines/README.md) — 线网按弧长间距重采样；可选 Fuse；短分支保留两端
 * [**Disconnected Region Fuse**](./DisconnectedRegionFuse/README.md)
 * [**Selection Extrude**](./SelectionExtrude/README.md) / [**Selection Append Patches**](./SelectionAppendPatches/README.md) / [**Point Extrude**](./PointExtrude/README.md) / [**Delete Selected Cells**](./DeleteSelectedCells/README.md) / [**Extract Selection**](./ExtractSelectedCells/README.md) / [**Flip Selected Cells Winding**](./FlipSelectedCellsWinding/README.md)
-* [**Selection: Fill, Alpha Wrap, Union**](./SelectionFillAlphaReunion/README.md) — CGAL ≥ 5.5
+* [**Selection: Fill, Alpha Wrap, Union**](./SelectionFillAlphaReunion/README.md) — CGAL ≥ 5.5；Alpha/Offset 默认 0 = 选区 AABB 最长边的 10%；Reset 按选区（[`SelectionBoundsDomain`](./SelectionBoundsDomain/README.md)）
 * [**Minimum OBB**](./MinimumOBB/README.md)
 * [**Enhanced Ruler**](./EnhancedRuler/README.md)
+* [**Surface Thickness**](./SurfaceThickness/README.md) — 顶点壁厚（默认自邻近，交叉面也可用；可选法向射线 / Shape Diameter）
 
 ## 血管与体积网格
 

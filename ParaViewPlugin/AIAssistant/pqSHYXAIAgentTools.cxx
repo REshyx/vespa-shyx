@@ -2084,6 +2084,13 @@ const ShyxExtra kShyxExtra[] = {
     "Prefer over VESPA Mesh Checker for vascular work. Port0 repaired mesh, port1 illegal primitives "
     "(soup edges / boundary rings / self-intersections). Typical follow-up for self-intersections: "
     "SHYXAutoMeshRepair." },
+  { "SHYXSurfaceThickness",
+    "Per-vertex wall thickness on a vtkPolyData surface. Method 0 Self-proximity (default) "
+    "does not ray-cast: nearest Euclidean neighbor outside GeodesicRings hops, optional InwardOnly. "
+    "Works with crossing faces (Thickness=0, ThicknessValid=1). Methods 1–2 shoot inward rays and "
+    "are unreliable on self-intersections. Arrays: Thickness, ThicknessOverEdgeLength, "
+    "ThicknessValid, LocalEdgeLength. MaxDistance 0 = 0.05 * longest AABB side. Color by "
+    "ThicknessOverEdgeLength to spot collapsed branches (rho less than ~2)." },
   { "SHYXAutoMeshRepair",
     "Mesh Checker front-end (soup/boundary/self-intersection diagnostics + soup repair). "
     "RepairSelfIntersections is OFF by default. When on (CGAL>=5.5), RepairStage defaults to 0 "
@@ -2092,12 +2099,29 @@ const ShyxExtra kShyxExtra[] = {
     "Stage 1 Union: Input=remainder, WrappedPatches=port2 of the extract filter; CGAL union + optional "
     "bridge remesh/smooth (same as SHYXSelectionFillAlphaReunionFilter). Stage 2 is legacy one-shot "
     "(one cluster per pass then re-detect, up to MaxPasses) and can hang on corefinement. "
-    "Port1 Mesh Checker illegal primitives (SHYX_CheckReason 1/2/3)." },
+    "Alpha and Offset are always absolute lengths; 0 (default) uses 0.1 times the longest AABB "
+    "side of the patch being wrapped. Port1 Mesh Checker illegal primitives (SHYX_CheckReason 1/2/3)." },
   { "SHYXBooleanOperationFilter", "Relaxed boolean; open meshes OK. Strict watertight meshes can use VESPA Boolean." },
+  { "SHYXAlphaWrapping",
+    "CGAL alpha wrap (CGAL>=5.5): point cloud or triangle soup -> watertight 2-manifold that "
+    "strictly encloses the input. Same backend as VESPAAlphaWrapping; prefer this. Alpha and "
+    "Offset are always absolute lengths. 0 (default) uses 0.05 / 0.03 times the longest AABB "
+    "side (BoundsDomain scaled_extent; Scale/Reset fills the suggestion). No "
+    "UseAbsoluteThresholds / percent-of-diagonal mode. Field data SHYXAlphaWrappingAlpha and "
+    "SHYXAlphaWrappingOffset record the values used." },
   { "SHYXHoleFillFilter", "SHYX hole fill; new pipelines prefer this over VESPA Hole Filling." },
   { "SHYXShapeSmoothing", "Three algorithms (MCF / Angle&Area / Fair). VESPA Shape Smoothing is MCF only." },
+  { "SHYXSubsetCoarsen",
+    "Triangle coarsen that never inserts Steiner points and never moves survivors: CGAL "
+    "edge_collapse onto an original endpoint. CostStrategy 0 Plane QEM (default, geometric "
+    "error) or 1 Min angle (post-collapse min interior angle in the remaining star). Not "
+    "isotropic remesh (SHYXAdaptiveIsotropicRemesher split/relax/project) and not "
+    "SHYXEdgeCollapse (Lindstrom-Turk / QEM / midpoint relocate). PreserveBoundary locks "
+    "border edges. DetectFeatureEdges + ProtectAngle lock sharp edges. May stop above "
+    "EdgeCountRatio if the link condition or constraints block further collapses." },
   { "SHYXAdaptiveIsotropicRemesher",
     "Curvature-adaptive remesh (CGAL>=6). Ports: remeshed, sharp features, mask patch, sizing preview. "
+    "Properties panel ICC size histogram is a live pre-remesh preview (same widget as SHYXRemeshWithEndpoint). "
     "Uniform target edge length: VESPA Isotropic Remesher." },
   { "SHYXRemeshWithEndpoint",
     "Vascular step 5: optional endpoint cull then ICC remesh / cap. Filled caps are retagged on "
@@ -2195,7 +2219,10 @@ const ShyxExtra kShyxExtra[] = {
     "It is repeatable and paired with Input order: extract each Input with its own cell ids, "
     "then remap by append offset. The panel copies every Input's current selection "
     "(Copy Input Selections). Then fill / alpha wrap / union (CGAL>=5.5). "
-    "SelectionCellArrayName is a fallback mask on the merged mesh. "
+    "Alpha and Offset are always absolute lengths; 0 (default) uses 0.1 times the longest AABB "
+    "side of the selected cells (recomputed each Apply). Reset fills that 0.1 suggestion from the "
+    "selection AABB (SHYXSelectionBoundsDomain); Scale multiplies the current value. No "
+    "percent-of-diagonal mode. SelectionCellArrayName is a fallback mask on the merged mesh. "
     "SHYXBridgeCleanupMask (cell array, 1 = cleanup patch) is always written when a bridge "
     "cleanup mask exists; there is no ExportBridgeMask toggle. EnableBridgeRemesh and "
     "EnableBridgeSmooth are independent checkboxes (default both on); uncheck smooth to remesh only." },
@@ -2207,6 +2234,13 @@ const ShyxExtra kShyxExtra[] = {
     "SampleDistance (0 = 0.01 * AABB longest side). If spacing >= branch length, both "
     "endpoints stay as one segment; short branches are not deleted. Closed all-degree-2 "
     "loops are resampled around the cycle." },
+  { "SHYXDisconnectedRegionFuse",
+    "Fuse nearby vertices across regions. FuseWithinInput (default on): connected components "
+    "inside one input can weld (broken lines in a single dataset). Off: each port-0 connection "
+    "is one region; same-input pieces never merge (AddInputConnection for extra pieces). "
+    "FuseVerts / FuseLines / FusePolys (default all on) remap those cell arrays onto fused "
+    "points. Nearby line endpoints from different regions share a vertex but are not concatenated "
+    "into one polyline. Triangle strips affect connectivity only, not output." },
   { "SHYXSurfaceToVolumeMesh", "CGAL Mesh_3 tets from closed surface (alternative to TetGen)." },
   { "SHYXSnappyHexMesh",
     "Hex-dominant volume mesh. Input is vtkPartitionedDataSetCollection (each partition = one STL "

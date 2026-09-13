@@ -288,6 +288,25 @@
         <Property name="ScaleToRange"/>
       </PropertyGroup>
 
+      <!-- Histogram panel: anchor must NOT be panel_visibility=never — pqProxyWidget skips
+           those properties and never creates the PropertyGroup panel_widget. -->
+      <IntVectorProperty name="UncappedSizeHistPanelAnchor"
+                         command="GetUncappedSizeHistSampleCount"
+                         information_only="1"
+                         number_of_elements="1"
+                         default_values="0"
+                         panel_visibility="default">
+        <Documentation>
+          Anchor property for the uncapped-size histogram panel widget (hidden by the custom
+          group widget; value unused in UI).
+        </Documentation>
+      </IntVectorProperty>
+      <PropertyGroup label="ICC size histogram"
+                     panel_widget="shyx_remesh_uncapped_histogram"
+                     panel_visibility="default">
+        <Property function="Anchor" name="UncappedSizeHistPanelAnchor"/>
+      </PropertyGroup>
+
       <!-- =================================================================
                                     ITERATIONS
            ================================================================= -->

@@ -51,6 +51,31 @@ vtkStandardNewMacro(vtkSHYXSelectionFillAlphaReunionFilter);
 namespace
 {
 
+constexpr double kSelectionWrapScale = 0.1;
+
+double LongestAabbSide(vtkPolyData* mesh)
+{
+  if (!mesh)
+  {
+    return 0.0;
+  }
+  double b[6];
+  mesh->GetBounds(b);
+  const double dx = b[1] - b[0];
+  const double dy = b[3] - b[2];
+  const double dz = b[5] - b[4];
+  return std::max(dx, std::max(dy, dz));
+}
+
+double ResolveWrapLength(double value, double longest)
+{
+  if (value > 0.0)
+  {
+    return value;
+  }
+  return kSelectionWrapScale * longest;
+}
+
 vtkSmartPointer<vtkPolyData> ForceDataSetToPolyData(vtkDataSet* ds)
 {
   if (!ds)
@@ -1110,7 +1135,6 @@ void vtkSHYXSelectionFillAlphaReunionFilter::PrintSelf(ostream& os, vtkIndent in
   os << indent << "SelectionCellArrayName: "
      << (this->SelectionCellArrayName ? this->SelectionCellArrayName : "(null)") << "\n";
   os << indent << "FairingContinuity: " << this->FairingContinuity << "\n";
-  os << indent << "AbsoluteThresholds: " << (this->AbsoluteThresholds ? "on" : "off") << "\n";
   os << indent << "Alpha: " << this->Alpha << "\n";
   os << indent << "Offset: " << this->Offset << "\n";
   os << indent << "SkipAlphaWrapping: " << (this->SkipAlphaWrapping ? "on" : "off") << "\n";
@@ -1248,10 +1272,21 @@ int vtkSHYXSelectionFillAlphaReunionFilter::RequestData(
   }
   else
   {
+    const double longest = LongestAabbSide(filledSel);
+    const double alpha = ResolveWrapLength(this->Alpha, longest);
+    const double offset = ResolveWrapLength(this->Offset, longest);
+    if (!(alpha > 0.0) || !(offset > 0.0))
+    {
+      vtkErrorMacro("Resolved Alpha (" << alpha << ") and Offset (" << offset
+                                       << ") must be positive. Selected-region bounding box may be "
+                                          "degenerate; set Alpha and Offset explicitly.");
+      return 0;
+    }
+
     vtkNew<vtkCGALAlphaWrapping> aw;
-    aw->SetAbsoluteThresholds(this->AbsoluteThresholds);
-    aw->SetAlpha(this->Alpha);
-    aw->SetOffset(this->Offset);
+    aw->SetAbsoluteThresholds(true);
+    aw->SetAlpha(alpha);
+    aw->SetOffset(offset);
     aw->SetInputData(filledSel);
     aw->SetUpdateAttributes(false);
     aw->Update();

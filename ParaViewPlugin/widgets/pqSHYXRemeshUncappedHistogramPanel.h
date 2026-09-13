@@ -13,10 +13,10 @@ class vtkEventQtSlotConnect;
 class vtkSMPropertyGroup;
 
 /**
- * Read-only ICC target-size histogram for SHYX Remesh With Endpoint.
- * Client-side preview from Input; updates live with AdaptiveTolerance and
- * Min/Max edge length (unchecked values, debounced). Shows sizes after clamp
- * to [Min, Max] (VespaSizeGlobal).
+ * Read-only ICC target-size histogram for SHYX Remesh With Endpoint and
+ * SHYX Adaptive Isotropic Remesher. Client-side preview from Input; updates
+ * live with AdaptiveTolerance and Min/Max edge length (unchecked values,
+ * debounced). Shows sizes after clamp to [Min, Max].
  */
 class pqSHYXRemeshUncappedHistogramPanel : public pqPropertyWidget
 {

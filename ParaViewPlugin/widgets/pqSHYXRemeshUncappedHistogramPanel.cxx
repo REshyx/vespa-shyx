@@ -4,6 +4,7 @@
 #include "pqPipelineSource.h"
 #include "pqServerManagerModel.h"
 
+#include "vtkSHYXAdaptiveIsotropicRemesher.h"
 #include "vtkSHYXRemeshWithEndpoint.h"
 
 #include "vtkAlgorithm.h"
@@ -15,13 +16,13 @@
 #include "vtkNew.h"
 #include "vtkPointData.h"
 #include "vtkPolyData.h"
+#include "vtkSelection.h"
 #include "vtkSMInputProperty.h"
 #include "vtkSMProperty.h"
 #include "vtkSMPropertyGroup.h"
 #include "vtkSMPropertyHelper.h"
 #include "vtkSMProxy.h"
 #include "vtkSMSourceProxy.h"
-#include "vtkSMStringVectorProperty.h"
 
 #include <QLabel>
 #include <QPainter>
@@ -35,6 +36,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdlib>
+#include <cstring>
 #include <limits>
 #include <vector>
 
@@ -130,9 +132,9 @@ bool buildHistogramFromValues(const std::vector<double>& values, int nBins, QVec
   return true;
 }
 
-vtkPolyData* fetchInputPolyData(vtkSMProxy* filterProxy, bool updateUpstream)
+vtkDataObject* fetchConnectedInput(vtkSMProxy* filterProxy, const char* propertyName, bool updateUpstream)
 {
-  auto* inputProp = vtkSMInputProperty::SafeDownCast(filterProxy->GetProperty("Input"));
+  auto* inputProp = vtkSMInputProperty::SafeDownCast(filterProxy->GetProperty(propertyName));
   if (!inputProp || inputProp->GetNumberOfProxies() == 0)
   {
     return nullptr;
@@ -152,7 +154,106 @@ vtkPolyData* fetchInputPolyData(vtkSMProxy* filterProxy, bool updateUpstream)
     return nullptr;
   }
   const unsigned int port = inputProp->GetOutputPortForConnection(0);
-  return vtkPolyData::SafeDownCast(algo->GetOutputDataObject(static_cast<int>(port)));
+  return algo->GetOutputDataObject(static_cast<int>(port));
+}
+
+vtkPolyData* fetchInputPolyData(vtkSMProxy* filterProxy, bool updateUpstream)
+{
+  return vtkPolyData::SafeDownCast(fetchConnectedInput(filterProxy, "Input", updateUpstream));
+}
+
+vtkSelection* fetchSelection(vtkSMProxy* filterProxy, bool updateUpstream)
+{
+  return vtkSelection::SafeDownCast(fetchConnectedInput(filterProxy, "Selection", updateUpstream));
+}
+
+const char* firstStringUnchecked(vtkSMProperty* prop)
+{
+  if (!prop)
+  {
+    return nullptr;
+  }
+  vtkSMPropertyHelper helper(prop);
+  helper.SetUseUnchecked(true);
+  if (helper.GetNumberOfElements() < 1)
+  {
+    helper.SetUseUnchecked(false);
+    if (helper.GetNumberOfElements() < 1)
+    {
+      return nullptr;
+    }
+  }
+  return helper.GetAsString(0);
+}
+
+void applyRemeshRangeArray(vtkSHYXAdaptiveIsotropicRemesher* preview, vtkSMProperty* prop)
+{
+  if (!preview || !prop)
+  {
+    return;
+  }
+  vtkSMPropertyHelper helper(prop);
+  helper.SetUseUnchecked(true);
+  unsigned n = helper.GetNumberOfElements();
+  if (n < 1)
+  {
+    helper.SetUseUnchecked(false);
+    n = helper.GetNumberOfElements();
+  }
+  if (n >= 5)
+  {
+    const char* name = helper.GetAsString(4);
+    if (name && name[0] != '\0')
+    {
+      preview->SetInputArrayToProcess(0, 0, 0, helper.GetAsInt(3), name);
+    }
+  }
+  else if (n >= 1)
+  {
+    preview->SetRemeshRangeArrayName(helper.GetAsString(0));
+  }
+}
+
+bool readUncappedRange(int sampleCount, const double* range, double& uncappedMin, double& uncappedMax)
+{
+  if (sampleCount < 1 || !range)
+  {
+    return false;
+  }
+  uncappedMin = range[0];
+  uncappedMax = range[1];
+  return std::isfinite(uncappedMin) && std::isfinite(uncappedMax) &&
+    (uncappedMax >= uncappedMin) && (uncappedMax > 0.0 || uncappedMin > 0.0);
+}
+
+bool histogramFromSizeArray(vtkDataArray* sizeArr, int nBins, int uncappedSampleCount,
+  const double* uncappedRange, QVector<double>& countVec, double& rangeMin, double& rangeMax,
+  int& sampleCount, double& uncappedMin, double& uncappedMax, bool& hasUncapped)
+{
+  countVec.clear();
+  rangeMin = 0.0;
+  rangeMax = 0.0;
+  sampleCount = 0;
+  uncappedMin = 0.0;
+  uncappedMax = 0.0;
+  hasUncapped = false;
+  if (!sizeArr || sizeArr->GetNumberOfTuples() < 1)
+  {
+    return false;
+  }
+
+  std::vector<double> sizes;
+  sizes.reserve(static_cast<std::size_t>(sizeArr->GetNumberOfTuples()));
+  for (vtkIdType i = 0; i < sizeArr->GetNumberOfTuples(); ++i)
+  {
+    sizes.push_back(sizeArr->GetComponent(i, 0));
+  }
+  if (!buildHistogramFromValues(sizes, nBins, countVec, rangeMin, rangeMax, sampleCount))
+  {
+    return false;
+  }
+  hasUncapped = readUncappedRange(uncappedSampleCount, uncappedRange, uncappedMin, uncappedMax);
+  return true;
 }
 
 } // namespace
@@ -190,7 +291,7 @@ protected:
     if (this->Counts.isEmpty() || this->SampleCount < 1)
     {
       p.setPen(QColor(120, 120, 120));
-      p.drawText(r, Qt::AlignCenter, tr("Waiting for Input wall mesh…"));
+      p.drawText(r, Qt::AlignCenter, tr("Waiting for Input mesh…"));
       return;
     }
 
@@ -258,7 +359,8 @@ pqSHYXRemeshUncappedHistogramPanel::pqSHYXRemeshUncappedHistogramPanel(
   this->PropertyConnect = vtkEventQtSlotConnect::New();
   for (const char* name :
     { "AdaptiveTolerance", "MinEdgeLength", "MaxEdgeLength", "ScaleToRange",
-      "AdaptiveSizingNeighborMaxRatio" })
+      "AdaptiveSizingNeighborMaxRatio", "RemeshRangeMin", "RemeshRangeMax",
+      "FeatureMaskThreshold" })
   {
     if (vtkSMProperty* p = smproxy->GetProperty(name))
     {
@@ -270,7 +372,9 @@ pqSHYXRemeshUncappedHistogramPanel::pqSHYXRemeshUncappedHistogramPanel(
   }
   for (const char* name :
     { "Input", "EnableEndpointCull", "EndpointIndexArrayName", "LargestConnectedRegionOnly",
-      "EndpointIndexAllScalars" })
+      "EndpointIndexAllScalars", "Selection", "RemeshRegionMode", "RemeshRangeArrayName",
+      "RemeshRangeAllScalars", "FeatureMaskEnabled", "FeatureMaskArrayName",
+      "FeatureMaskAllScalars" })
   {
     if (vtkSMProperty* p = smproxy->GetProperty(name))
     {
@@ -406,12 +510,6 @@ bool pqSHYXRemeshUncappedHistogramPanel::computePreviewFromInput()
     return false;
   }
 
-  const bool largestOnly =
-    readIntUnchecked(filterProxy->GetProperty("LargestConnectedRegionOnly"), 1) != 0;
-  const bool enableEndpointCull =
-    readIntUnchecked(filterProxy->GetProperty("EnableEndpointCull"), 1) != 0;
-  const bool allScalars =
-    readIntUnchecked(filterProxy->GetProperty("EndpointIndexAllScalars"), 0) != 0;
   const bool scaleToRange =
     readIntUnchecked(filterProxy->GetProperty("ScaleToRange"), 0) != 0;
   const double neighborRatio =
@@ -442,70 +540,114 @@ bool pqSHYXRemeshUncappedHistogramPanel::computePreviewFromInput()
     maxLen = fallbackMax;
   }
 
-  vtkNew<vtkSHYXRemeshWithEndpoint> preview;
-  preview->SetInputData(inputPd);
-  preview->SetAdaptiveTolerance(tol);
-  preview->SetMinEdgeLength(minLen);
-  preview->SetMaxEdgeLength(maxLen);
-  preview->SetAdaptiveSizingNeighborMaxRatio(neighborRatio);
-  preview->SetLargestConnectedRegionOnly(largestOnly);
-  preview->SetEnableEndpointCull(enableEndpointCull);
-  preview->SetEndpointIndexAllScalars(allScalars);
-  preview->SetScaleToRange(scaleToRange);
-  preview->EnableWallRemeshOff();
-  preview->EnableCapRemeshOff();
+  constexpr int nBinsEndpoint = vtkSHYXRemeshWithEndpoint::UncappedSizeHistBinCount;
+  constexpr int nBinsAdaptive = vtkSHYXAdaptiveIsotropicRemesher::UncappedSizeHistBinCount;
 
-  if (auto* arrProp =
-        vtkSMStringVectorProperty::SafeDownCast(filterProxy->GetProperty("EndpointIndexArrayName")))
-  {
-    if (arrProp->GetNumberOfElements() >= 1)
-    {
-      const char* name = arrProp->GetElement(0);
-      preview->SetEndpointIndexArrayName(name);
-    }
-  }
-
-  preview->Update();
-
-  vtkPolyData* outPd = vtkPolyData::SafeDownCast(preview->GetOutputDataObject(0));
-  if (!outPd)
-  {
-    return false;
-  }
-  vtkDataArray* sizeArr = outPd->GetPointData()->GetArray("VespaSizeGlobal");
-  if (!sizeArr || sizeArr->GetNumberOfTuples() < 1)
-  {
-    return false;
-  }
-
-  std::vector<double> sizes;
-  sizes.reserve(static_cast<std::size_t>(sizeArr->GetNumberOfTuples()));
-  for (vtkIdType i = 0; i < sizeArr->GetNumberOfTuples(); ++i)
-  {
-    sizes.push_back(sizeArr->GetComponent(i, 0));
-  }
-
-  constexpr int nBins = vtkSHYXRemeshWithEndpoint::UncappedSizeHistBinCount;
   QVector<double> countVec;
   double rangeMin = 0.0;
   double rangeMax = 0.0;
   int sampleCount = 0;
-  if (!buildHistogramFromValues(sizes, nBins, countVec, rangeMin, rangeMax, sampleCount))
-  {
-    return false;
-  }
-
   double uncappedMin = 0.0;
   double uncappedMax = 0.0;
   bool hasUncapped = false;
-  if (preview->GetUncappedSizeHistSampleCount() > 0)
+
+  const char* xmlName = filterProxy->GetXMLName();
+  const bool isAdaptive =
+    xmlName && std::strcmp(xmlName, "SHYXAdaptiveIsotropicRemesher") == 0;
+
+  if (isAdaptive)
   {
-    if (const double* ur = preview->GetUncappedSizeHistRange())
+    vtkNew<vtkSHYXAdaptiveIsotropicRemesher> preview;
+    preview->SetInputData(inputPd);
+    preview->SetAdaptiveTolerance(tol);
+    preview->SetMinEdgeLength(minLen);
+    preview->SetMaxEdgeLength(maxLen);
+    preview->SetAdaptiveSizingNeighborMaxRatio(neighborRatio);
+    preview->SetScaleToRange(scaleToRange);
+    preview->EnableRemeshOff();
+    preview->UpdateAttributesOff();
+
+    preview->SetRemeshRegionMode(
+      readIntUnchecked(filterProxy->GetProperty("RemeshRegionMode"), 0));
+    preview->SetRemeshRangeMin(
+      readDoubleUnchecked(filterProxy->GetProperty("RemeshRangeMin"), 0.0));
+    preview->SetRemeshRangeMax(
+      readDoubleUnchecked(filterProxy->GetProperty("RemeshRangeMax"), 1.0));
+    preview->SetRemeshRangeAllScalars(
+      readIntUnchecked(filterProxy->GetProperty("RemeshRangeAllScalars"), 0) != 0);
+    applyRemeshRangeArray(preview, filterProxy->GetProperty("RemeshRangeArrayName"));
+
+    if (vtkSelection* sel = fetchSelection(filterProxy, /*updateUpstream=*/true))
     {
-      uncappedMin = ur[0];
-      uncappedMax = ur[1];
-      hasUncapped = std::isfinite(uncappedMin) && std::isfinite(uncappedMax) &&
-        (uncappedMax >= uncappedMin) && (uncappedMax > 0.0 || uncappedMin > 0.0);
+      preview->SetInputData(1, sel);
+    }
+
+    preview->SetFeatureMaskEnabled(
+      readIntUnchecked(filterProxy->GetProperty("FeatureMaskEnabled"), 0) != 0);
+    preview->SetFeatureMaskThreshold(
+      readDoubleUnchecked(filterProxy->GetProperty("FeatureMaskThreshold"), 0.0));
+    preview->SetFeatureMaskAllScalars(
+      readIntUnchecked(filterProxy->GetProperty("FeatureMaskAllScalars"), 0) != 0);
+    if (const char* maskName = firstStringUnchecked(filterProxy->GetProperty("FeatureMaskArrayName")))
+    {
+      preview->SetFeatureMaskArrayName(maskName);
+    }
+
+    preview->Update();
+
+    vtkPolyData* outPd = vtkPolyData::SafeDownCast(preview->GetOutputDataObject(3));
+    if (!outPd)
+    {
+      return false;
+    }
+    vtkDataArray* sizeArr = outPd->GetPointData()->GetArray("VespaAdaptiveSizeGlobal");
+    if (!histogramFromSizeArray(sizeArr, nBinsAdaptive, preview->GetUncappedSizeHistSampleCount(),
+          preview->GetUncappedSizeHistRange(), countVec, rangeMin, rangeMax, sampleCount,
+          uncappedMin, uncappedMax, hasUncapped))
+    {
+      return false;
+    }
+  }
+  else
+  {
+    const bool largestOnly =
+      readIntUnchecked(filterProxy->GetProperty("LargestConnectedRegionOnly"), 1) != 0;
+    const bool enableEndpointCull =
+      readIntUnchecked(filterProxy->GetProperty("EnableEndpointCull"), 1) != 0;
+    const bool allScalars =
+      readIntUnchecked(filterProxy->GetProperty("EndpointIndexAllScalars"), 0) != 0;
+
+    vtkNew<vtkSHYXRemeshWithEndpoint> preview;
+    preview->SetInputData(inputPd);
+    preview->SetAdaptiveTolerance(tol);
+    preview->SetMinEdgeLength(minLen);
+    preview->SetMaxEdgeLength(maxLen);
+    preview->SetAdaptiveSizingNeighborMaxRatio(neighborRatio);
+    preview->SetLargestConnectedRegionOnly(largestOnly);
+    preview->SetEnableEndpointCull(enableEndpointCull);
+    preview->SetEndpointIndexAllScalars(allScalars);
+    preview->SetScaleToRange(scaleToRange);
+    preview->EnableWallRemeshOff();
+    preview->EnableCapRemeshOff();
+
+    if (const char* epName = firstStringUnchecked(filterProxy->GetProperty("EndpointIndexArrayName")))
+    {
+      preview->SetEndpointIndexArrayName(epName);
+    }
+
+    preview->Update();
+
+    vtkPolyData* outPd = vtkPolyData::SafeDownCast(preview->GetOutputDataObject(0));
+    if (!outPd)
+    {
+      return false;
+    }
+    vtkDataArray* sizeArr = outPd->GetPointData()->GetArray("VespaSizeGlobal");
+    if (!histogramFromSizeArray(sizeArr, nBinsEndpoint, preview->GetUncappedSizeHistSampleCount(),
+          preview->GetUncappedSizeHistRange(), countVec, rangeMin, rangeMax, sampleCount,
+          uncappedMin, uncappedMax, hasUncapped))
+    {
+      return false;
     }
   }
 

@@ -1,0 +1,154 @@
+<?xml version="1.0" ?>
+<ServerManagerConfiguration>
+  <ProxyGroup name="filters">
+    <SourceProxy class="vtkSHYXSubsetCoarsen"
+                 label="SHYX Subset Coarsen"
+                 name="SHYXSubsetCoarsen">
+      <Documentation short_help="SHYX Subset Coarsen: Coarsen a triangle mesh without new vertices or moving survivors.">
+        Triangle-mesh coarsening that never inserts Steiner points and never relocates
+        surviving vertices: CGAL edge_collapse onto an original endpoint. Cost Strategy
+        is plane QEM (default; geometric error) or post-collapse minimum angle (element
+        quality). Output vertices are a subset of the input vertices at the same coordinates.
+
+        Not SHYX Adaptive Isotropic Remesher (split / relaxation / projection) and not
+        SHYX Edge Collapse (Lindstrom–Turk / QEM / midpoint placement move survivors).
+        Input must be a pure triangle mesh; use Triangulate upstream for mixed cells.
+        Stop predicate is the same Edge Count Ratio as SHYX Edge Collapse. Feature or
+        boundary constraints, and the link condition, may stop before that ratio is reached.
+      </Documentation>
+
+      <InputProperty name="Input"
+                     command="SetInputConnection">
+        <ProxyGroupDomain name="groups">
+          <Group name="sources"/>
+          <Group name="filters"/>
+        </ProxyGroupDomain>
+        <DataTypeDomain name="input_type">
+          <DataType value="vtkPolyData"/>
+        </DataTypeDomain>
+      </InputProperty>
+
+      <DoubleVectorProperty command="SetEdgeCountRatio"
+                            name="EdgeCountRatio"
+                            label="Edge Count Ratio (stop)"
+                            number_of_elements="1"
+                            default_values="0.5">
+        <DoubleRangeDomain name="range" min="0.0001" max="1"/>
+        <Documentation>
+          Stop when (current undirected edges) / (initial undirected edges) is strictly
+          below this value. Default 0.5. Constraints or the link condition may stop earlier
+          at a higher ratio (a warning is issued).
+        </Documentation>
+      </DoubleVectorProperty>
+
+      <IntVectorProperty command="SetCostStrategy"
+                         name="CostStrategy"
+                         label="Cost Strategy"
+                         number_of_elements="1"
+                         default_values="0"
+                         animateable="0">
+        <EnumerationDomain name="enum">
+          <Entry text="Plane QEM (default)" value="0"/>
+          <Entry text="Min angle" value="1"/>
+        </EnumerationDomain>
+        <Documentation>
+          How the surviving original endpoint is ranked. Plane QEM: Garland–Heckbert plane
+          quadrics at the two endpoints (geometric error). Min angle: keep the endpoint
+          that leaves the larger minimum interior angle in the remaining star, and collapse
+          better-quality moves first (cost = minus that angle). Placement is always an
+          original vertex; neither strategy inserts points or relocates survivors.
+        </Documentation>
+      </IntVectorProperty>
+
+      <IntVectorProperty command="SetPreserveBoundary"
+                         name="PreserveBoundary"
+                         label="Preserve boundary"
+                         number_of_elements="1"
+                         default_values="1"
+                         animateable="0">
+        <BooleanDomain name="bool"/>
+        <Documentation>
+          When ON (default), every border edge is constrained and is not collapsed, so the
+          boundary polyline stays. Mixed interior–border edges still collapse onto the
+          remaining border vertex. Turn OFF to allow deleting border vertices (survivors
+          are still a subset of the original vertices, unmoved).
+        </Documentation>
+      </IntVectorProperty>
+
+      <IntVectorProperty command="SetDetectFeatureEdges"
+                         name="DetectFeatureEdges"
+                         label="Detect feature edges"
+                         number_of_elements="1"
+                         default_values="0"
+                         animateable="0">
+        <BooleanDomain name="bool"/>
+        <Documentation>
+          When ON, CGAL detect_sharp_edges (Protection angle) marks sharp edges as
+          constrained so they are not collapsed.
+        </Documentation>
+      </IntVectorProperty>
+
+      <DoubleVectorProperty command="SetProtectAngle"
+                            name="ProtectAngle"
+                            label="Protection angle"
+                            number_of_elements="1"
+                            default_values="70"
+                            animateable="0">
+        <DoubleRangeDomain name="range" min="0" max="180"/>
+        <Documentation>
+          Dihedral angle in degrees for detect_sharp_edges. Adjacent faces whose normals
+          differ by more than this angle mark the shared edge as a feature. Used only when
+          Detect feature edges is ON.
+        </Documentation>
+        <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="enabled_state"
+                                   property="DetectFeatureEdges"
+                                   value="1"/>
+        </Hints>
+      </DoubleVectorProperty>
+
+      <IntVectorProperty command="SetPreventNormalFlip"
+                         name="PreventNormalFlip"
+                         label="Prevent normal flip"
+                         number_of_elements="1"
+                         default_values="1"
+                         panel_visibility="advanced"
+                         animateable="0">
+        <BooleanDomain name="bool"/>
+        <Documentation>
+          CGAL Bounded_normal_change_placement. When ON (default), refuse a collapse that
+          would reverse a neighboring triangle's orientation.
+        </Documentation>
+      </IntVectorProperty>
+
+      <IntVectorProperty
+         name="UseUpdateAttributes"
+         command="SetUpdateAttributes"
+         label="Interpolate attributes"
+         number_of_elements="1"
+         default_values="1"
+         panel_visibility="advanced">
+         <BooleanDomain name="bool"/>
+         <Documentation>
+           If ON, point/cell data are probed from the input onto the coarsened mesh.
+         </Documentation>
+      </IntVectorProperty>
+
+      <PropertyGroup label="Stop">
+        <Property name="EdgeCountRatio"/>
+        <Property name="CostStrategy"/>
+      </PropertyGroup>
+      <PropertyGroup label="Constraints">
+        <Property name="PreserveBoundary"/>
+        <Property name="DetectFeatureEdges"/>
+        <Property name="ProtectAngle"/>
+      </PropertyGroup>
+
+      <Hints>
+        <ShowInMenu category="SHYX" icon=":/VESPA/SHYX_Subset_Coarsen.png"/>
+      </Hints>
+
+    </SourceProxy>
+  </ProxyGroup>
+</ServerManagerConfiguration>

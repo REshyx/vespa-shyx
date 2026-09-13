@@ -1,0 +1,14 @@
+NAME
+  vtkSHYXAlphaWrapping
+DESCRIPTION
+  "SHYX: CGAL alpha wrapping with Alpha/Offset as absolute lengths (0 = fraction of longest AABB side)."
+GROUPS
+  Meshing
+DEPENDS
+  vtkCGALAlgorithm
+  vtkCGALPMP
+  VTK::FiltersCore
+PRIVATE_DEPENDS
+  VTK::CommonCore
+  VTK::CommonDataModel
+  VTK::CommonExecutionModel

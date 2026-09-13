@@ -14,7 +14,9 @@
         each Input's own cell ids are extracted, then remapped by the append offset. The panel
         Copy Input Selections button clones every Input's current selection (not a second
         pipeline port; same SelectionInput hint as Extract Selection). Those faces are marked exactly
-        (no distance heuristic). Cleanup either dilates the full AW region or (checkbox) starts from the
+        (no distance heuristic). Alpha and Offset are absolute lengths; 0 (default) uses 0.1 times the
+        longest AABB side of the selected cells (recomputed each Apply). Reset on those properties
+        uses the same selection AABB. Cleanup either dilates the full AW region or (checkbox) starts from the
         AW/original boolean seam. Remesh and smooth are independent checkboxes: remesh only, smooth
         only, or both (smooth_shape MCF or fair with C0–C2 at the patch boundary). When the unselected
         part is empty (entire surface selected), only the selected path is output. Use Selection on
@@ -105,37 +107,46 @@
         </Documentation>
       </IntVectorProperty>
 
-      <IntVectorProperty command="SetAbsoluteThresholds"
-                         name="AbsoluteThresholds"
-                         label="Alpha wrap: absolute Alpha/Offset"
-                         number_of_elements="1"
-                         default_values="0"
-                         panel_visibility="advanced"
-                         animateable="0">
-        <BooleanDomain name="bool"/>
-        <Documentation>
-          If off, Alpha and Offset are percentages of the mesh length (see VESPA Alpha Wrapping).
-        </Documentation>
-      </IntVectorProperty>
-
       <DoubleVectorProperty command="SetAlpha"
                             name="Alpha"
                             label="Alpha"
                             number_of_elements="1"
-                            default_values="4.0"
-                            panel_visibility="advanced"
-                            animateable="1">
-        <Documentation>Alpha wrap parameter (maximum circumradius of faces in the result).</Documentation>
+                            default_values="0"
+                            animateable="0">
+        <SHYXSelectionBoundsDomain name="bounds" mode="scaled_extent" scale_factor="0.1">
+          <RequiredProperties>
+            <Property function="Input" name="Input"/>
+            <Property function="Selection" name="Selection"/>
+            <Property function="SelectionCellArrayName" name="SelectionCellArrayName"/>
+          </RequiredProperties>
+        </SHYXSelectionBoundsDomain>
+        <Documentation>
+          Absolute length: maximum circumradius of wrap faces. 0 (default) uses 0.1 times the
+          longest AABB side of the selected cells (recomputed each Apply). Smaller values follow
+          concavities more closely. Reset next to the property fills that 0.1 suggestion from the
+          current selection (or SelectionCellArrayName); Scale multiplies the value in the box.
+        </Documentation>
       </DoubleVectorProperty>
 
       <DoubleVectorProperty command="SetOffset"
                             name="Offset"
                             label="Offset"
                             number_of_elements="1"
-                            default_values="0.05"
-                            panel_visibility="advanced"
-                            animateable="1">
-        <Documentation>Alpha wrap offset (dilatation / shrink factor depending on context).</Documentation>
+                            default_values="0"
+                            animateable="0">
+        <SHYXSelectionBoundsDomain name="bounds" mode="scaled_extent" scale_factor="0.1">
+          <RequiredProperties>
+            <Property function="Input" name="Input"/>
+            <Property function="Selection" name="Selection"/>
+            <Property function="SelectionCellArrayName" name="SelectionCellArrayName"/>
+          </RequiredProperties>
+        </SHYXSelectionBoundsDomain>
+        <Documentation>
+          Absolute dilatation of the wrap relative to the selected part. Must stay positive after
+          auto-resolve. 0 (default) uses 0.1 times the longest AABB side of the selected cells
+          (recomputed each Apply). Reset fills that 0.1 suggestion from the current selection;
+          Scale multiplies the value in the box.
+        </Documentation>
       </DoubleVectorProperty>
 
       <IntVectorProperty command="SetThrowOnSelfIntersection"
@@ -439,6 +450,12 @@
                                    value="2"/>
         </Hints>
       </IntVectorProperty>
+
+      <PropertyGroup label="Alpha wrap (selected)">
+        <Property name="Alpha"/>
+        <Property name="Offset"/>
+        <Property name="SkipAlphaWrapping"/>
+      </PropertyGroup>
 
       <PropertyGroup label="Bridge cleanup (after union)">
         <Property name="EnableBridgeCleanup"/>

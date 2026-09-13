@@ -1,0 +1,13 @@
+NAME
+  vtkSHYXSubsetCoarsen
+DESCRIPTION
+  "SHYX: coarsen a triangle vtkPolyData without inserting vertices or moving survivors (CGAL edge_collapse onto an original endpoint)."
+GROUPS
+  Meshing
+DEPENDS
+  vtkCGALAlgorithm
+  VTK::FiltersCore
+PRIVATE_DEPENDS
+  VTK::CommonCore
+  VTK::CommonDataModel
+  VTK::CommonExecutionModel

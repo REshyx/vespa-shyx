@@ -99,6 +99,101 @@ vtkSHYXAdaptiveIsotropicRemesher::~vtkSHYXAdaptiveIsotropicRemesher()
 }
 
 //------------------------------------------------------------------------------
+double* vtkSHYXAdaptiveIsotropicRemesher::GetUncappedSizeHistCenters()
+{
+  return this->UncappedSizeHistCenters;
+}
+
+//------------------------------------------------------------------------------
+double* vtkSHYXAdaptiveIsotropicRemesher::GetUncappedSizeHistCounts()
+{
+  return this->UncappedSizeHistCounts;
+}
+
+//------------------------------------------------------------------------------
+double* vtkSHYXAdaptiveIsotropicRemesher::GetUncappedSizeHistRange()
+{
+  return this->UncappedSizeHistRange;
+}
+
+//------------------------------------------------------------------------------
+int vtkSHYXAdaptiveIsotropicRemesher::GetUncappedSizeHistSampleCount()
+{
+  return this->UncappedSizeHistSampleCount;
+}
+
+//------------------------------------------------------------------------------
+void vtkSHYXAdaptiveIsotropicRemesher::ClearUncappedSizeHistogram()
+{
+  for (int i = 0; i < UncappedSizeHistBinCount; ++i)
+  {
+    this->UncappedSizeHistCenters[i] = 0.0;
+    this->UncappedSizeHistCounts[i] = 0.0;
+  }
+  this->UncappedSizeHistRange[0] = 0.0;
+  this->UncappedSizeHistRange[1] = 0.0;
+  this->UncappedSizeHistSampleCount = 0;
+}
+
+//------------------------------------------------------------------------------
+void vtkSHYXAdaptiveIsotropicRemesher::FillUncappedSizeHistogram(
+  const std::vector<double>& uncappedSizes)
+{
+  this->ClearUncappedSizeHistogram();
+  double vmin = std::numeric_limits<double>::infinity();
+  double vmax = -std::numeric_limits<double>::infinity();
+  int nValid = 0;
+  for (double v : uncappedSizes)
+  {
+    if (!std::isfinite(v) || !(v > 0.0))
+    {
+      continue;
+    }
+    vmin = (std::min)(vmin, v);
+    vmax = (std::max)(vmax, v);
+    ++nValid;
+  }
+  if (nValid < 1 || !std::isfinite(vmin) || !std::isfinite(vmax))
+  {
+    return;
+  }
+  if (!(vmax > vmin))
+  {
+    vmax = vmin + (std::max)(1.0e-12, std::abs(vmin) * 1.0e-9);
+  }
+
+  const double span = vmax - vmin;
+  for (int i = 0; i < UncappedSizeHistBinCount; ++i)
+  {
+    this->UncappedSizeHistCenters[i] =
+      vmin + (static_cast<double>(i) + 0.5) * span / UncappedSizeHistBinCount;
+    this->UncappedSizeHistCounts[i] = 0.0;
+  }
+  for (double v : uncappedSizes)
+  {
+    if (!std::isfinite(v) || !(v > 0.0))
+    {
+      continue;
+    }
+    double t = (v - vmin) / span;
+    t = (std::min)(1.0, (std::max)(0.0, t));
+    int bin = static_cast<int>(t * (UncappedSizeHistBinCount - 1));
+    if (bin < 0)
+    {
+      bin = 0;
+    }
+    else if (bin >= UncappedSizeHistBinCount)
+    {
+      bin = UncappedSizeHistBinCount - 1;
+    }
+    this->UncappedSizeHistCounts[bin] += 1.0;
+  }
+  this->UncappedSizeHistRange[0] = vmin;
+  this->UncappedSizeHistRange[1] = vmax;
+  this->UncappedSizeHistSampleCount = nValid;
+}
+
+//------------------------------------------------------------------------------
 void vtkSHYXAdaptiveIsotropicRemesher::SetRemeshRangeArrayName(const char* name)
 {
   const bool hasName = (name != nullptr && name[0] != '\0');
@@ -167,6 +262,10 @@ void vtkSHYXAdaptiveIsotropicRemesher::PrintSelf(ostream& os, vtkIndent indent)
   os << indent << "RemeshRangeMin: " << this->RemeshRangeMin << std::endl;
   os << indent << "RemeshRangeMax: " << this->RemeshRangeMax << std::endl;
   os << indent << "RemeshRangeAllScalars: " << (this->RemeshRangeAllScalars ? "on" : "off") << std::endl;
+  os << indent << "EnableRemesh: " << (this->EnableRemesh ? "on" : "off") << std::endl;
+  os << indent << "UncappedSizeHistSampleCount: " << this->UncappedSizeHistSampleCount << std::endl;
+  os << indent << "UncappedSizeHistRange: [" << this->UncappedSizeHistRange[0] << ", "
+     << this->UncappedSizeHistRange[1] << "]" << std::endl;
   this->Superclass::PrintSelf(os, indent);
 }
 
@@ -214,22 +313,30 @@ int vtkSHYXAdaptiveIsotropicRemesher::RequestData(
     return 0;
   }
 
-  vtkSHYXSaveRemeshProgressState(this);
+  if (this->EnableRemesh)
+  {
+    vtkSHYXSaveRemeshProgressState(this);
+  }
+
+  this->ClearUncappedSizeHistogram();
 
   if (this->AdaptiveTolerance <= 0.0)
   {
     vtkErrorMacro("AdaptiveTolerance must be positive, got " << this->AdaptiveTolerance);
     return 0;
   }
-  if (this->NumberOfIterations < 1)
+  if (this->EnableRemesh)
   {
-    vtkErrorMacro("NumberOfIterations must be >= 1.");
-    return 0;
-  }
-  if (this->NumberOfRelaxationSteps < 0)
-  {
-    vtkErrorMacro("NumberOfRelaxationSteps must be >= 0, got " << this->NumberOfRelaxationSteps);
-    return 0;
+    if (this->NumberOfIterations < 1)
+    {
+      vtkErrorMacro("NumberOfIterations must be >= 1.");
+      return 0;
+    }
+    if (this->NumberOfRelaxationSteps < 0)
+    {
+      vtkErrorMacro("NumberOfRelaxationSteps must be >= 0, got " << this->NumberOfRelaxationSteps);
+      return 0;
+    }
   }
 
   double b[6];
@@ -350,7 +457,7 @@ int vtkSHYXAdaptiveIsotropicRemesher::RequestData(
   try
   {
     auto featureEdges = get(CGAL::edge_is_feature, cgalMesh->surface);
-    if (this->DetectFeatureEdges)
+    if (this->EnableRemesh && this->DetectFeatureEdges)
     {
       DetectSharpEdgesWithFilter(
         cgalMesh->surface, this->ProtectAngle, this->SharpFeatureSideFilter, featureEdges);
@@ -375,7 +482,7 @@ int vtkSHYXAdaptiveIsotropicRemesher::RequestData(
       }
     }
 
-    if (!selected.empty())
+    if (this->EnableRemesh && !selected.empty())
     {
       AddSelectionBoundaryUsingVtkTopology(this, input, cgalMesh->surface, featureEdges, selected);
     }
@@ -409,20 +516,22 @@ int vtkSHYXAdaptiveIsotropicRemesher::RequestData(
       static_cast<unsigned int>(this->NumberOfIterations);
 
     using SizingTy = FeatureAwareAdaptiveSizingField;
+    std::vector<double> uncappedSizes;
     std::optional<SizingTy> sizingStorage;
     if (patchRemesh)
     {
       sizingStorage.emplace(this->AdaptiveTolerance, std::make_pair(minLen, maxLen), remeshFaces,
         cgalMesh->surface, static_cast<double>(this->AdaptiveSizingNeighborMaxRatio),
-        this->ScaleToRange);
+        this->ScaleToRange, &uncappedSizes);
     }
     else
     {
       sizingStorage.emplace(this->AdaptiveTolerance, std::make_pair(minLen, maxLen),
         cgalMesh->surface.faces(), cgalMesh->surface,
         static_cast<double>(this->AdaptiveSizingNeighborMaxRatio),
-        this->ScaleToRange);
+        this->ScaleToRange, &uncappedSizes);
     }
+    this->FillUncappedSizeHistogram(uncappedSizes);
     SizingTy& sizing = *sizingStorage;
 
     // Port 3: geometry is the CGAL mesh immediately before the last remesh sub-step —
@@ -442,7 +551,7 @@ int vtkSHYXAdaptiveIsotropicRemesher::RequestData(
         const std::vector<char>* iccMaskPtrPv = nullptr;
         if (this->FeatureMaskEnabled)
         {
-          if (remeshIterations <= 1u)
+          if (remeshIterations <= 1u || !this->EnableRemesh)
           {
             if (inputFeatureMaskOk)
             {
@@ -590,7 +699,11 @@ int vtkSHYXAdaptiveIsotropicRemesher::RequestData(
       }
     };
 
-    if (remeshIterations <= 1u)
+    if (!this->EnableRemesh)
+    {
+      fillSizingIccPreviewPort();
+    }
+    else if (remeshIterations <= 1u)
     {
       fillSizingIccPreviewPort();
       doRemeshSingleIteration();
@@ -631,7 +744,7 @@ int vtkSHYXAdaptiveIsotropicRemesher::RequestData(
   vtkCGALHelper::toVTK(cgalMesh.get(), output);
   this->interpolateAttributes(input, output);
 
-  if (this->DetectFeatureEdges)
+  if (this->EnableRemesh && this->DetectFeatureEdges)
   {
     bool linesFromInputMaskPatch = false;
     if (this->FeatureMaskEnabled && inputFeatureMaskOk && outputMaskPatch->GetNumberOfCells() > 0)

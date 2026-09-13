@@ -4,8 +4,8 @@
                  class="vtkSHYXDisconnectedRegionFuse"
                  label="SHYX Disconnected Region Fuse">
       <Documentation
-          long_help="Fuse multiple vtkPolyData inputs (each connection on port 0 is one region). Vertices from different inputs within the distance threshold are merged; vertices from the same input are never merged, even if that mesh has several disconnected pieces. A single input is passed through unchanged."
-          short_help="SHYX Disconnected Region Fuse: Fuse nearby vertices across multiple input meshes (one region per input)."/>
+          long_help="Fuse nearby vertices across regions of vtkPolyData. With Fuse Within Input on (default), connected components are regions, so disconnected pieces in one dataset can merge. With it off, each input connection is one region and pieces inside that connection are not merged. Fuse Verts / Lines / Polys choose which cell arrays are written."
+          short_help="SHYX Disconnected Region Fuse: Fuse nearby vertices across disconnected verts/lines/polys."/>
 
       <!-- Same VTK input port (0), multiple connections: must use AddInputConnection (Set replaces). -->
       <InputProperty name="Input" command="AddInputConnection" multiple_input="1" repeatable="1">
@@ -17,18 +17,64 @@
           <DataType value="vtkPolyData"/>
         </DataTypeDomain>
         <Documentation>
-          Add each surface as its own fuse region (Pipeline: select filter, then add further inputs
-          to this property so they append as connections on port 0—not separate port indices).
+          PolyData to fuse. With Fuse Within Input on, disconnected pieces in one dataset
+          are separate regions. Additional pipeline nodes can be added as extra connections
+          on port 0 (Add, do not Set).
         </Documentation>
       </InputProperty>
 
       <DoubleVectorProperty name="FuseThreshold" label="Fuse Threshold" command="SetFuseThreshold"
           number_of_elements="1" default_values="0.01" animateable="0">
         <Documentation>
-          Distance threshold for vertex fusion. Vertices from different inputs (regions)
-          that are within this distance will be merged. Same-input vertices are never merged.
+          Distance threshold for vertex fusion. Vertices from different regions that are
+          within this distance will be merged. Vertices in the same region are not.
         </Documentation>
       </DoubleVectorProperty>
+
+      <IntVectorProperty name="FuseWithinInput" label="Fuse Within Input" command="SetFuseWithinInput"
+          number_of_elements="1" default_values="1">
+        <BooleanDomain name="bool"/>
+        <Documentation>
+          On: disconnected pieces inside one input are separate fuse regions (a single
+          dataset of broken lines/surfaces can weld). Off: each input connection is one
+          region; pieces inside that connection are never merged.
+        </Documentation>
+      </IntVectorProperty>
+
+      <IntVectorProperty name="FuseVerts" label="Fuse Verts" command="SetFuseVerts"
+          number_of_elements="1" default_values="1">
+        <BooleanDomain name="bool"/>
+        <Documentation>
+          Remap vertex cells (vtkVertex / vtkPolyVertex) onto fused points and keep them in the
+          output. Off drops verts. Degenerate vertex cells with no remaining points are discarded.
+        </Documentation>
+      </IntVectorProperty>
+
+      <IntVectorProperty name="FuseLines" label="Fuse Lines" command="SetFuseLines"
+          number_of_elements="1" default_values="1">
+        <BooleanDomain name="bool"/>
+        <Documentation>
+          Remap line cells (vtkLine / vtkPolyLine) onto fused points and keep them in the output.
+          Nearby endpoints from different connected pieces share a vertex after fusion.
+          Off drops lines. Degenerate lines with fewer than 2 points are discarded.
+        </Documentation>
+      </IntVectorProperty>
+
+      <IntVectorProperty name="FusePolys" label="Fuse Polys" command="SetFusePolys"
+          number_of_elements="1" default_values="1">
+        <BooleanDomain name="bool"/>
+        <Documentation>
+          Remap polygon cells onto fused points and keep them in the output. Off drops polygons.
+          Degenerate faces with fewer than 3 points are discarded. Triangle strips are used
+          only to define connected components; they are not written to the output.
+        </Documentation>
+      </IntVectorProperty>
+
+      <PropertyGroup label="Cell types">
+        <Property name="FuseVerts"/>
+        <Property name="FuseLines"/>
+        <Property name="FusePolys"/>
+      </PropertyGroup>
 
       <Hints>
         <ShowInMenu category="SHYX" icon=":/VESPA/SHYX_Disconnected_Region_Fuse.png"/>

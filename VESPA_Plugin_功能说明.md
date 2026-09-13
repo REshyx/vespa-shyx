@@ -16,8 +16,8 @@
 | **`VESPA_USE_SNAPPYHEXMESH`** | ON 时编 SnappyHexMesh（仓库内 `shyx-snappyhex/` adapter + `FOAM_SOURCE_DIR` 官方源码）。 |
 | **`USE_CERES`** | 找到 Ceres 且为 ON 时才编 **VESPA Mesh Smoothing**（内部变量 `VESPA_MESH_SMOOTHING`）。 |
 | **`VESPA_USE_MKL`** | 构建含 MKL 时，**SHYX Clebsch Map Filter** 中可选用 MKL 直接法求解器。 |
-| **`VESPA_USE_SMP`** | 部分滤镜内部并行（Density Sampler、Array Probability Point Cull、Clebsch、Bidirectional Streamline Merge、Disconnected Region Fuse、Tet Mesh Region Partition）。**SHYX Radius Neighbor Count** 使用 VTK 自带的 **vtkSMPTools**，不依赖此开关。 |
-| **（CGAL 版本，内部状态）** | CGAL ≥ 5.5 时内部 `VESPA_ALPHA_WRAPPING` 打开（Alpha Wrapping / Selection Fill / Auto Mesh Repair XML）。CGAL ≥ 6.0 时内部 `VESPA_ADAPTIVE_REMESHING` 打开（Adaptive Remesher / Remesh With Endpoint）。二者不是 cmake-gui 用户开关。 |
+| **`VESPA_USE_SMP`** | 部分滤镜内部并行（Density Sampler、Array Probability Point Cull、Clebsch、Bidirectional Streamline Merge、Disconnected Region Fuse、Tet Mesh Region Partition）。**SHYX Radius Neighbor Count** / **SHYX Surface Thickness** 使用 VTK 自带的 **vtkSMPTools**，不依赖此开关。 |
+| **（CGAL 版本，内部状态）** | CGAL ≥ 5.5 时内部 `VESPA_ALPHA_WRAPPING` 打开（VESPA/SHYX Alpha Wrapping / Selection Fill / Auto Mesh Repair XML）。CGAL ≥ 6.0 时内部 `VESPA_ADAPTIVE_REMESHING` 打开（Adaptive Remesher / Remesh With Endpoint）。二者不是 cmake-gui 用户开关。 |
 
 客户端若使用 Qt 版 ParaView，插件还可注册 **Pulse Glyph** / **Animated Streamline** 相关的自动启动管理器与自定义面板（如数组曲线映射面板）；表示类型仍可在显示面板中选择。
 
@@ -58,11 +58,13 @@
 |----------|------|
 | SHYX Mesh Checker | 诊断+修复；优先于 VESPA Mesh Checker |
 | SHYX Auto Mesh Repair | 前半段同 Mesh Checker；勾选后默认抽出做 Alpha Wrap，再另一步 union；CGAL ≥ 5.5 |
+| SHYX Alpha Wrapping | 与 VESPA Alpha Wrapping 成对；Alpha/Offset 按包围盒自动建议；CGAL ≥ 5.5 |
 | SHYX Hole Fill (CGAL) | 与 VESPA Hole Filling 成对 |
 | SHYX Repair Degeneracies (CGAL) | |
 | SHYX Boolean (CGAL, relaxed) | 不要求封闭；与 VESPA Boolean 成对 |
 | SHYX Shape Smoothing | 三算法；与 VESPA Shape Smoothing 成对 |
 | SHYX Edge Collapse (CGAL) | |
+| SHYX Subset Coarsen | 不加新点、存活点不动 |
 | SHYX Adaptive Isotropic Remesher | CGAL ≥ 6 |
 | SHYX Remesh With Endpoint | CGAL ≥ 6；**Vascular** |
 | SHYX Convex Hull | |
@@ -71,7 +73,7 @@
 | SHYX Selection Extrude / Point Extrude | |
 | SHYX Selection Append Patches | 选区 / 管线 / box·sphere 抽出为 PDC patch |
 | SHYX Delete Selected Cells / Extract Selection / Flip Selected Cells Winding | Extract 按选区输出 PolyData 或 UnstructuredGrid，不强制 UG；Delete/Extract 均可 Invert Selection |
-| SHYX Selection: Fill, Alpha Wrap, Union | CGAL ≥ 5.5 |
+| SHYX Selection: Fill, Alpha Wrap, Union | CGAL ≥ 5.5；Alpha/Offset 默认 0 = 选区 AABB 最长边 10% |
 | SHYX Minimum OBB | |
 | SHYX Enhanced Ruler | |
 | SHYX Skeleton Extraction | **Vascular** |
@@ -96,6 +98,7 @@
 | SHYX Radius Neighbor Count | |
 | SHYX Point Cloud Surface SDF | 纯 VTK；勿与 PMP 体素 SDF 混淆 |
 | SHYX Geodesic Distance / Surface Tip Extractor | |
+| SHYX Surface Thickness | 纯 VTK；默认自邻近壁厚，交叉面也可用 |
 | SHYX Array Curve Mapper | |
 | SHYX Vortex Criteria / FTLE / Clebsch Map | Clebsch 可选 MKL |
 | SHYX Vector Field Topology | 包装上游 VTK |
@@ -142,7 +145,7 @@
 
 ### 2. VESPA Alpha Wrapping（可选，CMake 启用 `VESPA_ALPHA_WRAPPING`）
 
-**功能**：从点云或三角面片汤（triangle soup）生成**严格包住输入的 2-流形网格**。输出保证水密、可定向。输入支持点和三角形；不要求输入已是流形。
+**功能**：从点云或三角面片汤（triangle soup）生成**严格包住输入的 2-流形网格**。输出保证水密、可定向。输入支持点和三角形；不要求输入已是流形。日常管线请用 **SHYX Alpha Wrapping**（Alpha/Offset 为绝对长度，默认按包围盒最长边刷新）。
 
 | 参数 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
@@ -490,6 +493,28 @@
 
 ---
 
+### 22c. SHYX Surface Thickness
+
+**功能**：对表面 `vtkPolyData` 每个顶点写局部壁厚，几何不变。默认 **Self-proximity**：在 Max Distance 内找欧氏最近邻，排除 `Geodesic Rings` 跳以内的同壁点，可选只要内法向一侧。不打射线，交叉/kissing 仍能得到厚度 0。可选 **Ray along normal** / **Shape diameter（锥内多射线中位数）**，交叉面上不可靠。
+
+输出点数组：**Thickness**（未找到对侧为 -1）、**ThicknessValid**（1 含厚度 0；0 为未找到）、**ThicknessOverEdgeLength**、**LocalEdgeLength**。Field data **SHYXSurfaceThicknessSearchDistance** 为本次实际搜索距离。着色看 **Thickness**；找坍缩支看 **ThicknessOverEdgeLength**（\(\rho \lesssim 2\) 往往已扁）。
+
+| 参数 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| **Method** | enum | Self-proximity | Self-proximity / Ray along normal / Shape diameter (cone) |
+| **Max Distance** | double | 0 | 0 = 包围盒最长边的 5%（BoundsDomain `scaled_extent` 0.05） |
+| **Flip Normals** | bool | off | 把绕序当成内法向 |
+| **Geodesic Rings** | int | 2 | 仅 Self-proximity；排除同壁 hops |
+| **Inward Only** | bool | on | 仅 Self-proximity；只要内半空间（与内法向夹角 &lt; 75°） |
+| **Ray Offset** | double | 0 | 仅射线法；0 = 0.25 × 当地平均边长 |
+| **Require Opposite Normal** | bool | on | 仅射线法；丢掉与查询点同向的命中 |
+| **Number Of Rays** | int | 9 | 仅 Shape diameter |
+| **Cone Angle (deg)** | double | 30 | 仅 Shape diameter |
+
+**输入**：带多边形或 triangle strip 的 `vtkPolyData`。并行：`vtkSMPTools`（与 Radius Neighbor Count 相同，不依赖 `VESPA_USE_SMP`）。
+
+---
+
 ### 23. SHYX FTLE Filter
 
 **功能**：从速度场计算**有限时间李雅普诺夫指数（FTLE）**场，用于识别流场中的拉格朗日相干结构（LCS）。
@@ -584,12 +609,16 @@
 
 ### 29. SHYX Disconnected Region Fuse
 
-**功能**：将表面网格中的**多个不连通区域**强行合并。针对每个连通区域内的顶点，在其它连通区域上寻找最近的点；若距离小于给定阈值，则将二者融合。**仅在不同连通区域之间进行顶点合并**，同一连通区域内的点永不合并。一个顶点可能与多个其它区域的多个顶点合并。
+**功能**：按域融合近处顶点。勾选 **Fuse Within Input**（默认开）时，一路输入里的不连通片按连通域缝上；关掉则一路一个域，只缝不同输入。同一域内的点不合并。**Fuse Verts / Fuse Lines / Fuse Polys** 决定哪些单元写入输出（默认全开）。
 
 | 参数 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
-| **Input** | vtkPolyData | — | 具有多个不连通区域的表面网格。 |
-| **Fuse Threshold** | double | 0.01 | 顶点融合距离阈值。来自不同连通区域且距离小于此值的顶点将被合并；超过阈值的顶点对不做处理。 |
+| **Input** | vtkPolyData（可多路） | — | 可再 Add 其它管线节点。 |
+| **Fuse Threshold** | double | 0.01 | 跨域顶点融合距离。同域不合并。 |
+| **Fuse Within Input** | bool | 开 | 开：单路里的断片按连通域融合。关：单路内部不合，只缝多路输入。 |
+| **Fuse Verts** | bool | 开 | 把 vertex / polyvertex 映射到融合后的点并保留。 |
+| **Fuse Lines** | bool | 开 | 把 line / polyline 映射到融合后的点并保留；不同域够近的端点会共用顶点。 |
+| **Fuse Polys** | bool | 开 | 把多边形映射到融合后的点并保留。Triangle strips 不写入输出。 |
 
 ---
 
@@ -646,6 +675,7 @@
 | **Adaptive tolerance** | `AdaptiveTolerance` | double | **0.01** | Vespa ICC sizing 容差；更小往往更细。 |
 | **Expansion ratio** | `AdaptiveSizingNeighborMaxRatio` | double | **1.6** | 限制相邻顶点 ICC 目标边长跳变；`≤ 1` 关闭。 |
 | **Scale to range** | `ScaleToRange` | bool | false | ON 时把 ICC 目标线性拉到 [Min, Max]。 |
+| **ICC size histogram** | （面板 widget） | — | — | Apply 前的 ICC 目标边长直方图（Min/Max clamp 后）；与 Remesh With Endpoint 同一控件，改 Tolerance / Min / Max 会实时刷新。 |
 | **Remesh iterations** | `NumberOfIterations` | int | 3 | CGAL `isotropic_remeshing` 迭代次数。 |
 | **Relaxation steps** | `NumberOfRelaxationSteps` | int | 3 | 每轮切向松弛步数。 |
 | **Protection angle** | `ProtectAngle` | double | **70** | 特征边二面角阈值（度）；依赖 **Detect feature edges**。 |
@@ -663,18 +693,20 @@
 |------|------|
 | **SHYX Mesh Checker** | 汤边 / 边界环 / 自交；port 1 诊断几何；可选 autorefine |
 | **SHYX Auto Mesh Repair** | 前半段同 Mesh Checker；默认不修交叉面；勾选后默认 extract + Alpha Wrap（port 0 remainder、port 2 wrapped），再另一步 union + 可选 remesh/smooth；one-shot 仍可选用；CGAL ≥ 5.5 |
+| **SHYX Alpha Wrapping** | CGAL ≥ 5.5；点云/三角汤 → 水密 2-流形。Alpha/Offset 默认 0 = 包围盒最长边的 5%/3%（BoundsDomain）；与 VESPA Alpha Wrapping 成对 |
 | **SHYX Hole Fill** | CGAL 补洞；与 VESPA Hole Filling 成对 |
 | **SHYX Repair Degeneracies** | CGAL 退化单元修复 |
 | **SHYX Boolean (relaxed)** | 不要求封闭 |
 | **SHYX Shape Smoothing** | MCF / Angle&Area / Fair 三算法 |
-| **SHYX Edge Collapse** | CGAL 边塌缩 |
+| **SHYX Edge Collapse** | CGAL 边塌缩（存活点会移动） |
+| **SHYX Subset Coarsen** | 子集粗化：折叠到原端点，不加新点、存活点坐标不变；Cost Strategy：QEM / 最小角 |
 | **SHYX Remesh With Endpoint** | Vascular 第 4 步；CGAL ≥ 6；与 Adaptive Remesher 同模块 |
 | **SHYX Convex Hull** | 纯 VTK 凸包 |
 | **SHYX Resample Lines** | 线网按 Sample Distance 重采样；Fuse 默认开（容差 1e-6×包围盒最长边）；度≠2 为特征点；短于间距的分支只留两端 |
 | **SHYX Selection / Point Extrude** | 选区挤出 / **全部顶点**沿法线或矢量位移（Point Extrude 无选区端口） |
 | **SHYX Selection Append Patches** | 选区 / 管线几何 / box·sphere 进 PDC；不收未选父网格单元 |
 | **SHYX Delete / Flip Selected Cells** | 删单元 / 翻转绕向 |
-| **SHYX Selection: Fill, Alpha Wrap, Union** | CGAL ≥ 5.5 |
+| **SHYX Selection: Fill, Alpha Wrap, Union** | CGAL ≥ 5.5；Alpha/Offset 默认 0 = 选区 AABB 最长边的 10%；Reset 按选区（`SHYXSelectionBoundsDomain`） |
 | **SHYX Minimum OBB** | 最小体积 OBB / PCA / AABB；交互 box |
 | **SHYX Enhanced Ruler** | 交互测距 |
 | **SHYX Selection Plane Clipper** | Vascular 第 3 步 |
@@ -713,18 +745,19 @@
 
 ## 使用建议
 
-- 多数网格滤镜要求输入为**三角化**的 `vtkPolyData`，建议先 **Tetrahedralize** + **Extract Surface**，必要时再用 **VESPA Alpha Wrapping** 得到水密 2-流形。
+- 多数网格滤镜要求输入为**三角化**的 `vtkPolyData`，建议先 **Tetrahedralize** + **Extract Surface**，必要时再用 **SHYX Alpha Wrapping** 得到水密 2-流形。
 - 布尔运算、重网格、细分等要求输入为**封闭、流形**网格时效果更稳定；可先用 **VESPA Mesh Checker** 检查或修复。
-- **SHYX Skeleton Extraction**、**SHYX Surface to Volume Mesh**、**SHYX TetGen** 的输入必须是**水密闭合**网格；若模型有洞，建议先用 **VESPA Hole Filling** 或 **VESPA Alpha Wrapping** 处理。
+- **SHYX Skeleton Extraction**、**SHYX Surface to Volume Mesh**、**SHYX TetGen** 的输入必须是**水密闭合**网格；若模型有洞，建议先用 **SHYX Hole Fill** 或 **SHYX Alpha Wrapping** 处理。
 - 血管建模流程示例（与 **Filters → Vascular** 工具条一致）：封闭表面 → **SHYX Skeleton Extraction** → **SHYX Vessel End Clipper**（或一步 **SHYX Skeleton End Clipper**）→ **SHYX Selection Plane Clipper** → **SHYX Remesh With Endpoint** → **SHYX TetGen**（或 Surface to Volume Mesh；hex 用 **Filters → SHYX SnappyHexMesh**）→ **SHYX DataSet To Partitioned Collection** → **SHYX Partitioned Collection Boundary Assignment**。
-- 从点云重建时，一般顺序：点云 → **VESPA PCA Estimate Normals** → **VESPA Poisson** 或 **Advancing Front**；若点云较乱可考虑先 **Alpha Wrapping** 再后续处理。
+- 从点云重建时，一般顺序：点云 → **VESPA PCA Estimate Normals** → **VESPA Poisson** 或 **Advancing Front**；若点云较乱可考虑先 **SHYX Alpha Wrapping** 再后续处理。
 - **SHYX TetGen** 与 **SHYX Surface to Volume Mesh** 均可从表面生成体积网格：TetGen 基于 TetGen 库，参数更直观；后者基于 CGAL Mesh_3，可精细控制表面与体积质量。
 - **SHYX Bidirectional Streamline Merge** 适用于 **Stream Tracer** 等产生的双向折线，需正确设置 **SeedIds** 数组（单元或点数据）。
 - **SHYX Resample Lines** 用于骨架/中心线等多分支折线：先可选 **Fuse**（默认开，容差 1e-6×包围盒最长边）保证近点连通，再按 **Sample Distance** 在各分支上等距重采样；分叉与端点（线度数 ≠ 2）保留；短于间距的分支只留两端，不会被删。
 - **SHYX Vector Field Topology**、**SHYX Vortex Criteria**、**SHYX FTLE**、**SHYX Clebsch Map** 等流场工具对数据类型与数组名要求不同，请以各节说明与 ParaView 属性面板为准。
-- **SHYX Disconnected Region Fuse** 用于将多个不连通表面（如断裂的网格）通过近距离顶点融合合并为一个整体；需根据模型尺度调整 Fuse Threshold。
+- **SHYX Disconnected Region Fuse** 缝近处顶点。默认 **Fuse Within Input** 开：一路里互不连通的线/面按连通域焊；关掉则单路内部不合、只缝多路输入。默认处理 verts / lines / polys；按模型尺度调 Fuse Threshold。
 - **SHYX Point Cloud Surface SDF** 在**点云**上写 **SDF**；若要在**规则体素网格**上对**封闭**三角网格求有符号距离场（`vtkImageData`），应使用 CGAL 管线中的 **`vtkCGALSignedDistanceFunction`**（见 CGAL / PMP 模块文档或源码），二者勿混淆。
 - **SHYX Radius Neighbor Count** 用于点云或网格顶点上的**局部密度/邻域规模**分析；半径需与点间距尺度匹配。并行行为由 VTK SMP 后端决定（如与 ParaView 一同构建的 TBB 等）。
+- **SHYX Surface Thickness** 在表面顶点上写壁厚。交叉/kissing 用默认 **Self-proximity**，不要用射线法；找扁掉的小血管看 **ThicknessOverEdgeLength**，不要看绝对 Thickness。
 - **SHYX DataSet To Partitioned Collection** 面向 **IOSS/Exodus** 写出：从含四面体的体网格提取体块与边界表面分区，并维护 **GlobalIds** / **element_side** 等；若仅需可视化拆分表面，也可在普通网格上试用，但设计目标是 Writer 侧装配与集合语义。OpenFOAM 体网格出口用 **SHYX Partitioned Collection To OpenFOAM**（必须有体块；side → patch；node 忽略；Selection Append Patches 不能写 polyMesh）。
 - **SHYX Adaptive Isotropic Remesher**（CGAL ≥ 6.0）适合需要在**曲率大处加密**、同时用 Min/Max 控制尺度的情况；均匀尺度需求可继续用 **VESPA Isotropic Remesher**。网格诊断优先 **SHYX Mesh Checker**；开放网格布尔用 **SHYX Boolean (relaxed)**。完整对照见 [`vespa/INVENTORY.md`](vespa/INVENTORY.md)。
 

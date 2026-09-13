@@ -129,7 +129,7 @@ description: >-
 ### 8.2 插件能否使用、能否自定义
 
 - **使用**：在 **`vespa/shyx/<Feature>/SHYX*.xml`** 里直接写已存在的 Domain 名与 Decorator 的 `type=` 即可（需与所链 ParaView 版本一致）。
-- **自定义 Domain**：通常需 **C++** 子类化 `vtkSMDomain` 并注册；仅 XML 发明新标签名一般不可行。多数 shyx 插件只组合现有 Domain。
+- **自定义 Domain**：通常需 **C++** 子类化 `vtkSMDomain` 并注册；仅 XML 发明新标签名一般不可行。XML 标签 `FooDomain` → 类 `vtkSMFooDomain`（`vtkClientServerStreamInstantiator`）。仓库内：`vtkSMAnimatedStreamlineIntegrationScaleDomain`；选区包围盒 Reset 用 `vtkSMSHYXSelectionBoundsDomain`（[`vespa/shyx/SelectionBoundsDomain/`](../../../vespa/shyx/SelectionBoundsDomain/)，XML `SHYXSelectionBoundsDomain`，无 ParaView 插件时与 Representation 一并排除）。多数 shyx 滤镜只组合现有 Domain。
 - **自定义 Decorator**：**可以**。上游示例 `ParaView/Examples/Plugins/PropertyWidgets/Plugin/`：继承 `pqPropertyWidgetDecorator`，通过 `pqPropertyWidgetInterface::createWidgetDecorator()` 按 XML `type="..."` 分派；插件注册一个**额外的** `pqPropertyWidgetInterface` 与标准实现并列。若需 server-side 共用逻辑，走 `vtkPropertyDecorator`（如 `vtkGenericPropertyDecorator`）再由 Qt 侧包装。
 
 ### 8.3 内置 `createWidgetDecorator` 识别的 `type`
@@ -301,7 +301,7 @@ description: >-
 | XML | 锚点（不能 never） | 其余可 never |
 |-----|-------------------|--------------|
 | `SHYXDataSetToPartitionedCollection.xml` | `BlockNames` | `BoundaryVariables`、`BoundaryWriteNormals` |
-| `SHYXRemeshWithEndpoint.xml` | `UncappedSizeHistPanelAnchor`（注释写明） | — |
+| `SHYXRemeshWithEndpoint.xml` / `SHYXAdaptiveIsotropicRemesher.xml` | `UncappedSizeHistPanelAnchor`（注释写明） | — |
 | `SHYXSelectionAppendPatches.xml` | `PatchNames` | `PatchCellIds` |
 
 源码：`Qt/Components/pqProxyWidget.cxx` 里 `skip_property` 对 `never` 直接 `continue`，到不了 `createWidgetForPropertyGroup`。

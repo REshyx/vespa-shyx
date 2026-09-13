@@ -243,33 +243,23 @@
         </Hints>
       </IntVectorProperty>
 
-      <IntVectorProperty command="SetAbsoluteThresholds"
-                         name="AbsoluteThresholds"
-                         label="Alpha wrap: absolute Alpha/Offset"
-                         number_of_elements="1"
-                         default_values="0"
-                         panel_visibility="advanced"
-                         animateable="0">
-        <BooleanDomain name="bool"/>
-        <Hints>
-          <PropertyWidgetDecorator type="GenericDecorator"
-                                   mode="enabled_state"
-                                   property="RepairSelfIntersections"
-                                   value="1"/>
-          <PropertyWidgetDecorator type="GenericDecorator"
-                                   mode="enabled_state"
-                                   property="RepairStage"
-                                   values="0 2"/>
-        </Hints>
-      </IntVectorProperty>
-
       <DoubleVectorProperty command="SetAlpha"
                             name="Alpha"
                             label="Alpha"
                             number_of_elements="1"
-                            default_values="4.0"
+                            default_values="0"
                             panel_visibility="advanced"
-                            animateable="1">
+                            animateable="0">
+        <BoundsDomain mode="scaled_extent" name="bounds" scale_factor="0.1">
+          <RequiredProperties>
+            <Property function="Input" name="Input"/>
+          </RequiredProperties>
+        </BoundsDomain>
+        <Documentation>
+          Absolute wrap-face circumradius. 0 (default) uses 0.1 times the longest AABB side of
+          the patch being wrapped (extract cluster or one-shot selection). Scale/Reset suggests
+          0.1 of the Input AABB (BoundsDomain binds to Input).
+        </Documentation>
         <Hints>
           <PropertyWidgetDecorator type="GenericDecorator"
                                    mode="enabled_state"
@@ -286,9 +276,18 @@
                             name="Offset"
                             label="Offset"
                             number_of_elements="1"
-                            default_values="0.05"
+                            default_values="0"
                             panel_visibility="advanced"
-                            animateable="1">
+                            animateable="0">
+        <BoundsDomain mode="scaled_extent" name="bounds" scale_factor="0.1">
+          <RequiredProperties>
+            <Property function="Input" name="Input"/>
+          </RequiredProperties>
+        </BoundsDomain>
+        <Documentation>
+          Absolute wrap dilatation. 0 (default) uses 0.1 times the longest AABB side of the patch
+          being wrapped. Scale/Reset suggests 0.1 of the Input AABB (BoundsDomain binds to Input).
+        </Documentation>
         <Hints>
           <PropertyWidgetDecorator type="GenericDecorator"
                                    mode="enabled_state"
@@ -706,6 +705,9 @@
         <Property name="DilateLayers"/>
         <Property name="MaxPasses"/>
         <Property name="FairingContinuity"/>
+        <Property name="Alpha"/>
+        <Property name="Offset"/>
+        <Property name="SkipAlphaWrapping"/>
       </PropertyGroup>
 
       <PropertyGroup label="Bridge cleanup (after each local union)">

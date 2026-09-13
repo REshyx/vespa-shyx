@@ -111,10 +111,6 @@ public:
   vtkGetMacro(FairingContinuity, int);
   vtkSetClampMacro(FairingContinuity, int, 0, 2);
 
-  vtkGetMacro(AbsoluteThresholds, bool);
-  vtkSetMacro(AbsoluteThresholds, bool);
-  vtkBooleanMacro(AbsoluteThresholds, bool);
-
   vtkGetMacro(Alpha, double);
   vtkSetMacro(Alpha, double);
 
@@ -193,9 +189,8 @@ protected:
   bool LogSteps = true;
 
   int FairingContinuity = 1;
-  bool AbsoluteThresholds = false;
-  double Alpha = 4.0;
-  double Offset = 0.05;
+  double Alpha = 0.0;
+  double Offset = 0.0;
   bool SkipAlphaWrapping = false;
   bool ThrowOnSelfIntersection = false;
   bool OrientToBoundVolumeWhenNeeded = true;

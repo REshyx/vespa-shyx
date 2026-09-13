@@ -1,0 +1,13 @@
+NAME
+  vtkSHYXSurfaceThickness
+DESCRIPTION
+  "Per-vertex surface thickness: self-proximity (default) or inward ray / shape-diameter."
+GROUPS
+  Meshing
+DEPENDS
+  VTK::FiltersCore
+  VTK::FiltersGeneral
+PRIVATE_DEPENDS
+  VTK::CommonCore
+  VTK::CommonDataModel
+  VTK::CommonExecutionModel

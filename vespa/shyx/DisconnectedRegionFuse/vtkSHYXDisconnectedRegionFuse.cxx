@@ -2,6 +2,7 @@
 
 #include <vtkCellArray.h>
 #include <vtkCellData.h>
+#include <vtkIdList.h>
 #include <vtkInformation.h>
 #include <vtkInformationVector.h>
 #include <vtkObjectFactory.h>
@@ -55,11 +56,94 @@ private:
     std::vector<int> rank;
 };
 
-// Point info store (copy coords, avoid VTK internal pointer invalidation)
-struct PointInfo {
-    vtkIdType id;
-    std::array<double, 3> pos;
-};
+void UniteAlongCells(
+    vtkCellArray* cells, vtkIdType ptOffset, UnionFind& conn, bool closeLoop, vtkIdList* cellPts)
+{
+    if (!cells)
+    {
+        return;
+    }
+    for (cells->InitTraversal(); cells->GetNextCell(cellPts);)
+    {
+        const vtkIdType n = cellPts->GetNumberOfIds();
+        if (n < 2)
+        {
+            continue;
+        }
+        for (vtkIdType k = 1; k < n; ++k)
+        {
+            conn.unite(ptOffset + cellPts->GetId(k - 1), ptOffset + cellPts->GetId(k));
+        }
+        if (closeLoop && n >= 3)
+        {
+            conn.unite(ptOffset + cellPts->GetId(n - 1), ptOffset + cellPts->GetId(0));
+        }
+    }
+}
+
+void UniteVertCells(vtkCellArray* cells, vtkIdType ptOffset, UnionFind& conn, vtkIdList* cellPts)
+{
+    if (!cells)
+    {
+        return;
+    }
+    for (cells->InitTraversal(); cells->GetNextCell(cellPts);)
+    {
+        const vtkIdType n = cellPts->GetNumberOfIds();
+        for (vtkIdType k = 1; k < n; ++k)
+        {
+            conn.unite(ptOffset + cellPts->GetId(0), ptOffset + cellPts->GetId(k));
+        }
+    }
+}
+
+void RemapCellArray(
+    vtkCellArray* inCells,
+    vtkCellArray* outCells,
+    vtkIdList* cellPts,
+    vtkIdType ptOffset,
+    UnionFind& uf,
+    const std::unordered_map<vtkIdType, vtkIdType>& rootToNewId,
+    vtkIdType minKeep,
+    int inp,
+    vtkIdType cellIdOffset,
+    std::vector<std::pair<int, vtkIdType>>& keptCellSource)
+{
+    if (!inCells)
+    {
+        return;
+    }
+    vtkIdType localCellId = 0;
+    for (inCells->InitTraversal(); inCells->GetNextCell(cellPts); ++localCellId)
+    {
+        std::vector<vtkIdType> newIds;
+        newIds.reserve(static_cast<size_t>(cellPts->GetNumberOfIds()));
+        for (vtkIdType k = 0; k < cellPts->GetNumberOfIds(); ++k)
+        {
+            const vtkIdType oldGlobal = ptOffset + cellPts->GetId(k);
+            const vtkIdType root = uf.find(oldGlobal);
+            const auto found = rootToNewId.find(root);
+            if (found == rootToNewId.end())
+            {
+                continue;
+            }
+            const vtkIdType nid = found->second;
+            if (newIds.empty() || newIds.back() != nid)
+            {
+                newIds.push_back(nid);
+            }
+        }
+        if (newIds.size() > 1 && newIds.front() == newIds.back())
+        {
+            newIds.pop_back();
+        }
+        if (static_cast<vtkIdType>(newIds.size()) >= minKeep)
+        {
+            outCells->InsertNextCell(static_cast<vtkIdType>(newIds.size()), newIds.data());
+            keptCellSource.emplace_back(inp, cellIdOffset + localCellId);
+        }
+    }
+}
 } 
 
 //------------------------------------------------------------------------------
@@ -95,18 +179,6 @@ int vtkSHYXDisconnectedRegionFuse::RequestData(
         return 0;
     }
 
-    if (nInputs == 1)
-    {
-        vtkPolyData* input = vtkPolyData::GetData(inVec, 0);
-        if (!input || input->GetNumberOfPoints() == 0)
-        {
-            return 1;
-        }
-        output->ShallowCopy(input);
-        return 1;
-    }
-
-    // 1. Each input connection is one fuse domain; global point id = prefix offsets over inputs.
     std::vector<vtkPolyData*> pdIn(static_cast<size_t>(nInputs), nullptr);
     std::vector<vtkIdType> ptOffset(static_cast<size_t>(nInputs) + 1, 0);
     for (int i = 0; i < nInputs; ++i)
@@ -126,8 +198,6 @@ int vtkSHYXDisconnectedRegionFuse::RequestData(
     std::vector<int> globalInputOfPoint(static_cast<size_t>(nPoints));
     std::vector<vtkIdType> globalLocalId(static_cast<size_t>(nPoints));
 
-    const int nRegions = nInputs;
-    std::vector<std::vector<PointInfo>> regions(static_cast<size_t>(nRegions));
     for (int i = 0; i < nInputs; ++i)
     {
         vtkPolyData* pd = pdIn[static_cast<size_t>(i)];
@@ -144,77 +214,134 @@ int vtkSHYXDisconnectedRegionFuse::RequestData(
             globalPos[static_cast<size_t>(gid)] = {p[0], p[1], p[2]};
             globalInputOfPoint[static_cast<size_t>(gid)] = i;
             globalLocalId[static_cast<size_t>(gid)] = j;
-            regions[static_cast<size_t>(i)].push_back({gid, {p[0], p[1], p[2]}});
         }
     }
 
-    // 2. Find cross-region merge pairs
-    std::vector<std::pair<vtkIdType, vtkIdType>> mergePairs;
-#ifdef VESPA_USE_SMP
-    vtkSMPThreadLocal<std::vector<std::pair<vtkIdType, vtkIdType>>> threadPairs;
-#endif
-
-    for (int i = 0; i < nRegions; ++i)
+    std::vector<int> componentOfPoint(static_cast<size_t>(nPoints), 0);
+    int nComponents = 0;
+    if (this->FuseWithinInput)
     {
-        const auto& ptsI = regions[i];
-        if (ptsI.empty()) continue;
+        UnionFind connectivity(nPoints);
+        vtkSmartPointer<vtkIdList> walkPts = vtkSmartPointer<vtkIdList>::New();
+        for (int i = 0; i < nInputs; ++i)
+        {
+            vtkPolyData* pd = pdIn[static_cast<size_t>(i)];
+            if (!pd)
+            {
+                continue;
+            }
+            const vtkIdType off = ptOffset[static_cast<size_t>(i)];
+            UniteVertCells(pd->GetVerts(), off, connectivity, walkPts);
+            UniteAlongCells(pd->GetLines(), off, connectivity, false, walkPts);
+            UniteAlongCells(pd->GetPolys(), off, connectivity, true, walkPts);
+            UniteAlongCells(pd->GetStrips(), off, connectivity, false, walkPts);
+        }
 
-        // Build Locator for region I
-        vtkSmartPointer<vtkPoints> vtkPtsI = vtkSmartPointer<vtkPoints>::New();
-        vtkPtsI->SetDataTypeToDouble();
-        for (const auto& pi : ptsI) vtkPtsI->InsertNextPoint(pi.pos.data());
+        std::unordered_map<vtkIdType, int> rootToComponent;
+        for (vtkIdType i = 0; i < nPoints; ++i)
+        {
+            const vtkIdType root = connectivity.find(i);
+            auto inserted = rootToComponent.emplace(root, nComponents);
+            if (inserted.second)
+            {
+                ++nComponents;
+            }
+            componentOfPoint[static_cast<size_t>(i)] = inserted.first->second;
+        }
+    }
+    else
+    {
+        nComponents = nInputs;
+        for (vtkIdType i = 0; i < nPoints; ++i)
+        {
+            componentOfPoint[static_cast<size_t>(i)] = globalInputOfPoint[static_cast<size_t>(i)];
+        }
+    }
 
-        vtkSmartPointer<vtkPolyData> pdI = vtkSmartPointer<vtkPolyData>::New();
-        pdI->SetPoints(vtkPtsI);
+    const bool passthrough = (nInputs == 1 && nComponents <= 1 && this->FuseVerts &&
+        this->FuseLines && this->FusePolys);
+    if (passthrough)
+    {
+        vtkPolyData* input = pdIn[0];
+        if (!input)
+        {
+            return 1;
+        }
+        output->ShallowCopy(input);
+        return 1;
+    }
+
+    // Cross-component pairs within FuseThreshold (one locator; skip same component).
+    std::vector<std::pair<vtkIdType, vtkIdType>> mergePairs;
+    if (nComponents > 1 && this->FuseThreshold > 0.0)
+    {
+        vtkSmartPointer<vtkPoints> allPts = vtkSmartPointer<vtkPoints>::New();
+        allPts->SetDataTypeToDouble();
+        allPts->SetNumberOfPoints(nPoints);
+        for (vtkIdType i = 0; i < nPoints; ++i)
+        {
+            allPts->SetPoint(i, globalPos[static_cast<size_t>(i)].data());
+        }
+        vtkSmartPointer<vtkPolyData> locPd = vtkSmartPointer<vtkPolyData>::New();
+        locPd->SetPoints(allPts);
 
         vtkSmartPointer<vtkStaticPointLocator> locator = vtkSmartPointer<vtkStaticPointLocator>::New();
-        locator->SetDataSet(pdI);
+        locator->SetDataSet(locPd);
         locator->BuildLocator();
 
-        // Iterate all other regions J
-        for (int j = 0; j < nRegions; ++j)
-        {
-            if (i == j) continue;  // do not merge within same region
-
-            const auto& ptsJ = regions[j];
-            vtkIdType nj = static_cast<vtkIdType>(ptsJ.size());
-
 #ifdef VESPA_USE_SMP
-            vtkSMPTools::For(0, nj, [&](vtkIdType begin, vtkIdType end) {
-                auto& local = threadPairs.Local();
-                for (vtkIdType k = begin; k < end; ++k)
+        vtkSMPThreadLocal<std::vector<std::pair<vtkIdType, vtkIdType>>> threadPairs;
+        vtkSMPTools::For(0, nPoints, [&](vtkIdType begin, vtkIdType end) {
+            auto& local = threadPairs.Local();
+            vtkSmartPointer<vtkIdList> ids = vtkSmartPointer<vtkIdList>::New();
+            for (vtkIdType i = begin; i < end; ++i)
+            {
+                ids->Reset();
+                locator->FindPointsWithinRadius(
+                    this->FuseThreshold, globalPos[static_cast<size_t>(i)].data(), ids);
+                const int ci = componentOfPoint[static_cast<size_t>(i)];
+                for (vtkIdType k = 0; k < ids->GetNumberOfIds(); ++k)
                 {
-                    double distSq = 0;
-                    // search within radius only
-                    vtkIdType closestInI = locator->FindClosestPointWithinRadius(this->FuseThreshold, ptsJ[k].pos.data(), distSq);
-                    if (closestInI >= 0)
+                    const vtkIdType j = ids->GetId(k);
+                    if (j <= i)
                     {
-                        local.emplace_back(ptsI[closestInI].id, ptsJ[k].id);
+                        continue;
+                    }
+                    if (componentOfPoint[static_cast<size_t>(j)] != ci)
+                    {
+                        local.emplace_back(i, j);
                     }
                 }
-            });
+            }
+        });
+        for (auto it = threadPairs.begin(); it != threadPairs.end(); ++it)
+        {
+            mergePairs.insert(mergePairs.end(), it->begin(), it->end());
+        }
 #else
-            for (const auto& pj : ptsJ)
+        vtkSmartPointer<vtkIdList> ids = vtkSmartPointer<vtkIdList>::New();
+        for (vtkIdType i = 0; i < nPoints; ++i)
+        {
+            ids->Reset();
+            locator->FindPointsWithinRadius(
+                this->FuseThreshold, globalPos[static_cast<size_t>(i)].data(), ids);
+            const int ci = componentOfPoint[static_cast<size_t>(i)];
+            for (vtkIdType k = 0; k < ids->GetNumberOfIds(); ++k)
             {
-                double distSq = 0;
-                vtkIdType closestInI = locator->FindClosestPointWithinRadius(this->FuseThreshold, pj.pos.data(), distSq);
-                if (closestInI >= 0)
+                const vtkIdType j = ids->GetId(k);
+                if (j <= i)
                 {
-                    mergePairs.emplace_back(ptsI[closestInI].id, pj.id);
+                    continue;
+                }
+                if (componentOfPoint[static_cast<size_t>(j)] != ci)
+                {
+                    mergePairs.emplace_back(i, j);
                 }
             }
-#endif
         }
-    }
-
-#ifdef VESPA_USE_SMP
-    for (auto it = threadPairs.begin(); it != threadPairs.end(); ++it)
-    {
-        mergePairs.insert(mergePairs.end(), it->begin(), it->end());
-    }
 #endif
+    }
 
-    // 4. UnionFind for equivalence classes
     UnionFind uf(nPoints);
     for (const auto& pair : mergePairs) uf.unite(pair.first, pair.second);
 
@@ -251,7 +378,9 @@ int vtkSHYXDisconnectedRegionFuse::RequestData(
         newPoints->SetPoint(i, center);
     }
 
-    // 5. Update cell topology from each input, drop degenerate cells
+    // 5. Remap enabled cell arrays (VTK order: verts, lines, polys). Drop degenerates.
+    vtkSmartPointer<vtkCellArray> newVerts = vtkSmartPointer<vtkCellArray>::New();
+    vtkSmartPointer<vtkCellArray> newLines = vtkSmartPointer<vtkCellArray>::New();
     vtkSmartPointer<vtkCellArray> newPolys = vtkSmartPointer<vtkCellArray>::New();
     vtkSmartPointer<vtkIdList> cellPts = vtkSmartPointer<vtkIdList>::New();
     std::vector<std::pair<int, vtkIdType>> keptCellSource;
@@ -259,39 +388,37 @@ int vtkSHYXDisconnectedRegionFuse::RequestData(
     for (int inp = 0; inp < nInputs; ++inp)
     {
         vtkPolyData* pd = pdIn[static_cast<size_t>(inp)];
-        if (!pd)
+        if (!pd || !this->FuseVerts)
         {
             continue;
         }
-        vtkCellArray* inPolys = pd->GetPolys();
-        vtkIdType localCellId = 0;
-        for (inPolys->InitTraversal(); inPolys->GetNextCell(cellPts); ++localCellId)
+        RemapCellArray(pd->GetVerts(), newVerts, cellPts, ptOffset[static_cast<size_t>(inp)], uf,
+            rootToNewId, 1, inp, 0, keptCellSource);
+    }
+    for (int inp = 0; inp < nInputs; ++inp)
+    {
+        vtkPolyData* pd = pdIn[static_cast<size_t>(inp)];
+        if (!pd || !this->FuseLines)
         {
-            std::vector<vtkIdType> newIds;
-            for (vtkIdType k = 0; k < cellPts->GetNumberOfIds(); ++k)
-            {
-                const vtkIdType oldGlobal = ptOffset[static_cast<size_t>(inp)] + cellPts->GetId(k);
-                const vtkIdType root = uf.find(oldGlobal);
-                const vtkIdType nid = rootToNewId[root];
-                if (newIds.empty() || newIds.back() != nid)
-                {
-                    newIds.push_back(nid);
-                }
-            }
-            if (newIds.size() > 1 && newIds.front() == newIds.back())
-            {
-                newIds.pop_back();
-            }
-
-            if (newIds.size() >= 3)
-            {
-                newPolys->InsertNextCell(static_cast<vtkIdType>(newIds.size()), newIds.data());
-                keptCellSource.emplace_back(inp, localCellId);
-            }
+            continue;
         }
+        RemapCellArray(pd->GetLines(), newLines, cellPts, ptOffset[static_cast<size_t>(inp)], uf,
+            rootToNewId, 2, inp, pd->GetNumberOfVerts(), keptCellSource);
+    }
+    for (int inp = 0; inp < nInputs; ++inp)
+    {
+        vtkPolyData* pd = pdIn[static_cast<size_t>(inp)];
+        if (!pd || !this->FusePolys)
+        {
+            continue;
+        }
+        RemapCellArray(pd->GetPolys(), newPolys, cellPts, ptOffset[static_cast<size_t>(inp)], uf,
+            rootToNewId, 3, inp, pd->GetNumberOfVerts() + pd->GetNumberOfLines(), keptCellSource);
     }
 
     output->SetPoints(newPoints);
+    output->SetVerts(newVerts);
+    output->SetLines(newLines);
     output->SetPolys(newPolys);
 
     // 6. Map attribute data (PointData & CellData); schema from first non-empty input
@@ -355,6 +482,10 @@ void vtkSHYXDisconnectedRegionFuse::PrintSelf(ostream& os, vtkIndent indent)
 {
     this->Superclass::PrintSelf(os, indent);
     os << indent << "FuseThreshold: " << this->FuseThreshold << "\n";
+    os << indent << "FuseWithinInput: " << (this->FuseWithinInput ? "On\n" : "Off\n");
+    os << indent << "FuseVerts: " << (this->FuseVerts ? "On\n" : "Off\n");
+    os << indent << "FuseLines: " << (this->FuseLines ? "On\n" : "Off\n");
+    os << indent << "FusePolys: " << (this->FusePolys ? "On\n" : "Off\n");
 }
 
 VTK_ABI_NAMESPACE_END
