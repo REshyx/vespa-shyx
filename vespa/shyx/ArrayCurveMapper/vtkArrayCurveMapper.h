@@ -7,8 +7,10 @@
  * (vtkPiecewiseFunction) whose X axis spans InputRange and Y axis spans
  * OutputRange.  For vector arrays the magnitude is used.  Input values
  * are clamped to [InputRangeMin, InputRangeMax] before curve evaluation.
- * The mapped values are stored as a new scalar (1-component) array on the
- * same attribute type (point or cell) as the input.
+ * By default the mapped values replace the selected input array (same name,
+ * 1-component scalar).  When CreateMappedArray is on they are written to
+ * OutputArrayName (default "MappedArray") instead.  Either way the result is
+ * set as the active scalars on that attribute type.
  */
 
 #ifndef vtkArrayCurveMapper_h
@@ -43,6 +45,11 @@ public:
 
     vtkGetMacro(OutputArrayName, std::string);
     vtkSetMacro(OutputArrayName, std::string);
+
+    /** When off (default), overwrite InputArrayName. When on, write OutputArrayName. */
+    vtkGetMacro(CreateMappedArray, int);
+    vtkSetMacro(CreateMappedArray, int);
+    vtkBooleanMacro(CreateMappedArray, int);
 
     vtkGetMacro(InputRangeMin, double);
     vtkSetMacro(InputRangeMin, double);
@@ -101,6 +108,7 @@ protected:
 
     std::string InputArrayName;
     std::string OutputArrayName = "MappedArray";
+    int         CreateMappedArray = 0;
     double      InputRangeMin  = 0.0;
     double      InputRangeMax  = 1.0;
     double      OutputRangeMin = 0.0;

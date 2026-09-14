@@ -96,6 +96,16 @@ public:
     vtkSetMacro(MaxEdgeLength, double);
     vtkGetMacro(AdaptiveTolerance, double);
     vtkSetMacro(AdaptiveTolerance, double);
+    vtkGetMacro(IccNeighborhoodMode, int);
+    vtkSetClampMacro(IccNeighborhoodMode, int, 0, 1);
+    vtkGetMacro(IccNeighborhoodRings, int);
+    vtkSetClampMacro(IccNeighborhoodRings, int, 1, 32);
+    /**
+     * Euclidean ICC `ball_radius` when IccNeighborhoodMode is 1 (same semantics as
+     * vtkSHYXAdaptiveIsotropicRemesher). Ignored in mesh-rings mode. Not Cap expansion ratio.
+     */
+    vtkGetMacro(IccBallRadius, double);
+    vtkSetMacro(IccBallRadius, double);
     vtkGetMacro(AdaptiveSizingNeighborMaxRatio, double);
     vtkSetClampMacro(AdaptiveSizingNeighborMaxRatio, double, 0.0, 1.0e6);
     vtkGetMacro(ScaleToRange, bool);
@@ -224,6 +234,9 @@ protected:
     double MinEdgeLength = 0.0;
     double MaxEdgeLength = 0.0;
     double AdaptiveTolerance = 0.01;
+    int IccNeighborhoodMode = 0;
+    int IccNeighborhoodRings = 1;
+    double IccBallRadius = -1.0;
     double AdaptiveSizingNeighborMaxRatio = 1.6;
     bool ScaleToRange = false;
     bool RemeshRecomputeCurvatureEachIteration = true;

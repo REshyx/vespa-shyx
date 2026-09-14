@@ -643,6 +643,9 @@ void vtkSHYXRemeshWithEndpoint::PrintSelf(ostream& os, vtkIndent indent)
     os << indent << "MinEdgeLength: " << this->MinEdgeLength << std::endl;
     os << indent << "MaxEdgeLength: " << this->MaxEdgeLength << std::endl;
     os << indent << "AdaptiveTolerance: " << this->AdaptiveTolerance << std::endl;
+    os << indent << "IccNeighborhoodMode: " << this->IccNeighborhoodMode << std::endl;
+    os << indent << "IccNeighborhoodRings: " << this->IccNeighborhoodRings << std::endl;
+    os << indent << "IccBallRadius: " << this->IccBallRadius << std::endl;
     os << indent << "AdaptiveSizingNeighborMaxRatio: " << this->AdaptiveSizingNeighborMaxRatio
        << std::endl;
     os << indent << "ScaleToRange: " << (this->ScaleToRange ? "on" : "off") << std::endl;
@@ -847,11 +850,13 @@ int vtkSHYXRemeshWithEndpoint::RequestData(
 
         std::vector<double> uncappedSizes;
         using SizingTy = FeatureAwareAdaptiveSizingField;
+        const int iccRings = (this->IccNeighborhoodMode == 0) ? this->IccNeighborhoodRings : 0;
+        const double iccRadius = (this->IccNeighborhoodMode == 1) ? this->IccBallRadius : -1.0;
         std::optional<SizingTy> sizingStorage;
         sizingStorage.emplace(this->AdaptiveTolerance, std::make_pair(minLen, maxLen),
             cgalMesh->surface.faces(), cgalMesh->surface,
             static_cast<double>(this->AdaptiveSizingNeighborMaxRatio), this->ScaleToRange,
-            &uncappedSizes);
+            &uncappedSizes, iccRadius, iccRings);
         this->FillUncappedSizeHistogram(uncappedSizes);
 
         if (this->CheckAbort())

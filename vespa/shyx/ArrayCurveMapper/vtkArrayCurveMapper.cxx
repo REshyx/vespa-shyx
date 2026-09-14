@@ -132,6 +132,7 @@ void vtkArrayCurveMapper::PrintSelf(ostream& os, vtkIndent indent)
     this->Superclass::PrintSelf(os, indent);
     os << indent << "InputArrayName: " << this->InputArrayName << std::endl;
     os << indent << "OutputArrayName: " << this->OutputArrayName << std::endl;
+    os << indent << "CreateMappedArray: " << this->CreateMappedArray << std::endl;
     os << indent << "InputRange: [" << this->InputRangeMin << ", " << this->InputRangeMax << "]" << std::endl;
     os << indent << "OutputRange: [" << this->OutputRangeMin << ", " << this->OutputRangeMax << "]" << std::endl;
     os << indent << "CurveTransferFunction: " << this->CurveTransferFunction << std::endl;
@@ -184,8 +185,12 @@ int vtkArrayCurveMapper::RequestData(
     double outMin = this->OutputRangeMin;
     double outMax = this->OutputRangeMax;
 
+    const std::string outName = this->CreateMappedArray
+        ? (this->OutputArrayName.empty() ? std::string("MappedArray") : this->OutputArrayName)
+        : this->InputArrayName;
+
     vtkNew<vtkDoubleArray> dstArray;
-    dstArray->SetName(this->OutputArrayName.c_str());
+    dstArray->SetName(outName.c_str());
     dstArray->SetNumberOfComponents(1);
     dstArray->SetNumberOfTuples(numPts);
 
@@ -218,10 +223,12 @@ int vtkArrayCurveMapper::RequestData(
     if (isPointData)
     {
         output->GetPointData()->AddArray(dstArray);
+        output->GetPointData()->SetActiveScalars(dstArray->GetName());
     }
     else
     {
         output->GetCellData()->AddArray(dstArray);
+        output->GetCellData()->SetActiveScalars(dstArray->GetName());
     }
     return 1;
 }

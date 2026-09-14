@@ -681,7 +681,8 @@ inline void RunIccFillVertexCurvatureScalars(FaceGraph& fg, std::size_t num_vert
   const CGAL_Surface::Property_map<CGAL_Surface::Vertex_index, CGAL_Kernel::Vector_3>* vn_map,
   const CGAL_Surface* vespa_dual_normal_property_host,
   std::vector<double>& out_kmin, std::vector<double>& out_kmax,
-  std::vector<double>& out_kmean, std::vector<double>& out_kgauss)
+  std::vector<double>& out_kmean, std::vector<double>& out_kgauss,
+  double icc_ball_radius = -1.0, int icc_neighborhood_rings = 0)
 {
   namespace pmp_sf = CGAL::Polygon_mesh_processing;
   using Vertex_index = CGAL_Surface::Vertex_index;
@@ -691,18 +692,21 @@ inline void RunIccFillVertexCurvatureScalars(FaceGraph& fg, std::size_t num_vert
   using CTag         = CGAL::dynamic_vertex_property_t<Principal>;
 
   auto curv_map = get(CTag(), fg);
+  const double radiusForIcc = (icc_neighborhood_rings >= 1) ? -1.0 : icc_ball_radius;
   if (vn_map != nullptr)
   {
     vespa_shyx::custom_interpolated_corrected_curvatures(fg,
       pmp_sf::parameters::vertex_principal_curvatures_and_directions_map(curv_map)
-        .vertex_normal_map(*vn_map),
-      vespa_dual_normal_property_host);
+        .vertex_normal_map(*vn_map)
+        .ball_radius(radiusForIcc),
+      vespa_dual_normal_property_host, icc_neighborhood_rings);
   }
   else
   {
-    vespa_shyx::custom_interpolated_corrected_curvatures(
-      fg, pmp_sf::parameters::vertex_principal_curvatures_and_directions_map(curv_map),
-      vespa_dual_normal_property_host);
+    vespa_shyx::custom_interpolated_corrected_curvatures(fg,
+      pmp_sf::parameters::vertex_principal_curvatures_and_directions_map(curv_map)
+        .ball_radius(radiusForIcc),
+      vespa_dual_normal_property_host, icc_neighborhood_rings);
   }
 
   for (Vertex_index v : vertices(fg))
@@ -735,7 +739,8 @@ inline void ComputeIccVertexCurvatureScalars(CGAL_Surface& mesh, bool patch_doma
   const std::vector<CGAL_Surface::Face_index>& patchFaces,
   const CGAL_Surface::Property_map<CGAL_Surface::Vertex_index, CGAL_Kernel::Vector_3>* vn_map,
   std::vector<double>& out_kmin, std::vector<double>& out_kmax,
-  std::vector<double>& out_kmean, std::vector<double>& out_kgauss)
+  std::vector<double>& out_kmean, std::vector<double>& out_kgauss,
+  double icc_ball_radius = -1.0, int icc_neighborhood_rings = 0)
 {
   using Face_index = CGAL_Surface::Face_index;
   const std::size_t nv = mesh.number_of_vertices();
@@ -748,7 +753,7 @@ inline void ComputeIccVertexCurvatureScalars(CGAL_Surface& mesh, bool patch_doma
   if (!patch_domain || patchFaces.empty() || patchFaces.size() == mesh.number_of_faces())
   {
     detail::RunIccFillVertexCurvatureScalars(mesh, nv, vn_map, &mesh, out_kmin, out_kmax, out_kmean,
-      out_kgauss);
+      out_kgauss, icc_ball_radius, icc_neighborhood_rings);
     return;
   }
 
@@ -765,7 +770,7 @@ inline void ComputeIccVertexCurvatureScalars(CGAL_Surface& mesh, bool patch_doma
   CGAL::expand_face_selection(sel, mesh, 1, is_sel, std::back_inserter(sel));
   CGAL::Face_filtered_graph<CGAL_Surface> ffg(mesh, sel);
   detail::RunIccFillVertexCurvatureScalars(ffg, nv, vn_map, &mesh, out_kmin, out_kmax, out_kmean,
-    out_kgauss);
+    out_kgauss, icc_ball_radius, icc_neighborhood_rings);
 }
 
 template <typename EdgeBoolMap>

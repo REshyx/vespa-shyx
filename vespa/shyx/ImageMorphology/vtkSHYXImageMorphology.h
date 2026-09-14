@@ -2,8 +2,8 @@
  * @class   vtkSHYXImageMorphology
  * @brief   Binary / grayscale morphology on vtkImageData point scalars.
  *
- * Binary Match: exact Foreground/Background labels, or one Threshold (>= is
- * foreground, result written 1/0).
+ * Binary Match defaults to Threshold (>= 0.5 is foreground, result written 1/0);
+ * Equal uses exact Foreground/Background labels.
  * Structuring element: Box, Cross, or Ellipsoid (default) of odd KernelSize.
  * Operations: dilate, erode, open, close, morphological / internal / external
  * gradient, white / black top-hat, and binary hit-or-miss (foreground SE plus
@@ -105,13 +105,13 @@ protected:
 
   int Operation = DILATE;
   int ValueMode = BINARY;
-  int BinaryMatch = EQUAL;
+  int BinaryMatch = THRESHOLD;
   int KernelShape = ELLIPSOID;
   int KernelSize[3] = { 3, 3, 3 };
   int NumberOfIterations = 1;
   double ForegroundValue = 1.0;
   double BackgroundValue = 0.0;
-  double Threshold = 1.0;
+  double Threshold = 0.5;
   int BackgroundKernelSize[3] = { 5, 5, 5 };
 
 private:

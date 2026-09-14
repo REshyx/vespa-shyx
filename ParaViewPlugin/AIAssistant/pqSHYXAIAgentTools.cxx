@@ -2124,11 +2124,15 @@ const ShyxExtra kShyxExtra[] = {
     "EdgeCountRatio if the link condition or constraints block further collapses." },
   { "SHYXAdaptiveIsotropicRemesher",
     "Curvature-adaptive remesh (CGAL>=6). Ports: remeshed, sharp features, mask patch, sizing preview. "
+    "IccNeighborhoodMode: 0 mesh rings (IccNeighborhoodRings, default 1 = incident faces) or "
+    "1 Euclidean ball (IccBallRadius). Mutually exclusive. "
+    "DetectFeatureEdges is OFF by default (no detect_sharp_edges / feature-mask constraints; port 1 empty). "
     "Properties panel ICC size histogram is a live pre-remesh preview (same widget as SHYXRemeshWithEndpoint). "
     "Uniform target edge length: VESPA Isotropic Remesher." },
   { "SHYXRemeshWithEndpoint",
     "Vascular step 5: optional endpoint cull then ICC remesh / cap. Filled caps are retagged on "
-    "cell EndpointIndex (wall -1, patches 1..n by area)." },
+    "cell EndpointIndex (wall -1, patches 1..n by area). Wall ICC neighborhood same as "
+    "SHYXAdaptiveIsotropicRemesher (mesh rings vs Euclidean ball)." },
   { "SHYXSkeletonExtraction",
     "Vascular step 1. Input must be watertight triangle mesh. Optional AppendCapEndpoints: "
     "cell EndpointIndex > 0 connected patches, area-weighted centroids joined to nearest "
@@ -2243,6 +2247,11 @@ const ShyxExtra kShyxExtra[] = {
     "cleanup mask exists; there is no ExportBridgeMask toggle. EnableBridgeRemesh and "
     "EnableBridgeSmooth are independent checkboxes (default both on); uncheck smooth to remesh only." },
   { "SHYXPointCloudSurfaceSDF", "Point cloud to surface SDF (VTK). Not CGAL vtkCGALSignedDistanceFunction." },
+  { "SHYXArrayCurveMapper",
+    "Maps a point/cell array through an editable piecewise curve. Default overwrites the "
+    "selected input array (same name, 1-component; vectors become scalars) and SetActiveScalars "
+    "on that array. CreateMappedArray writes OutputArrayName (default MappedArray) instead and "
+    "activates the new array." },
   { "SHYXResampleLines",
     "Resample VTK_LINE / VTK_POLY_LINE networks. Fuse (default on) merges points within "
     "FuseTolerance (0 = 1e-6 * AABB longest side) so nearby ends share a vertex. "
@@ -2308,9 +2317,9 @@ const ShyxExtra kShyxExtra[] = {
     "Voxel morphology on vtkImageData point scalars (not mesh face-ring DilateLayers). "
     "Operations: Dilate/Erode/Open/Close, morphological gradient (dilate-erode; not Filters "
     "Gradient Magnitude), internal/external gradient, white/black top-hat, binary hit-or-miss "
-    "(FG SE + BG shell). ValueMode 0 Binary or 1 Grayscale (min/max). BinaryMatch 0 Equal "
-    "(strict ForegroundValue/BackgroundValue; other labels copied) or 1 Threshold "
-    "(voxel >= Threshold is FG, else BG; result written 1/0). "
+    "(FG SE + BG shell). ValueMode 0 Binary or 1 Grayscale (min/max). BinaryMatch 1 Threshold "
+    "(default, voxel >= Threshold 0.5 is FG, else BG; result written 1/0) or 0 Equal "
+    "(strict ForegroundValue/BackgroundValue; other labels copied). "
     "KernelShape 0 Box / 1 Cross / 2 Ellipsoid (default). KernelSize odd voxels "
     "default 3 3 3; 2D volumes force Z=1. Not Median. Python: SHYXImageMorphology()." },
   { "SHYXImageAntiAlias",

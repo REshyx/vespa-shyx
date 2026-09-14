@@ -152,6 +152,58 @@
         </Documentation>
       </DoubleVectorProperty>
 
+      <IntVectorProperty command="SetIccNeighborhoodMode"
+                         name="IccNeighborhoodMode"
+                         label="ICC neighborhood"
+                         number_of_elements="1"
+                         default_values="0"
+                         animateable="0">
+        <EnumerationDomain name="enum">
+          <Entry text="Mesh rings" value="0"/>
+          <Entry text="Euclidean ball" value="1"/>
+        </EnumerationDomain>
+        <Documentation>
+          Mutually exclusive ICC curvature neighborhood for wall sizing (same as SHYX Adaptive
+          Isotropic Remesher). Mesh rings vs Euclidean ball; only the active mode is applied.
+        </Documentation>
+      </IntVectorProperty>
+
+      <IntVectorProperty command="SetIccNeighborhoodRings"
+                         name="IccNeighborhoodRings"
+                         label="Mesh rings"
+                         number_of_elements="1"
+                         default_values="1">
+        <IntRangeDomain name="range" min="1" max="32"/>
+        <Documentation>
+          Face-hop count around each vertex. 1 = incident faces only. Not Euclidean distance.
+        </Documentation>
+        <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="visibility"
+                                   property="IccNeighborhoodMode"
+                                   value="0"/>
+        </Hints>
+      </IntVectorProperty>
+
+      <DoubleVectorProperty command="SetIccBallRadius"
+                            name="IccBallRadius"
+                            label="ICC ball radius"
+                            number_of_elements="1"
+                            default_values="-1">
+        <DoubleRangeDomain name="range" min="-1"/>
+        <Documentation>
+          CGAL ICC `ball_radius` for wall sizing when ICC neighborhood is Euclidean ball.
+          **&lt; 0** (default **-1**): incident faces only. **0**: tiny epsilon. **&gt; 0**: Euclidean
+          ball in model units. Not Expansion ratio and not Cap expansion ratio.
+        </Documentation>
+        <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="visibility"
+                                   property="IccNeighborhoodMode"
+                                   value="1"/>
+        </Hints>
+      </DoubleVectorProperty>
+
       <DoubleVectorProperty command="SetAdaptiveSizingNeighborMaxRatio"
                             name="AdaptiveSizingNeighborMaxRatio"
                             label="Expansion ratio"
@@ -182,6 +234,9 @@
         <Property name="MinEdgeLength"/>
         <Property name="MaxEdgeLength"/>
         <Property name="AdaptiveTolerance"/>
+        <Property name="IccNeighborhoodMode"/>
+        <Property name="IccNeighborhoodRings"/>
+        <Property name="IccBallRadius"/>
         <Property name="AdaptiveSizingNeighborMaxRatio"/>
         <Property name="ScaleToRange"/>
       </PropertyGroup>

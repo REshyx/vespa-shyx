@@ -359,6 +359,7 @@ pqSHYXRemeshUncappedHistogramPanel::pqSHYXRemeshUncappedHistogramPanel(
   this->PropertyConnect = vtkEventQtSlotConnect::New();
   for (const char* name :
     { "AdaptiveTolerance", "MinEdgeLength", "MaxEdgeLength", "ScaleToRange",
+      "IccNeighborhoodMode", "IccNeighborhoodRings", "IccBallRadius",
       "AdaptiveSizingNeighborMaxRatio", "RemeshRangeMin", "RemeshRangeMax",
       "FeatureMaskThreshold" })
   {
@@ -514,6 +515,12 @@ bool pqSHYXRemeshUncappedHistogramPanel::computePreviewFromInput()
     readIntUnchecked(filterProxy->GetProperty("ScaleToRange"), 0) != 0;
   const double neighborRatio =
     readDoubleUnchecked(filterProxy->GetProperty("AdaptiveSizingNeighborMaxRatio"), 1.6);
+  const double iccBallRadius =
+    readDoubleUnchecked(filterProxy->GetProperty("IccBallRadius"), -1.0);
+  const int iccNeighborhoodMode =
+    readIntUnchecked(filterProxy->GetProperty("IccNeighborhoodMode"), 0);
+  const int iccNeighborhoodRings =
+    readIntUnchecked(filterProxy->GetProperty("IccNeighborhoodRings"), 1);
 
   double b[6];
   inputPd->GetBounds(b);
@@ -563,6 +570,9 @@ bool pqSHYXRemeshUncappedHistogramPanel::computePreviewFromInput()
     preview->SetMinEdgeLength(minLen);
     preview->SetMaxEdgeLength(maxLen);
     preview->SetAdaptiveSizingNeighborMaxRatio(neighborRatio);
+    preview->SetIccNeighborhoodMode(iccNeighborhoodMode);
+    preview->SetIccNeighborhoodRings(iccNeighborhoodRings);
+    preview->SetIccBallRadius(iccBallRadius);
     preview->SetScaleToRange(scaleToRange);
     preview->EnableRemeshOff();
     preview->UpdateAttributesOff();
@@ -623,6 +633,9 @@ bool pqSHYXRemeshUncappedHistogramPanel::computePreviewFromInput()
     preview->SetMinEdgeLength(minLen);
     preview->SetMaxEdgeLength(maxLen);
     preview->SetAdaptiveSizingNeighborMaxRatio(neighborRatio);
+    preview->SetIccNeighborhoodMode(iccNeighborhoodMode);
+    preview->SetIccNeighborhoodRings(iccNeighborhoodRings);
+    preview->SetIccBallRadius(iccBallRadius);
     preview->SetLargestConnectedRegionOnly(largestOnly);
     preview->SetEnableEndpointCull(enableEndpointCull);
     preview->SetEndpointIndexAllScalars(allScalars);

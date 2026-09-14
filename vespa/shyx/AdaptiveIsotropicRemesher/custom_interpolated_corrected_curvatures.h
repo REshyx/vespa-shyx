@@ -36,6 +36,7 @@
 #include <numeric>
 #include <queue>
 #include <unordered_set>
+#include <utility>
 
 namespace vespa_shyx {
 
@@ -858,6 +859,7 @@ private:
   Vertex_normal_map vnm;
   FT ball_radius;
   FT avg_edge_length;
+  int neighborhood_rings;
 
   bool is_mean_curvature_selected;
   bool is_Gaussian_curvature_selected;
@@ -919,9 +921,10 @@ private:
 public:
 
   Custom_interpolated_corrected_curvatures_computer(const PolygonMesh& pmesh, const NamedParameters& np,
-    const CGAL_Surface* vespa_dual_prop_host = nullptr)
+    const CGAL_Surface* vespa_dual_prop_host = nullptr, int neighborhood_rings_in = 0)
     : pmesh(pmesh)
     , vespa_dual_prop_host_(vespa_dual_prop_host)
+    , neighborhood_rings(neighborhood_rings_in > 0 ? neighborhood_rings_in : 0)
   {
     vespa_dual_bundle_.active = false;
     if (vespa_dual_prop_host_ != nullptr)
@@ -929,6 +932,11 @@ public:
       VespaIccTryLoadDualNormalBundle(vespa_dual_prop_host_, vespa_dual_bundle_);
     }
     set_named_params(np);
+    // k-ring aggregation ignores Euclidean ball_radius.
+    if (neighborhood_rings >= 1)
+    {
+      ball_radius = -1;
+    }
 
     if (is_mean_curvature_selected || is_Gaussian_curvature_selected || is_principal_curvatures_and_directions_selected)
     {
@@ -1006,6 +1014,72 @@ private:
         const std::array<FT, 3 * 3> face_anisotropic_measure = get(muXY_map, f);
         for (std::size_t i = 0; i < 3 * 3; i++)
           vertex_measures.anisotropic_measure[i] += face_anisotropic_measure[i];
+      }
+    }
+
+    return vertex_measures;
+  }
+
+  void accumulate_face_measures(Vertex_measures<GT>& vertex_measures, face_descriptor f)
+  {
+    vertex_measures.area_measure += get(mu0_map, f);
+
+    if (is_mean_curvature_selected)
+      vertex_measures.mean_curvature_measure += get(mu1_map, f);
+
+    if (is_Gaussian_curvature_selected)
+      vertex_measures.gaussian_curvature_measure += get(mu2_map, f);
+
+    if (is_principal_curvatures_and_directions_selected)
+    {
+      const std::array<FT, 3 * 3> face_anisotropic_measure = get(muXY_map, f);
+      for (std::size_t i = 0; i < 3 * 3; i++)
+        vertex_measures.anisotropic_measure[i] += face_anisotropic_measure[i];
+    }
+  }
+
+  // Face-hop neighborhood: hop 1 = incident faces (same as no_radius). Hop k includes faces
+  // reached by (k-1) dual-graph steps (faces_around_face). No Euclidean weighting.
+  Vertex_measures<GT> expand_interpolated_corrected_measure_vertex_k_ring(vertex_descriptor v)
+  {
+    if (neighborhood_rings <= 1)
+      return expand_interpolated_corrected_measure_vertex_no_radius(v);
+
+    std::queue<std::pair<face_descriptor, int>> bfs_queue;
+    std::unordered_set<face_descriptor> bfs_visited;
+    Vertex_measures<GT> vertex_measures;
+
+    const VespaIccDualNormalBundle* dual_corner =
+      vespa_dual_bundle_.active ? &vespa_dual_bundle_ : nullptr;
+
+    for (face_descriptor f : faces_around_target(halfedge(v, pmesh), pmesh))
+    {
+      if (f == boost::graph_traits<PolygonMesh>::null_face())
+        continue;
+      bfs_queue.push(std::make_pair(f, 1));
+      bfs_visited.insert(f);
+    }
+
+    while (!bfs_queue.empty())
+    {
+      const face_descriptor fi = bfs_queue.front().first;
+      const int hop = bfs_queue.front().second;
+      bfs_queue.pop();
+
+      if (!VespaIccSkipMaskedFaceForVertexAggregate(dual_corner, fi))
+        accumulate_face_measures(vertex_measures, fi);
+
+      if (hop >= neighborhood_rings)
+        continue;
+
+      for (face_descriptor fj : faces_around_face(halfedge(fi, pmesh), pmesh))
+      {
+        if (fj == boost::graph_traits<PolygonMesh>::null_face())
+          continue;
+        if (bfs_visited.find(fj) != bfs_visited.end())
+          continue;
+        bfs_visited.insert(fj);
+        bfs_queue.push(std::make_pair(fj, hop + 1));
       }
     }
 
@@ -1091,9 +1165,11 @@ private:
     for (vertex_descriptor v : vertices(pmesh))
     {
       // expand the computed measures (on faces) to the vertices
-      Vertex_measures<GT> vertex_measures = (is_negative(ball_radius)) ?
-        expand_interpolated_corrected_measure_vertex_no_radius(v) :
-        expand_interpolated_corrected_measure_vertex(v);
+      Vertex_measures<GT> vertex_measures = (neighborhood_rings >= 1) ?
+        expand_interpolated_corrected_measure_vertex_k_ring(v) :
+        ((is_negative(ball_radius)) ?
+          expand_interpolated_corrected_measure_vertex_no_radius(v) :
+          expand_interpolated_corrected_measure_vertex(v));
 
       // compute the selected curvatures from the expanded measures and store them in the property maps
       // if the area measure is zero, the curvature is set to zero
@@ -1214,10 +1290,11 @@ template<typename PolygonMesh,
          typename  CGAL_NP_TEMPLATE_PARAMETERS>
 void custom_interpolated_corrected_curvatures(const PolygonMesh& pmesh,
                                        const CGAL_NP_CLASS& np = CGAL::Polygon_mesh_processing::parameters::default_values(),
-                                       const CGAL_Surface* vespa_dual_normal_property_host = nullptr)
+                                       const CGAL_Surface* vespa_dual_normal_property_host = nullptr,
+                                       int neighborhood_rings = 0)
 {
   internal::Custom_interpolated_corrected_curvatures_computer<PolygonMesh, CGAL_NP_CLASS>(
-    pmesh, np, vespa_dual_normal_property_host);
+    pmesh, np, vespa_dual_normal_property_host, neighborhood_rings);
 }
 
 /**

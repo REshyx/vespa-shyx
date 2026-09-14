@@ -229,6 +229,9 @@ void vtkSHYXAdaptiveIsotropicRemesher::PrintSelf(ostream& os, vtkIndent indent)
   os << indent << "MinEdgeLength: " << this->MinEdgeLength << std::endl;
   os << indent << "MaxEdgeLength: " << this->MaxEdgeLength << std::endl;
   os << indent << "AdaptiveTolerance: " << this->AdaptiveTolerance << std::endl;
+  os << indent << "IccNeighborhoodMode: " << this->IccNeighborhoodMode << std::endl;
+  os << indent << "IccNeighborhoodRings: " << this->IccNeighborhoodRings << std::endl;
+  os << indent << "IccBallRadius: " << this->IccBallRadius << std::endl;
   os << indent << "AdaptiveSizingNeighborMaxRatio: " << this->AdaptiveSizingNeighborMaxRatio << std::endl;
   os << indent << "ScaleToRange: " << (this->ScaleToRange ? "on" : "off") << std::endl;
   os << indent << "RemeshRecomputeCurvatureEachIteration: "
@@ -517,19 +520,25 @@ int vtkSHYXAdaptiveIsotropicRemesher::RequestData(
 
     using SizingTy = FeatureAwareAdaptiveSizingField;
     std::vector<double> uncappedSizes;
+    const int iccRings = (this->IccNeighborhoodMode == ICC_NEIGHBORHOOD_RINGS)
+      ? this->IccNeighborhoodRings
+      : 0;
+    const double iccRadius = (this->IccNeighborhoodMode == ICC_NEIGHBORHOOD_BALL)
+      ? this->IccBallRadius
+      : -1.0;
     std::optional<SizingTy> sizingStorage;
     if (patchRemesh)
     {
       sizingStorage.emplace(this->AdaptiveTolerance, std::make_pair(minLen, maxLen), remeshFaces,
         cgalMesh->surface, static_cast<double>(this->AdaptiveSizingNeighborMaxRatio),
-        this->ScaleToRange, &uncappedSizes);
+        this->ScaleToRange, &uncappedSizes, iccRadius, iccRings);
     }
     else
     {
       sizingStorage.emplace(this->AdaptiveTolerance, std::make_pair(minLen, maxLen),
         cgalMesh->surface.faces(), cgalMesh->surface,
         static_cast<double>(this->AdaptiveSizingNeighborMaxRatio),
-        this->ScaleToRange, &uncappedSizes);
+        this->ScaleToRange, &uncappedSizes, iccRadius, iccRings);
     }
     this->FillUncappedSizeHistogram(uncappedSizes);
     SizingTy& sizing = *sizingStorage;
@@ -635,7 +644,8 @@ int vtkSHYXAdaptiveIsotropicRemesher::RequestData(
       // when a small region is remeshed). Actual remesh sizing still uses the patch-expanded graph in
       // FeatureAwareAdaptiveSizingField's constructor; this path is intentionally global for VTK.
       ComputeIccVertexCurvatureScalars(smDiag, false, std::vector<CGAL_Surface::Face_index>{},
-        vnPtrDiag, iccKminDiag, iccKmaxDiag, iccKmeanDiscard, iccKgaussDiscard);
+        vnPtrDiag, iccKminDiag, iccKmaxDiag, iccKmeanDiscard, iccKgaussDiscard,
+        iccRadius, iccRings);
       (void)iccKmeanDiscard;
       (void)iccKgaussDiscard;
 

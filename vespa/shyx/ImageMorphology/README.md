@@ -10,7 +10,7 @@
 
 **Binary Match**（Binary 时，紧跟 Value Mode）：
 
+- **Threshold**（默认）：一个数，`值 >= Threshold`（默认 `0.5`）为前景，否则背景；结果写成 1 / 0。
 - **Equal**：两个数严格相等（`== Foreground` / `== Background`）；其它标签原样拷贝。
-- **Threshold**：一个数，`值 >= Threshold` 为前景，否则背景；结果写成 1 / 0。
 
 Python：`SHYXImageMorphology()`。面板字段见同目录 `SHYXImageMorphology.xml`。

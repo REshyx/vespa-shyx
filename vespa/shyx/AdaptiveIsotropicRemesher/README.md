@@ -7,7 +7,7 @@
 ## 1. 目的与功能算法详细解释
 
 **目的与功能：**
-这段代码实现了一个基于曲率感知的**自适应各向同性重网格化 (Adaptive Isotropic Remeshing)** 算法。主要用于对三维模型进行高质量的网格重构。在平坦区域，算法会使用较大的均匀三角形来覆盖以优化性能；而在曲率较高或细节较多的区域，算法会自动采用更细小密集的三角形以精准还原几何特征。同时，该算法能够保护模型原有的尖锐特征边，避免在平滑过程中丢失。
+这段代码实现了一个基于曲率感知的**自适应各向同性重网格化 (Adaptive Isotropic Remeshing)** 算法。主要用于对三维模型进行高质量的网格重构。在平坦区域，算法会使用较大的均匀三角形来覆盖以优化性能；而在曲率较高或细节较多的区域，算法会自动采用更细小密集的三角形以精准还原几何特征。同时，打开 **Detect feature edges** 后能够保护模型原有的尖锐特征边，避免在平滑过程中丢失（该开关默认关闭）。
 
 **算法流程：**
 本算法底层依赖 CGAL (6.0+) 几何算法库：
@@ -26,13 +26,17 @@
 | **`MinEdgeLength`** | `double` | `0`（未设） | **最小边长**。C++ **不会**把 0 自动换成包围盒比例；`RequestData` 要求 `0 < Min < Max`。ParaView 上 BoundsDomain 建议约 AABB 最长边的 **0.1%**，需点 Scale/Reset 才写入。非 ParaView 调用必须显式设正值。 |
 | **`MaxEdgeLength`** | `double` | `0`（未设） | **最大边长**。Domain 建议约最长边的 **10%**（`scale_factor=0.1`）。 |
 | **`AdaptiveTolerance`** | `double` | `0.01` | **ICC sizing 容差**。必须 > 0。**值越小**对曲率越敏感，在 Min/Max 范围内更密。 |
+| **`IccNeighborhoodMode`** | `int` | `0` | **ICC 邻域模式**。`0` Mesh rings；`1` Euclidean ball。二者互斥，不会同时生效。 |
+| **`IccNeighborhoodRings`** | `int` | `1` | **网格 hop 层数**（仅 Mesh rings）。`1` = 一环邻面（旧默认）。每多 1 层加上与上一层共边的面。 |
+| **`IccBallRadius`** | `double` | `-1` | **ICC `ball_radius`（模型长度）**，仅 Euclidean ball 模式。`< 0`：一环邻面；`0`：平均边长 × 1e-6；`> 0`：欧氏球。不是 Expansion ratio。 |
 | **`ProtectAngle`** | `double` | `70.0` | **特征边保护角度（度）**。相邻面法线夹角大于此阈值时保护该边。 |
 | **`NumberOfIterations`** | `int` | `3` | CGAL 各向同性重网格循环次数。必须 `>= 1`。面板标签 **Remesh iterations**。 |
 | **`NumberOfRelaxationSteps`** | `int` | `3` | 每轮切向松弛步数（CGAL 文档默认常为 1；本滤镜默认 3）。面板标签 **Relaxation steps**。 |
+| **`DetectFeatureEdges`** | `bool` | `false` | **检测特征边**。默认关：不做 `detect_sharp_edges` / Feature mask 约束，端口 1 为空。打开后才按 `ProtectAngle` 保护尖锐边。 |
 
 **输出端口**：0 remeshed `vtkPolyData`；1 特征线；2 mask patch；3 sizing/ICC preview。可选 Selection（port 1）或标量范围只重网格一部分；空选区 = 整张表面。
 
-面板其余项（Expansion ratio、Scale to range、ICC size histogram、Detect feature edges、Feature mask、Remesh constraints 等）见同目录 `SHYXAdaptiveIsotropicRemesher.xml`；同模块还有 Vascular 用的 `SHYXRemeshWithEndpoint.xml`。
+面板其余项（ICC neighborhood / Mesh rings / ICC ball radius、Expansion ratio、Scale to range、ICC size histogram、Detect feature edges、Feature mask、Remesh constraints 等）见同目录 `SHYXAdaptiveIsotropicRemesher.xml`；同模块还有 Vascular 用的 `SHYXRemeshWithEndpoint.xml`。
 
 **卡死恢复：** `RequestData` 进入 CGAL remesh 之前会覆盖 `%TEMP%/shyx_remesh_pre_apply.pvsm`（非 Windows 为 `$TMPDIR` 或 `/tmp`）。ParaView File → Load State 可找回 Apply 前的管线。直方图预览（`EnableRemesh` 关，或 Remesh With Endpoint 的 wall/cap remesh 都关）不写该文件。
 

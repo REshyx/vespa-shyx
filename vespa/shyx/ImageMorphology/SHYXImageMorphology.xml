@@ -8,8 +8,8 @@
         Voxel morphology on a 1-component vtkImageData point scalar. KernelSize is the
         structuring-element box in voxels (odd, default 3 3 3); KernelShape chooses Box,
         Cross, or Ellipsoid (default, same idea as VTK vtkImageDilateErode3D). Binary mode
-        classifies voxels with Binary Match: two exact labels, or one Threshold (&gt;= is
-        foreground). Grayscale uses neighborhood max/min. Morphological gradient is dilate
+        classifies voxels with Binary Match: Threshold (default, &gt;= 0.5 is foreground) or
+        two exact labels. Grayscale uses neighborhood max/min. Morphological gradient is dilate
         minus erode (not Filters → Gradient Magnitude). Hit-or-miss is binary only.
       </Documentation>
 
@@ -103,7 +103,7 @@
                          name="BinaryMatch"
                          label="Binary Match"
                          number_of_elements="1"
-                         default_values="0"
+                         default_values="1"
                          animateable="0">
         <EnumerationDomain name="enum">
           <Entry text="Equal (two values)" value="0"/>
@@ -111,9 +111,9 @@
         </EnumerationDomain>
         <Documentation>
           How Binary (and Hit-or-Miss) decides foreground vs background.
-          Equal: voxel == Foreground Value or == Background Value (strict); any other
-          label is copied unchanged. Threshold: voxel &gt;= Threshold is foreground,
-          otherwise background; result is written as 1 / 0.
+          Threshold (default): voxel &gt;= Threshold is foreground, otherwise background;
+          result is written as 1 / 0. Equal: voxel == Foreground Value or == Background
+          Value (strict); any other label is copied unchanged.
         </Documentation>
         <Hints>
           <PropertyWidgetDecorator type="CompositeDecorator">
@@ -198,11 +198,12 @@
                             name="Threshold"
                             label="Threshold"
                             number_of_elements="1"
-                            default_values="1">
+                            default_values="0.5">
         <DoubleRangeDomain name="range"/>
         <Documentation>
-          Threshold match: voxels with value &gt;= Threshold are foreground, the rest are
-          background. Morphological result is written as 1 (foreground) and 0 (background).
+          Threshold match: voxels with value &gt;= Threshold (default 0.5) are foreground,
+          the rest are background. Morphological result is written as 1 (foreground) and
+          0 (background).
         </Documentation>
         <Hints>
           <PropertyWidgetDecorator type="CompositeDecorator">

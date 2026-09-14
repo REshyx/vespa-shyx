@@ -597,12 +597,13 @@
 
 ### 28. SHYX Array Curve Mapper
 
-**功能**：将点数据数组（标量或矢量）通过**可编辑的分段线性曲线**映射到新的标量范围。矢量数组使用其模长。可选取输入数组、指定输入/输出范围、编辑传递曲线，结果为新的标量点数据数组。
+**功能**：将点或单元数组（标量或矢量）通过**可编辑的分段线性曲线**映射到新的标量范围。矢量数组使用其模长。默认同名覆盖原数组并设为 Active Scalars；勾选 **Create Mapped Array** 后写入新数组（默认 `MappedArray`）并激活该数组。
 
 | 参数 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
-| **Input Array** | string | — | 要映射的点数据数组。 |
-| **Output Array Name** | string | MappedArray | 输出标量数组名称。 |
+| **Input Array** | string | — | 要映射的点或单元数据数组。 |
+| **Create Mapped Array** | bool | false | 关：覆盖原数组并激活它。开：写入 **Output Array Name** 并激活新数组。 |
+| **Output Array Name** | string | MappedArray | 仅 Create Mapped Array 打开时可见。 |
 | **Input Range Min/Max** | double | 0.0 / 1.0 | 输入值范围。 |
 | **Output Range Min/Max** | double | 0.0 / 1.0 | 输出映射后的值范围。 |
 | **Transfer Curve** | PiecewiseFunction | — | 通过拖拽控制点编辑映射曲线，X 为归一化输入 [0,1]，Y 为归一化输出 [0,1]。 |
@@ -679,11 +680,15 @@
 | **Min edge length** | `MinEdgeLength` | double | 0 | XML 默认未设。`RequestData` 要求 **0 < Min < Max**。ParaView BoundsDomain 建议约 AABB 最长边的 **0.1%**；点 Scale/Reset 才写入。非 ParaView 调用必须显式设正值。 |
 | **Max edge length** | `MaxEdgeLength` | double | 0 | 同上；Domain 建议约最长边的 **10%**（`scale_factor=0.1`）。 |
 | **Adaptive tolerance** | `AdaptiveTolerance` | double | **0.01** | Vespa ICC sizing 容差；更小往往更细。 |
+| **ICC neighborhood** | `IccNeighborhoodMode` | int | **0** | `0` Mesh rings；`1` Euclidean ball。二者互斥。 |
+| **Mesh rings** | `IccNeighborhoodRings` | int | **1** | 网格 hop 层数（仅 Mesh rings）。`1` = 一环邻面。 |
+| **ICC ball radius** | `IccBallRadius` | double | **-1** | 仅 Euclidean ball。`< 0` 一环邻面；`0` 极小 epsilon；`> 0` 欧氏球半径（模型单位）。 |
 | **Expansion ratio** | `AdaptiveSizingNeighborMaxRatio` | double | **1.6** | 限制相邻顶点 ICC 目标边长跳变；`≤ 1` 关闭。 |
 | **Scale to range** | `ScaleToRange` | bool | false | ON 时把 ICC 目标线性拉到 [Min, Max]。 |
-| **ICC size histogram** | （面板 widget） | — | — | Apply 前的 ICC 目标边长直方图（Min/Max clamp 后）；与 Remesh With Endpoint 同一控件，改 Tolerance / Min / Max 会实时刷新。 |
+| **ICC size histogram** | （面板 widget） | — | — | Apply 前的 ICC 目标边长直方图（Min/Max clamp 后）；与 Remesh With Endpoint 同一控件，改 Tolerance / neighborhood / Min / Max 会实时刷新。 |
 | **Remesh iterations** | `NumberOfIterations` | int | 3 | CGAL `isotropic_remeshing` 迭代次数。 |
 | **Relaxation steps** | `NumberOfRelaxationSteps` | int | 3 | 每轮切向松弛步数。 |
+| **Detect feature edges** | `DetectFeatureEdges` | bool | false | 默认关。打开后才跑 CGAL `detect_sharp_edges` / Feature mask 约束；关时端口 1 为空。 |
 | **Protection angle** | `ProtectAngle` | double | **70** | 特征边二面角阈值（度）；依赖 **Detect feature edges**。 |
 | **Interpolate attributes** | `UseUpdateAttributes` | bool | true | 是否将点/单元数据插值到新网格。 |
 
@@ -727,7 +732,7 @@
 | **SHYX VMTK Centerlines / Opening Centerlines** | 需 `VESPA_USE_VMTK`。Opening Centerlines 端口 0 数组含义见 [`vespa/shyx/VmtkOpeningCenterlines/README.md`](vespa/shyx/VmtkOpeningCenterlines/README.md) |
 | **SHYX Vascular / Endpoint Stent Placement** | 交互圆柱/端点支架 |
 | **SHYX Auto Streamline** | 自动布种流线 |
-| **SHYX Image Morphology** | `vtkImageData` 点标量形态学。Binary Match：两值严格相等，或单阈值（`>=` 为前景，结果 1/0）。结构元 Box/Cross/Ellipsoid，`KernelSize` 默认 3 3 3 |
+| **SHYX Image Morphology** | `vtkImageData` 点标量形态学。Binary Match 默认 **Threshold**（`>= 0.5` 为前景，结果 1/0），也可两值严格相等。结构元 Box/Cross/Ellipsoid，`KernelSize` 默认 3 3 3 |
 | **SHYX Image AntiAlias** | 需 `VESPA_USE_VMTK`。可选 **Resample Factor**（&gt;1 加密 / &lt;1 减粗 / 1 原网格）再跑 ITK `AntiAliasBinaryImageFilter`。输出 float level set（内正外负），抽表面 Contour 0 |
 
 完整对照（类名 / XML / 图标 / README）见 [`vespa/INVENTORY.md`](vespa/INVENTORY.md)。
@@ -764,7 +769,7 @@
 - **SHYX Resample Lines** 用于骨架/中心线等多分支折线：先可选 **Fuse**（默认开，容差 1e-6×包围盒最长边）保证近点连通，再按 **Sample Distance** 在各分支上等距重采样；分叉与端点（线度数 ≠ 2）保留；短于间距的分支只留两端，不会被删。
 - **SHYX Vector Field Topology**、**SHYX Vortex Criteria**、**SHYX FTLE**、**SHYX Clebsch Map** 等流场工具对数据类型与数组名要求不同，请以各节说明与 ParaView 属性面板为准。
 - **SHYX Disconnected Region Fuse** 在不连通域的最近处连接。**Fuse Method** 可选合点中点、小域贴大域、或不删点而加线/两个桥接三角形。默认 **Fuse Within Input** 开。
-- **SHYX Image Morphology** 作用于 **`vtkImageData` 点标量**（体素），不是网格面环 DilateLayers，也不是 **Gradient Magnitude**（有限差分）或 **Median**。形态学梯度 = 膨胀 − 侵蚀；核大小是 **Kernel Size**（默认 3 3 3，椭圆核）。Binary 下 **Binary Match** 可选两值严格相等，或单 **Threshold**（`>=` 为前景，输出 1/0）。
+- **SHYX Image Morphology** 作用于 **`vtkImageData` 点标量**（体素），不是网格面环 DilateLayers，也不是 **Gradient Magnitude**（有限差分）或 **Median**。形态学梯度 = 膨胀 − 侵蚀；核大小是 **Kernel Size**（默认 3 3 3，椭圆核）。Binary 下 **Binary Match** 默认 **Threshold**（`>= 0.5` 为前景，输出 1/0），也可两值严格相等。
 - **SHYX Image AntiAlias** 用于二值体**消台阶**（Whitaker 占用约束曲率流）。ITK 与 VMTK 中心线共用 `VMTK_DIR`，不是独立 ITK。输出是 float level set，抽表面用 **Contour 0**。**Resample Factor** &gt;1 先加密再抗锯齿（半个体素锁在更细网格上，世界空间里更圆）；&lt;1 减粗。多标签请先 Threshold；开/闭请用 Image Morphology。
 - **SHYX Point Cloud Surface SDF** 在**点云**上写 **SDF**；若要在**规则体素网格**上对**封闭**三角网格求有符号距离场（`vtkImageData`），应使用 CGAL 管线中的 **`vtkCGALSignedDistanceFunction`**（见 CGAL / PMP 模块文档或源码），二者勿混淆。
 - **SHYX Radius Neighbor Count** 用于点云或网格顶点上的**局部密度/邻域规模**分析；半径需与点间距尺度匹配。并行行为由 VTK SMP 后端决定（如与 ParaView 一同构建的 TBB 等）。

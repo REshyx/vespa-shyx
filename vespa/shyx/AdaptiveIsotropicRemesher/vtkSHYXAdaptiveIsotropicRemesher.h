@@ -8,15 +8,17 @@
  * per-vertex caps on a named CGAL property map — not CGAL `Adaptive_sizing_field`). After
  * `PrepareIccVertexNormalsForAdaptiveSizing` (CGAL area-weighted `v:vespa_icc_normal`, and dual
  * per-vertex normals when the Feature mask applies), curvature-driven targets mirror CGAL's ICC
- * sizing formula inside min/max bounds, with optional **AdaptiveSizingNeighborMaxRatio** smoothing
- * of adjacent vertex targets (**> 1** reduces sharp spatial sizing jumps).
+ * sizing formula inside min/max bounds, with mutually exclusive ICC neighborhood
+ * (**IccNeighborhoodMode**: mesh rings vs Euclidean ball), and **AdaptiveSizingNeighborMaxRatio**
+ * smoothing of adjacent vertex targets (**> 1** reduces sharp spatial sizing jumps).
  *
  * Remesh region: either an optional vtkSelection on port 1 (copied/active selection) or a scalar
  * value-range on the input polydata (point- or cell-centered array; same name resolution as the
  * feature mask). The rest of the surface is unchanged when the region is non-empty.
  * Edges on the boundary between remeshed and untouched faces are also marked as
- * CGAL feature/constrained edges for isotropic_remeshing (together with angle-based sharp edges
- * and optional FeatureMask filtering).
+ * CGAL feature/constrained edges for isotropic_remeshing (independent of DetectFeatureEdges).
+ * Angle-based sharp edges and optional FeatureMask filtering apply only when DetectFeatureEdges
+ * is ON (default OFF).
  * With an empty remesh region (no selection, invalid scalar-range setup, or no cells in range),
  * the whole surface is remeshed.
  *
@@ -133,6 +135,42 @@ public:
    */
   vtkGetMacro(AdaptiveTolerance, double);
   vtkSetMacro(AdaptiveTolerance, double);
+  //@}
+
+  enum IccNeighborhoodModeType
+  {
+    ICC_NEIGHBORHOOD_RINGS = 0, ///< k-ring of faces (hop 1 = incident faces)
+    ICC_NEIGHBORHOOD_BALL  = 1  ///< Euclidean ICC ball_radius
+  };
+
+  //@{
+  /**
+   * Mutually exclusive ICC neighborhood. **0** (default): mesh rings (`IccNeighborhoodRings`).
+   * **1**: Euclidean ball (`IccBallRadius`). Only one is applied.
+   */
+  vtkGetMacro(IccNeighborhoodMode, int);
+  vtkSetClampMacro(IccNeighborhoodMode, int, 0, 1);
+  //@}
+
+  //@{
+  /**
+   * Face-hop count when IccNeighborhoodMode is Mesh rings. **1** (default) = incident faces only
+   * (same as the old ICC `ball_radius = -1`). Each extra hop adds faces sharing an edge with the
+   * previous layer. Ignored in Euclidean-ball mode.
+   */
+  vtkGetMacro(IccNeighborhoodRings, int);
+  vtkSetClampMacro(IccNeighborhoodRings, int, 1, 32);
+  //@}
+
+  //@{
+  /**
+   * CGAL interpolated-corrected-curvatures `ball_radius` (model units) when IccNeighborhoodMode is
+   * Euclidean ball. **< 0** (default **-1**) sums only incident faces. **0** uses a tiny epsilon
+   * times average edge length. **> 0** expands a Euclidean ball around each vertex (faces weighted
+   * by inclusion). Ignored in mesh-rings mode. Not Expansion ratio.
+   */
+  vtkGetMacro(IccBallRadius, double);
+  vtkSetMacro(IccBallRadius, double);
   //@}
 
   //@{
@@ -279,12 +317,12 @@ public:
   //@{
   /**
    * Master switch for sharp-edge / feature-mask constraints.
-   * When true (default), CGAL detect_sharp_edges (with ProtectAngle / SharpFeatureSideFilter)
+   * When false (default), those sources do NOT write feature-edge constraints; remesh sees only
+   * vtkSelection-boundary constraints (when a selection input is connected).
+   * When true, CGAL detect_sharp_edges (with ProtectAngle / SharpFeatureSideFilter)
    * and feature-mask region/boundary contributions are added to edge_is_constrained_map for
    * isotropic_remeshing; ProtectAngle, SharpFeatureSideFilter, FeatureMaskEnabled, and related
    * properties take effect.
-   * When false, those sources do NOT write feature-edge constraints; remesh sees only
-   * vtkSelection-boundary constraints (when a selection input is connected).
    * vtkSelection behavior is independent of this toggle.
    */
   vtkGetMacro(DetectFeatureEdges, bool);
@@ -368,6 +406,9 @@ protected:
   double MinEdgeLength       = 0.0;
   double MaxEdgeLength       = 0.0;
   double AdaptiveTolerance   = 0.01;
+  int    IccNeighborhoodMode  = ICC_NEIGHBORHOOD_RINGS;
+  int    IccNeighborhoodRings = 1;
+  double IccBallRadius       = -1.0;
   double AdaptiveSizingNeighborMaxRatio = 1.6;
   bool   ScaleToRange                          = false;
   bool   RemeshRecomputeCurvatureEachIteration = true;
@@ -383,7 +424,7 @@ protected:
   bool   RemeshDoFlip               = true;
   bool   RemeshDoProject            = true;
 
-  bool   DetectFeatureEdges    = true;
+  bool   DetectFeatureEdges    = false;
   bool   FeatureMaskEnabled    = false;
   char*  FeatureMaskArrayName = nullptr;
   double FeatureMaskThreshold  = 0.0;

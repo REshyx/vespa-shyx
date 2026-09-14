@@ -376,7 +376,7 @@ pqArrayCurveMapperPanel::pqArrayCurveMapperPanel(
         this->LiveHistogramCheck->setToolTip(
             tr("When checked, histograms update while you edit the curve. "
                "Uncheck to skip live updates and click Refresh instead."));
-        this->LiveHistogramCheck->setChecked(true);
+        this->LiveHistogramCheck->setChecked(false);
         connect(this->LiveHistogramCheck, &QCheckBox::toggled, this,
             &pqArrayCurveMapperPanel::onLiveHistogramToggled);
         row->addWidget(this->LiveHistogramCheck);
@@ -488,7 +488,7 @@ pqArrayCurveMapperPanel::pqArrayCurveMapperPanel(
     connect(this->ChartHeightSpin, QOverload<int>::of(&QSpinBox::valueChanged), this,
         &pqArrayCurveMapperPanel::onChartHeightChanged);
 
-    this->refreshVisualization();
+    this->refreshVisualization(false, true);
 }
 
 //------------------------------------------------------------------------------
@@ -1196,7 +1196,7 @@ void pqArrayCurveMapperPanel::select()
         emit changeAvailable();
     }
     this->syncChartOutputRange();
-    this->refreshVisualization(true);
+    this->refreshVisualization(true, true);
     this->Superclass::select();
 }
 

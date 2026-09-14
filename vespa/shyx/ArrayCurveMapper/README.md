@@ -17,8 +17,8 @@
    - 对于标量数据，直接读取。
    - 将提取的数值严格限制 (Clamp) 在 `[InputRangeMin, InputRangeMax]` 区间内。
 4. **曲线映射 (Curve Evaluation)**：使用限制后的数值在 `vtkPiecewiseFunction` 中查询。曲线 **Y 轴为物理输出值**（落在 OutputRange 内），不再使用归一化 `t`。
-5. **输出钳制**：将曲线求值结果再钳制到 `[OutputRangeMin, OutputRangeMax]`，并存入新数组。
-6. **输出装载**：将生成的新数组以 `OutputArrayName` 为名，挂载至与输入相同的属性类型（Point/Cell Data）。
+5. **输出钳制**：将曲线求值结果再钳制到 `[OutputRangeMin, OutputRangeMax]`。
+6. **输出装载**：默认用映射结果**覆盖**原数组（同名、1 分量标量；矢量会被标量替换）。勾选 `CreateMappedArray` 后改为写入 `OutputArrayName`（默认 `"MappedArray"`），原数组保留。无论哪种模式，结果都会设为该属性类型（Point/Cell）的 **Active Scalars**。
 
 ---
 
@@ -28,9 +28,10 @@
 
 ### 核心映射参数
 * **`InputArrayName`** (string): 输入数组名称。指定需进行映射处理的数据列。
-* **`OutputArrayName`** (string): 输出数组名称。默认值为 `"MappedArray"`，表示映射后生成的新数组名称。
+* **`CreateMappedArray`** (bool, 默认关): 关则覆盖原数组；开则写入新数组 `OutputArrayName`（默认 `"MappedArray"`）。
+* **`OutputArrayName`** (string): 仅在 `CreateMappedArray` 打开时使用。默认 `"MappedArray"`。
 * **`InputRangeMin` / `InputRangeMax`** (double): 输入数据范围限制（默认 `[0.0, 1.0]`）。超出此区间的原始值将被截断并限制在该边界上。
 * **`OutputRangeMin` / `OutputRangeMax`** (double): 输出数据的目标范围（默认 `[0.0, 1.0]`）。曲线控制点的 Y 值与此范围一致。
-* **`CurveTransferFunction`** (`vtkPiecewiseFunction*`): 分段线性传递函数；X = 输入值，Y = 映射后的输出值。面板提供可编辑曲线与输入/输出直方图预览。**Live hist** 勾选时拖动曲线会实时刷新直方图；关闭后直方图保持上次结果，可用 **Refresh** 手动刷新。**Reset** 把输入/输出范围还原为数组 min–max 并清成线性恒等曲线。
+* **`CurveTransferFunction`** (`vtkPiecewiseFunction*`): 分段线性传递函数；X = 输入值，Y = 映射后的输出值。面板提供可编辑曲线与输入/输出直方图预览。**Live hist** 默认关闭；勾选后拖动曲线会实时刷新直方图，关闭后直方图保持上次结果，可用 **Refresh** 手动刷新。**Reset** 把输入/输出范围还原为数组 min–max 并清成线性恒等曲线。
 
 C++ 头文件里仍有 `RepresentationMode` / `Opacity` / `Trunc` / `Pow` / `IntegrationScale` / `Time*` / `AnimationArrayName` 等成员，**未写入 XML，`RequestData` 也不读取**，对 ParaView 面板无效。

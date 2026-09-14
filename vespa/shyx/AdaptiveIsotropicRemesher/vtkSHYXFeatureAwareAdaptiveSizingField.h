@@ -34,6 +34,16 @@ namespace pmp_sf = CGAL::Polygon_mesh_processing;
  * [short, long]) but stores the cache in a **distinct named** Surface_mesh property map to avoid
  * the dynamic_vertex_property_t key collision in CGAL's own class.
  *
+ * Optional ICC neighborhood (mutually exclusive):
+ * - @a icc_neighborhood_rings **>= 1**: sum face measures over a **k-ring** of faces (hop 1 =
+ *   incident faces). Euclidean `ball_radius` is ignored.
+ * - @a icc_neighborhood_rings **== 0**: use ICC `ball_radius` (@a icc_ball_radius). Negative
+ *   (default **-1**) is incident faces only. **0** becomes a tiny epsilon times average edge
+ *   length. **> 0** is a Euclidean ball (model units) with faces weighted by inclusion ratio.
+ *
+ * This is the curvature-estimation scale; it is not Expansion ratio (`neighbor_max_ratio`), which
+ * only limits adjacent *sizing* jumps after targets are computed.
+ *
  * Optional neighbor ratio limit: when @a neighbor_max_ratio > 1 in the constructor, targets are
  * relaxed so along every mesh edge neither endpoint exceeds R times the other (only reductions).
  * Implemented as multi-source multiplicative Dijkstra achieving
@@ -83,13 +93,16 @@ public:
   template <typename FaceRange>
   FeatureAwareAdaptiveSizingField(FT tol, std::pair<FT, FT> bounds, const FaceRange& face_range,
     CGAL_Surface& mesh, FT neighbor_max_ratio = FT(0), bool scale_to_range = false,
-    std::vector<FT>* uncapped_sizes_out = nullptr)
+    std::vector<FT>* uncapped_sizes_out = nullptr, FT icc_ball_radius = FT(-1),
+    int icc_neighborhood_rings = 0)
     : tol_g_(tol)
     , short_g_(bounds.first)
     , long_g_(bounds.second)
     , neighbor_max_ratio_(neighbor_max_ratio)
     , scale_to_range_(scale_to_range)
     , uncapped_sizes_out_(uncapped_sizes_out)
+    , icc_ball_radius_(icc_ball_radius)
+    , icc_neighborhood_rings_(icc_neighborhood_rings > 0 ? icc_neighborhood_rings : 0)
   {
     map_g_ =
       mesh.template add_property_map<vertex_descriptor, FT>("v:vespa_size_global", FT(0)).first;
@@ -208,17 +221,22 @@ private:
     auto curv_map   = get(CTag(), fg);
     const auto vn_opt =
       mesh.property_map<vertex_descriptor, CGAL_Kernel::Vector_3>("v:vespa_icc_normal");
+    const FT radiusForIcc =
+      (icc_neighborhood_rings_ >= 1) ? FT(-1) : icc_ball_radius_;
     if (vn_opt.has_value())
     {
       vespa_shyx::custom_interpolated_corrected_curvatures(fg,
         pmp_sf::parameters::vertex_principal_curvatures_and_directions_map(curv_map)
-          .vertex_normal_map(*vn_opt),
-        &mesh);
+          .vertex_normal_map(*vn_opt)
+          .ball_radius(radiusForIcc),
+        &mesh, icc_neighborhood_rings_);
     }
     else
     {
-      vespa_shyx::custom_interpolated_corrected_curvatures(
-        fg, pmp_sf::parameters::vertex_principal_curvatures_and_directions_map(curv_map), &mesh);
+      vespa_shyx::custom_interpolated_corrected_curvatures(fg,
+        pmp_sf::parameters::vertex_principal_curvatures_and_directions_map(curv_map)
+          .ball_radius(radiusForIcc),
+        &mesh, icc_neighborhood_rings_);
     }
 
     if (uncapped_sizes_out_)
@@ -440,6 +458,8 @@ private:
   FT       neighbor_max_ratio_;
   bool     scale_to_range_   = false;
   std::vector<FT>* uncapped_sizes_out_ = nullptr;
+  FT       icc_ball_radius_ = FT(-1);
+  int      icc_neighborhood_rings_ = 0;
   static constexpr int gradient_limit_sweeps_ = 32;
 };
 
