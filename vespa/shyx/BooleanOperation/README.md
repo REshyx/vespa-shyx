@@ -2,6 +2,6 @@
 
 菜单 **SHYX Boolean (CGAL, relaxed)**。CGAL 布尔的 relaxed 版本，**不因网格开放而直接 abort**；CGAL 仍可能失败。封闭且要严格自交策略时用上游 VESPA Boolean。
 
-两个 `vtkPolyData` 输入：**Input** 与 **Source**（Tool mesh）。`OperationType`：0 Difference（默认）、1 Intersection、2 Union。`ThrowOnSelfIntersection` 默认关。
+两个 `vtkPolyData` 输入：**Input** 与 **Source**（Tool mesh）。`OperationType`：0 Difference（默认）、1 Intersection、2 Union。`FillHolesBeforeBoolean` 默认关：勾选后在布尔前对两侧用 CGAL `triangulate_hole` 填边界环（close / fill hole，不做 refine/fair）。`ThrowOnSelfIntersection` 默认关。
 
 详见同目录 `SHYXBooleanOperationFilter.xml`。

@@ -61,7 +61,7 @@
 | SHYX Alpha Wrapping | 与 VESPA Alpha Wrapping 成对；Alpha/Offset 按包围盒自动建议；CGAL ≥ 5.5 |
 | SHYX Hole Fill (CGAL) | 与 VESPA Hole Filling 成对 |
 | SHYX Repair Degeneracies (CGAL) | |
-| SHYX Boolean (CGAL, relaxed) | 不要求封闭；与 VESPA Boolean 成对 |
+| SHYX Boolean (CGAL, relaxed) | 不要求封闭；可选合并前 close（fill hole），默认关；与 VESPA Boolean 成对 |
 | SHYX Shape Smoothing | 三算法；与 VESPA Shape Smoothing 成对 |
 | SHYX Edge Collapse (CGAL) | |
 | SHYX Subset Coarsen | 不加新点、存活点不动 |
@@ -700,7 +700,7 @@
 | **SHYX Alpha Wrapping** | CGAL ≥ 5.5；点云/三角汤 → 水密 2-流形。Alpha/Offset 默认 0 = 包围盒最长边的 5%/3%（BoundsDomain）；与 VESPA Alpha Wrapping 成对 |
 | **SHYX Hole Fill** | CGAL 补洞；与 VESPA Hole Filling 成对 |
 | **SHYX Repair Degeneracies** | CGAL 退化单元修复 |
-| **SHYX Boolean (relaxed)** | 不要求封闭 |
+| **SHYX Boolean (relaxed)** | 不要求封闭；可选合并前 close（fill hole），默认关 |
 | **SHYX Shape Smoothing** | MCF / Angle&Area / Fair 三算法 |
 | **SHYX Edge Collapse** | CGAL 边塌缩（存活点会移动） |
 | **SHYX Subset Coarsen** | 子集粗化：折叠到原端点，不加新点、存活点坐标不变；Cost Strategy：QEM / 最小角 |

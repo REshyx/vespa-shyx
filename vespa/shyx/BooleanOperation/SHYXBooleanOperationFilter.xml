@@ -5,10 +5,12 @@
                  label="SHYX Boolean (CGAL, relaxed)">
       <Documentation short_help="SHYX Boolean (CGAL, relaxed): CGAL union / intersection / difference without requiring closed meshes.">
         Wraps CGAL Polygon_mesh_processing corefinement booleans like the VESPA boolean filter, but
-        does not abort when meshes are open: it logs a warning and still calls CGAL. By default CGAL
-        is not asked to throw on self-intersection (unlike the strict VESPA filter). For badly
-        conditioned data the operation may still return failure or an empty / unexpected surface; use
-        advanced options to match VESPA-style strictness or to skip volume-orientation preprocessing.
+        does not abort when meshes are open: it logs a warning and still calls CGAL. Optional
+        Close (fill holes) before boolean (default off) triangulates boundary cycles on both inputs
+        first. By default CGAL is not asked to throw on self-intersection (unlike the strict VESPA
+        filter). For badly conditioned data the operation may still return failure or an empty /
+        unexpected surface; use advanced options to match VESPA-style strictness or to skip
+        volume-orientation preprocessing.
       </Documentation>
 
       <InputProperty name="Input" command="SetInputConnection">
@@ -47,6 +49,20 @@
           <Entry text="Intersection" value="1"/>
           <Entry text="Union" value="2"/>
         </EnumerationDomain>
+      </IntVectorProperty>
+
+      <IntVectorProperty command="SetFillHolesBeforeBoolean"
+                         name="FillHolesBeforeBoolean"
+                         label="Close (fill holes) before boolean"
+                         number_of_elements="1"
+                         default_values="0"
+                         animateable="0">
+        <BooleanDomain name="bool"/>
+        <Documentation>
+          When on, fill every boundary cycle on both Input and Tool meshes with CGAL triangulate_hole
+          before the boolean (no refine / fairing). Off by default. Incomplete fills log a warning
+          and still attempt the boolean (relaxed). For C1/C2 faired patches, run SHYX Hole Fill first.
+        </Documentation>
       </IntVectorProperty>
 
       <IntVectorProperty command="SetThrowOnSelfIntersection"

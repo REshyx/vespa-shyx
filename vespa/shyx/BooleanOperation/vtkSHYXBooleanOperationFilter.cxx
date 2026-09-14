@@ -7,14 +7,51 @@
 #include <vtkObjectFactory.h>
 #include <vtkPolyData.h>
 
+#include <CGAL/Polygon_mesh_processing/border.h>
 #include <CGAL/Polygon_mesh_processing/corefinement.h>
+#include <CGAL/Polygon_mesh_processing/triangulate_hole.h>
 
 #include <exception>
+#include <iterator>
 #include <memory>
+#include <vector>
 
 vtkStandardNewMacro(vtkSHYXBooleanOperationFilter);
 
 namespace pmp = CGAL::Polygon_mesh_processing;
+
+namespace
+{
+
+using Graph_halfedge = boost::graph_traits<CGAL_Surface>::halfedge_descriptor;
+
+enum class HoleFillStatus
+{
+  AlreadyClosed,
+  Closed,
+  Incomplete
+};
+
+HoleFillStatus FillBoundaryHoles(CGAL_Surface& surface)
+{
+  if (CGAL::is_closed(surface))
+  {
+    return HoleFillStatus::AlreadyClosed;
+  }
+
+  std::vector<Graph_halfedge> borderCycles;
+  pmp::extract_boundary_cycles(surface, std::back_inserter(borderCycles));
+
+  for (Graph_halfedge h : borderCycles)
+  {
+    // CGAL returns the face output iterator here, not bool.
+    pmp::triangulate_hole(surface, h);
+  }
+
+  return CGAL::is_closed(surface) ? HoleFillStatus::Closed : HoleFillStatus::Incomplete;
+}
+
+} // namespace
 
 //------------------------------------------------------------------------------
 vtkSHYXBooleanOperationFilter::vtkSHYXBooleanOperationFilter()
@@ -44,6 +81,8 @@ void vtkSHYXBooleanOperationFilter::PrintSelf(ostream& os, vtkIndent indent)
      << std::endl;
   os << indent << "OrientToBoundVolumeWhenNeeded: "
      << (this->OrientToBoundVolumeWhenNeeded ? "on" : "off") << std::endl;
+  os << indent << "FillHolesBeforeBoolean: " << (this->FillHolesBeforeBoolean ? "on" : "off")
+     << std::endl;
   this->Superclass::PrintSelf(os, indent);
 }
 
@@ -84,6 +123,30 @@ int vtkSHYXBooleanOperationFilter::RequestData(
   std::unique_ptr<vtkCGALHelper::Vespa_surface> cgalSourceMesh =
     std::make_unique<vtkCGALHelper::Vespa_surface>();
   vtkCGALHelper::toCGAL(sourceData, cgalSourceMesh.get());
+
+  if (this->FillHolesBeforeBoolean)
+  {
+    try
+    {
+      const HoleFillStatus inputFill = FillBoundaryHoles(cgalInputMesh->surface);
+      if (inputFill == HoleFillStatus::Incomplete)
+      {
+        vtkWarningMacro(
+          << "Input close (fill holes) did not produce a closed mesh; boolean may still fail.");
+      }
+      const HoleFillStatus sourceFill = FillBoundaryHoles(cgalSourceMesh->surface);
+      if (sourceFill == HoleFillStatus::Incomplete)
+      {
+        vtkWarningMacro(
+          << "Source close (fill holes) did not produce a closed mesh; boolean may still fail.");
+      }
+    }
+    catch (const std::exception& e)
+    {
+      vtkErrorMacro("CGAL exception while filling holes: " << e.what());
+      return 0;
+    }
+  }
 
   if (!CGAL::is_closed(cgalInputMesh->surface))
   {

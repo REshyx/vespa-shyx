@@ -51,6 +51,15 @@ public:
   vtkSetMacro(OrientToBoundVolumeWhenNeeded, bool);
   vtkBooleanMacro(OrientToBoundVolumeWhenNeeded, bool);
 
+  /**
+   * When true (default false), fill every boundary cycle on Input and Source with
+   * CGAL triangulate_hole before the boolean (close / fill holes). Refine and fairing are
+   * not applied; use SHYX Hole Fill if a faired patch is needed.
+   */
+  vtkGetMacro(FillHolesBeforeBoolean, bool);
+  vtkSetMacro(FillHolesBeforeBoolean, bool);
+  vtkBooleanMacro(FillHolesBeforeBoolean, bool);
+
   void SetSourceConnection(vtkAlgorithmOutput* algOutput);
 
 protected:
@@ -63,6 +72,7 @@ protected:
   int OperationType = vtkSHYXBooleanOperationFilter::DIFFERENCE;
   bool ThrowOnSelfIntersection = false;
   bool OrientToBoundVolumeWhenNeeded = true;
+  bool FillHolesBeforeBoolean = false;
 
 private:
   vtkSHYXBooleanOperationFilter(const vtkSHYXBooleanOperationFilter&) = delete;

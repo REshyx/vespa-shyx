@@ -2101,7 +2101,10 @@ const ShyxExtra kShyxExtra[] = {
     "(one cluster per pass then re-detect, up to MaxPasses) and can hang on corefinement. "
     "Alpha and Offset are always absolute lengths; 0 (default) uses 0.1 times the longest AABB "
     "side of the patch being wrapped. Port1 Mesh Checker illegal primitives (SHYX_CheckReason 1/2/3)." },
-  { "SHYXBooleanOperationFilter", "Relaxed boolean; open meshes OK. Strict watertight meshes can use VESPA Boolean." },
+  { "SHYXBooleanOperationFilter",
+    "Relaxed boolean; open meshes OK. FillHolesBeforeBoolean (default off) triangulates boundary "
+    "cycles on Input and Source with CGAL triangulate_hole before the boolean. Strict watertight "
+    "meshes can use VESPA Boolean." },
   { "SHYXAlphaWrapping",
     "CGAL alpha wrap (CGAL>=5.5): point cloud or triangle soup -> watertight 2-manifold that "
     "strictly encloses the input. Same backend as VESPAAlphaWrapping; prefer this. Alpha and "
