@@ -15,13 +15,12 @@
           outside the chosen range act as boundary conditions, exactly preserving everything else.
 
         Constrained vertices come from the same threshold-based feature extraction as
-        SHYX Adaptive Isotropic Remesher: sharp edges via Protection Angle (signed dihedral side
-        filter optional), and an optional Feature Mask (point/cell array threshold) which drops
-        sharp edges leaving the mask, adds mask-region boundary edges as feature edges, and
-        contributes sharp endpoints inside the mask threshold patch as anchor positions snapped
-        within Anchor Tolerance of the bounding box length. The Detect feature edges master
-        toggle disables both sources at once; with it OFF, no constraints are produced from the
-        feature pipeline.
+        SHYX Adaptive Isotropic Remesher, but Detect feature edges is OFF by default so no
+        constraints are produced until it is turned ON. When ON: sharp edges via Protection
+        Angle (signed dihedral side filter optional), and an optional Feature Mask (point/cell
+        array threshold) which drops sharp edges leaving the mask, adds mask-region boundary
+        edges as feature edges, and contributes sharp endpoints inside the mask threshold patch
+        as anchor positions snapped within Anchor Tolerance of the bounding box length.
 
         Output port 0: smoothed surface. Output port 1: feature diagnostic (lines = feature edges,
         verts = constrained feature vertices).
@@ -83,16 +82,17 @@
                          name="DetectFeatureEdges"
                          label="Detect feature edges"
                          number_of_elements="1"
-                         default_values="1"
+                         default_values="0"
                          animateable="0">
         <BooleanDomain name="bool"/>
         <Documentation>
           Master switch for sharp-edge / feature-mask constraints (mirrors SHYX Adaptive Isotropic
-          Remesher). When ON (default), CGAL detect_sharp_edges (Protection angle / Sharp side
-          filter) and feature-mask region/boundary contributions populate the constrained edge map
-          and the constrained vertex map used by the smoother. When OFF, none of those sources
-          contribute; SHAPE_MCF and ANGLE_AND_AREA run unconstrained, FAIR fails with the "every
-          vertex would be moved" error unless the input has another natural boundary condition.
+          Remesher). When OFF (default), none of those sources contribute; SHAPE_MCF and
+          ANGLE_AND_AREA run unconstrained, FAIR fails with the "every vertex would be moved"
+          error unless the input has another natural boundary condition. When ON, CGAL
+          detect_sharp_edges (Protection angle / Sharp side filter) and feature-mask
+          region/boundary contributions populate the constrained edge map and the constrained
+          vertex map used by the smoother.
         </Documentation>
       </IntVectorProperty>
 

@@ -24,7 +24,7 @@
  *   only the (mask-region, non-constrained) vertices move, so the rest of the mesh is preserved
  *   exactly.
  *
- * Constrained vertices come from
+ * Constrained vertices come from DetectFeatureEdges (default OFF). When ON:
  *  - sharp edges via `pmp::detect_sharp_edges(ProtectAngle)` filtered by `SharpFeatureSideFilter`
  *    (signed dihedral angle, like vtkSHYXAdaptiveIsotropicRemesher),
  *  - optional Feature Mask: tuple-magnitude threshold on a point/cell array; mask-region boundary
@@ -113,13 +113,12 @@ public:
   //@{
   /**
    * Master switch for sharp-edge / feature-mask constraints (mirrors
-   * vtkSHYXAdaptiveIsotropicRemesher::DetectFeatureEdges). When true (default), CGAL
-   * detect_sharp_edges (ProtectAngle / SharpFeatureSideFilter) and feature-mask
-   * region/boundary contributions populate the constrained edge map and constrained
-   * vertex map used by the selected smoother. When false, none of those sources contribute;
-   * featureEdges and vertexConstrained stay empty, so SHAPE_MCF and ANGLE_AND_AREA run with
-   * no constraints, FAIR triggers the "every vertex would be moved" error unless the mesh
-   * has another natural boundary.
+   * vtkSHYXAdaptiveIsotropicRemesher::DetectFeatureEdges). When false (default), none of
+   * those sources contribute; featureEdges and vertexConstrained stay empty, so SHAPE_MCF
+   * and ANGLE_AND_AREA run unconstrained, FAIR triggers the "every vertex would be moved"
+   * error unless the mesh has another natural boundary. When true, CGAL detect_sharp_edges
+   * (ProtectAngle / SharpFeatureSideFilter) and feature-mask region/boundary contributions
+   * populate the constrained edge map and constrained vertex map used by the smoother.
    */
   vtkGetMacro(DetectFeatureEdges, bool);
   vtkSetMacro(DetectFeatureEdges, bool);
@@ -265,7 +264,7 @@ protected:
   int    SharpFeatureSideFilter = 0;
   double AnchorTolerance        = 1e-4;
 
-  bool   DetectFeatureEdges    = true;
+  bool   DetectFeatureEdges    = false;
   bool   FeatureMaskEnabled    = false;
   char*  FeatureMaskArrayName  = nullptr;
   double FeatureMaskThreshold  = 0.0;

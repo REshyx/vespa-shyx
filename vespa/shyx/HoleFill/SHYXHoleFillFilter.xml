@@ -4,11 +4,13 @@
                  class="vtkSHYXHoleFillFilter"
                  label="SHYX Hole Fill (CGAL)">
       <Documentation short_help="SHYX Hole Fill (CGAL): Fill holes (or a selected patch) on a surface using CGAL PMP.">
-        Fills mesh boundary cycles with CGAL triangulate_refine_and_fair_hole (same pipeline as
-        vtkCGALPatchFilling). Accepts any vtkDataSet; non-PolyData inputs are converted to a surface
-        with vtkGeometryFilter first. Optional Selection removes triangles or points first (e.g. to
-        open a tunnel or delete a patch). Input should be a manifold triangle mesh where possible;
-        output replaces the surface including new fill triangles.
+        Fills mesh boundary cycles with CGAL triangulate_refine_and_fair_hole. By default runs the
+        same polygon-soup cleanup as SHYX Mesh Checker (orient_polygon_soup + repair_polygon_soup)
+        so duplicate vertices on a hole rim become a fillable cycle; without that, filling the raw
+        mesh is often a silent no-op. Accepts any vtkDataSet; non-PolyData inputs are converted to a
+        surface with vtkGeometryFilter first. Optional Selection removes triangles or points first
+        (applied before soup repair). Creating the filter copies the Input's active selection into
+        the Selection widget. Output is the repaired surface plus new fill triangles.
       </Documentation>
 
       <InputProperty name="Input" command="SetInputConnection">
@@ -38,6 +40,21 @@
         </Hints>
       </InputProperty>
 
+      <IntVectorProperty command="SetRepairPolygonSoup"
+                         name="RepairPolygonSoup"
+                         label="Repair polygon soup first"
+                         number_of_elements="1"
+                         default_values="1"
+                         animateable="0">
+        <BooleanDomain name="bool"/>
+        <Documentation>
+          Default on. Same as Mesh Checker: orient_polygon_soup then repair_polygon_soup (weld
+          duplicates, drop degenerate/duplicate faces), then polygon_soup_to_polygon_mesh, then fill
+          every boundary cycle. Turn off to pass the raw surface to vtkCGALPatchFilling (Euler
+          add_face); duplicate vertices around a hole then often produce no fill and no error.
+        </Documentation>
+      </IntVectorProperty>
+
       <IntVectorProperty command="SetFairingContinuity"
                          name="FairingContinuity"
                          label="Fairing Continuity"
@@ -53,6 +70,7 @@
 
       <Hints>
         <ShowInMenu category="SHYX" icon=":/VESPA/SHYX_Hole_Fill.png"/>
+        <InitializationHelper class="vtkSMExtractSelectionProxyInitializationHelper"/>
       </Hints>
     </SourceProxy>
   </ProxyGroup>

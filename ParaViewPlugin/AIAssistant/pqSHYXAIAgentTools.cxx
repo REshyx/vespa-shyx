@@ -2112,8 +2112,15 @@ const ShyxExtra kShyxExtra[] = {
     "side (BoundsDomain scaled_extent; Scale/Reset fills the suggestion). No "
     "UseAbsoluteThresholds / percent-of-diagonal mode. Field data SHYXAlphaWrappingAlpha and "
     "SHYXAlphaWrappingOffset record the values used." },
-  { "SHYXHoleFillFilter", "SHYX hole fill; new pipelines prefer this over VESPA Hole Filling." },
-  { "SHYXShapeSmoothing", "Three algorithms (MCF / Angle&Area / Fair). VESPA Shape Smoothing is MCF only." },
+  { "SHYXHoleFillFilter",
+    "SHYX hole fill; new pipelines prefer this over VESPA Hole Filling. RepairPolygonSoup "
+    "(default on) is the same orient+repair_polygon_soup path as Mesh Checker port 0; raw "
+    "duplicate-vertex rims otherwise often fill nothing with no error. Selection is copied at "
+    "create (InitializationHelper)." },
+  { "SHYXShapeSmoothing",
+    "Three algorithms (MCF / Angle&Area / Fair). VESPA Shape Smoothing is MCF only. "
+    "DetectFeatureEdges is OFF by default (no detect_sharp_edges / feature-mask constraints; "
+    "port 1 empty)." },
   { "SHYXSubsetCoarsen",
     "Triangle coarsen that never inserts Steiner points and never moves survivors: CGAL "
     "edge_collapse onto an original endpoint. CostStrategy 0 Plane QEM (default, geometric "

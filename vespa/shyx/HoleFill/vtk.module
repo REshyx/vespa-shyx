@@ -1,13 +1,14 @@
 NAME
   vtkSHYXHoleFillFilter
 DESCRIPTION
-  "SHYX: CGAL PMP hole / boundary fill (triangulate_refine_and_fair_hole), wraps vtkCGALPatchFilling."
+  "SHYX: CGAL PMP hole fill; default soup repair (as Mesh Checker) then triangulate_refine_and_fair_hole."
 GROUPS
   Meshing
 DEPENDS
   vtkCGALAlgorithm
   vtkCGALPMP
   VTK::FiltersCore
+  VTK::FiltersExtraction
   VTK::FiltersGeometry
 PRIVATE_DEPENDS
   VTK::CommonCore

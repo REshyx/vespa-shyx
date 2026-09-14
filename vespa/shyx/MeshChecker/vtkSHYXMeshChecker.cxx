@@ -278,14 +278,28 @@ void append_boundary_polylines(const CGAL_Surface& mesh, const Graph_Coord& coor
       continue;
     }
 
+    // Combinatorial cycles walk back to start; VTK_POLY_LINE only draws consecutive ids, so
+    // repeat the first point or the closing border edge is missing in the view.
+    const bool is_cycle = (cur == start);
+    const vtkIdType nPts = static_cast<vtkIdType>(cycle.size());
+    const vtkIdType nIds = is_cycle ? nPts + 1 : nPts;
     vtkNew<vtkPolyLine> poly;
-    poly->GetPointIds()->SetNumberOfIds(static_cast<vtkIdType>(cycle.size()));
-    for (vtkIdType i = 0; i < static_cast<vtkIdType>(cycle.size()); ++i)
+    poly->GetPointIds()->SetNumberOfIds(nIds);
+    vtkIdType firstPid = -1;
+    for (vtkIdType i = 0; i < nPts; ++i)
     {
       const auto& p = get(coords, cycle[static_cast<std::size_t>(i)]);
       const vtkIdType pid = pts->InsertNextPoint(
         CGAL::to_double(p.x()), CGAL::to_double(p.y()), CGAL::to_double(p.z()));
       poly->GetPointIds()->SetId(i, pid);
+      if (i == 0)
+      {
+        firstPid = pid;
+      }
+    }
+    if (is_cycle && firstPid >= 0)
+    {
+      poly->GetPointIds()->SetId(nPts, firstPid);
     }
     lines->InsertNextCell(poly);
     reason->InsertNextTuple1(reason_value);
