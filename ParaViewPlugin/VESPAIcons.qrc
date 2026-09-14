@@ -28,6 +28,7 @@
     <file alias="SHYX_Partitioned_Collection_Boundary_Fields.png">../icon/SHYX_Partitioned_Collection_Boundary_Fields.png</file>
     <file alias="SHYX_Partitioned_Collection_Wsl_Simulation.png">../icon/SHYX_Partitioned_Collection_Wsl_Simulation.png</file>
     <file alias="SHYX_Point_Cloud_Surface_SDF.png">../icon/SHYX_Point_Cloud_Surface_SDF.png</file>
+    <file alias="SHYX_Extrude.png">../icon/SHYX_Point_Extrude.png</file>
     <file alias="SHYX_Point_Extrude.png">../icon/SHYX_Point_Extrude.png</file>
     <file alias="SHYX_Radius_Neighbor_Count.png">../icon/SHYX_Radius_Neighbor_Count.png</file>
     <file alias="SHYX_Partitioned_Collection_Boundary_Assignment.png">../icon/SHYX_Partitioned_Collection_Boundary_Assignment_fluent.png</file>

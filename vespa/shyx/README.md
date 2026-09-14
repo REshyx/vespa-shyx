@@ -16,7 +16,7 @@ SHYX 是本仓库里 **一个作者命名空间**（[`vespa/shyx/`](.)），不�
 * [**Convex Hull**](./ConvexHullFilter/README.md)
 * [**Resample Lines**](./ResampleLines/README.md) — 线网按弧长间距重采样；可选 Fuse；短分支保留两端
 * [**Disconnected Region Fuse**](./DisconnectedRegionFuse/README.md)
-* [**Selection Extrude**](./SelectionExtrude/README.md) / [**Selection Append Patches**](./SelectionAppendPatches/README.md) / [**Point Extrude**](./PointExtrude/README.md) / [**Delete Selected Cells**](./DeleteSelectedCells/README.md) / [**Extract Selection**](./ExtractSelectedCells/README.md) / [**Flip Selected Cells Winding**](./FlipSelectedCellsWinding/README.md)
+* [**Selection Extrude**](./SelectionExtrude/README.md) / [**Extrude**](./Extrude/README.md) / [**Selection Append Patches**](./SelectionAppendPatches/README.md) / [**Delete Selected Cells**](./DeleteSelectedCells/README.md) / [**Extract Selection**](./ExtractSelectedCells/README.md) / [**Flip Selected Cells Winding**](./FlipSelectedCellsWinding/README.md)
 * [**Selection: Fill, Alpha Wrap, Union**](./SelectionFillAlphaReunion/README.md) — CGAL ≥ 5.5；Alpha/Offset 默认 0 = 选区 AABB 最长边的 10%；Reset 按选区（[`SelectionBoundsDomain`](./SelectionBoundsDomain/README.md)）
 * [**Minimum OBB**](./MinimumOBB/README.md)
 * [**Enhanced Ruler**](./EnhancedRuler/README.md)

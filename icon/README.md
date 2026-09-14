@@ -39,7 +39,7 @@
 | <img src="SHYX_Partitioned_Collection_Boundary_Fields.png" width="72" alt="SHYX_Partitioned_Collection_Boundary_Fields.png"> | `SHYX_Partitioned_Collection_Boundary_Fields.png` | 128×128 PNG |  |
 | <img src="SHYX_Partitioned_Collection_Wsl_Simulation.png" width="72" alt="SHYX_Partitioned_Collection_Wsl_Simulation.png"> | `SHYX_Partitioned_Collection_Wsl_Simulation.png` | 128×128 PNG |  |
 | <img src="SHYX_Point_Cloud_Surface_SDF.png" width="72" alt="SHYX_Point_Cloud_Surface_SDF.png"> | `SHYX_Point_Cloud_Surface_SDF.png` | 128×128 PNG |  |
-| <img src="SHYX_Point_Extrude.png" width="72" alt="SHYX_Point_Extrude.png"> | `SHYX_Point_Extrude.png` | 128×128 PNG |  |
+| <img src="SHYX_Point_Extrude.png" width="72" alt="SHYX_Point_Extrude.png"> | `SHYX_Point_Extrude.png` | 128×128 PNG | qrc 另作 `SHYX_Extrude.png` |
 | <img src="SHYX_Radius_Neighbor_Count.png" width="72" alt="SHYX_Radius_Neighbor_Count.png"> | `SHYX_Radius_Neighbor_Count.png` | 128×128 PNG |  |
 | <img src="SHYX_Repair_Degeneracies.png" width="72" alt="SHYX_Repair_Degeneracies.png"> | `SHYX_Repair_Degeneracies.png` | 128×128 PNG |  |
 | <img src="SHYX_Selection_Extrude.png" width="72" alt="SHYX_Selection_Extrude.png"> | `SHYX_Selection_Extrude.png` | 128×128 PNG |  |
@@ -120,4 +120,4 @@
 | :---: | --- | --- | --- |
 | <img src="SHYX_Vascular_fluent_set.png" width="160" alt="SHYX_Vascular_fluent_set.png"> | `SHYX_Vascular_fluent_set.png` | 1536×1024 PNG | 血管 fluent 拼图源，未进 qrc |
 
-另外：`VESPAIcons.qrc` 里 `SHYX_Selection_Append_Patches.png` 与 `SHYX_Selection_Extrude.png` 共用 `SHYX_Selection_Extrude.png`。
+另外：`VESPAIcons.qrc` 里 `SHYX_Selection_Append_Patches.png` 与 `SHYX_Selection_Extrude.png` 共用 `SHYX_Selection_Extrude.png`；`SHYX_Extrude.png` 共用 `SHYX_Point_Extrude.png`。

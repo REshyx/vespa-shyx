@@ -70,7 +70,7 @@
 | SHYX Convex Hull | |
 | SHYX Resample Lines | 线网等距重采样；可选 Fuse；短分支保留两端 |
 | SHYX Disconnected Region Fuse | |
-| SHYX Selection Extrude / Point Extrude | |
+| SHYX Selection Extrude / Extrude | Extrude 接替 Point Extrude：Point/Poly + Front/Side/Back |
 | SHYX Selection Append Patches | 选区 / 管线 / box·sphere 抽出为 PDC patch |
 | SHYX Delete Selected Cells / Extract Selection / Flip Selected Cells Winding | Extract 按选区输出 PolyData 或 UnstructuredGrid，不强制 UG；Delete/Extract 均可 Invert Selection |
 | SHYX Selection: Fill, Alpha Wrap, Union | CGAL ≥ 5.5；Alpha/Offset 默认 0 = 选区 AABB 最长边 10% |
@@ -707,7 +707,8 @@
 | **SHYX Remesh With Endpoint** | Vascular 第 4 步；CGAL ≥ 6；与 Adaptive Remesher 同模块 |
 | **SHYX Convex Hull** | 纯 VTK 凸包 |
 | **SHYX Resample Lines** | 线网按 Sample Distance 重采样；Fuse 默认开（容差 1e-6×包围盒最长边）；度≠2 为特征点；短于间距的分支只留两端 |
-| **SHYX Selection / Point Extrude** | 选区挤出 / **全部顶点**沿法线或矢量位移（Point Extrude 无选区端口） |
+| **SHYX Selection Extrude** | 选区连通块挤出（共享帽顶点） |
+| **SHYX Extrude** | Point（点法线，默认同地挪点）/ Poly（面法线鳞片）；Front/Side/Back；选区或 Threshold mask |
 | **SHYX Selection Append Patches** | 选区 / 管线几何 / box·sphere 进 PDC；不收未选父网格单元 |
 | **SHYX Delete / Flip Selected Cells** | 删单元 / 翻转绕向 |
 | **SHYX Selection: Fill, Alpha Wrap, Union** | CGAL ≥ 5.5；Alpha/Offset 默认 0 = 选区 AABB 最长边的 10%；Reset 按选区（`SHYXSelectionBoundsDomain`） |

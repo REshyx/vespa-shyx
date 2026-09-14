@@ -1,0 +1,327 @@
+<ServerManagerConfiguration>
+  <ProxyGroup name="filters">
+    <SourceProxy name="SHYXExtrudeFilter"
+                 class="vtkSHYXExtrudeFilter"
+                 label="SHYX Extrude">
+      <Documentation
+          long_help="Extrudes vtkPolyData as Point (shared vertices along point normals or a point vector array) or Poly (each polygon independently along its face normal, unique vertices per face). Region comes from the Selection port if present, else a point- or cell-data mask using vtkThreshold-style Between / Below Lower / Above Upper, else the whole mesh. Invert flips that set. Output Front / Side / Back are independent: Front is the cap; Side is walls (Point: one ring on the patch boundary; Poly: every scale edge back to the original vertices); Back keeps the original selected faces (reversed when Front is also on). Point with only Front on is in-place displacement (a subset stretches neighboring faces). Creating the filter copies the Input's active selection into the Selection widget."
+          short_help="SHYX Extrude: Point (vertex normals) or Poly (face-normal scales); Front/Side/Back; Threshold mask or selection."/>
+
+      <InputProperty name="Input" command="SetInputConnection">
+        <ProxyGroupDomain name="groups">
+          <Group name="sources"/>
+          <Group name="filters"/>
+        </ProxyGroupDomain>
+        <DataTypeDomain name="input_type">
+          <DataType value="vtkPolyData"/>
+        </DataTypeDomain>
+        <InputArrayDomain name="point_arrays" attribute_type="point" optional="1"/>
+        <InputArrayDomain name="mask_arrays" optional="1"/>
+        <Documentation>Surface or polygonal vtkPolyData.</Documentation>
+      </InputProperty>
+
+      <InputProperty name="Selection" label="Selection"
+                     command="SetSourceConnection">
+        <ProxyGroupDomain name="groups">
+          <Group name="sources"/>
+          <Group name="filters"/>
+        </ProxyGroupDomain>
+        <DataTypeDomain name="input_type">
+          <DataType value="vtkSelection"/>
+        </DataTypeDomain>
+        <Documentation>
+          Optional vtkSelection. Used when present; otherwise the Threshold mask, otherwise all.
+          Filled at create from the Input's active selection.
+        </Documentation>
+        <Hints>
+          <SelectionInput/>
+        </Hints>
+      </InputProperty>
+
+      <IntVectorProperty name="ExtrudeType"
+                         label="Type"
+                         command="SetExtrudeType"
+                         number_of_elements="1"
+                         default_values="0"
+                         animateable="0">
+        <EnumerationDomain name="enum">
+          <Entry text="Point" value="0"/>
+          <Entry text="Poly" value="1"/>
+        </EnumerationDomain>
+        <Documentation>
+          Point: shared vertices along point normals (or a point vector). Poly: each face along
+          its own face normal with unique vertices (scales / hedgehog).
+        </Documentation>
+      </IntVectorProperty>
+
+      <IntVectorProperty name="OutputFront"
+                         label="Output Front"
+                         command="SetOutputFront"
+                         number_of_elements="1"
+                         default_values="1"
+                         animateable="0">
+        <BooleanDomain name="bool"/>
+        <Documentation>
+          Extruded cap. Point with Side and Back off: move existing points in place.
+        </Documentation>
+      </IntVectorProperty>
+
+      <IntVectorProperty name="OutputSide"
+                         label="Output Side"
+                         command="SetOutputSide"
+                         number_of_elements="1"
+                         default_values="0"
+                         animateable="0">
+        <BooleanDomain name="bool"/>
+        <Documentation>
+          Side walls. Point: one ring on the selected patch boundary. Poly: each scale edge
+          connects back to the original vertices (adjacent selected faces stay split).
+        </Documentation>
+      </IntVectorProperty>
+
+      <IntVectorProperty name="OutputBack"
+                         label="Output Back"
+                         command="SetOutputBack"
+                         number_of_elements="1"
+                         default_values="0"
+                         animateable="0">
+        <BooleanDomain name="bool"/>
+        <Documentation>
+          Keep the original selected faces. Reversed when Output Front is also on so a closed
+          prism has outward winding.
+        </Documentation>
+      </IntVectorProperty>
+
+      <DoubleVectorProperty name="ExtrusionDistance"
+                            label="Extrusion Distance"
+                            command="SetExtrusionDistance"
+                            number_of_elements="1"
+                            default_values="1.0"
+                            animateable="1">
+        <DoubleRangeDomain name="range" min="-1e12" max="1e12"/>
+        <Documentation>
+          Signed displacement length. Optional multiplier array scales this per point (Point) or
+          per face (Poly).
+        </Documentation>
+      </DoubleVectorProperty>
+
+      <IntVectorProperty name="FlipDirection"
+                         label="Flip Direction"
+                         command="SetFlipDirection"
+                         number_of_elements="1"
+                         default_values="0"
+                         animateable="0">
+        <BooleanDomain name="bool"/>
+        <Documentation>Negate the unit direction before applying distance.</Documentation>
+      </IntVectorProperty>
+
+      <IntVectorProperty name="UseNormalsForDirection"
+                         label="Use Normals For Direction"
+                         command="SetUseNormalsForDirection"
+                         number_of_elements="1"
+                         default_values="1"
+                         animateable="0">
+        <BooleanDomain name="bool"/>
+        <Documentation>
+          Point type: on = vtkPolyDataNormals; off = Direction Array. Ignored for Poly (face normals).
+        </Documentation>
+        <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="visibility"
+                                   property="ExtrudeType"
+                                   value="0"/>
+        </Hints>
+      </IntVectorProperty>
+
+      <StringVectorProperty name="DirectionArrayName"
+                            label="Direction Array"
+                            command="SetDirectionArrayName"
+                            number_of_elements="1"
+                            default_values=""
+                            animateable="0">
+        <ArrayListDomain name="array_list"
+                         attribute_type="Vectors"
+                         input_domain_name="point_arrays">
+          <RequiredProperties>
+            <Property name="Input" function="Input"/>
+          </RequiredProperties>
+        </ArrayListDomain>
+        <Documentation>
+          3-component point vector; required when Type is Point and Use Normals is off.
+        </Documentation>
+        <Hints>
+          <PropertyWidgetDecorator type="CompositeDecorator">
+            <Expression type="and">
+              <PropertyWidgetDecorator type="GenericDecorator"
+                                       mode="visibility"
+                                       property="ExtrudeType"
+                                       value="0"/>
+              <PropertyWidgetDecorator type="GenericDecorator"
+                                       mode="visibility"
+                                       property="UseNormalsForDirection"
+                                       value="0"/>
+            </Expression>
+          </PropertyWidgetDecorator>
+          <ArraySelectionWidget icon_type="point"/>
+        </Hints>
+      </StringVectorProperty>
+
+      <IntVectorProperty name="UseDistanceMultiplierArray"
+                         label="Use Distance Multiplier Array"
+                         command="SetUseDistanceMultiplierArray"
+                         number_of_elements="1"
+                         default_values="0"
+                         animateable="0">
+        <BooleanDomain name="bool"/>
+        <Documentation>
+          Scale Extrusion Distance by a scalar array (Point: point data; Poly: cell data if the
+          same name exists, otherwise average of corner point values).
+        </Documentation>
+      </IntVectorProperty>
+
+      <StringVectorProperty name="DistanceMultiplierArrayName"
+                            label="Distance Multiplier Array"
+                            command="SetDistanceMultiplierArrayName"
+                            number_of_elements="1"
+                            default_values=""
+                            animateable="0">
+        <ArrayListDomain name="array_list"
+                         input_domain_name="mask_arrays">
+          <RequiredProperties>
+            <Property name="Input" function="Input"/>
+          </RequiredProperties>
+        </ArrayListDomain>
+        <Documentation>Scalar (first component) used as a per-point or per-face multiplier.</Documentation>
+        <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="visibility"
+                                   property="UseDistanceMultiplierArray"
+                                   value="1"/>
+          <ArraySelectionWidget/>
+        </Hints>
+      </StringVectorProperty>
+
+      <StringVectorProperty name="MaskArrayName"
+                            label="Mask Array"
+                            command="SetMaskArrayName"
+                            number_of_elements="1"
+                            default_values=""
+                            animateable="0">
+        <ArrayListDomain name="array_list"
+                         input_domain_name="mask_arrays">
+          <RequiredProperties>
+            <Property name="Input" function="Input"/>
+          </RequiredProperties>
+        </ArrayListDomain>
+        <Documentation>
+          Used when Selection is empty. Point- or cell-centered; same name on both prefers cell data.
+          Tuple magnitude compared with Lower / Between / Upper.
+        </Documentation>
+        <Hints>
+          <ArraySelectionWidget/>
+        </Hints>
+      </StringVectorProperty>
+
+      <IntVectorProperty name="ThresholdMethod"
+                         label="Threshold Method"
+                         command="SetThresholdMethod"
+                         number_of_elements="1"
+                         default_values="0"
+                         animateable="0">
+        <EnumerationDomain name="enum">
+          <Entry text="Between" value="0"/>
+          <Entry text="Below Lower" value="1"/>
+          <Entry text="Above Upper" value="2"/>
+        </EnumerationDomain>
+        <Documentation>
+          vtkThreshold-style test on the mask array: x in [Lower, Upper], x &lt;= Lower, or x &gt;= Upper.
+        </Documentation>
+      </IntVectorProperty>
+
+      <DoubleVectorProperty name="LowerThreshold"
+                            label="Lower Threshold"
+                            command="SetLowerThreshold"
+                            number_of_elements="1"
+                            default_values="0.0"
+                            animateable="1">
+        <DoubleRangeDomain name="range" min="-1e308" max="1e308"/>
+        <Documentation>Used by Between and Below Lower.</Documentation>
+        <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="visibility"
+                                   property="ThresholdMethod"
+                                   values="0 1"/>
+        </Hints>
+      </DoubleVectorProperty>
+
+      <DoubleVectorProperty name="UpperThreshold"
+                            label="Upper Threshold"
+                            command="SetUpperThreshold"
+                            number_of_elements="1"
+                            default_values="1.0"
+                            animateable="1">
+        <DoubleRangeDomain name="range" min="-1e308" max="1e308"/>
+        <Documentation>Used by Between and Above Upper.</Documentation>
+        <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="visibility"
+                                   property="ThresholdMethod"
+                                   values="0 2"/>
+        </Hints>
+      </DoubleVectorProperty>
+
+      <IntVectorProperty name="AllScalars"
+                         label="All Scalars"
+                         command="SetAllScalars"
+                         number_of_elements="1"
+                         default_values="0"
+                         animateable="0">
+        <BooleanDomain name="bool"/>
+        <Documentation>
+          Point-centered mask to faces: all corners must pass vs any corner. Cell-centered mask
+          to points: all incident cells vs any.
+        </Documentation>
+      </IntVectorProperty>
+
+      <IntVectorProperty name="Invert"
+                         label="Invert"
+                         command="SetInvert"
+                         number_of_elements="1"
+                         default_values="0"
+                         animateable="0">
+        <BooleanDomain name="bool"/>
+        <Documentation>Invert the resolved region (selection, mask, or all) before extruding.</Documentation>
+      </IntVectorProperty>
+
+      <PropertyGroup label="Type and output">
+        <Property name="ExtrudeType"/>
+        <Property name="OutputFront"/>
+        <Property name="OutputSide"/>
+        <Property name="OutputBack"/>
+      </PropertyGroup>
+
+      <PropertyGroup label="Distance and direction">
+        <Property name="ExtrusionDistance"/>
+        <Property name="FlipDirection"/>
+        <Property name="UseNormalsForDirection"/>
+        <Property name="DirectionArrayName"/>
+        <Property name="UseDistanceMultiplierArray"/>
+        <Property name="DistanceMultiplierArrayName"/>
+      </PropertyGroup>
+
+      <PropertyGroup label="Region (selection or threshold)">
+        <Property name="MaskArrayName"/>
+        <Property name="ThresholdMethod"/>
+        <Property name="LowerThreshold"/>
+        <Property name="UpperThreshold"/>
+        <Property name="AllScalars"/>
+        <Property name="Invert"/>
+      </PropertyGroup>
+
+      <Hints>
+        <ShowInMenu category="SHYX" icon=":/VESPA/SHYX_Extrude.png"/>
+        <InitializationHelper class="vtkSMExtractSelectionProxyInitializationHelper"/>
+      </Hints>
+    </SourceProxy>
+  </ProxyGroup>
+</ServerManagerConfiguration>

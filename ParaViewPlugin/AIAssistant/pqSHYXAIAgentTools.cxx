@@ -2184,7 +2184,18 @@ const ShyxExtra kShyxExtra[] = {
     "and volume PointData/CellData as 0/shyx_<array> (NaN is not written: interior NaNs become 0; "
     "PointData is averaged only if every vertex is finite; any NaN on a face writes 0 so data "
     "does not bleed one cell onto neighbours; patch value lists follow polyMesh face order)." },
-  { "SHYXSelectionExtrudeFilter", "Needs an active 3D selection of cells." },
+  { "SHYXExtrudeFilter",
+    "Replaces SHYX Point Extrude. Type Point = shared vertices along point normals (or a point "
+    "vector array); Type Poly = each polygon along its face normal with unique vertices (scales). "
+    "Output Front/Side/Back: Front is the cap (Point with Side and Back off = in-place move); "
+    "Side = walls (Point: patch boundary ring; Poly: each scale edge back to original verts); "
+    "Back keeps original selected faces (reversed if Front is also on). Region: vtkSelection if "
+    "present, else Mask Array with Threshold Between/Below Lower/Above Upper, else all. Invert "
+    "flips the set. Old SHYXPointExtrudeFilter() is gone. SHYX Selection Extrude is still the "
+    "connected-patch tool along patch/point normals." },
+  { "SHYXSelectionExtrudeFilter",
+    "Connected-patch extrusion (shared cap vertices), not SHYX Extrude's Poly scales. "
+    "Needs an active 3D selection of cells (or Selection Cell Array Name)." },
   { "SHYXSelectionAppendPatches",
     "Add from selection snapshots the 3D-view cell selection into the Patches table (geo_N); "
     "Copy Active Selection is not required. Add from Celldata dropdown lists Input CellData "

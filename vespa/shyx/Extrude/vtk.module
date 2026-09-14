@@ -1,0 +1,12 @@
+NAME
+  vtkSHYXExtrudeFilter
+DESCRIPTION
+  "Point (vertex normals, shared verts) or Poly (face normals, per-face scales) extrusion with Threshold mask, vtkSelection, and Output Front/Side/Back."
+GROUPS
+  Meshing
+DEPENDS
+  VTK::CommonCore
+  VTK::CommonDataModel
+  VTK::CommonExecutionModel
+  VTK::FiltersCore
+  VTK::FiltersExtraction

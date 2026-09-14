@@ -51,8 +51,8 @@ Kitware 原版 CGAL 滤镜，全部需 **`VESPA_USE_CGAL`**，只作保留（对
 | SHYX Resample Lines | `vtkSHYXResampleLines` | ResampleLines | SHYXResampleLines.xml | 复用 Array Curve Mapper | [有](shyx/ResampleLines/README.md) | VTK |
 | SHYX Disconnected Region Fuse | `vtkSHYXDisconnectedRegionFuse` | DisconnectedRegionFuse | SHYXDisconnectedRegionFuse.xml | 自有 | [有](shyx/DisconnectedRegionFuse/README.md) | VTK |
 | SHYX Selection Extrude | `vtkSHYXSelectionExtrudeFilter` | SelectionExtrude | SHYXSelectionExtrude.xml | 自有 | [有](shyx/SelectionExtrude/README.md) | VTK |
+| SHYX Extrude | `vtkSHYXExtrudeFilter` | Extrude | SHYXExtrude.xml | 自有（复用 Point Extrude 图） | [有](shyx/Extrude/README.md) | VTK |
 | SHYX Selection Append Patches | `vtkSHYXSelectionAppendPatches` | SelectionAppendPatches | SHYXSelectionAppendPatches.xml | 自有（复用 Extrude 图） | [有](shyx/SelectionAppendPatches/README.md) | VTK |
-| SHYX Point Extrude | `vtkSHYXPointExtrudeFilter` | PointExtrude | SHYXPointExtrude.xml | 自有 | [有](shyx/PointExtrude/README.md) | VTK |
 | SHYX Delete Selected Cells | `vtkSHYXDeleteSelectedCellsFilter` | DeleteSelectedCells | SHYXDeleteSelectedCells.xml | 自有 | [有](shyx/DeleteSelectedCells/README.md) | VTK |
 | SHYX Extract Selection | `vtkSHYXExtractSelectedCellsFilter` | ExtractSelectedCells | SHYXExtractSelectedCells.xml | 自有 | [有](shyx/ExtractSelectedCells/README.md) | VTK |
 | SHYX Flip Selected Cells Winding | `vtkSHYXFlipSelectedCellsWindingFilter` | FlipSelectedCellsWinding | SHYXFlipSelectedCellsWinding.xml | 自有 | [有](shyx/FlipSelectedCellsWinding/README.md) | VTK |
