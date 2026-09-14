@@ -97,7 +97,8 @@
         <Documentation>
           Drag control points to shape the transfer curve.
           X = input value (clamped to Input Range), Y = mapped output value
-          (clamped to Output Range). The panel shows live input/output histograms.
+          (clamped to Output Range). The panel shows input/output histograms, with an optional
+          live-update checkbox and a Refresh button.
         </Documentation>
         <ProxyGroupDomain name="groups">
           <Group name="piecewise_functions"/>

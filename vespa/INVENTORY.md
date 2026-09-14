@@ -114,6 +114,12 @@ Vascular 顺序（[`VESPAVascularCategory.xml`](../ParaViewPlugin/smxml/VESPAVas
 | SHYX Surface Tip Extractor | `vtkSurfaceTipExtractor` | SurfaceTipExtractor | SHYXSurfaceTipExtractor.xml | 自有 | [有](shyx/SurfaceTipExtractor/README.md) | VTK |
 | SHYX Array Curve Mapper | `vtkArrayCurveMapper` | ArrayCurveMapper | SHYXArrayCurveMapper.xml | 自有 | [有](shyx/ArrayCurveMapper/README.md) | VTK |
 
+### 图像 / 体素
+
+| 界面标签 | 类 | 目录 | XML | 图标 | README | 后端 |
+|----------|----|------|-----|------|--------|------|
+| SHYX Image Morphology | `vtkSHYXImageMorphology` | ImageMorphology | SHYXImageMorphology.xml | 自有（复用 Density Sampler 图） | [有](shyx/ImageMorphology/README.md) | VTK |
+
 ### 工具
 
 | 界面标签 | 类 | 目录 | XML | 图标 | README | 后端 |

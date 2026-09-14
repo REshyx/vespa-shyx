@@ -1,0 +1,243 @@
+<?xml version="1.0" ?>
+<ServerManagerConfiguration>
+  <ProxyGroup name="filters">
+    <SourceProxy class="vtkSHYXImageMorphology"
+                 label="SHYX Image Morphology"
+                 name="SHYXImageMorphology">
+      <Documentation short_help="SHYX Image Morphology: Dilate, erode, open/close, morph gradient, top-hat, and hit-or-miss on vtkImageData.">
+        Voxel morphology on a 1-component vtkImageData point scalar. KernelSize is the
+        structuring-element box in voxels (odd, default 3 3 3); KernelShape chooses Box,
+        Cross, or Ellipsoid (default, same idea as VTK vtkImageDilateErode3D). Binary mode
+        only changes Foreground/Background labels; grayscale uses neighborhood max/min.
+        Morphological gradient is dilate minus erode (not Filters → Gradient Magnitude).
+        Hit-or-miss is binary only: foreground SE must match FG and the background shell
+        (BackgroundKernelSize minus the FG kernel) must match BG.
+      </Documentation>
+
+      <InputProperty command="SetInputConnection"
+                     name="Input">
+        <ProxyGroupDomain name="groups">
+          <Group name="sources"/>
+          <Group name="filters"/>
+        </ProxyGroupDomain>
+        <DataTypeDomain name="input_type">
+          <DataType value="vtkImageData"/>
+        </DataTypeDomain>
+        <InputArrayDomain attribute_type="point"
+                          name="input_array"
+                          number_of_components="1"/>
+        <Documentation>
+          Uniform rectilinear image or volume. Point-centered 1-component scalars.
+        </Documentation>
+      </InputProperty>
+
+      <StringVectorProperty command="SetInputArrayToProcess"
+                            element_types="0 0 0 0 2"
+                            name="SelectInputScalars"
+                            number_of_elements="5"
+                            label="Scalars">
+        <ArrayListDomain attribute_type="Scalars"
+                         name="array_list"
+                         input_domain_name="input_array">
+          <RequiredProperties>
+            <Property function="Input" name="Input"/>
+          </RequiredProperties>
+        </ArrayListDomain>
+        <Documentation>
+          Point scalar array to morph (replaced on output; other arrays are passed through).
+        </Documentation>
+      </StringVectorProperty>
+
+      <IntVectorProperty command="SetOperation"
+                         name="Operation"
+                         label="Operation"
+                         number_of_elements="1"
+                         default_values="0"
+                         animateable="0">
+        <EnumerationDomain name="enum">
+          <Entry text="Dilate" value="0"/>
+          <Entry text="Erode" value="1"/>
+          <Entry text="Open" value="2"/>
+          <Entry text="Close" value="3"/>
+          <Entry text="Morphological Gradient" value="4"/>
+          <Entry text="Internal Gradient" value="5"/>
+          <Entry text="External Gradient" value="6"/>
+          <Entry text="White Top-Hat" value="7"/>
+          <Entry text="Black Top-Hat" value="8"/>
+          <Entry text="Hit-or-Miss" value="9"/>
+        </EnumerationDomain>
+        <Documentation>
+          Dilate / Erode grow or shrink the foreground. Open = erode then dilate (remove small
+          bright specks). Close = dilate then erode (fill small dark holes). Morphological
+          gradient = dilate − erode (boundary band; not finite-difference Gradient Magnitude).
+          Internal / External put that band inside or outside the object. White Top-Hat =
+          image − opening (small bright details). Black Top-Hat = closing − image (small dark
+          details). Hit-or-Miss finds binary patterns (FG SE plus BG shell).
+        </Documentation>
+      </IntVectorProperty>
+
+      <IntVectorProperty command="SetValueMode"
+                         name="ValueMode"
+                         label="Value Mode"
+                         number_of_elements="1"
+                         default_values="0"
+                         animateable="0">
+        <EnumerationDomain name="enum">
+          <Entry text="Binary" value="0"/>
+          <Entry text="Grayscale" value="1"/>
+        </EnumerationDomain>
+        <Documentation>
+          Binary: only ForegroundValue / BackgroundValue change (other labels are copied).
+          Grayscale: neighborhood maximum (dilate) or minimum (erode). Hit-or-Miss always
+          uses binary matching.
+        </Documentation>
+        <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="enabled_state"
+                                   property="Operation"
+                                   value="9"
+                                   inverse="1"/>
+        </Hints>
+      </IntVectorProperty>
+
+      <IntVectorProperty command="SetKernelShape"
+                         name="KernelShape"
+                         label="Kernel Shape"
+                         number_of_elements="1"
+                         default_values="2"
+                         animateable="0">
+        <EnumerationDomain name="enum">
+          <Entry text="Box" value="0"/>
+          <Entry text="Cross" value="1"/>
+          <Entry text="Ellipsoid" value="2"/>
+        </EnumerationDomain>
+        <Documentation>
+          Neighbors inside the KernelSize box. Box = every voxel; Cross = axis-aligned plus;
+          Ellipsoid = inscribed ellipse/ellipsoid (VTK DilateErode default).
+        </Documentation>
+      </IntVectorProperty>
+
+      <IntVectorProperty command="SetKernelSize"
+                         name="KernelSize"
+                         label="Kernel Size"
+                         number_of_elements="3"
+                         default_values="3 3 3"
+                         animateable="0">
+        <IntRangeDomain name="range" min="1" max="99"/>
+        <Documentation>
+          Structuring-element size in voxels along X Y Z (odd; even values are rounded up).
+          Default 3 3 3 is radius 1. Use Z = 1 for in-plane 2D morphology. A 2D image
+          (single Z slice) forces Z = 1 automatically.
+        </Documentation>
+      </IntVectorProperty>
+
+      <IntVectorProperty command="SetNumberOfIterations"
+                         name="NumberOfIterations"
+                         label="Number Of Iterations"
+                         number_of_elements="1"
+                         default_values="1">
+        <IntRangeDomain name="range" min="1" max="64"/>
+        <Documentation>
+          Repeat Dilate/Erode/Open/Close this many times (one Open = erode then dilate).
+          For gradients and top-hats, iterates the underlying dilate/erode/open/close.
+          Ignored by Hit-or-Miss.
+        </Documentation>
+        <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="enabled_state"
+                                   property="Operation"
+                                   value="9"
+                                   inverse="1"/>
+        </Hints>
+      </IntVectorProperty>
+
+      <DoubleVectorProperty command="SetForegroundValue"
+                            name="ForegroundValue"
+                            label="Foreground Value"
+                            number_of_elements="1"
+                            default_values="1">
+        <DoubleRangeDomain name="range"/>
+        <Documentation>
+          Binary (and Hit-or-Miss) foreground label. Dilate grows this value.
+        </Documentation>
+        <Hints>
+          <PropertyWidgetDecorator type="CompositeDecorator">
+            <Expression type="or">
+              <PropertyWidgetDecorator type="GenericDecorator"
+                                       mode="enabled_state"
+                                       property="ValueMode"
+                                       value="0"/>
+              <PropertyWidgetDecorator type="GenericDecorator"
+                                       mode="enabled_state"
+                                       property="Operation"
+                                       value="9"/>
+            </Expression>
+          </PropertyWidgetDecorator>
+        </Hints>
+      </DoubleVectorProperty>
+
+      <DoubleVectorProperty command="SetBackgroundValue"
+                            name="BackgroundValue"
+                            label="Background Value"
+                            number_of_elements="1"
+                            default_values="0">
+        <DoubleRangeDomain name="range"/>
+        <Documentation>
+          Binary (and Hit-or-Miss) background label. Erode grows this value into the foreground.
+        </Documentation>
+        <Hints>
+          <PropertyWidgetDecorator type="CompositeDecorator">
+            <Expression type="or">
+              <PropertyWidgetDecorator type="GenericDecorator"
+                                       mode="enabled_state"
+                                       property="ValueMode"
+                                       value="0"/>
+              <PropertyWidgetDecorator type="GenericDecorator"
+                                       mode="enabled_state"
+                                       property="Operation"
+                                       value="9"/>
+            </Expression>
+          </PropertyWidgetDecorator>
+        </Hints>
+      </DoubleVectorProperty>
+
+      <IntVectorProperty command="SetBackgroundKernelSize"
+                         name="BackgroundKernelSize"
+                         label="Background Kernel Size"
+                         number_of_elements="3"
+                         default_values="5 5 5"
+                         animateable="0">
+        <IntRangeDomain name="range" min="1" max="99"/>
+        <Documentation>
+          Hit-or-Miss only. Size of the larger kernel whose voxels minus the foreground SE
+          form the background shell. Each axis is at least KernelSize + 2.
+        </Documentation>
+        <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="visibility"
+                                   property="Operation"
+                                   value="9"/>
+        </Hints>
+      </IntVectorProperty>
+
+      <PropertyGroup label="Operation">
+        <Property name="Operation"/>
+        <Property name="ValueMode"/>
+      </PropertyGroup>
+      <PropertyGroup label="Structuring element">
+        <Property name="KernelShape"/>
+        <Property name="KernelSize"/>
+        <Property name="NumberOfIterations"/>
+        <Property name="BackgroundKernelSize"/>
+      </PropertyGroup>
+      <PropertyGroup label="Binary values">
+        <Property name="ForegroundValue"/>
+        <Property name="BackgroundValue"/>
+      </PropertyGroup>
+
+      <Hints>
+        <ShowInMenu category="SHYX" icon=":/VESPA/SHYX_Image_Morphology.png"/>
+      </Hints>
+    </SourceProxy>
+  </ProxyGroup>
+</ServerManagerConfiguration>

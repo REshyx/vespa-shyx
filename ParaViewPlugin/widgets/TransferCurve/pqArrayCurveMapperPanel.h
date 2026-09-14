@@ -5,6 +5,7 @@
 
 #include <vector>
 
+class QCheckBox;
 class QDoubleSpinBox;
 class QLabel;
 class QSpinBox;
@@ -13,7 +14,7 @@ class pqSHYXTransferCurveWidget;
 class vtkColorTransferFunction;
 class vtkPiecewiseFunction;
 
-/** Property-group panel: editable transfer curve with live input/output histograms. */
+/** Property-group panel: editable transfer curve with optional live input/output histograms. */
 class pqArrayCurveMapperPanel : public pqPropertyWidget
 {
     Q_OBJECT
@@ -37,6 +38,8 @@ private Q_SLOTS:
     void onResetInputRange();
     void onResetOutputRange();
     void onResetCurveClicked();
+    void onRefreshHistogramClicked();
+    void onLiveHistogramToggled(bool checked);
     void onHistogramHeightChanged();
     void onChartHeightChanged();
 
@@ -51,7 +54,8 @@ private:
     void migrateLegacyNormalizedCurve();
     void setIdentityCurve();
     void setupCurveWidgetIfNeeded();
-    void refreshVisualization(bool forcePipelineUpdate = false);
+    void refreshVisualization(bool forcePipelineUpdate = false, bool forceHistogram = false);
+    bool shouldUpdateHistogram(bool forceHistogram) const;
     void updateHistogramTable(const std::vector<double>& values);
     void updateMappedHistogramTable(const std::vector<double>& mappedValues);
     void syncClampRangeCTF();
@@ -62,6 +66,7 @@ private:
 
     QSpinBox* ChartHeightSpin = nullptr;
     QDoubleSpinBox* HistogramHeightSpin = nullptr;
+    QCheckBox* LiveHistogramCheck = nullptr;
     QDoubleSpinBox* InputMinSpin = nullptr;
     QDoubleSpinBox* InputMaxSpin = nullptr;
     QDoubleSpinBox* OutputMinSpin = nullptr;

@@ -2304,6 +2304,13 @@ const ShyxExtra kShyxExtra[] = {
     "extendedFeatureEdgeMesh (ASCII only; gzip/binary Foam not). Extended files get EdgeStatus / "
     "PointStatus / FoamExtendedFeatureEdgeMesh like SHYXExtendedFeatureEdgeMesh. "
     "Feed to SHYXSnappyHexMesh FeatureEdges. Does not need VESPA_USE_SNAPPYHEXMESH." },
+  { "SHYXImageMorphology",
+    "Voxel morphology on vtkImageData point scalars (not mesh face-ring DilateLayers). "
+    "Operations: Dilate/Erode/Open/Close, morphological gradient (dilate-erode; not Filters "
+    "Gradient Magnitude), internal/external gradient, white/black top-hat, binary hit-or-miss "
+    "(FG SE + BG shell). ValueMode 0 Binary (FG/BG labels, other values unchanged) or 1 Grayscale "
+    "(min/max). KernelShape 0 Box / 1 Cross / 2 Ellipsoid (default). KernelSize odd voxels "
+    "default 3 3 3; 2D volumes force Z=1. Not Median. Python: SHYXImageMorphology()." },
   { "PulseGlyphRepresentation",
     "Display representation, not a filter. Display dropdown 'Pulse Glyphs'. "
     "Python: GetDisplayProperties().Representation = 'Pulse Glyphs'. Never call PulseGlyphRepresentation(). "

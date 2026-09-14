@@ -31,6 +31,6 @@
 * **`OutputArrayName`** (string): 输出数组名称。默认值为 `"MappedArray"`，表示映射后生成的新数组名称。
 * **`InputRangeMin` / `InputRangeMax`** (double): 输入数据范围限制（默认 `[0.0, 1.0]`）。超出此区间的原始值将被截断并限制在该边界上。
 * **`OutputRangeMin` / `OutputRangeMax`** (double): 输出数据的目标范围（默认 `[0.0, 1.0]`）。曲线控制点的 Y 值与此范围一致。
-* **`CurveTransferFunction`** (`vtkPiecewiseFunction*`): 分段线性传递函数；X = 输入值，Y = 映射后的输出值。面板提供可编辑曲线与输入/输出直方图预览。
+* **`CurveTransferFunction`** (`vtkPiecewiseFunction*`): 分段线性传递函数；X = 输入值，Y = 映射后的输出值。面板提供可编辑曲线与输入/输出直方图预览。**Live hist** 勾选时拖动曲线会实时刷新直方图；关闭后直方图保持上次结果，可用 **Refresh** 手动刷新。**Reset** 把输入/输出范围还原为数组 min–max 并清成线性恒等曲线。
 
 C++ 头文件里仍有 `RepresentationMode` / `Opacity` / `Trunc` / `Pow` / `IntegrationScale` / `Time*` / `AnimationArrayName` 等成员，**未写入 XML，`RequestData` 也不读取**，对 ParaView 面板无效。

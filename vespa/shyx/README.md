@@ -4,7 +4,7 @@ SHYX 是本仓库里 **一个作者命名空间**（[`vespa/shyx/`](.)），不�
 
 每个子目录通常是独立 VTK 模块（自有 `vtk.module` / `DEPENDS` / **`SHYX*.xml`**，由 `vespa_plugin_xml()` 注册）。例外：[**AI Assistant**](./AIAssistant/README.md) 的**用户界面**是 View dock（`ParaViewPlugin/AIAssistant/pqSHYXAI*`），本目录只有文档，没有 VTK 模块或 SM XML；不要 `SHYXAIAssistant()`。需要 CGAL 的才依赖 `vtkCGALAlgorithm`；TetGen / VMTK / 纯 VTK 不要走 CGAL 基类。纯 VTK 的 Density Sampler / 点云 SDF 类名是 `vtkSHYX*`。骨架、切端、Surface-to-Volume 的 **vtk.module NAME** 是 `vtkSHYX*`，**C++ / XML `class=`** 仍是 `vtkCGAL*`。
 
-`vtk.module` 的 **GROUPS**：`Meshing` / `Vascular` / `Flow` / `PointCloud`（表示层为 `ParaView`）。
+`vtk.module` 的 **GROUPS**：`Core` / `Meshing` / `Vascular` / `Flow` / `PointCloud`（表示层为 `ParaView`）。
 
 ## 网格修复 / 几何
 
@@ -62,6 +62,10 @@ SHYX 是本仓库里 **一个作者命名空间**（[`vespa/shyx/`](.)），不�
 * [**Geodesic Distance**](./GeodesicDistance/README.md)
 * [**Surface Tip Extractor**](./SurfaceTipExtractor/README.md)
 * [**Array Curve Mapper**](./ArrayCurveMapper/README.md)
+
+## 图像 / 体素
+
+* [**Image Morphology**](./ImageMorphology/README.md) — `vtkImageData` 点标量：膨胀/侵蚀/开闭、形态学梯度、顶帽、击中-击不中（Box / Cross / Ellipsoid）
 
 ## 工具
 

@@ -1,0 +1,12 @@
+NAME
+  vtkSHYXImageMorphology
+DESCRIPTION
+  "Binary/grayscale morphology on vtkImageData point scalars (dilate, erode, open/close, morph gradient, top-hat, hit-or-miss)."
+GROUPS
+  Core
+DEPENDS
+  VTK::ImagingCore
+PRIVATE_DEPENDS
+  VTK::CommonCore
+  VTK::CommonDataModel
+  VTK::CommonExecutionModel

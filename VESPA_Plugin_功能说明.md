@@ -16,7 +16,7 @@
 | **`VESPA_USE_SNAPPYHEXMESH`** | ON 时编 SnappyHexMesh（仓库内 `shyx-snappyhex/` adapter + `FOAM_SOURCE_DIR` 官方源码）。 |
 | **`USE_CERES`** | 找到 Ceres 且为 ON 时才编 **VESPA Mesh Smoothing**（内部变量 `VESPA_MESH_SMOOTHING`）。 |
 | **`VESPA_USE_MKL`** | 构建含 MKL 时，**SHYX Clebsch Map Filter** 中可选用 MKL 直接法求解器。 |
-| **`VESPA_USE_SMP`** | 部分滤镜内部并行（Density Sampler、Array Probability Point Cull、Clebsch、Bidirectional Streamline Merge、Disconnected Region Fuse、Tet Mesh Region Partition）。**SHYX Radius Neighbor Count** / **SHYX Surface Thickness** 使用 VTK 自带的 **vtkSMPTools**，不依赖此开关。 |
+| **`VESPA_USE_SMP`** | 部分滤镜内部并行（Density Sampler、Array Probability Point Cull、Clebsch、Bidirectional Streamline Merge、Disconnected Region Fuse、Tet Mesh Region Partition）。**SHYX Radius Neighbor Count** / **SHYX Surface Thickness** / **SHYX Image Morphology** 使用 VTK 自带的 **vtkSMPTools**，不依赖此开关。 |
 | **（CGAL 版本，内部状态）** | CGAL ≥ 5.5 时内部 `VESPA_ALPHA_WRAPPING` 打开（VESPA/SHYX Alpha Wrapping / Selection Fill / Auto Mesh Repair XML）。CGAL ≥ 6.0 时内部 `VESPA_ADAPTIVE_REMESHING` 打开（Adaptive Remesher / Remesh With Endpoint）。二者不是 cmake-gui 用户开关。 |
 
 客户端若使用 Qt 版 ParaView，插件还可注册 **Pulse Glyph** / **Animated Streamline** 相关的自动启动管理器与自定义面板（如数组曲线映射面板）；表示类型仍可在显示面板中选择。
@@ -103,6 +103,7 @@
 | SHYX Vortex Criteria / FTLE / Clebsch Map | Clebsch 可选 MKL |
 | SHYX Vector Field Topology | 包装上游 VTK |
 | SHYX Auto Streamline / Bidirectional Streamline Merge | |
+| SHYX Image Morphology | 纯 VTK；`vtkImageData` 形态学（胀/蚀/开闭/形态学梯度/顶帽/击中）；勿与 Gradient Magnitude、Median 混淆 |
 
 **Filters → Vascular**（工具条顺序）：Skeleton Extraction → Vessel End Clipper → Skeleton End Clipper → Selection Plane Clipper → Remesh With Endpoint → TetGen → DataSet To Partitioned Collection → Boundary Assignment。
 
@@ -725,6 +726,7 @@
 | **SHYX VMTK Centerlines / Opening Centerlines** | 需 `VESPA_USE_VMTK`。Opening Centerlines 端口 0 数组含义见 [`vespa/shyx/VmtkOpeningCenterlines/README.md`](vespa/shyx/VmtkOpeningCenterlines/README.md) |
 | **SHYX Vascular / Endpoint Stent Placement** | 交互圆柱/端点支架 |
 | **SHYX Auto Streamline** | 自动布种流线 |
+| **SHYX Image Morphology** | `vtkImageData` 点标量形态学：Dilate/Erode/Open/Close、形态学梯度（胀−蚀，不是 Gradient Magnitude）、顶帽、二值击中-击不中。结构元 Box/Cross/Ellipsoid，`KernelSize` 默认 3 3 3 |
 
 完整对照（类名 / XML / 图标 / README）见 [`vespa/INVENTORY.md`](vespa/INVENTORY.md)。
 
@@ -760,6 +762,7 @@
 - **SHYX Resample Lines** 用于骨架/中心线等多分支折线：先可选 **Fuse**（默认开，容差 1e-6×包围盒最长边）保证近点连通，再按 **Sample Distance** 在各分支上等距重采样；分叉与端点（线度数 ≠ 2）保留；短于间距的分支只留两端，不会被删。
 - **SHYX Vector Field Topology**、**SHYX Vortex Criteria**、**SHYX FTLE**、**SHYX Clebsch Map** 等流场工具对数据类型与数组名要求不同，请以各节说明与 ParaView 属性面板为准。
 - **SHYX Disconnected Region Fuse** 在不连通域的最近处连接。**Fuse Method** 可选合点中点、小域贴大域、或不删点而加线/两个桥接三角形。默认 **Fuse Within Input** 开。
+- **SHYX Image Morphology** 作用于 **`vtkImageData` 点标量**（体素），不是网格面环 DilateLayers，也不是 **Gradient Magnitude**（有限差分）或 **Median**。形态学梯度 = 膨胀 − 侵蚀；核大小是 **Kernel Size**（默认 3 3 3，椭圆核）。
 - **SHYX Point Cloud Surface SDF** 在**点云**上写 **SDF**；若要在**规则体素网格**上对**封闭**三角网格求有符号距离场（`vtkImageData`），应使用 CGAL 管线中的 **`vtkCGALSignedDistanceFunction`**（见 CGAL / PMP 模块文档或源码），二者勿混淆。
 - **SHYX Radius Neighbor Count** 用于点云或网格顶点上的**局部密度/邻域规模**分析；半径需与点间距尺度匹配。并行行为由 VTK SMP 后端决定（如与 ParaView 一同构建的 TBB 等）。
 - **SHYX Surface Thickness** 在表面顶点上写壁厚。交叉/kissing 用默认 **Self-proximity**，不要用射线法；找扁掉的小血管看 **ThicknessOverEdgeLength**，不要看绝对 Thickness。

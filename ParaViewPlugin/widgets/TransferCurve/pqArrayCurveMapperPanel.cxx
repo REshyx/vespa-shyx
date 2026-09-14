@@ -2,6 +2,7 @@
 
 #include "pqSHYXTransferCurveWidget.h"
 
+#include <QCheckBox>
 #include <QDoubleSpinBox>
 #include <QHBoxLayout>
 #include <QLabel>
@@ -360,11 +361,25 @@ pqArrayCurveMapperPanel::pqArrayCurveMapperPanel(
         this->HistogramHeightSpin = createPercentSpinBox(this, 60.0);
         row->addWidget(this->HistogramHeightSpin);
         row->addSpacing(8);
-        auto* curveResetBtn = new QPushButton(tr("Reset curve"), this);
+        auto* curveResetBtn = new QPushButton(tr("Reset"), this);
         curveResetBtn->setToolTip(
             tr("Set input/output range to array data min–max and clear to a linear identity curve"));
         connect(curveResetBtn, &QPushButton::clicked, this, &pqArrayCurveMapperPanel::onResetCurveClicked);
         row->addWidget(curveResetBtn);
+        auto* histRefreshBtn = new QPushButton(tr("Refresh"), this);
+        histRefreshBtn->setToolTip(
+            tr("Rebuild input and mapped-output histograms from the current array"));
+        connect(histRefreshBtn, &QPushButton::clicked, this,
+            &pqArrayCurveMapperPanel::onRefreshHistogramClicked);
+        row->addWidget(histRefreshBtn);
+        this->LiveHistogramCheck = new QCheckBox(tr("Live hist"), this);
+        this->LiveHistogramCheck->setToolTip(
+            tr("When checked, histograms update while you edit the curve. "
+               "Uncheck to skip live updates and click Refresh instead."));
+        this->LiveHistogramCheck->setChecked(true);
+        connect(this->LiveHistogramCheck, &QCheckBox::toggled, this,
+            &pqArrayCurveMapperPanel::onLiveHistogramToggled);
+        row->addWidget(this->LiveHistogramCheck);
         row->addStretch(1);
         vbox->addLayout(row);
     }
@@ -694,8 +709,25 @@ bool pqArrayCurveMapperPanel::fetchInputValues(
 }
 
 //------------------------------------------------------------------------------
-void pqArrayCurveMapperPanel::refreshVisualization(bool forcePipelineUpdate)
+bool pqArrayCurveMapperPanel::shouldUpdateHistogram(bool forceHistogram) const
 {
+    return forceHistogram || (this->LiveHistogramCheck && this->LiveHistogramCheck->isChecked());
+}
+
+//------------------------------------------------------------------------------
+void pqArrayCurveMapperPanel::refreshVisualization(bool forcePipelineUpdate, bool forceHistogram)
+{
+    this->syncClampRangeVisuals();
+
+    if (!this->shouldUpdateHistogram(forceHistogram))
+    {
+        if (this->CurveWidgetInitialized)
+        {
+            this->CurveWidget->render();
+        }
+        return;
+    }
+
     std::vector<double> values;
     const bool hasData = this->fetchInputValues(values, forcePipelineUpdate);
 
@@ -704,8 +736,6 @@ void pqArrayCurveMapperPanel::refreshVisualization(bool forcePipelineUpdate)
         this->DataExtentMin = *std::min_element(values.begin(), values.end());
         this->DataExtentMax = *std::max_element(values.begin(), values.end());
     }
-
-    this->syncClampRangeVisuals();
 
     if (!hasData)
     {
@@ -891,6 +921,21 @@ void pqArrayCurveMapperPanel::onHistogramHeightChanged()
 }
 
 //------------------------------------------------------------------------------
+void pqArrayCurveMapperPanel::onRefreshHistogramClicked()
+{
+    this->refreshVisualization(true, true);
+}
+
+//------------------------------------------------------------------------------
+void pqArrayCurveMapperPanel::onLiveHistogramToggled(bool checked)
+{
+    if (checked)
+    {
+        this->refreshVisualization(false, true);
+    }
+}
+
+//------------------------------------------------------------------------------
 void pqArrayCurveMapperPanel::onChartHeightChanged()
 {
     this->syncChartHeightVisuals();
@@ -988,7 +1033,7 @@ void pqArrayCurveMapperPanel::onResetInputRange()
     this->rescaleCurveX(oldInMin, oldInMax);
     this->syncClampRangeVisuals();
     this->syncChartOutputRange();
-    this->refreshVisualization(true);
+    this->refreshVisualization(true, true);
     emit changeAvailable();
 }
 
@@ -1139,7 +1184,7 @@ void pqArrayCurveMapperPanel::onResetCurveClicked()
     {
         this->CurveWidget->render();
     }
-    this->refreshVisualization(true);
+    this->refreshVisualization(true, true);
     emit changeAvailable();
 }
 
