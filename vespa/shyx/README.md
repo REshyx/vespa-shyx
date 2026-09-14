@@ -66,6 +66,7 @@ SHYX 是本仓库里 **一个作者命名空间**（[`vespa/shyx/`](.)），不�
 ## 图像 / 体素
 
 * [**Image Morphology**](./ImageMorphology/README.md) — `vtkImageData` 点标量：膨胀/侵蚀/开闭、形态学梯度、顶帽、击中-击不中（Box / Cross / Ellipsoid）
+* [**Image AntiAlias**](./ImageAntiAlias/README.md) — 二值体素消台阶（Whitaker / ITK `AntiAliasBinaryImageFilter`，ITK 来自 `VMTK_DIR`）；可选 Resample Factor 加密/减粗；需 `VESPA_USE_VMTK`
 
 ## 工具
 

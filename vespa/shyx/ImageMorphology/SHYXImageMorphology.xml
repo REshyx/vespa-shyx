@@ -8,10 +8,9 @@
         Voxel morphology on a 1-component vtkImageData point scalar. KernelSize is the
         structuring-element box in voxels (odd, default 3 3 3); KernelShape chooses Box,
         Cross, or Ellipsoid (default, same idea as VTK vtkImageDilateErode3D). Binary mode
-        only changes Foreground/Background labels; grayscale uses neighborhood max/min.
-        Morphological gradient is dilate minus erode (not Filters → Gradient Magnitude).
-        Hit-or-miss is binary only: foreground SE must match FG and the background shell
-        (BackgroundKernelSize minus the FG kernel) must match BG.
+        classifies voxels with Binary Match: two exact labels, or one Threshold (&gt;= is
+        foreground). Grayscale uses neighborhood max/min. Morphological gradient is dilate
+        minus erode (not Filters → Gradient Magnitude). Hit-or-miss is binary only.
       </Documentation>
 
       <InputProperty command="SetInputConnection"
@@ -87,7 +86,7 @@
           <Entry text="Grayscale" value="1"/>
         </EnumerationDomain>
         <Documentation>
-          Binary: only ForegroundValue / BackgroundValue change (other labels are copied).
+          Binary: classify voxels then dilate/erode that mask (see Binary Match).
           Grayscale: neighborhood maximum (dilate) or minimum (erode). Hit-or-Miss always
           uses binary matching.
         </Documentation>
@@ -99,6 +98,133 @@
                                    inverse="1"/>
         </Hints>
       </IntVectorProperty>
+
+      <IntVectorProperty command="SetBinaryMatch"
+                         name="BinaryMatch"
+                         label="Binary Match"
+                         number_of_elements="1"
+                         default_values="0"
+                         animateable="0">
+        <EnumerationDomain name="enum">
+          <Entry text="Equal (two values)" value="0"/>
+          <Entry text="Threshold (one value)" value="1"/>
+        </EnumerationDomain>
+        <Documentation>
+          How Binary (and Hit-or-Miss) decides foreground vs background.
+          Equal: voxel == Foreground Value or == Background Value (strict); any other
+          label is copied unchanged. Threshold: voxel &gt;= Threshold is foreground,
+          otherwise background; result is written as 1 / 0.
+        </Documentation>
+        <Hints>
+          <PropertyWidgetDecorator type="CompositeDecorator">
+            <Expression type="or">
+              <PropertyWidgetDecorator type="GenericDecorator"
+                                       mode="visibility"
+                                       property="ValueMode"
+                                       value="0"/>
+              <PropertyWidgetDecorator type="GenericDecorator"
+                                       mode="visibility"
+                                       property="Operation"
+                                       value="9"/>
+            </Expression>
+          </PropertyWidgetDecorator>
+        </Hints>
+      </IntVectorProperty>
+
+      <DoubleVectorProperty command="SetForegroundValue"
+                            name="ForegroundValue"
+                            label="Foreground Value"
+                            number_of_elements="1"
+                            default_values="1">
+        <DoubleRangeDomain name="range"/>
+        <Documentation>
+          Equal match: exact foreground label. Dilate grows this value. Other labels
+          besides Foreground / Background are left unchanged.
+        </Documentation>
+        <Hints>
+          <PropertyWidgetDecorator type="CompositeDecorator">
+            <Expression type="and">
+              <Expression type="or">
+                <PropertyWidgetDecorator type="GenericDecorator"
+                                         mode="visibility"
+                                         property="ValueMode"
+                                         value="0"/>
+                <PropertyWidgetDecorator type="GenericDecorator"
+                                         mode="visibility"
+                                         property="Operation"
+                                         value="9"/>
+              </Expression>
+              <PropertyWidgetDecorator type="GenericDecorator"
+                                       mode="visibility"
+                                       property="BinaryMatch"
+                                       value="0"/>
+            </Expression>
+          </PropertyWidgetDecorator>
+        </Hints>
+      </DoubleVectorProperty>
+
+      <DoubleVectorProperty command="SetBackgroundValue"
+                            name="BackgroundValue"
+                            label="Background Value"
+                            number_of_elements="1"
+                            default_values="0">
+        <DoubleRangeDomain name="range"/>
+        <Documentation>
+          Equal match: exact background label. Erode grows this value into the foreground.
+        </Documentation>
+        <Hints>
+          <PropertyWidgetDecorator type="CompositeDecorator">
+            <Expression type="and">
+              <Expression type="or">
+                <PropertyWidgetDecorator type="GenericDecorator"
+                                         mode="visibility"
+                                         property="ValueMode"
+                                         value="0"/>
+                <PropertyWidgetDecorator type="GenericDecorator"
+                                         mode="visibility"
+                                         property="Operation"
+                                         value="9"/>
+              </Expression>
+              <PropertyWidgetDecorator type="GenericDecorator"
+                                       mode="visibility"
+                                       property="BinaryMatch"
+                                       value="0"/>
+            </Expression>
+          </PropertyWidgetDecorator>
+        </Hints>
+      </DoubleVectorProperty>
+
+      <DoubleVectorProperty command="SetThreshold"
+                            name="Threshold"
+                            label="Threshold"
+                            number_of_elements="1"
+                            default_values="1">
+        <DoubleRangeDomain name="range"/>
+        <Documentation>
+          Threshold match: voxels with value &gt;= Threshold are foreground, the rest are
+          background. Morphological result is written as 1 (foreground) and 0 (background).
+        </Documentation>
+        <Hints>
+          <PropertyWidgetDecorator type="CompositeDecorator">
+            <Expression type="and">
+              <Expression type="or">
+                <PropertyWidgetDecorator type="GenericDecorator"
+                                         mode="visibility"
+                                         property="ValueMode"
+                                         value="0"/>
+                <PropertyWidgetDecorator type="GenericDecorator"
+                                         mode="visibility"
+                                         property="Operation"
+                                         value="9"/>
+              </Expression>
+              <PropertyWidgetDecorator type="GenericDecorator"
+                                       mode="visibility"
+                                       property="BinaryMatch"
+                                       value="1"/>
+            </Expression>
+          </PropertyWidgetDecorator>
+        </Hints>
+      </DoubleVectorProperty>
 
       <IntVectorProperty command="SetKernelShape"
                          name="KernelShape"
@@ -151,56 +277,6 @@
         </Hints>
       </IntVectorProperty>
 
-      <DoubleVectorProperty command="SetForegroundValue"
-                            name="ForegroundValue"
-                            label="Foreground Value"
-                            number_of_elements="1"
-                            default_values="1">
-        <DoubleRangeDomain name="range"/>
-        <Documentation>
-          Binary (and Hit-or-Miss) foreground label. Dilate grows this value.
-        </Documentation>
-        <Hints>
-          <PropertyWidgetDecorator type="CompositeDecorator">
-            <Expression type="or">
-              <PropertyWidgetDecorator type="GenericDecorator"
-                                       mode="enabled_state"
-                                       property="ValueMode"
-                                       value="0"/>
-              <PropertyWidgetDecorator type="GenericDecorator"
-                                       mode="enabled_state"
-                                       property="Operation"
-                                       value="9"/>
-            </Expression>
-          </PropertyWidgetDecorator>
-        </Hints>
-      </DoubleVectorProperty>
-
-      <DoubleVectorProperty command="SetBackgroundValue"
-                            name="BackgroundValue"
-                            label="Background Value"
-                            number_of_elements="1"
-                            default_values="0">
-        <DoubleRangeDomain name="range"/>
-        <Documentation>
-          Binary (and Hit-or-Miss) background label. Erode grows this value into the foreground.
-        </Documentation>
-        <Hints>
-          <PropertyWidgetDecorator type="CompositeDecorator">
-            <Expression type="or">
-              <PropertyWidgetDecorator type="GenericDecorator"
-                                       mode="enabled_state"
-                                       property="ValueMode"
-                                       value="0"/>
-              <PropertyWidgetDecorator type="GenericDecorator"
-                                       mode="enabled_state"
-                                       property="Operation"
-                                       value="9"/>
-            </Expression>
-          </PropertyWidgetDecorator>
-        </Hints>
-      </DoubleVectorProperty>
-
       <IntVectorProperty command="SetBackgroundKernelSize"
                          name="BackgroundKernelSize"
                          label="Background Kernel Size"
@@ -223,16 +299,16 @@
       <PropertyGroup label="Operation">
         <Property name="Operation"/>
         <Property name="ValueMode"/>
+        <Property name="BinaryMatch"/>
+        <Property name="ForegroundValue"/>
+        <Property name="BackgroundValue"/>
+        <Property name="Threshold"/>
       </PropertyGroup>
       <PropertyGroup label="Structuring element">
         <Property name="KernelShape"/>
         <Property name="KernelSize"/>
         <Property name="NumberOfIterations"/>
         <Property name="BackgroundKernelSize"/>
-      </PropertyGroup>
-      <PropertyGroup label="Binary values">
-        <Property name="ForegroundValue"/>
-        <Property name="BackgroundValue"/>
       </PropertyGroup>
 
       <Hints>

@@ -1,0 +1,12 @@
+NAME
+  vtkSHYXImageAntiAlias
+DESCRIPTION
+  "Whitaker anti-alias of binary vtkImageData using the ITK that ships with VMTK."
+GROUPS
+  Core
+DEPENDS
+  VTK::ImagingCore
+PRIVATE_DEPENDS
+  VTK::CommonCore
+  VTK::CommonDataModel
+  VTK::CommonExecutionModel

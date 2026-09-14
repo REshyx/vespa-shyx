@@ -6,6 +6,11 @@
 
 **结构元**：`KernelSize`（奇数体素，默认 `3 3 3`）；形状 Box / Cross / **Ellipsoid**（默认，对齐 VTK `vtkImageDilateErode3D`）。2D（单层 Z）自动 `KernelSize_Z = 1`。
 
-**Value Mode**：Binary 只改前景/背景标签；Grayscale 为邻域 max/min。击中-击不中始终按二值匹配（前景核全为 FG，外围壳全为 BG）。
+**Value Mode**：Binary 先判定前景/背景再做形态学；Grayscale 为邻域 max/min。击中-击不中始终按二值。
+
+**Binary Match**（Binary 时，紧跟 Value Mode）：
+
+- **Equal**：两个数严格相等（`== Foreground` / `== Background`）；其它标签原样拷贝。
+- **Threshold**：一个数，`值 >= Threshold` 为前景，否则背景；结果写成 1 / 0。
 
 Python：`SHYXImageMorphology()`。面板字段见同目录 `SHYXImageMorphology.xml`。

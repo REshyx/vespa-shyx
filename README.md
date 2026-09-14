@@ -81,6 +81,8 @@ VESPA can be installed using the standard CMake procedure:
 1. Configure the project with VTK or ParaView. Set `VESPA_USE_CGAL=ON` (the
 default) if you need CGAL-backed modules; that is the only path that calls
 `find_package(CGAL)`. TetGen / VMTK / VTK-only modules do not require CGAL.
+VMTK-backed modules (centerlines and Image AntiAlias) use the ITK that ships
+with `VMTK_DIR`; they do not add a separate InsightToolkit.
 
 If you want to build the ParaView plugin, set the CMake variable `VESPA_BUILD_PV_PLUGIN` to `ON` (it is already ON by default in this tree).
    - If you have installed a library in a custom folder, you can find it in CMake

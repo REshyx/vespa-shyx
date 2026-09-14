@@ -2308,9 +2308,22 @@ const ShyxExtra kShyxExtra[] = {
     "Voxel morphology on vtkImageData point scalars (not mesh face-ring DilateLayers). "
     "Operations: Dilate/Erode/Open/Close, morphological gradient (dilate-erode; not Filters "
     "Gradient Magnitude), internal/external gradient, white/black top-hat, binary hit-or-miss "
-    "(FG SE + BG shell). ValueMode 0 Binary (FG/BG labels, other values unchanged) or 1 Grayscale "
-    "(min/max). KernelShape 0 Box / 1 Cross / 2 Ellipsoid (default). KernelSize odd voxels "
+    "(FG SE + BG shell). ValueMode 0 Binary or 1 Grayscale (min/max). BinaryMatch 0 Equal "
+    "(strict ForegroundValue/BackgroundValue; other labels copied) or 1 Threshold "
+    "(voxel >= Threshold is FG, else BG; result written 1/0). "
+    "KernelShape 0 Box / 1 Cross / 2 Ellipsoid (default). KernelSize odd voxels "
     "default 3 3 3; 2D volumes force Z=1. Not Median. Python: SHYXImageMorphology()." },
+  { "SHYXImageAntiAlias",
+    "Whitaker anti-alias of a binary vtkImageData (voxel staircasing). Uses "
+    "itk::AntiAliasBinaryImageFilter from the ITK that ships with VMTK (same VMTK_DIR as "
+    "centerlines), not a second ITK install. Output is a float level set (inside>0, outside<0); "
+    "extract the surface with Contour at 0, do not treat as 0/1 labels. BinarizeMode 1 Threshold "
+    "(default, >=0.5 inside) or 0 Auto min/max (for 0/1 or 0/255 only). ResampleFactor (default 1) "
+    "is vtkImageResample before anti-alias: >1 refine, <1 coarsen, 1 skip; 2D keeps Z=1. "
+    "ResampleInterpolation 0 Nearest (default) / 1 Linear (re-threshold in Threshold mode). "
+    "The 0.5-voxel occupancy lock is in output voxels, so factor 2 gives a tighter world-space "
+    "round. If the grid changes, only the level set is kept. Not morphology and not "
+    "Gaussian. Requires VESPA_USE_VMTK. Python: SHYXImageAntiAlias()." },
   { "PulseGlyphRepresentation",
     "Display representation, not a filter. Display dropdown 'Pulse Glyphs'. "
     "Python: GetDisplayProperties().Representation = 'Pulse Glyphs'. Never call PulseGlyphRepresentation(). "

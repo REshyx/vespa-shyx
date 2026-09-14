@@ -14,6 +14,7 @@
     <file alias="SHYX_Delete_Selected_Cells.png">../icon/SHYX_Delete_Selected_Cells.png</file>
     <file alias="SHYX_Density_Based_Volume_Sampler.png">../icon/SHYX_Density_Based_Volume_Sampler.png</file>
     <file alias="SHYX_Image_Morphology.png">../icon/SHYX_Density_Based_Volume_Sampler.png</file>
+    <file alias="SHYX_Image_AntiAlias.png">../icon/SHYX_Density_Based_Volume_Sampler.png</file>
     <file alias="SHYX_Disconnected_Region_Fuse.png">../icon/SHYX_Disconnected_Region_Fuse.png</file>
     <file alias="SHYX_Edge_Collapse.png">../icon/SHYX_Edge_Collapse.png</file>
     <file alias="SHYX_Subset_Coarsen.png">../icon/SHYX_Edge_Collapse.png</file>

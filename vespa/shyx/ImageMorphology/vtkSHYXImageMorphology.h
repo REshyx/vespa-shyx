@@ -2,6 +2,8 @@
  * @class   vtkSHYXImageMorphology
  * @brief   Binary / grayscale morphology on vtkImageData point scalars.
  *
+ * Binary Match: exact Foreground/Background labels, or one Threshold (>= is
+ * foreground, result written 1/0).
  * Structuring element: Box, Cross, or Ellipsoid (default) of odd KernelSize.
  * Operations: dilate, erode, open, close, morphological / internal / external
  * gradient, white / black top-hat, and binary hit-or-miss (foreground SE plus
@@ -50,11 +52,20 @@ public:
     ELLIPSOID = 2
   };
 
+  enum BinaryMatchType
+  {
+    EQUAL = 0,
+    THRESHOLD = 1
+  };
+
   vtkSetClampMacro(Operation, int, DILATE, HIT_OR_MISS);
   vtkGetMacro(Operation, int);
 
   vtkSetClampMacro(ValueMode, int, BINARY, GRAYSCALE);
   vtkGetMacro(ValueMode, int);
+
+  vtkSetClampMacro(BinaryMatch, int, EQUAL, THRESHOLD);
+  vtkGetMacro(BinaryMatch, int);
 
   vtkSetClampMacro(KernelShape, int, BOX, ELLIPSOID);
   vtkGetMacro(KernelShape, int);
@@ -71,6 +82,9 @@ public:
 
   vtkSetMacro(BackgroundValue, double);
   vtkGetMacro(BackgroundValue, double);
+
+  vtkSetMacro(Threshold, double);
+  vtkGetMacro(Threshold, double);
 
   void SetBackgroundKernelSize(int sx, int sy, int sz);
   void SetBackgroundKernelSize(const int sz[3])
@@ -91,11 +105,13 @@ protected:
 
   int Operation = DILATE;
   int ValueMode = BINARY;
+  int BinaryMatch = EQUAL;
   int KernelShape = ELLIPSOID;
   int KernelSize[3] = { 3, 3, 3 };
   int NumberOfIterations = 1;
   double ForegroundValue = 1.0;
   double BackgroundValue = 0.0;
+  double Threshold = 1.0;
   int BackgroundKernelSize[3] = { 5, 5, 5 };
 
 private:

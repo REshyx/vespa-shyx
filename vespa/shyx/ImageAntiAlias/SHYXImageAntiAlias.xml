@@ -1,0 +1,174 @@
+<?xml version="1.0" ?>
+<ServerManagerConfiguration>
+  <ProxyGroup name="filters">
+    <SourceProxy class="vtkSHYXImageAntiAlias"
+                 label="SHYX Image AntiAlias"
+                 name="SHYXImageAntiAlias">
+      <Documentation short_help="SHYX Image AntiAlias: optional resample, then Whitaker constrained curvature flow to remove voxel staircasing (ITK via VMTK).">
+        Binary vtkImageData anti-alias using itk::AntiAliasBinaryImageFilter from the ITK that
+        ships with VMTK (same VMTK_DIR as SHYX VMTK Centerlines). Optional vtkImageResample first:
+        ResampleFactor &gt; 1 refines (more voxels, smaller spacing), &lt; 1 coarsens, 1 skips.
+        Occupancy-constrained mean curvature flow rounds voxel stairs; the 0.5-voxel lock is in
+        output voxel units, so a 2× upsample allows a tighter world-space round. Output is a
+        float level set on the resampled grid (inside &gt; 0, outside &lt; 0); extract the surface
+        with Contour at 0. Not SHYX Image Morphology and not Gaussian blur. Requires VESPA_USE_VMTK.
+      </Documentation>
+
+      <InputProperty command="SetInputConnection"
+                     name="Input">
+        <ProxyGroupDomain name="groups">
+          <Group name="sources"/>
+          <Group name="filters"/>
+        </ProxyGroupDomain>
+        <DataTypeDomain name="input_type">
+          <DataType value="vtkImageData"/>
+        </DataTypeDomain>
+        <InputArrayDomain attribute_type="point"
+                          name="input_array"
+                          number_of_components="1"/>
+        <Documentation>
+          Uniform rectilinear image or volume. Point-centered 1-component scalars (binary mask
+          or a field that can be thresholded to one).
+        </Documentation>
+      </InputProperty>
+
+      <StringVectorProperty command="SetInputArrayToProcess"
+                            element_types="0 0 0 0 2"
+                            name="SelectInputScalars"
+                            number_of_elements="5"
+                            label="Scalars">
+        <ArrayListDomain attribute_type="Scalars"
+                         name="array_list"
+                         input_domain_name="input_array">
+          <RequiredProperties>
+            <Property function="Input" name="Input"/>
+          </RequiredProperties>
+        </ArrayListDomain>
+        <Documentation>
+          Point scalar to anti-alias. Replaced on output by a float level set. If Resample Factor
+          is 1, other arrays pass through; if the grid changes, only the level set and field data
+          are kept.
+        </Documentation>
+      </StringVectorProperty>
+
+      <DoubleVectorProperty command="SetResampleFactor"
+                            name="ResampleFactor"
+                            label="Resample Factor"
+                            number_of_elements="1"
+                            default_values="1">
+        <DoubleRangeDomain name="range" min="0.25" max="8"/>
+        <Documentation>
+          Magnification applied before anti-alias (vtkImageResample). 1 = original grid.
+          Greater than 1 refines (e.g. 2 doubles samples per axis, halves spacing). Less than 1
+          coarsens (e.g. 0.5). 2D volumes (single Z slice) keep Z = 1. Memory grows as factor^3
+          in 3D; 2 or 4 is typical for stronger rounding.
+        </Documentation>
+      </DoubleVectorProperty>
+
+      <IntVectorProperty command="SetResampleInterpolation"
+                         name="ResampleInterpolation"
+                         label="Resample Interpolation"
+                         number_of_elements="1"
+                         default_values="0"
+                         animateable="0">
+        <EnumerationDomain name="enum">
+          <Entry text="Nearest" value="0"/>
+          <Entry text="Linear" value="1"/>
+        </EnumerationDomain>
+        <Documentation>
+          Ignored when Resample Factor is 1. Nearest (default) duplicates occupancy and keeps a
+          binary mask. Linear interpolates then, in Threshold mode, re-thresholds at Threshold
+          so AntiAlias still sees 0/1.
+        </Documentation>
+      </IntVectorProperty>
+
+      <IntVectorProperty command="SetBinarizeMode"
+                         name="BinarizeMode"
+                         label="Binarize Mode"
+                         number_of_elements="1"
+                         default_values="1"
+                         animateable="0">
+        <EnumerationDomain name="enum">
+          <Entry text="Auto min/max" value="0"/>
+          <Entry text="Threshold" value="1"/>
+        </EnumerationDomain>
+        <Documentation>
+          Threshold (default): voxels &gt;= Threshold are inside (1), others outside (0), then ITK
+          anti-alias. Auto min/max: convert to float and let ITK treat the array min as outside
+          and max as inside (correct for 0/1 or 0/255; not for multi-label volumes).
+        </Documentation>
+      </IntVectorProperty>
+
+      <DoubleVectorProperty command="SetThreshold"
+                            name="Threshold"
+                            label="Threshold"
+                            number_of_elements="1"
+                            default_values="0.5">
+        <DoubleRangeDomain name="range"/>
+        <Documentation>
+          Used when Binarize Mode is Threshold. Voxels at or above this value are inside.
+        </Documentation>
+        <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="enabled_state"
+                                   property="BinarizeMode"
+                                   value="1"/>
+        </Hints>
+      </DoubleVectorProperty>
+
+      <IntVectorProperty command="SetNumberOfIterations"
+                         name="NumberOfIterations"
+                         label="Number Of Iterations"
+                         number_of_elements="1"
+                         default_values="1000">
+        <IntRangeDomain name="range" min="1" max="10000"/>
+        <Documentation>
+          Maximum sparse-field iterations (ITK default 1000). The solver also stops when RMS
+          change drops below Maximum RMS Error.
+        </Documentation>
+      </IntVectorProperty>
+
+      <DoubleVectorProperty command="SetMaximumRMSError"
+                            name="MaximumRMSError"
+                            label="Maximum RMS Error"
+                            number_of_elements="1"
+                            default_values="0.07">
+        <DoubleRangeDomain name="range" min="1e-6" max="1"/>
+        <Documentation>
+          Convergence threshold (ITK default 0.07). Smaller is tighter but slower; keep below 1.
+        </Documentation>
+      </DoubleVectorProperty>
+
+      <IntVectorProperty command="SetUseImageSpacing"
+                         name="UseImageSpacing"
+                         label="Use Image Spacing"
+                         number_of_elements="1"
+                         default_values="0"
+                         panel_visibility="advanced">
+        <BooleanDomain name="bool"/>
+        <Documentation>
+          If on, curvature is computed in physical units (ITK UseImageSpacing). Default off
+          matches itk::AntiAliasBinaryImageFilter (voxel index space).
+        </Documentation>
+      </IntVectorProperty>
+
+      <PropertyGroup label="Resample">
+        <Property name="ResampleFactor"/>
+        <Property name="ResampleInterpolation"/>
+      </PropertyGroup>
+      <PropertyGroup label="Binarize">
+        <Property name="BinarizeMode"/>
+        <Property name="Threshold"/>
+      </PropertyGroup>
+      <PropertyGroup label="Solver">
+        <Property name="NumberOfIterations"/>
+        <Property name="MaximumRMSError"/>
+        <Property name="UseImageSpacing"/>
+      </PropertyGroup>
+
+      <Hints>
+        <ShowInMenu category="SHYX" icon=":/VESPA/SHYX_Image_AntiAlias.png"/>
+      </Hints>
+    </SourceProxy>
+  </ProxyGroup>
+</ServerManagerConfiguration>

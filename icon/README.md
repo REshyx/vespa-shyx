@@ -120,4 +120,4 @@
 | :---: | --- | --- | --- |
 | <img src="SHYX_Vascular_fluent_set.png" width="160" alt="SHYX_Vascular_fluent_set.png"> | `SHYX_Vascular_fluent_set.png` | 1536×1024 PNG | 血管 fluent 拼图源，未进 qrc |
 
-另外：`VESPAIcons.qrc` 里 `SHYX_Selection_Append_Patches.png` 与 `SHYX_Selection_Extrude.png` 共用 `SHYX_Selection_Extrude.png`；`SHYX_Extrude.png` 共用 `SHYX_Point_Extrude.png`；`SHYX_Image_Morphology.png` 共用 `SHYX_Density_Based_Volume_Sampler.png`。
+另外：`VESPAIcons.qrc` 里 `SHYX_Selection_Append_Patches.png` 与 `SHYX_Selection_Extrude.png` 共用 `SHYX_Selection_Extrude.png`；`SHYX_Extrude.png` 共用 `SHYX_Point_Extrude.png`；`SHYX_Image_Morphology.png` 与 `SHYX_Image_AntiAlias.png` 共用 `SHYX_Density_Based_Volume_Sampler.png`。

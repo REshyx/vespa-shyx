@@ -12,7 +12,7 @@
 |------------|------|
 | **`VESPA_BUILD_PV_PLUGIN`** | 默认 ON；关闭则不构建 ParaView 插件。 |
 | **`VESPA_USE_CGAL`** | 为 ON（默认）时才编译依赖 CGAL 的模块，并 `find_package(CGAL)`。OFF 时跳过原版 VESPA 与所有 `DEPENDS vtkCGALAlgorithm` / `CGAL::CGAL` 的 SHYX 滤镜。 |
-| **`VESPA_USE_VMTK`** | ON 时编 VMTK 中心线两个滤镜并注册对应 XML。 |
+| **`VESPA_USE_VMTK`** | ON 时编 VMTK 中心线两个滤镜，以及 **SHYX Image AntiAlias**（用 VMTK 安装树里的 ITK，不另装一份）。 |
 | **`VESPA_USE_SNAPPYHEXMESH`** | ON 时编 SnappyHexMesh（仓库内 `shyx-snappyhex/` adapter + `FOAM_SOURCE_DIR` 官方源码）。 |
 | **`USE_CERES`** | 找到 Ceres 且为 ON 时才编 **VESPA Mesh Smoothing**（内部变量 `VESPA_MESH_SMOOTHING`）。 |
 | **`VESPA_USE_MKL`** | 构建含 MKL 时，**SHYX Clebsch Map Filter** 中可选用 MKL 直接法求解器。 |
@@ -104,6 +104,7 @@
 | SHYX Vector Field Topology | 包装上游 VTK |
 | SHYX Auto Streamline / Bidirectional Streamline Merge | |
 | SHYX Image Morphology | 纯 VTK；`vtkImageData` 形态学（胀/蚀/开闭/形态学梯度/顶帽/击中）；勿与 Gradient Magnitude、Median 混淆 |
+| SHYX Image AntiAlias | 需 `VESPA_USE_VMTK`；用 VMTK 自带 ITK 的 Whitaker 抗锯齿消体素台阶；输出 float level set，Contour 0 |
 
 **Filters → Vascular**（工具条顺序）：Skeleton Extraction → Vessel End Clipper → Skeleton End Clipper → Selection Plane Clipper → Remesh With Endpoint → TetGen → DataSet To Partitioned Collection → Boundary Assignment。
 
@@ -726,7 +727,8 @@
 | **SHYX VMTK Centerlines / Opening Centerlines** | 需 `VESPA_USE_VMTK`。Opening Centerlines 端口 0 数组含义见 [`vespa/shyx/VmtkOpeningCenterlines/README.md`](vespa/shyx/VmtkOpeningCenterlines/README.md) |
 | **SHYX Vascular / Endpoint Stent Placement** | 交互圆柱/端点支架 |
 | **SHYX Auto Streamline** | 自动布种流线 |
-| **SHYX Image Morphology** | `vtkImageData` 点标量形态学：Dilate/Erode/Open/Close、形态学梯度（胀−蚀，不是 Gradient Magnitude）、顶帽、二值击中-击不中。结构元 Box/Cross/Ellipsoid，`KernelSize` 默认 3 3 3 |
+| **SHYX Image Morphology** | `vtkImageData` 点标量形态学。Binary Match：两值严格相等，或单阈值（`>=` 为前景，结果 1/0）。结构元 Box/Cross/Ellipsoid，`KernelSize` 默认 3 3 3 |
+| **SHYX Image AntiAlias** | 需 `VESPA_USE_VMTK`。可选 **Resample Factor**（&gt;1 加密 / &lt;1 减粗 / 1 原网格）再跑 ITK `AntiAliasBinaryImageFilter`。输出 float level set（内正外负），抽表面 Contour 0 |
 
 完整对照（类名 / XML / 图标 / README）见 [`vespa/INVENTORY.md`](vespa/INVENTORY.md)。
 
@@ -762,7 +764,8 @@
 - **SHYX Resample Lines** 用于骨架/中心线等多分支折线：先可选 **Fuse**（默认开，容差 1e-6×包围盒最长边）保证近点连通，再按 **Sample Distance** 在各分支上等距重采样；分叉与端点（线度数 ≠ 2）保留；短于间距的分支只留两端，不会被删。
 - **SHYX Vector Field Topology**、**SHYX Vortex Criteria**、**SHYX FTLE**、**SHYX Clebsch Map** 等流场工具对数据类型与数组名要求不同，请以各节说明与 ParaView 属性面板为准。
 - **SHYX Disconnected Region Fuse** 在不连通域的最近处连接。**Fuse Method** 可选合点中点、小域贴大域、或不删点而加线/两个桥接三角形。默认 **Fuse Within Input** 开。
-- **SHYX Image Morphology** 作用于 **`vtkImageData` 点标量**（体素），不是网格面环 DilateLayers，也不是 **Gradient Magnitude**（有限差分）或 **Median**。形态学梯度 = 膨胀 − 侵蚀；核大小是 **Kernel Size**（默认 3 3 3，椭圆核）。
+- **SHYX Image Morphology** 作用于 **`vtkImageData` 点标量**（体素），不是网格面环 DilateLayers，也不是 **Gradient Magnitude**（有限差分）或 **Median**。形态学梯度 = 膨胀 − 侵蚀；核大小是 **Kernel Size**（默认 3 3 3，椭圆核）。Binary 下 **Binary Match** 可选两值严格相等，或单 **Threshold**（`>=` 为前景，输出 1/0）。
+- **SHYX Image AntiAlias** 用于二值体**消台阶**（Whitaker 占用约束曲率流）。ITK 与 VMTK 中心线共用 `VMTK_DIR`，不是独立 ITK。输出是 float level set，抽表面用 **Contour 0**。**Resample Factor** &gt;1 先加密再抗锯齿（半个体素锁在更细网格上，世界空间里更圆）；&lt;1 减粗。多标签请先 Threshold；开/闭请用 Image Morphology。
 - **SHYX Point Cloud Surface SDF** 在**点云**上写 **SDF**；若要在**规则体素网格**上对**封闭**三角网格求有符号距离场（`vtkImageData`），应使用 CGAL 管线中的 **`vtkCGALSignedDistanceFunction`**（见 CGAL / PMP 模块文档或源码），二者勿混淆。
 - **SHYX Radius Neighbor Count** 用于点云或网格顶点上的**局部密度/邻域规模**分析；半径需与点间距尺度匹配。并行行为由 VTK SMP 后端决定（如与 ParaView 一同构建的 TBB 等）。
 - **SHYX Surface Thickness** 在表面顶点上写壁厚。交叉/kissing 用默认 **Self-proximity**，不要用射线法；找扁掉的小血管看 **ThicknessOverEdgeLength**，不要看绝对 Thickness。

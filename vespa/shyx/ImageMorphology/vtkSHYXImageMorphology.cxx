@@ -232,7 +232,40 @@ void ErodeGray(const T* in, T* out, const Grid& g, vtkSHYXImageMorphology* self)
 }
 
 template <typename T>
-void DilateBin(const T* in, T* out, const Grid& g, T fg, T bg, vtkSHYXImageMorphology* self)
+struct BinSpec
+{
+  bool ThresholdMode = false;
+  T Fg = static_cast<T>(1);
+  T Bg = static_cast<T>(0);
+  double Thresh = 1.0;
+
+  T OutFg() const { return this->ThresholdMode ? static_cast<T>(1) : this->Fg; }
+  T OutBg() const { return this->ThresholdMode ? static_cast<T>(0) : this->Bg; }
+
+  bool IsFg(T v) const
+  {
+    if (this->ThresholdMode)
+    {
+      return static_cast<double>(v) >= this->Thresh;
+    }
+    return v == this->Fg;
+  }
+
+  bool IsBg(T v) const
+  {
+    if (this->ThresholdMode)
+    {
+      return static_cast<double>(v) < this->Thresh;
+    }
+    return v == this->Bg;
+  }
+
+  bool PassThrough(T v) const { return !this->ThresholdMode && v != this->Fg && v != this->Bg; }
+};
+
+template <typename T>
+void DilateBin(
+  const T* in, T* out, const Grid& g, const BinSpec<T>& bin, vtkSHYXImageMorphology* self)
 {
   const int* ext = g.Ext;
   vtkSMPTools::For(ext[4], ext[5] + 1, [&](vtkIdType z0, vtkIdType z1) {
@@ -248,7 +281,7 @@ void DilateBin(const T* in, T* out, const Grid& g, T fg, T bg, vtkSHYXImageMorph
         {
           const vtkIdType i = VoxelIndex(x, y, z, ext, g.DimX, g.DimXY);
           const T cur = in[i];
-          if (cur != fg && cur != bg)
+          if (bin.PassThrough(cur))
           {
             out[i] = cur;
             continue;
@@ -256,13 +289,13 @@ void DilateBin(const T* in, T* out, const Grid& g, T fg, T bg, vtkSHYXImageMorph
           bool foundFg = false;
           for (const Off& o : *g.SE)
           {
-            if (SampleClamp(in, x + o.dx, y + o.dy, z + o.dz, ext, g.DimX, g.DimXY) == fg)
+            if (bin.IsFg(SampleClamp(in, x + o.dx, y + o.dy, z + o.dz, ext, g.DimX, g.DimXY)))
             {
               foundFg = true;
               break;
             }
           }
-          out[i] = foundFg ? fg : cur;
+          out[i] = foundFg ? bin.OutFg() : (bin.ThresholdMode ? bin.OutBg() : cur);
         }
       }
     }
@@ -270,7 +303,7 @@ void DilateBin(const T* in, T* out, const Grid& g, T fg, T bg, vtkSHYXImageMorph
 }
 
 template <typename T>
-void ErodeBin(const T* in, T* out, const Grid& g, T fg, T bg, vtkSHYXImageMorphology* self)
+void ErodeBin(const T* in, T* out, const Grid& g, const BinSpec<T>& bin, vtkSHYXImageMorphology* self)
 {
   const int* ext = g.Ext;
   vtkSMPTools::For(ext[4], ext[5] + 1, [&](vtkIdType z0, vtkIdType z1) {
@@ -286,7 +319,7 @@ void ErodeBin(const T* in, T* out, const Grid& g, T fg, T bg, vtkSHYXImageMorpho
         {
           const vtkIdType i = VoxelIndex(x, y, z, ext, g.DimX, g.DimXY);
           const T cur = in[i];
-          if (cur != fg && cur != bg)
+          if (bin.PassThrough(cur))
           {
             out[i] = cur;
             continue;
@@ -294,13 +327,13 @@ void ErodeBin(const T* in, T* out, const Grid& g, T fg, T bg, vtkSHYXImageMorpho
           bool foundBg = false;
           for (const Off& o : *g.SE)
           {
-            if (SampleClamp(in, x + o.dx, y + o.dy, z + o.dz, ext, g.DimX, g.DimXY) == bg)
+            if (bin.IsBg(SampleClamp(in, x + o.dx, y + o.dy, z + o.dz, ext, g.DimX, g.DimXY)))
             {
               foundBg = true;
               break;
             }
           }
-          out[i] = foundBg ? bg : cur;
+          out[i] = foundBg ? bin.OutBg() : (bin.ThresholdMode ? bin.OutFg() : cur);
         }
       }
     }
@@ -308,8 +341,8 @@ void ErodeBin(const T* in, T* out, const Grid& g, T fg, T bg, vtkSHYXImageMorpho
 }
 
 template <typename T>
-void HitOrMiss(const T* in, T* out, const Grid& gFg, const std::vector<Off>& bgSE, T fg, T bg,
-  vtkSHYXImageMorphology* self)
+void HitOrMiss(const T* in, T* out, const Grid& gFg, const std::vector<Off>& bgSE,
+  const BinSpec<T>& bin, vtkSHYXImageMorphology* self)
 {
   const int* ext = gFg.Ext;
   vtkSMPTools::For(ext[4], ext[5] + 1, [&](vtkIdType z0, vtkIdType z1) {
@@ -326,7 +359,7 @@ void HitOrMiss(const T* in, T* out, const Grid& gFg, const std::vector<Off>& bgS
           bool hitFg = true;
           for (const Off& o : *gFg.SE)
           {
-            if (SampleClamp(in, x + o.dx, y + o.dy, z + o.dz, ext, gFg.DimX, gFg.DimXY) != fg)
+            if (!bin.IsFg(SampleClamp(in, x + o.dx, y + o.dy, z + o.dz, ext, gFg.DimX, gFg.DimXY)))
             {
               hitFg = false;
               break;
@@ -337,14 +370,15 @@ void HitOrMiss(const T* in, T* out, const Grid& gFg, const std::vector<Off>& bgS
           {
             for (const Off& o : bgSE)
             {
-              if (SampleClamp(in, x + o.dx, y + o.dy, z + o.dz, ext, gFg.DimX, gFg.DimXY) != bg)
+              if (!bin.IsBg(SampleClamp(in, x + o.dx, y + o.dy, z + o.dz, ext, gFg.DimX, gFg.DimXY)))
               {
                 hitBg = false;
                 break;
               }
             }
           }
-          out[VoxelIndex(x, y, z, ext, gFg.DimX, gFg.DimXY)] = (hitFg && hitBg) ? fg : bg;
+          out[VoxelIndex(x, y, z, ext, gFg.DimX, gFg.DimXY)] =
+            (hitFg && hitBg) ? bin.OutFg() : bin.OutBg();
         }
       }
     }
@@ -403,12 +437,14 @@ void vtkSHYXImageMorphology::PrintSelf(ostream& os, vtkIndent indent)
   this->Superclass::PrintSelf(os, indent);
   os << indent << "Operation: " << this->Operation << "\n";
   os << indent << "ValueMode: " << this->ValueMode << "\n";
+  os << indent << "BinaryMatch: " << this->BinaryMatch << "\n";
   os << indent << "KernelShape: " << this->KernelShape << "\n";
   os << indent << "KernelSize: (" << this->KernelSize[0] << ", " << this->KernelSize[1] << ", "
      << this->KernelSize[2] << ")\n";
   os << indent << "NumberOfIterations: " << this->NumberOfIterations << "\n";
   os << indent << "ForegroundValue: " << this->ForegroundValue << "\n";
   os << indent << "BackgroundValue: " << this->BackgroundValue << "\n";
+  os << indent << "Threshold: " << this->Threshold << "\n";
   os << indent << "BackgroundKernelSize: (" << this->BackgroundKernelSize[0] << ", "
      << this->BackgroundKernelSize[1] << ", " << this->BackgroundKernelSize[2] << ")\n";
 }
@@ -581,8 +617,29 @@ int vtkSHYXImageMorphology::RequestData(vtkInformation* vtkNotUsed(request),
       using T = VTK_TT;
       const T* inPtr = static_cast<const T*>(inArr->GetVoidPointer(0));
       T* outPtr = static_cast<T*>(outArr->GetVoidPointer(0));
-      const T fg = static_cast<T>(this->ForegroundValue);
-      const T bg = static_cast<T>(this->BackgroundValue);
+      BinSpec<T> bin;
+      bin.ThresholdMode = (this->BinaryMatch == THRESHOLD);
+      bin.Fg = static_cast<T>(this->ForegroundValue);
+      bin.Bg = static_cast<T>(this->BackgroundValue);
+      bin.Thresh = this->Threshold;
+
+      std::vector<T> thresholdMask;
+      const T* src = inPtr;
+      if (!gray && bin.ThresholdMode)
+      {
+        thresholdMask.resize(static_cast<size_t>(nPts));
+        vtkSMPTools::For(0, nPts, [&](vtkIdType begin, vtkIdType end) {
+          for (vtkIdType i = begin; i < end; ++i)
+          {
+            thresholdMask[static_cast<size_t>(i)] =
+              bin.IsFg(inPtr[i]) ? static_cast<T>(1) : static_cast<T>(0);
+          }
+        });
+        bin.ThresholdMode = false;
+        bin.Fg = static_cast<T>(1);
+        bin.Bg = static_cast<T>(0);
+        src = thresholdMask.data();
+      }
 
       auto dilate = [&](const T* s, T* d) {
         if (gray)
@@ -591,7 +648,7 @@ int vtkSHYXImageMorphology::RequestData(vtkInformation* vtkNotUsed(request),
         }
         else
         {
-          DilateBin(s, d, g, fg, bg, this);
+          DilateBin(s, d, g, bin, this);
         }
       };
       auto erode = [&](const T* s, T* d) {
@@ -601,7 +658,7 @@ int vtkSHYXImageMorphology::RequestData(vtkInformation* vtkNotUsed(request),
         }
         else
         {
-          ErodeBin(s, d, g, fg, bg, this);
+          ErodeBin(s, d, g, bin, this);
         }
       };
 
@@ -612,15 +669,15 @@ int vtkSHYXImageMorphology::RequestData(vtkInformation* vtkNotUsed(request),
       switch (op)
       {
         case DILATE:
-          RepeatOp(dilate, inPtr, outPtr, scratch, nIters, nPts);
+          RepeatOp(dilate, src, outPtr, scratch, nIters, nPts);
           break;
         case ERODE:
-          RepeatOp(erode, inPtr, outPtr, scratch, nIters, nPts);
+          RepeatOp(erode, src, outPtr, scratch, nIters, nPts);
           break;
         case OPEN:
           bufA.resize(static_cast<size_t>(nPts));
           bufB.resize(static_cast<size_t>(nPts));
-          std::copy(inPtr, inPtr + nPts, bufA.begin());
+          std::copy(src, src + nPts, bufA.begin());
           for (int i = 0; i < nIters && !this->AbortExecute; ++i)
           {
             erode(bufA.data(), bufB.data());
@@ -632,7 +689,7 @@ int vtkSHYXImageMorphology::RequestData(vtkInformation* vtkNotUsed(request),
         case CLOSE:
           bufA.resize(static_cast<size_t>(nPts));
           bufB.resize(static_cast<size_t>(nPts));
-          std::copy(inPtr, inPtr + nPts, bufA.begin());
+          std::copy(src, src + nPts, bufA.begin());
           for (int i = 0; i < nIters && !this->AbortExecute; ++i)
           {
             dilate(bufA.data(), bufB.data());
@@ -644,44 +701,44 @@ int vtkSHYXImageMorphology::RequestData(vtkInformation* vtkNotUsed(request),
         case MORPH_GRADIENT:
           bufA.resize(static_cast<size_t>(nPts));
           bufB.resize(static_cast<size_t>(nPts));
-          RepeatOp(dilate, inPtr, bufA.data(), scratch, nIters, nPts);
-          RepeatOp(erode, inPtr, bufB.data(), scratch, nIters, nPts);
+          RepeatOp(dilate, src, bufA.data(), scratch, nIters, nPts);
+          RepeatOp(erode, src, bufB.data(), scratch, nIters, nPts);
           SubtractArrays(bufA.data(), bufB.data(), outPtr, nPts);
           break;
         case INTERNAL_GRADIENT:
           bufA.resize(static_cast<size_t>(nPts));
-          RepeatOp(erode, inPtr, bufA.data(), scratch, nIters, nPts);
-          SubtractArrays(inPtr, bufA.data(), outPtr, nPts);
+          RepeatOp(erode, src, bufA.data(), scratch, nIters, nPts);
+          SubtractArrays(src, bufA.data(), outPtr, nPts);
           break;
         case EXTERNAL_GRADIENT:
           bufA.resize(static_cast<size_t>(nPts));
-          RepeatOp(dilate, inPtr, bufA.data(), scratch, nIters, nPts);
-          SubtractArrays(bufA.data(), inPtr, outPtr, nPts);
+          RepeatOp(dilate, src, bufA.data(), scratch, nIters, nPts);
+          SubtractArrays(bufA.data(), src, outPtr, nPts);
           break;
         case WHITE_TOPHAT:
           bufA.resize(static_cast<size_t>(nPts));
           bufB.resize(static_cast<size_t>(nPts));
-          std::copy(inPtr, inPtr + nPts, bufA.begin());
+          std::copy(src, src + nPts, bufA.begin());
           for (int i = 0; i < nIters && !this->AbortExecute; ++i)
           {
             erode(bufA.data(), bufB.data());
             dilate(bufB.data(), bufA.data());
           }
-          SubtractArrays(inPtr, bufA.data(), outPtr, nPts);
+          SubtractArrays(src, bufA.data(), outPtr, nPts);
           break;
         case BLACK_TOPHAT:
           bufA.resize(static_cast<size_t>(nPts));
           bufB.resize(static_cast<size_t>(nPts));
-          std::copy(inPtr, inPtr + nPts, bufA.begin());
+          std::copy(src, src + nPts, bufA.begin());
           for (int i = 0; i < nIters && !this->AbortExecute; ++i)
           {
             dilate(bufA.data(), bufB.data());
             erode(bufB.data(), bufA.data());
           }
-          SubtractArrays(bufA.data(), inPtr, outPtr, nPts);
+          SubtractArrays(bufA.data(), src, outPtr, nPts);
           break;
         case HIT_OR_MISS:
-          HitOrMiss(inPtr, outPtr, g, bgSe, fg, bg, this);
+          HitOrMiss(src, outPtr, g, bgSe, bin, this);
           break;
         default:
           vtkErrorMacro(<< "Unknown Operation.");

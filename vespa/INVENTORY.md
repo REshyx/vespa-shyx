@@ -119,6 +119,7 @@ Vascular 顺序（[`VESPAVascularCategory.xml`](../ParaViewPlugin/smxml/VESPAVas
 | 界面标签 | 类 | 目录 | XML | 图标 | README | 后端 |
 |----------|----|------|-----|------|--------|------|
 | SHYX Image Morphology | `vtkSHYXImageMorphology` | ImageMorphology | SHYXImageMorphology.xml | 自有（复用 Density Sampler 图） | [有](shyx/ImageMorphology/README.md) | VTK |
+| SHYX Image AntiAlias | `vtkSHYXImageAntiAlias` | ImageAntiAlias | SHYXImageAntiAlias.xml | 自有（复用 Density Sampler 图） | [有](shyx/ImageAntiAlias/README.md) | VMTK（其安装树中的 ITK） |
 
 ### 工具
 
