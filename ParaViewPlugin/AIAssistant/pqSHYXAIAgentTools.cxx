@@ -2189,10 +2189,12 @@ const ShyxExtra kShyxExtra[] = {
     "vector array); Type Poly = each polygon along its face normal with unique vertices (scales). "
     "Output Front/Side/Back: Front is the cap (Point with Side and Back off = in-place move); "
     "Side = walls (Point: patch boundary ring; Poly: each scale edge back to original verts); "
-    "Back keeps original selected faces (reversed if Front is also on). Region: vtkSelection if "
-    "present, else Mask Array with Threshold Between/Below Lower/Above Upper, else all. Invert "
-    "flips the set. Old SHYXPointExtrudeFilter() is gone. SHYX Selection Extrude is still the "
-    "connected-patch tool along patch/point normals." },
+    "Back keeps original selected faces (reversed if Front is also on). Use Selection is off by "
+    "default (the Selection port is ignored). It and the Threshold mask are independent: either, "
+    "both = intersection, neither = all. Invert flips the combined set. Creating the filter still "
+    "copies the active selection into the widget so turning Use Selection on does not need Copy "
+    "Active Selection unless the pick changed. Old SHYXPointExtrudeFilter() is gone. SHYX "
+    "Selection Extrude is still the connected-patch tool along patch/point normals." },
   { "SHYXSelectionExtrudeFilter",
     "Connected-patch extrusion (shared cap vertices), not SHYX Extrude's Poly scales. "
     "Needs an active 3D selection of cells (or Selection Cell Array Name)." },

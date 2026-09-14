@@ -4,8 +4,8 @@
                  class="vtkSHYXExtrudeFilter"
                  label="SHYX Extrude">
       <Documentation
-          long_help="Extrudes vtkPolyData as Point (shared vertices along point normals or a point vector array) or Poly (each polygon independently along its face normal, unique vertices per face). Region comes from the Selection port if present, else a point- or cell-data mask using vtkThreshold-style Between / Below Lower / Above Upper, else the whole mesh. Invert flips that set. Output Front / Side / Back are independent: Front is the cap; Side is walls (Point: one ring on the patch boundary; Poly: every scale edge back to the original vertices); Back keeps the original selected faces (reversed when Front is also on). Point with only Front on is in-place displacement (a subset stretches neighboring faces). Creating the filter copies the Input's active selection into the Selection widget."
-          short_help="SHYX Extrude: Point (vertex normals) or Poly (face-normal scales); Front/Side/Back; Threshold mask or selection."/>
+          long_help="Extrudes vtkPolyData as Point (shared vertices along point normals or a point vector array) or Poly (each polygon independently along its face normal, unique vertices per face). Use Selection (off by default) and a Threshold mask are independent: either, both (intersection), or neither (whole mesh). Invert flips the combined set. Output Front / Side / Back are independent: Front is the cap; Side is walls (Point: one ring on the patch boundary; Poly: every scale edge back to the original vertices); Back keeps the original selected faces (reversed when Front is also on). Point with only Front on is in-place displacement (a subset stretches neighboring faces). Creating the filter still copies the Input's active selection into the Selection widget so turning Use Selection on does not require Copy Active Selection unless the pick changed."
+          short_help="SHYX Extrude: Point or Poly; Front/Side/Back; Use Selection (off by default) and Threshold independently."/>
 
       <InputProperty name="Input" command="SetInputConnection">
         <ProxyGroupDomain name="groups">
@@ -20,6 +20,19 @@
         <Documentation>Surface or polygonal vtkPolyData.</Documentation>
       </InputProperty>
 
+      <IntVectorProperty name="UseSelection"
+                         label="Use Selection"
+                         command="SetUseSelection"
+                         number_of_elements="1"
+                         default_values="0"
+                         animateable="0">
+        <BooleanDomain name="bool"/>
+        <Documentation>
+          Off by default: the Selection port is ignored. On: restrict to the vtkSelection
+          (independent of the Threshold mask; both on → intersection).
+        </Documentation>
+      </IntVectorProperty>
+
       <InputProperty name="Selection" label="Selection"
                      command="SetSourceConnection">
         <ProxyGroupDomain name="groups">
@@ -30,11 +43,16 @@
           <DataType value="vtkSelection"/>
         </DataTypeDomain>
         <Documentation>
-          Optional vtkSelection. Used when present; otherwise the Threshold mask, otherwise all.
-          Filled at create from the Input's active selection.
+          vtkSelection used only when Use Selection is on. Independent of the Threshold mask:
+          both on → intersection. Creating the filter copies the Input's active selection so
+          enabling Use Selection does not require Copy Active Selection unless the pick changed.
         </Documentation>
         <Hints>
           <SelectionInput/>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="visibility"
+                                   property="UseSelection"
+                                   value="1"/>
         </Hints>
       </InputProperty>
 
@@ -214,8 +232,8 @@
           </RequiredProperties>
         </ArrayListDomain>
         <Documentation>
-          Used when Selection is empty. Point- or cell-centered; same name on both prefers cell data.
-          Tuple magnitude compared with Lower / Between / Upper.
+          Point- or cell-centered; same name on both prefers cell data. Tuple magnitude compared
+          with Lower / Between / Upper. Independent of Use Selection: both on → intersection.
         </Documentation>
         <Hints>
           <ArraySelectionWidget/>
@@ -300,6 +318,11 @@
         <Property name="OutputBack"/>
       </PropertyGroup>
 
+      <PropertyGroup label="Selection">
+        <Property name="UseSelection"/>
+        <Property name="Selection"/>
+      </PropertyGroup>
+
       <PropertyGroup label="Distance and direction">
         <Property name="ExtrusionDistance"/>
         <Property name="FlipDirection"/>
@@ -309,7 +332,7 @@
         <Property name="DistanceMultiplierArrayName"/>
       </PropertyGroup>
 
-      <PropertyGroup label="Region (selection or threshold)">
+      <PropertyGroup label="Threshold mask">
         <Property name="MaskArrayName"/>
         <Property name="ThresholdMethod"/>
         <Property name="LowerThreshold"/>

@@ -1,0 +1,676 @@
+<ServerManagerConfiguration>
+  <ProxyGroup name="representations">
+    <RepresentationProxy name="SHYXGraphRepresentation"
+                         class="vtkSHYXGraphRepresentation"
+                         processes="client|dataserver|renderserver"
+                         base_proxygroup="representations"
+                         base_proxyname="SurfaceRepresentation">
+      <Documentation>
+        Draws the dataset as a labeled graph of vertices, lines, faces, and volumes.
+        Vertex cells become camera-facing disks with numbers; enable All points to include
+        non-vertex mesh points. Line / face / volume numbers sit at cell centers. Volumes
+        use outer faces plus a wireframe of all unique edges (selection-style), not volume
+        rendering. Empty / IDs arrays label with point or cell ids. The default Surface
+        actor is hidden.
+      </Documentation>
+
+      <IntVectorProperty name="ShowVertex"
+                         command="SetShowVertex"
+                         default_values="1"
+                         number_of_elements="1"
+                         label="Vertex">
+        <BooleanDomain name="bool" />
+        <Documentation>
+          Draw vertex cells as circles with a number inside. Turn on All points to also
+          mark every mesh point, not only VTK_VERTEX cells.
+        </Documentation>
+      </IntVectorProperty>
+
+      <IntVectorProperty name="AllPoint"
+                         command="SetAllPoint"
+                         default_values="0"
+                         number_of_elements="1"
+                         label="All points">
+        <BooleanDomain name="bool" />
+        <Documentation>
+          When Vertex is on, also draw non-vertex mesh points as numbered circles.
+        </Documentation>
+        <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="visibility"
+                                   property="ShowVertex"
+                                   value="1"/>
+        </Hints>
+      </IntVectorProperty>
+
+      <StringVectorProperty name="VertexArray"
+                            command="SetVertexArray"
+                            default_values="IDs"
+                            label="Vertex array"
+                            number_of_elements="1">
+        <Documentation>
+          Point (or cell) array written inside each vertex circle. IDs (default) uses
+          point indices. None hides the numbers but keeps the circles.
+        </Documentation>
+        <RepresentedArrayListDomain name="array_list"
+                                    input_domain_name="input_array_point"
+                                    none_string="None">
+          <RequiredProperties>
+            <Property function="Input" name="Input" />
+          </RequiredProperties>
+        </RepresentedArrayListDomain>
+        <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="visibility"
+                                   property="ShowVertex"
+                                   value="1"/>
+        </Hints>
+      </StringVectorProperty>
+
+      <DoubleVectorProperty name="VertexColor"
+                            command="SetVertexColor"
+                            default_values="1 0.85 0.2"
+                            number_of_elements="3"
+                            label="Vertex color">
+        <DoubleRangeDomain name="range" min="0 0 0" max="1 1 1" />
+        <Documentation>RGB color of vertex disks.</Documentation>
+        <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="visibility"
+                                   property="ShowVertex"
+                                   value="1"/>
+        </Hints>
+      </DoubleVectorProperty>
+
+      <DoubleVectorProperty name="VertexOpacity"
+                            command="SetVertexOpacity"
+                            default_values="1"
+                            number_of_elements="1"
+                            label="Vertex opacity">
+        <DoubleRangeDomain name="range" min="0" max="1" />
+        <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="visibility"
+                                   property="ShowVertex"
+                                   value="1"/>
+        </Hints>
+      </DoubleVectorProperty>
+
+      <DoubleVectorProperty name="VertexScale"
+                            command="SetVertexScale"
+                            default_values="1"
+                            number_of_elements="1"
+                            label="Vertex scale">
+        <DoubleRangeDomain name="range" min="0.01" max="100" />
+        <Documentation>
+          Multiplier on the auto disk radius (about 1.2% of the bounds diagonal).
+        </Documentation>
+        <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="visibility"
+                                   property="ShowVertex"
+                                   value="1"/>
+        </Hints>
+      </DoubleVectorProperty>
+
+      <IntVectorProperty name="ShowLine"
+                         command="SetShowLine"
+                         default_values="1"
+                         number_of_elements="1"
+                         label="Line">
+        <BooleanDomain name="bool" />
+        <Documentation>Draw 1D cells and put a number at each line midpoint.</Documentation>
+      </IntVectorProperty>
+
+      <StringVectorProperty name="LineArray"
+                            command="SetLineArray"
+                            default_values="IDs"
+                            label="Line array"
+                            number_of_elements="1">
+        <Documentation>
+          Cell (or point, averaged) array labeled at line midpoints. IDs uses cell indices.
+        </Documentation>
+        <RepresentedArrayListDomain name="array_list"
+                                    input_domain_name="input_array_cell"
+                                    none_string="None">
+          <RequiredProperties>
+            <Property function="Input" name="Input" />
+          </RequiredProperties>
+        </RepresentedArrayListDomain>
+        <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="visibility"
+                                   property="ShowLine"
+                                   value="1"/>
+        </Hints>
+      </StringVectorProperty>
+
+      <DoubleVectorProperty name="LineColor"
+                            command="SetLineColor"
+                            default_values="0.2 0.7 1"
+                            number_of_elements="3"
+                            label="Line color">
+        <DoubleRangeDomain name="range" min="0 0 0" max="1 1 1" />
+        <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="visibility"
+                                   property="ShowLine"
+                                   value="1"/>
+        </Hints>
+      </DoubleVectorProperty>
+
+      <DoubleVectorProperty name="LineOpacity"
+                            command="SetLineOpacity"
+                            default_values="1"
+                            number_of_elements="1"
+                            label="Line opacity">
+        <DoubleRangeDomain name="range" min="0" max="1" />
+        <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="visibility"
+                                   property="ShowLine"
+                                   value="1"/>
+        </Hints>
+      </DoubleVectorProperty>
+
+      <IntVectorProperty name="ShowFace"
+                         command="SetShowFace"
+                         default_values="1"
+                         number_of_elements="1"
+                         label="Face">
+        <BooleanDomain name="bool" />
+        <Documentation>Draw 2D cells and put a number at each face center.</Documentation>
+      </IntVectorProperty>
+
+      <StringVectorProperty name="FaceArray"
+                            command="SetFaceArray"
+                            default_values="IDs"
+                            label="Face array"
+                            number_of_elements="1">
+        <Documentation>
+          Cell (or point, averaged) array labeled at face centers. IDs uses cell indices.
+        </Documentation>
+        <RepresentedArrayListDomain name="array_list"
+                                    input_domain_name="input_array_cell"
+                                    none_string="None">
+          <RequiredProperties>
+            <Property function="Input" name="Input" />
+          </RequiredProperties>
+        </RepresentedArrayListDomain>
+        <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="visibility"
+                                   property="ShowFace"
+                                   value="1"/>
+        </Hints>
+      </StringVectorProperty>
+
+      <DoubleVectorProperty name="FaceColor"
+                            command="SetFaceColor"
+                            default_values="0.45 0.8 0.5"
+                            number_of_elements="3"
+                            label="Face color">
+        <DoubleRangeDomain name="range" min="0 0 0" max="1 1 1" />
+        <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="visibility"
+                                   property="ShowFace"
+                                   value="1"/>
+        </Hints>
+      </DoubleVectorProperty>
+
+      <DoubleVectorProperty name="FaceOpacity"
+                            command="SetFaceOpacity"
+                            default_values="0.55"
+                            number_of_elements="1"
+                            label="Face opacity">
+        <DoubleRangeDomain name="range" min="0" max="1" />
+        <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="visibility"
+                                   property="ShowFace"
+                                   value="1"/>
+        </Hints>
+      </DoubleVectorProperty>
+
+      <IntVectorProperty name="ShowVolume"
+                         command="SetShowVolume"
+                         default_values="1"
+                         number_of_elements="1"
+                         label="Volume">
+        <BooleanDomain name="bool" />
+        <Documentation>
+          Draw 3D cells as outer faces plus a wireframe of all unique edges (like volume
+          cell selection), with a number at each volume center. Does not use volume
+          raycasting.
+        </Documentation>
+      </IntVectorProperty>
+
+      <StringVectorProperty name="VolumeArray"
+                            command="SetVolumeArray"
+                            default_values="IDs"
+                            label="Volume array"
+                            number_of_elements="1">
+        <Documentation>
+          Cell (or point, averaged) array labeled at volume centers. IDs uses cell indices.
+        </Documentation>
+        <RepresentedArrayListDomain name="array_list"
+                                    input_domain_name="input_array_cell"
+                                    none_string="None">
+          <RequiredProperties>
+            <Property function="Input" name="Input" />
+          </RequiredProperties>
+        </RepresentedArrayListDomain>
+        <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="visibility"
+                                   property="ShowVolume"
+                                   value="1"/>
+        </Hints>
+      </StringVectorProperty>
+
+      <DoubleVectorProperty name="VolumeColor"
+                            command="SetVolumeColor"
+                            default_values="1 0.5 0.2"
+                            number_of_elements="3"
+                            label="Volume color">
+        <DoubleRangeDomain name="range" min="0 0 0" max="1 1 1" />
+        <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="visibility"
+                                   property="ShowVolume"
+                                   value="1"/>
+        </Hints>
+      </DoubleVectorProperty>
+
+      <DoubleVectorProperty name="VolumeOpacity"
+                            command="SetVolumeOpacity"
+                            default_values="0.35"
+                            number_of_elements="1"
+                            label="Volume opacity">
+        <DoubleRangeDomain name="range" min="0" max="1" />
+        <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="visibility"
+                                   property="ShowVolume"
+                                   value="1"/>
+        </Hints>
+      </DoubleVectorProperty>
+
+      <IntVectorProperty name="MaximumNumberOfLabels"
+                         command="SetMaximumNumberOfLabels"
+                         default_values="2000"
+                         number_of_elements="1"
+                         label="Maximum number of labels">
+        <IntRangeDomain name="range" min="1" max="1000000" />
+        <Documentation>
+          Cap on labels per entity type (vertex / line / face / volume). Extra entities
+          are randomly subsampled.
+        </Documentation>
+      </IntVectorProperty>
+
+      <StringVectorProperty name="LabelFormat"
+                            command="SetLabelFormat"
+                            default_values=""
+                            label="Label format (printf)"
+                            number_of_elements="1">
+        <Documentation>
+          Optional printf-style format for numeric arrays (e.g. "%.0f"). Empty uses VTK
+          defaults. String arrays ignore this.
+        </Documentation>
+      </StringVectorProperty>
+
+      <IntVectorProperty name="LabelFontSize"
+                         command="SetLabelFontSize"
+                         default_values="14"
+                         number_of_elements="1"
+                         label="Label font size">
+        <IntRangeDomain name="range" min="4" max="128" />
+      </IntVectorProperty>
+
+      <PropertyGroup label="Vertex">
+        <Property name="ShowVertex"/>
+        <Property name="AllPoint"/>
+        <Property name="VertexArray"/>
+        <Property name="VertexColor"/>
+        <Property name="VertexOpacity"/>
+        <Property name="VertexScale"/>
+      </PropertyGroup>
+      <PropertyGroup label="Line">
+        <Property name="ShowLine"/>
+        <Property name="LineArray"/>
+        <Property name="LineColor"/>
+        <Property name="LineOpacity"/>
+      </PropertyGroup>
+      <PropertyGroup label="Face">
+        <Property name="ShowFace"/>
+        <Property name="FaceArray"/>
+        <Property name="FaceColor"/>
+        <Property name="FaceOpacity"/>
+      </PropertyGroup>
+      <PropertyGroup label="Volume">
+        <Property name="ShowVolume"/>
+        <Property name="VolumeArray"/>
+        <Property name="VolumeColor"/>
+        <Property name="VolumeOpacity"/>
+      </PropertyGroup>
+      <PropertyGroup label="Labels">
+        <Property name="MaximumNumberOfLabels"/>
+        <Property name="LabelFormat"/>
+        <Property name="LabelFontSize"/>
+      </PropertyGroup>
+    </RepresentationProxy>
+
+    <Extension name="GeometryRepresentation">
+      <RepresentationType subproxy="SHYXGraphRepresentation"
+                          text="Graph" />
+      <SubProxy>
+        <Proxy name="SHYXGraphRepresentation"
+               proxygroup="representations"
+               proxyname="SHYXGraphRepresentation" />
+        <ShareProperties subproxy="SurfaceRepresentation">
+          <Exception name="Input" />
+          <Exception name="Visibility" />
+          <Exception name="Representation" />
+        </ShareProperties>
+        <ExposedProperties>
+          <PropertyGroup label="Vertex">
+            <Property name="ShowVertex" exposed_name="GR_ShowVertex" />
+            <Property name="AllPoint" exposed_name="GR_AllPoint" />
+            <Property name="VertexArray" exposed_name="GR_VertexArray" />
+            <Property name="VertexColor" exposed_name="GR_VertexColor" />
+            <Property name="VertexOpacity" exposed_name="GR_VertexOpacity" />
+            <Property name="VertexScale" exposed_name="GR_VertexScale" />
+            <Hints>
+              <PropertyWidgetDecorator type="GenericDecorator"
+                                       mode="visibility"
+                                       property="Representation"
+                                       value="Graph" />
+            </Hints>
+          </PropertyGroup>
+          <PropertyGroup label="Line">
+            <Property name="ShowLine" exposed_name="GR_ShowLine" />
+            <Property name="LineArray" exposed_name="GR_LineArray" />
+            <Property name="LineColor" exposed_name="GR_LineColor" />
+            <Property name="LineOpacity" exposed_name="GR_LineOpacity" />
+            <Hints>
+              <PropertyWidgetDecorator type="GenericDecorator"
+                                       mode="visibility"
+                                       property="Representation"
+                                       value="Graph" />
+            </Hints>
+          </PropertyGroup>
+          <PropertyGroup label="Face">
+            <Property name="ShowFace" exposed_name="GR_ShowFace" />
+            <Property name="FaceArray" exposed_name="GR_FaceArray" />
+            <Property name="FaceColor" exposed_name="GR_FaceColor" />
+            <Property name="FaceOpacity" exposed_name="GR_FaceOpacity" />
+            <Hints>
+              <PropertyWidgetDecorator type="GenericDecorator"
+                                       mode="visibility"
+                                       property="Representation"
+                                       value="Graph" />
+            </Hints>
+          </PropertyGroup>
+          <PropertyGroup label="Volume">
+            <Property name="ShowVolume" exposed_name="GR_ShowVolume" />
+            <Property name="VolumeArray" exposed_name="GR_VolumeArray" />
+            <Property name="VolumeColor" exposed_name="GR_VolumeColor" />
+            <Property name="VolumeOpacity" exposed_name="GR_VolumeOpacity" />
+            <Hints>
+              <PropertyWidgetDecorator type="GenericDecorator"
+                                       mode="visibility"
+                                       property="Representation"
+                                       value="Graph" />
+            </Hints>
+          </PropertyGroup>
+          <PropertyGroup label="Graph labels">
+            <Property name="MaximumNumberOfLabels" exposed_name="GR_MaximumNumberOfLabels" />
+            <Property name="LabelFormat" exposed_name="GR_LabelFormat" />
+            <Property name="LabelFontSize" exposed_name="GR_LabelFontSize" />
+            <Hints>
+              <PropertyWidgetDecorator type="GenericDecorator"
+                                       mode="visibility"
+                                       property="Representation"
+                                       value="Graph" />
+            </Hints>
+          </PropertyGroup>
+        </ExposedProperties>
+      </SubProxy>
+    </Extension>
+
+    <Extension name="UnstructuredGridRepresentation">
+      <RepresentationType subproxy="SHYXGraphRepresentation"
+                          text="Graph" />
+      <SubProxy>
+        <Proxy name="SHYXGraphRepresentation"
+               proxygroup="representations"
+               proxyname="SHYXGraphRepresentation" />
+        <ShareProperties subproxy="SurfaceRepresentation">
+          <Exception name="Input" />
+          <Exception name="Visibility" />
+          <Exception name="Representation" />
+        </ShareProperties>
+        <ExposedProperties>
+          <PropertyGroup label="Vertex">
+            <Property name="ShowVertex" exposed_name="GR_ShowVertex" />
+            <Property name="AllPoint" exposed_name="GR_AllPoint" />
+            <Property name="VertexArray" exposed_name="GR_VertexArray" />
+            <Property name="VertexColor" exposed_name="GR_VertexColor" />
+            <Property name="VertexOpacity" exposed_name="GR_VertexOpacity" />
+            <Property name="VertexScale" exposed_name="GR_VertexScale" />
+            <Hints>
+              <PropertyWidgetDecorator type="GenericDecorator"
+                                       mode="visibility"
+                                       property="Representation"
+                                       value="Graph" />
+            </Hints>
+          </PropertyGroup>
+          <PropertyGroup label="Line">
+            <Property name="ShowLine" exposed_name="GR_ShowLine" />
+            <Property name="LineArray" exposed_name="GR_LineArray" />
+            <Property name="LineColor" exposed_name="GR_LineColor" />
+            <Property name="LineOpacity" exposed_name="GR_LineOpacity" />
+            <Hints>
+              <PropertyWidgetDecorator type="GenericDecorator"
+                                       mode="visibility"
+                                       property="Representation"
+                                       value="Graph" />
+            </Hints>
+          </PropertyGroup>
+          <PropertyGroup label="Face">
+            <Property name="ShowFace" exposed_name="GR_ShowFace" />
+            <Property name="FaceArray" exposed_name="GR_FaceArray" />
+            <Property name="FaceColor" exposed_name="GR_FaceColor" />
+            <Property name="FaceOpacity" exposed_name="GR_FaceOpacity" />
+            <Hints>
+              <PropertyWidgetDecorator type="GenericDecorator"
+                                       mode="visibility"
+                                       property="Representation"
+                                       value="Graph" />
+            </Hints>
+          </PropertyGroup>
+          <PropertyGroup label="Volume">
+            <Property name="ShowVolume" exposed_name="GR_ShowVolume" />
+            <Property name="VolumeArray" exposed_name="GR_VolumeArray" />
+            <Property name="VolumeColor" exposed_name="GR_VolumeColor" />
+            <Property name="VolumeOpacity" exposed_name="GR_VolumeOpacity" />
+            <Hints>
+              <PropertyWidgetDecorator type="GenericDecorator"
+                                       mode="visibility"
+                                       property="Representation"
+                                       value="Graph" />
+            </Hints>
+          </PropertyGroup>
+          <PropertyGroup label="Graph labels">
+            <Property name="MaximumNumberOfLabels" exposed_name="GR_MaximumNumberOfLabels" />
+            <Property name="LabelFormat" exposed_name="GR_LabelFormat" />
+            <Property name="LabelFontSize" exposed_name="GR_LabelFontSize" />
+            <Hints>
+              <PropertyWidgetDecorator type="GenericDecorator"
+                                       mode="visibility"
+                                       property="Representation"
+                                       value="Graph" />
+            </Hints>
+          </PropertyGroup>
+        </ExposedProperties>
+      </SubProxy>
+    </Extension>
+
+    <Extension name="UniformGridRepresentation">
+      <RepresentationType subproxy="SHYXGraphRepresentation"
+                          text="Graph" />
+      <SubProxy>
+        <Proxy name="SHYXGraphRepresentation"
+               proxygroup="representations"
+               proxyname="SHYXGraphRepresentation" />
+        <ShareProperties subproxy="SurfaceRepresentation">
+          <Exception name="Input" />
+          <Exception name="Visibility" />
+          <Exception name="Representation" />
+        </ShareProperties>
+        <ExposedProperties>
+          <PropertyGroup label="Vertex">
+            <Property name="ShowVertex" exposed_name="GR_ShowVertex" />
+            <Property name="AllPoint" exposed_name="GR_AllPoint" />
+            <Property name="VertexArray" exposed_name="GR_VertexArray" />
+            <Property name="VertexColor" exposed_name="GR_VertexColor" />
+            <Property name="VertexOpacity" exposed_name="GR_VertexOpacity" />
+            <Property name="VertexScale" exposed_name="GR_VertexScale" />
+            <Hints>
+              <PropertyWidgetDecorator type="GenericDecorator"
+                                       mode="visibility"
+                                       property="Representation"
+                                       value="Graph" />
+            </Hints>
+          </PropertyGroup>
+          <PropertyGroup label="Line">
+            <Property name="ShowLine" exposed_name="GR_ShowLine" />
+            <Property name="LineArray" exposed_name="GR_LineArray" />
+            <Property name="LineColor" exposed_name="GR_LineColor" />
+            <Property name="LineOpacity" exposed_name="GR_LineOpacity" />
+            <Hints>
+              <PropertyWidgetDecorator type="GenericDecorator"
+                                       mode="visibility"
+                                       property="Representation"
+                                       value="Graph" />
+            </Hints>
+          </PropertyGroup>
+          <PropertyGroup label="Face">
+            <Property name="ShowFace" exposed_name="GR_ShowFace" />
+            <Property name="FaceArray" exposed_name="GR_FaceArray" />
+            <Property name="FaceColor" exposed_name="GR_FaceColor" />
+            <Property name="FaceOpacity" exposed_name="GR_FaceOpacity" />
+            <Hints>
+              <PropertyWidgetDecorator type="GenericDecorator"
+                                       mode="visibility"
+                                       property="Representation"
+                                       value="Graph" />
+            </Hints>
+          </PropertyGroup>
+          <PropertyGroup label="Volume">
+            <Property name="ShowVolume" exposed_name="GR_ShowVolume" />
+            <Property name="VolumeArray" exposed_name="GR_VolumeArray" />
+            <Property name="VolumeColor" exposed_name="GR_VolumeColor" />
+            <Property name="VolumeOpacity" exposed_name="GR_VolumeOpacity" />
+            <Hints>
+              <PropertyWidgetDecorator type="GenericDecorator"
+                                       mode="visibility"
+                                       property="Representation"
+                                       value="Graph" />
+            </Hints>
+          </PropertyGroup>
+          <PropertyGroup label="Graph labels">
+            <Property name="MaximumNumberOfLabels" exposed_name="GR_MaximumNumberOfLabels" />
+            <Property name="LabelFormat" exposed_name="GR_LabelFormat" />
+            <Property name="LabelFontSize" exposed_name="GR_LabelFontSize" />
+            <Hints>
+              <PropertyWidgetDecorator type="GenericDecorator"
+                                       mode="visibility"
+                                       property="Representation"
+                                       value="Graph" />
+            </Hints>
+          </PropertyGroup>
+        </ExposedProperties>
+      </SubProxy>
+    </Extension>
+
+    <Extension name="StructuredGridRepresentation">
+      <RepresentationType subproxy="SHYXGraphRepresentation"
+                          text="Graph" />
+      <SubProxy>
+        <Proxy name="SHYXGraphRepresentation"
+               proxygroup="representations"
+               proxyname="SHYXGraphRepresentation" />
+        <ShareProperties subproxy="SurfaceRepresentation">
+          <Exception name="Input" />
+          <Exception name="Visibility" />
+          <Exception name="Representation" />
+        </ShareProperties>
+        <ExposedProperties>
+          <PropertyGroup label="Vertex">
+            <Property name="ShowVertex" exposed_name="GR_ShowVertex" />
+            <Property name="AllPoint" exposed_name="GR_AllPoint" />
+            <Property name="VertexArray" exposed_name="GR_VertexArray" />
+            <Property name="VertexColor" exposed_name="GR_VertexColor" />
+            <Property name="VertexOpacity" exposed_name="GR_VertexOpacity" />
+            <Property name="VertexScale" exposed_name="GR_VertexScale" />
+            <Hints>
+              <PropertyWidgetDecorator type="GenericDecorator"
+                                       mode="visibility"
+                                       property="Representation"
+                                       value="Graph" />
+            </Hints>
+          </PropertyGroup>
+          <PropertyGroup label="Line">
+            <Property name="ShowLine" exposed_name="GR_ShowLine" />
+            <Property name="LineArray" exposed_name="GR_LineArray" />
+            <Property name="LineColor" exposed_name="GR_LineColor" />
+            <Property name="LineOpacity" exposed_name="GR_LineOpacity" />
+            <Hints>
+              <PropertyWidgetDecorator type="GenericDecorator"
+                                       mode="visibility"
+                                       property="Representation"
+                                       value="Graph" />
+            </Hints>
+          </PropertyGroup>
+          <PropertyGroup label="Face">
+            <Property name="ShowFace" exposed_name="GR_ShowFace" />
+            <Property name="FaceArray" exposed_name="GR_FaceArray" />
+            <Property name="FaceColor" exposed_name="GR_FaceColor" />
+            <Property name="FaceOpacity" exposed_name="GR_FaceOpacity" />
+            <Hints>
+              <PropertyWidgetDecorator type="GenericDecorator"
+                                       mode="visibility"
+                                       property="Representation"
+                                       value="Graph" />
+            </Hints>
+          </PropertyGroup>
+          <PropertyGroup label="Volume">
+            <Property name="ShowVolume" exposed_name="GR_ShowVolume" />
+            <Property name="VolumeArray" exposed_name="GR_VolumeArray" />
+            <Property name="VolumeColor" exposed_name="GR_VolumeColor" />
+            <Property name="VolumeOpacity" exposed_name="GR_VolumeOpacity" />
+            <Hints>
+              <PropertyWidgetDecorator type="GenericDecorator"
+                                       mode="visibility"
+                                       property="Representation"
+                                       value="Graph" />
+            </Hints>
+          </PropertyGroup>
+          <PropertyGroup label="Graph labels">
+            <Property name="MaximumNumberOfLabels" exposed_name="GR_MaximumNumberOfLabels" />
+            <Property name="LabelFormat" exposed_name="GR_LabelFormat" />
+            <Property name="LabelFontSize" exposed_name="GR_LabelFontSize" />
+            <Hints>
+              <PropertyWidgetDecorator type="GenericDecorator"
+                                       mode="visibility"
+                                       property="Representation"
+                                       value="Graph" />
+            </Hints>
+          </PropertyGroup>
+        </ExposedProperties>
+      </SubProxy>
+    </Extension>
+  </ProxyGroup>
+</ServerManagerConfiguration>

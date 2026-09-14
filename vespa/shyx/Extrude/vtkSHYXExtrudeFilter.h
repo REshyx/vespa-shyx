@@ -12,8 +12,8 @@
  * per face). Side walls attach to the original edge vertices; adjacent selected faces do not
  * share cap vertices.
  *
- * Region: vtkSelection on port 1, else a point- or cell-data array with vtkThreshold-style
- * Lower / Between / Upper, else all. Invert flips the resolved set.
+ * Region: Use Selection (off by default) and a Threshold mask are independent. Either, both
+ * (intersection), or neither (whole mesh). Invert flips the combined set.
  */
 
 #ifndef vtkSHYXExtrudeFilter_h
@@ -44,8 +44,12 @@ public:
     THRESHOLD_ABOVE_UPPER = 2
   };
 
-  /** Selection input (port 1): vtkSelection, same pattern as SHYX Selection Extrude. */
+  /** Selection input (port 1): vtkSelection. Ignored unless UseSelection is on. */
   void SetSourceConnection(vtkAlgorithmOutput* algOutput);
+
+  vtkSetMacro(UseSelection, int);
+  vtkGetMacro(UseSelection, int);
+  vtkBooleanMacro(UseSelection, int);
 
   vtkSetClampMacro(ExtrudeType, int, EXTRUDE_POINT, EXTRUDE_POLY);
   vtkGetMacro(ExtrudeType, int);
@@ -126,6 +130,7 @@ protected:
   double LowerThreshold = 0.0;
   double UpperThreshold = 1.0;
   int AllScalars = 0;
+  int UseSelection = 0;
   int Invert = 0;
 
 private:

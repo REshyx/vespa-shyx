@@ -13,6 +13,7 @@
 #include <vtkInformationVector.h>
 #include <vtkMath.h>
 #include <vtkNew.h>
+#include <vtkObject.h>
 #include <vtkObjectFactory.h>
 #include <vtkPointData.h>
 #include <vtkPolyData.h>
@@ -301,6 +302,83 @@ void CollectFromExtracted(vtkPolyData* mesh, vtkDataSet* extracted,
   }
 }
 
+bool AnyTrue(const std::vector<char>& m)
+{
+  for (char b : m)
+  {
+    if (b)
+    {
+      return true;
+    }
+  }
+  return false;
+}
+
+void AndMasks(std::vector<char>& a, const std::vector<char>& b)
+{
+  const size_t n = a.size();
+  for (size_t i = 0; i < n; ++i)
+  {
+    a[i] = (a[i] && b[i]) ? 1 : 0;
+  }
+}
+
+bool ApplyThresholdMask(vtkPolyData* mesh, const char* name, int method, double lo, double hi,
+  bool allScalars, std::vector<char>& selectedCell, std::vector<char>& selectedPoint,
+  bool& primaryIsCell, vtkObject* self)
+{
+  const vtkIdType nCells = mesh->GetNumberOfCells();
+  const vtkIdType nPts = mesh->GetNumberOfPoints();
+  vtkDataArray* const cellArr = mesh->GetCellData()->GetArray(name);
+  vtkDataArray* const ptArr = mesh->GetPointData()->GetArray(name);
+  const bool cellOk = (cellArr != nullptr && cellArr->GetNumberOfTuples() == nCells);
+  const bool pointOk = (ptArr != nullptr && ptArr->GetNumberOfTuples() == nPts);
+  vtkDataArray* arr = nullptr;
+  bool usePointCorners = false;
+  if (cellOk)
+  {
+    arr = cellArr;
+    usePointCorners = false;
+    primaryIsCell = true;
+  }
+  else if (pointOk)
+  {
+    arr = ptArr;
+    usePointCorners = true;
+    primaryIsCell = false;
+  }
+  if (!arr)
+  {
+    vtkWarningWithObjectMacro(self, "Mask array \"" << name << "\" not found on point or cell data.");
+    return false;
+  }
+  selectedCell.assign(static_cast<size_t>(nCells), 0);
+  selectedPoint.assign(static_cast<size_t>(nPts), 0);
+  if (!usePointCorners)
+  {
+    for (vtkIdType cid = 0; cid < nCells; ++cid)
+    {
+      if (!IsSurfacePoly(mesh->GetCellType(cid)))
+      {
+        continue;
+      }
+      selectedCell[static_cast<size_t>(cid)] =
+        PassesThreshold(TupleMagnitude(arr, cid), method, lo, hi) ? 1 : 0;
+    }
+    ExpandCellsToPoints(mesh, selectedCell, selectedPoint, allScalars);
+  }
+  else
+  {
+    for (vtkIdType pid = 0; pid < nPts; ++pid)
+    {
+      selectedPoint[static_cast<size_t>(pid)] =
+        PassesThreshold(TupleMagnitude(arr, pid), method, lo, hi) ? 1 : 0;
+    }
+    ExpandPointsToCells(mesh, selectedPoint, selectedCell, allScalars);
+  }
+  return true;
+}
+
 void AppendUnselected(vtkPolyData* mesh, const std::vector<char>& selectedCell,
   const std::vector<char>& selectedPoint, bool dropSelectedPolys, vtkCellArray* verts,
   vtkCellArray* lines, vtkCellArray* polys, vtkCellArray* strips, vtkIdType& skippedNonPoly)
@@ -428,6 +506,7 @@ void vtkSHYXExtrudeFilter::PrintSelf(ostream& os, vtkIndent indent)
   os << indent << "LowerThreshold: " << this->LowerThreshold << "\n";
   os << indent << "UpperThreshold: " << this->UpperThreshold << "\n";
   os << indent << "AllScalars: " << this->AllScalars << "\n";
+  os << indent << "UseSelection: " << this->UseSelection << "\n";
   os << indent << "Invert: " << this->Invert << "\n";
 }
 
@@ -481,12 +560,12 @@ int vtkSHYXExtrudeFilter::RequestData(vtkInformation* vtkNotUsed(request),
 
   mesh->BuildCells();
 
-  std::vector<char> selectedCell(static_cast<size_t>(nCells), 0);
-  std::vector<char> selectedPoint(static_cast<size_t>(nPts), 0);
-  bool primaryIsCell = true;
-  bool haveRegion = false;
+  std::vector<char> selCell(static_cast<size_t>(nCells), 0);
+  std::vector<char> selPoint(static_cast<size_t>(nPts), 0);
+  bool selPrimaryIsCell = true;
+  bool haveSel = false;
 
-  if (this->GetNumberOfInputConnections(1) > 0)
+  if (this->UseSelection && this->GetNumberOfInputConnections(1) > 0)
   {
     vtkInformation* selInfo = inputVector[1]->GetInformationObject(0);
     if (selInfo && selInfo->Has(vtkDataObject::DATA_OBJECT()))
@@ -503,90 +582,62 @@ int vtkSHYXExtrudeFilter::RequestData(vtkInformation* vtkNotUsed(request),
         if (extracted &&
           (extracted->GetNumberOfCells() > 0 || extracted->GetNumberOfPoints() > 0))
         {
-          CollectFromExtracted(mesh, extracted, selectedCell, selectedPoint, primaryIsCell);
-          for (char b : selectedCell)
-          {
-            if (b)
-            {
-              haveRegion = true;
-              break;
-            }
-          }
-          if (!haveRegion)
-          {
-            for (char b : selectedPoint)
-            {
-              if (b)
-              {
-                haveRegion = true;
-                break;
-              }
-            }
-          }
+          CollectFromExtracted(mesh, extracted, selCell, selPoint, selPrimaryIsCell);
+          haveSel = AnyTrue(selCell) || AnyTrue(selPoint);
         }
       }
     }
   }
-
-  if (!haveRegion && this->MaskArrayName && this->MaskArrayName[0] != '\0')
+  if (this->UseSelection && !haveSel)
   {
-    vtkDataArray* const cellArr = mesh->GetCellData()->GetArray(this->MaskArrayName);
-    vtkDataArray* const ptArr = mesh->GetPointData()->GetArray(this->MaskArrayName);
-    const bool cellOk = (cellArr != nullptr && cellArr->GetNumberOfTuples() == nCells);
-    const bool pointOk = (ptArr != nullptr && ptArr->GetNumberOfTuples() == nPts);
-    vtkDataArray* arr = nullptr;
-    bool usePointCorners = false;
-    if (cellOk)
+    vtkWarningMacro("Use Selection is on but the Selection is empty; it does not restrict the region.");
+  }
+
+  std::vector<char> maskCell(static_cast<size_t>(nCells), 0);
+  std::vector<char> maskPoint(static_cast<size_t>(nPts), 0);
+  bool maskPrimaryIsCell = true;
+  bool haveMask = false;
+  if (this->MaskArrayName && this->MaskArrayName[0] != '\0')
+  {
+    haveMask = ApplyThresholdMask(mesh, this->MaskArrayName, this->ThresholdMethod,
+      this->LowerThreshold, this->UpperThreshold, this->AllScalars != 0, maskCell, maskPoint,
+      maskPrimaryIsCell, this);
+  }
+
+  std::vector<char> selectedCell(static_cast<size_t>(nCells), 0);
+  std::vector<char> selectedPoint(static_cast<size_t>(nPts), 0);
+  bool primaryIsCell = true;
+
+  if (haveSel && haveMask)
+  {
+    if (this->ExtrudeType == EXTRUDE_POLY)
     {
-      arr = cellArr;
-      usePointCorners = false;
+      selectedCell = maskCell;
+      AndMasks(selectedCell, selCell);
+      ExpandCellsToPoints(mesh, selectedCell, selectedPoint, false);
       primaryIsCell = true;
-    }
-    else if (pointOk)
-    {
-      arr = ptArr;
-      usePointCorners = true;
-      primaryIsCell = false;
-    }
-    if (!arr)
-    {
-      vtkWarningMacro("Mask array \"" << this->MaskArrayName << "\" not found on point or cell data.");
     }
     else
     {
-      haveRegion = true;
-      if (!usePointCorners)
-      {
-        for (vtkIdType cid = 0; cid < nCells; ++cid)
-        {
-          if (!IsSurfacePoly(mesh->GetCellType(cid)))
-          {
-            continue;
-          }
-          selectedCell[static_cast<size_t>(cid)] =
-            PassesThreshold(TupleMagnitude(arr, cid), this->ThresholdMethod, this->LowerThreshold,
-              this->UpperThreshold)
-            ? 1
-            : 0;
-        }
-        ExpandCellsToPoints(mesh, selectedCell, selectedPoint, this->AllScalars != 0);
-      }
-      else
-      {
-        for (vtkIdType pid = 0; pid < nPts; ++pid)
-        {
-          selectedPoint[static_cast<size_t>(pid)] =
-            PassesThreshold(TupleMagnitude(arr, pid), this->ThresholdMethod, this->LowerThreshold,
-              this->UpperThreshold)
-            ? 1
-            : 0;
-        }
-        ExpandPointsToCells(mesh, selectedPoint, selectedCell, this->AllScalars != 0);
-      }
+      selectedPoint = maskPoint;
+      AndMasks(selectedPoint, selPoint);
+      ExpandPointsToCells(mesh, selectedPoint, selectedCell, this->AllScalars != 0);
+      primaryIsCell = false;
     }
   }
-
-  if (!haveRegion)
+  else if (haveSel)
+  {
+    selectedCell = std::move(selCell);
+    selectedPoint = std::move(selPoint);
+    primaryIsCell = selPrimaryIsCell;
+  }
+  else if (haveMask)
+  {
+    selectedCell = std::move(maskCell);
+    selectedPoint = std::move(maskPoint);
+    primaryIsCell = maskPrimaryIsCell;
+  }
+  else
   {
     primaryIsCell = true;
     for (vtkIdType pid = 0; pid < nPts; ++pid)

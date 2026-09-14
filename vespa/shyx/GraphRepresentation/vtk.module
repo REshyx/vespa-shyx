@@ -1,0 +1,16 @@
+NAME
+  vtkSHYXGraphRepresentation
+DESCRIPTION
+  "Display representation that draws mesh vertices, lines, faces, and volumes as a labeled graph."
+GROUPS
+  ParaView
+DEPENDS
+  ParaView::RemotingViews
+  VTK::FiltersCore
+  VTK::FiltersParallel
+  VTK::FiltersGeometry
+PRIVATE_DEPENDS
+  VTK::CommonCore
+  VTK::CommonDataModel
+  VTK::RenderingCore
+  VTK::RenderingLabel

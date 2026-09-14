@@ -13,9 +13,14 @@
 
 ## 挤谁
 
-1. Selection 端口有 `vtkSelection`（创建时拷贝当前选区）；
-2. 否则 Mask Array 非空：Threshold **Between / Below Lower / Above Upper**（与 `vtkThreshold` 相同的闭区间），同名数组优先 CellData，可 Invert、All Scalars；
-3. 否则整网。
+Selection 默认关（**Use Selection**）。和 Threshold 独立，不是互斥切换：
+
+- Use Selection 开、无 Mask → 该选区（创建时仍会把当前选区拷进 widget，打开开关不必再 Copy Active Selection，除非后来改了选区）；
+- 只有 Mask Array → Threshold（Between / Below Lower / Above Upper，同名优先 CellData，可 All Scalars）；
+- **两个都开 → 交集**；
+- 都关（无 mask）→ 整网。
+
+Invert 在组合之后取反。
 
 Poly 支持三角/四边/多边形。挤出新点/新面时不搬运原 point/cell 数组；Point 原地挪点时保留数组。
 

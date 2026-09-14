@@ -708,7 +708,7 @@
 | **SHYX Convex Hull** | 纯 VTK 凸包 |
 | **SHYX Resample Lines** | 线网按 Sample Distance 重采样；Fuse 默认开（容差 1e-6×包围盒最长边）；度≠2 为特征点；短于间距的分支只留两端 |
 | **SHYX Selection Extrude** | 选区连通块挤出（共享帽顶点） |
-| **SHYX Extrude** | Point（点法线，默认同地挪点）/ Poly（面法线鳞片）；Front/Side/Back；选区或 Threshold mask |
+| **SHYX Extrude** | Point / Poly；Front/Side/Back；Use Selection 默认关；与 Threshold 独立（同时开则交集） |
 | **SHYX Selection Append Patches** | 选区 / 管线几何 / box·sphere 进 PDC；不收未选父网格单元 |
 | **SHYX Delete / Flip Selected Cells** | 删单元 / 翻转绕向 |
 | **SHYX Selection: Fill, Alpha Wrap, Union** | CGAL ≥ 5.5；Alpha/Offset 默认 0 = 选区 AABB 最长边的 10%；Reset 按选区（`SHYXSelectionBoundsDomain`） |
