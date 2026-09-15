@@ -3,19 +3,26 @@
     <SourceProxy name="SHYXSelectionPlaneClipper"
                  class="vtkSHYXSelectionPlaneClipper"
                  label="SHYX Selection Plane Clipper">
-      <Documentation short_help="SHYX Selection Plane Clipper: Clip mesh with a plane from selection centroid and average normal.">
-        Port 0 input is the full triangulated surface; port 0 output is the clipped mesh. Port 1 is a vtkSelection (same convention as SHYX Selection
+      <Documentation short_help="SHYX Selection Plane Clipper: Clip mesh with a plane from selected faces, lines, or points.">
+        Port 0 input is the full surface; port 0 output is the clipped mesh. Port 1 is a vtkSelection (same convention as SHYX Selection
         Extrude and VESPA Region Fairing). Creating the filter copies the Input's active selection into the Selection
         widget. Copy Active Selection stores that view selection (from any pipeline node) in the
-        Selection box as the source of truth for the initial plane. Show Interactive Cut Plane
+        Selection box as the source of truth for the initial plane. Faces (triangles, quads, polygons, strips)
+        use the area-weighted centroid and average normal. Lines and points fit a PCA plane when they are not
+        collinear; otherwise the normal comes from incident surface (or point) normals, with a last-resort
+        perpendicular to a single line. Show Interactive Cut Plane
         displays the widget from InteractiveCutPacked when that is already set (including a loaded
         .pvsm after a manual drag); otherwise it computes a world-space plane from the copied
         selection. It does not clip and does not clear the view selection. Apply performs the clip.
         No separate Extract Selection filter is required. With Tip connectivity (default), clipping
-        follows the same strategy as SHYX Vessel End Clipper.
-        Optional Selection Cell Array Name selects triangles on port 0 when no selection is provided.
-        Fill Holes (default ON) runs vtkFillHolesFilter on the clip boundary using an automatic maximum hole size
-        from the result bounds unless you set Fill Holes Maximum Size. Cell data from the clipped surface is
+        follows the same strategy as SHYX Vessel End Clipper (discards the small fragment near the
+        selection). Invert Result keeps that small fragment instead and discards the large remainder.
+        Optional Selection Cell Array Name selects cells on port 0 when no selection is provided.
+        Fill Holes (default ON) closes small boundary loops after clipping. By default that is
+        vtkFillHolesFilter ear-clip triangulation; enable Wheel Cap from Plane Center to fan
+        triangles from the clip-plane origin to the opening (a wheel-shaped cap). Remaining holes
+        that are not on the clip plane still use vtkFillHolesFilter. Hole size is automatic from the
+        result bounds unless you set Fill Holes Maximum Size. Cell data from the clipped surface is
         restored after filling. New fill-hole triangles are stamped on the cell array named Fill Hole Stamp
         Array Name (default EndpointIndex). By default the marker is max(existing values)+1; enable
         Use Custom Marker Value to supply an explicit number instead.
@@ -32,7 +39,7 @@
         <DataTypeDomain name="input_type">
           <DataType value="vtkPolyData"/>
         </DataTypeDomain>
-        <Documentation>Full surface mesh to clip (triangles).</Documentation>
+        <Documentation>Full surface mesh to clip.</Documentation>
       </InputProperty>
 
       <InputProperty name="Selection" label="Selection"
@@ -47,8 +54,8 @@
         <Documentation>
           Copied vtkSelection (ParaView SelectionInput). Copy Active Selection from any pipeline
           node in the view; this copied selection is the source of truth for the initial plane.
-          Show Interactive Cut Plane computes the plane from these ids on the dataset that was
-          copied from. Apply clips the Input mesh with that plane.
+          Faces, lines, or points all work. Show Interactive Cut Plane computes the plane from these
+          ids on the dataset that was copied from. Apply clips the Input mesh with that plane.
         </Documentation>
         <Hints>
           <SelectionInput/>
@@ -58,7 +65,7 @@
       <StringVectorProperty name="SelectionCellArrayName" label="Selection Cell Array Name"
           command="SetSelectionCellArrayName" number_of_elements="1" default_values="">
         <Documentation>
-          If Selection is empty: name of a cell data array on Input. Triangles are selected when value
+          If Selection is empty: name of a cell data array on Input. Cells are selected when value
           is greater than 0.5 (float) or non-zero (integer types), same as SHYX Selection Extrude.
         </Documentation>
       </StringVectorProperty>
@@ -68,17 +75,8 @@
                             label="Clip Offset"
                             number_of_elements="1"
                             default_values="0.0">
-        <Documentation>Shift the plane origin along the averaged normal from the patch centroid.</Documentation>
+        <Documentation>Shift the plane origin along the fitted normal from the selection centroid.</Documentation>
       </DoubleVectorProperty>
-
-      <IntVectorProperty command="SetInvertPlane"
-                         name="InvertPlane"
-                         label="Invert Plane Normal"
-                         number_of_elements="1"
-                         default_values="0">
-        <BooleanDomain name="bool"/>
-        <Documentation>Flip the averaged normal (and half-space labels) before clipping.</Documentation>
-      </IntVectorProperty>
 
       <IntVectorProperty command="SetUseTipConnectivity"
                          name="UseTipConnectivity"
@@ -87,8 +85,22 @@
                          default_values="1">
         <BooleanDomain name="bool"/>
         <Documentation>
-          When ON (default), split the mesh by the plane and remove the smaller connected fragment
-          near the selection centroid. When OFF, remove a single half-space controlled by Remove Positive Half-Space.
+          When ON (default), split the mesh by the plane and discard the smaller connected fragment
+          near the selection centroid (keep the large remainder). Invert Result swaps that choice.
+          When OFF, remove a single half-space controlled by Remove Positive Half-Space.
+        </Documentation>
+      </IntVectorProperty>
+
+      <IntVectorProperty command="SetInvertResult"
+                         name="InvertResult"
+                         label="Invert Result"
+                         number_of_elements="1"
+                         default_values="0">
+        <BooleanDomain name="bool"/>
+        <Documentation>
+          Default OFF: keep the large remainder (Tip Connectivity discards the small piece near the
+          selection). When ON: keep that small piece instead (cut away the large remainder).
+          When Tip Connectivity is OFF, swaps which half-space is kept.
         </Documentation>
       </IntVectorProperty>
 
@@ -111,9 +123,29 @@
                          default_values="1">
         <BooleanDomain name="bool"/>
         <Documentation>
-          When ON (default), triangulate small open boundary loops after clipping (vtkFillHolesFilter),
-          suitable for closing a planar cut. Turn OFF to keep the clip as an open surface.
+          When ON (default), close small open boundary loops after clipping. Use Wheel Cap from
+          Plane Center for a fan from the clip-plane origin; otherwise vtkFillHolesFilter
+          triangulates the hole. Turn OFF to keep the clip as an open surface.
         </Documentation>
+      </IntVectorProperty>
+
+      <IntVectorProperty command="SetWheelCap"
+                         name="WheelCap"
+                         label="Wheel Cap from Plane Center"
+                         number_of_elements="1"
+                         default_values="0">
+        <BooleanDomain name="bool"/>
+        <Documentation>
+          When Fill Holes is ON: insert the clip-plane origin as a hub and triangulate each
+          clip opening as a wheel (one triangle per boundary edge). Openings that are not on the
+          clip plane still use vtkFillHolesFilter. Default OFF.
+        </Documentation>
+        <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="enabled_state"
+                                   property="FillHoles"
+                                   value="1"/>
+        </Hints>
       </IntVectorProperty>
 
       <DoubleVectorProperty command="SetFillHolesMaximumSize"

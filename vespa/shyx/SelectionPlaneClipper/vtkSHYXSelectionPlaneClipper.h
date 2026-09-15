@@ -1,8 +1,9 @@
 /**
  * @class   vtkSHYXSelectionPlaneClipper
  * @brief   Clip a surface mesh using a world-space plane. The initial plane comes from selected
- *          triangles in the scene (any pipeline node) or from InteractiveCutPackedString when set.
- *          UseInteractiveCutPlanes only controls whether the plane widget is shown.
+ *          faces (triangles, quads, polygons, strips), lines, or points in the scene (any pipeline
+ *          node), or from InteractiveCutPackedString when set. UseInteractiveCutPlanes only
+ *          controls whether the plane widget is shown.
  *
  * Port 1 accepts vtkSelection (ParaView SelectionInput). Those ids are only a fallback against the
  * Input mesh when InteractiveCutPackedString is empty (e.g. Python / create-time copy from Input).
@@ -45,10 +46,6 @@ public:
   vtkGetMacro(ClipOffset, double);
   vtkSetMacro(ClipOffset, double);
 
-  vtkGetMacro(InvertPlane, int);
-  vtkSetMacro(InvertPlane, int);
-  vtkBooleanMacro(InvertPlane, int);
-
   /**
    * If true (default), clip like Vessel End Clipper: split by the plane, then remove the smaller
    * connected component near the selection centroid on the side that contains it.
@@ -57,6 +54,15 @@ public:
   vtkGetMacro(UseTipConnectivity, int);
   vtkSetMacro(UseTipConnectivity, int);
   vtkBooleanMacro(UseTipConnectivity, int);
+
+  /**
+   * Swap which fragment is kept after the clip. Default off: discard the small connected piece
+   * near the selection (Tip Connectivity) or the half-space chosen by RemovePositiveHalfSpace.
+   * When on: keep that piece / the other half-space (cut away the large remainder).
+   */
+  vtkGetMacro(InvertResult, int);
+  vtkSetMacro(InvertResult, int);
+  vtkBooleanMacro(InvertResult, int);
 
   /** Used only when UseTipConnectivity is false: if true, remove the plane's positive half-space
    *  (implicit function > 0); if false, remove the negative half-space. */
@@ -78,16 +84,20 @@ public:
   vtkBooleanMacro(UseInteractiveCutPlanes, int);
 
   /**
-   * Area-weighted centroid and average normal of selected cells on any vtkDataSet (the dataset the
-   * selection was made on). origin is the centroid; ClipOffset / InvertPlane are not applied.
+   * Fit a world-space plane from a selection on any vtkDataSet (the dataset the selection was made
+   * on). Faces use area-weighted centroid and average normal. Lines / points use PCA when the
+   * samples are not collinear, otherwise incident surface (or point) normals, with a last-resort
+   * perpendicular to a single line (or +Z at a lone point). origin is the centroid; ClipOffset is
+   * not applied.
    */
   static bool ComputePlaneFromDatasetSelection(
     vtkDataSet* dataset, vtkSelection* selection, double origin[3], double normal[3]);
 
   /**
-   * When true (default), run vtkFillHolesFilter after clipping to triangulate small boundary loops
-   * (typical clip opening). Hole size limit is derived from the clipped mesh bounding diagonal unless
-   * FillHolesMaximumSize is set positive.
+   * When true (default), fill small boundary loops after clipping (typical clip opening).
+   * Hole size limit is derived from the clipped mesh bounding diagonal unless
+   * FillHolesMaximumSize is set positive. WheelCap chooses a fan from the clip-plane origin
+   * instead of vtkFillHolesFilter ear-clip triangulation for openings that lie on that plane.
    */
   vtkGetMacro(FillHoles, int);
   vtkSetMacro(FillHoles, int);
@@ -98,7 +108,16 @@ public:
   vtkSetMacro(FillHolesMaximumSize, double);
 
   /**
-   * vtkFillHolesFilter does not pass input cell data to the output. After filling, we restore cell
+   * When FillHoles is on: if true, cap clip openings with a wheel of triangles from the clip-plane
+   * origin to each boundary vertex. Remaining holes (not on the clip plane) still use
+   * vtkFillHolesFilter. Default off.
+   */
+  vtkGetMacro(WheelCap, int);
+  vtkSetMacro(WheelCap, int);
+  vtkBooleanMacro(WheelCap, int);
+
+  /**
+   * vtkFillHolesFilter / wheel-cap do not pass input cell data to the output. After filling, we restore cell
    * arrays for pre-fill cells, then on new fill-hole triangles: the cell array named
    * FillHoleStampCellArrayName (default EndpointIndex) receives a marker value.
    * - UseCustomFillHoleMarkerValue OFF (default): new triangles get max(existing)+1 when the array
@@ -123,8 +142,8 @@ protected:
   int RequestData(vtkInformation*, vtkInformationVector**, vtkInformationVector*) override;
 
   double ClipOffset = 0.0;
-  int InvertPlane = 0;
   int UseTipConnectivity = 1;
+  int InvertResult = 0;
   int RemovePositiveHalfSpace = 1;
 
   char* InteractiveCutPackedString = nullptr;
@@ -133,6 +152,7 @@ protected:
 
   int FillHoles = 1;
   double FillHolesMaximumSize = 0.0;
+  int WheelCap = 0;
 
   int UseCustomFillHoleMarkerValue = 0;
   double FillHoleNewCellDataMarkerValue = 0.0;

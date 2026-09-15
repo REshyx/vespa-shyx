@@ -100,10 +100,10 @@ pqSHYXSelectionPlaneClipperWidget::pqSHYXSelectionPlaneClipperWidget(
 
   auto* vbox = new QVBoxLayout(this);
   this->InfoLabel = new QLabel(
-    tr("Select triangles on any pipeline node, then Copy Active Selection into the Selection box "
-       "(that copied selection is the source of truth). Show interactive cut plane is on by default "
-       "and places the yellow plane at that patch without clipping. Apply to clip. "
-       "The view selection is kept."),
+    tr("Select faces (triangles / polygons), lines, or points on any pipeline node, then Copy "
+       "Active Selection into the Selection box (that copied selection is the source of truth). "
+       "Show interactive cut plane is on by default and places the yellow plane at that selection "
+       "without clipping. Apply to clip. The view selection is kept."),
     this);
   this->InfoLabel->setWordWrap(true);
   vbox->addWidget(this->InfoLabel);
@@ -511,13 +511,6 @@ bool pqSHYXSelectionPlaneClipperWidget::computePlaneFromCopiedSelection()
   if (!vtkSHYXSelectionPlaneClipper::ComputePlaneFromDatasetSelection(dataset, selection, origin, normal))
   {
     return false;
-  }
-  const int invert = vtkSMPropertyHelper(src, "InvertPlane").GetAsInt();
-  if (invert)
-  {
-    normal[0] = -normal[0];
-    normal[1] = -normal[1];
-    normal[2] = -normal[2];
   }
   const double offset = vtkSMPropertyHelper(src, "ClipOffset").GetAsDouble();
   origin[0] += offset * normal[0];

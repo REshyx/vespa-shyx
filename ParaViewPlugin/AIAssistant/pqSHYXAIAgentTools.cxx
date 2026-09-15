@@ -2164,7 +2164,13 @@ const ShyxExtra kShyxExtra[] = {
     "Single watertight surface input. Port0 clipped mesh, port1 skeleton lines plus "
     "clip-plane labels and short direction lines (Point Label, VertexOnly on clip origins). "
     "Same skeleton and clip parameters, including Endpoints to Clip and interactive planes." },
-  { "SHYXSelectionPlaneClipper", "Vascular step 4. Uses current selection / interactive plane." },
+  { "SHYXSelectionPlaneClipper",
+    "Vascular step 4. Uses current selection / interactive plane. Faces (triangles, quads, "
+    "polygons) give an area-weighted centroid and average normal. Lines and points fit a PCA "
+    "plane when not collinear; otherwise incident surface or point normals (a single line gets "
+    "a perpendicular last-resort plane). Fill Holes closes the clip opening; WheelCap fans "
+    "triangles from the clip-plane origin (wheel-shaped cap) instead of ear-clip triangulation. "
+    "InvertResult keeps the small fragment near the selection instead of discarding it." },
   { "SHYXTetGen",
     "Vascular step 6. Closed triangle surface -> tetrahedra. InteriorPointMode: "
     "0 Quality (Steiner, default), 1 Prescribed pipeline points (surface vertices plus "

@@ -14,6 +14,7 @@
 #include <vtkDoubleArray.h>
 #include <vtkExtractSelection.h>
 #include <vtkFillHolesFilter.h>
+#include <vtkIdList.h>
 #include <vtkIdTypeArray.h>
 #include <vtkInformation.h>
 #include <vtkInformationVector.h>
@@ -28,10 +29,14 @@
 #include <vtkPolyDataConnectivityFilter.h>
 #include <vtkPolyDataNormals.h>
 #include <vtkSelection.h>
+#include <vtkSelectionNode.h>
+#include <vtkSmartPointer.h>
 #include <vtkStringArray.h>
 #include <vtkTriangleFilter.h>
+#include <vtkUnstructuredGrid.h>
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <set>
 #include <sstream>
@@ -66,146 +71,314 @@ void SetClipPlaneHintPacked(vtkSHYXSelectionPlaneClipper* self, const double mes
   self->SetClipPlaneHintPackedString(packed.c_str());
 }
 
-void CollectCellsFromExtracted(vtkPolyData* mesh, vtkDataSet* extracted, std::set<vtkIdType>& selected)
+void BuildLinksIfNeeded(vtkDataSet* ds)
 {
-  if (!mesh || !extracted)
+  if (auto* pd = vtkPolyData::SafeDownCast(ds))
   {
-    return;
+    pd->BuildLinks();
   }
-  const vtkIdType nMeshCells = mesh->GetNumberOfCells();
-
-  vtkDataArray* ocid = extracted->GetCellData()->GetArray("vtkOriginalCellIds");
-  if (auto* cellIds = vtkIdTypeArray::SafeDownCast(ocid))
+  else if (auto* ug = vtkUnstructuredGrid::SafeDownCast(ds))
   {
-    if (cellIds->GetNumberOfTuples() == extracted->GetNumberOfCells())
-    {
-      for (vtkIdType i = 0; i < cellIds->GetNumberOfTuples(); ++i)
-      {
-        const vtkIdType cid = cellIds->GetValue(i);
-        if (cid >= 0 && cid < nMeshCells)
-        {
-          selected.insert(cid);
-        }
-      }
-    }
-  }
-  if (!selected.empty())
-  {
-    return;
-  }
-
-  vtkDataArray* opid = extracted->GetPointData()->GetArray("vtkOriginalPointIds");
-  auto* ptIds = vtkIdTypeArray::SafeDownCast(opid);
-  if (!ptIds || ptIds->GetNumberOfTuples() == 0)
-  {
-    return;
-  }
-  std::set<vtkIdType> selPt;
-  for (vtkIdType i = 0; i < ptIds->GetNumberOfTuples(); ++i)
-  {
-    const vtkIdType pid = ptIds->GetValue(i);
-    if (pid >= 0 && pid < mesh->GetNumberOfPoints())
-    {
-      selPt.insert(pid);
-    }
-  }
-  if (selPt.empty())
-  {
-    return;
-  }
-  vtkIdType npts;
-  const vtkIdType* pids;
-  for (vtkIdType cid = 0; cid < nMeshCells; ++cid)
-  {
-    if (mesh->GetCellType(cid) != VTK_TRIANGLE)
-    {
-      continue;
-    }
-    mesh->GetCellPoints(cid, npts, pids);
-    for (int k = 0; k < 3; ++k)
-    {
-      if (selPt.count(pids[k]) != 0u)
-      {
-        selected.insert(cid);
-        break;
-      }
-    }
+    ug->BuildLinks();
   }
 }
 
-bool ExtractSelectedCells(vtkPolyData* dataset, vtkSelection* inputSel, std::set<vtkIdType>& selected)
+vtkIdTypeArray* OriginalPointIds(vtkDataSet* extracted)
 {
-  selected.clear();
-  if (!dataset || !inputSel || dataset->GetNumberOfCells() == 0)
+  if (!extracted)
+  {
+    return nullptr;
+  }
+  return vtkIdTypeArray::SafeDownCast(extracted->GetPointData()->GetArray("vtkOriginalPointIds"));
+}
+
+void OrientNormalWithHint(double n[3], const double hint[3])
+{
+  if (vtkMath::Norm(hint) < 1e-15)
+  {
+    return;
+  }
+  if (vtkMath::Dot(n, hint) < 0.0)
+  {
+    n[0] = -n[0];
+    n[1] = -n[1];
+    n[2] = -n[2];
+  }
+}
+
+void AppendCellPointSamples(vtkDataSet* ds, vtkCell* cell, std::vector<std::array<double, 3>>& pts)
+{
+  if (!ds || !cell)
+  {
+    return;
+  }
+  const int npts = cell->GetNumberOfPoints();
+  for (int i = 0; i < npts; ++i)
+  {
+    double x[3];
+    ds->GetPoint(cell->GetPointId(i), x);
+    pts.push_back({ x[0], x[1], x[2] });
+  }
+}
+
+void AppendAllPointSamples(vtkDataSet* ds, std::vector<std::array<double, 3>>& pts)
+{
+  if (!ds)
+  {
+    return;
+  }
+  const vtkIdType np = ds->GetNumberOfPoints();
+  pts.reserve(pts.size() + static_cast<size_t>(np));
+  for (vtkIdType i = 0; i < np; ++i)
+  {
+    double x[3];
+    ds->GetPoint(i, x);
+    pts.push_back({ x[0], x[1], x[2] });
+  }
+}
+
+bool LineDirectionFromSamples(
+  const std::vector<std::array<double, 3>>& pts, const double origin[3], double dir[3])
+{
+  dir[0] = dir[1] = dir[2] = 0.0;
+  double best = 0.0;
+  for (const auto& p : pts)
+  {
+    const double d[3] = { p[0] - origin[0], p[1] - origin[1], p[2] - origin[2] };
+    const double nn = vtkMath::Norm(d);
+    if (nn > best)
+    {
+      best = nn;
+      dir[0] = d[0];
+      dir[1] = d[1];
+      dir[2] = d[2];
+    }
+  }
+  return vtkMath::Normalize(dir) > 1e-15;
+}
+
+void MakeNormalPerpendicularToDir(double n[3], const double dir[3])
+{
+  const double d = vtkMath::Dot(n, dir);
+  n[0] -= d * dir[0];
+  n[1] -= d * dir[1];
+  n[2] -= d * dir[2];
+  if (vtkMath::Normalize(n) < 1e-15)
+  {
+    vtkMath::Perpendiculars(dir, n, nullptr, 0.0);
+    vtkMath::Normalize(n);
+  }
+}
+
+/** Covariance PCA. origin is always the centroid when pts is not empty.
+ *  Returns true when the samples span a plane (not a single point / line). */
+bool FitPlaneFromPointsPCA(
+  const std::vector<std::array<double, 3>>& pts, double origin[3], double normal[3])
+{
+  origin[0] = origin[1] = origin[2] = 0.0;
+  normal[0] = 0.0;
+  normal[1] = 0.0;
+  normal[2] = 1.0;
+  const size_t n = pts.size();
+  if (n == 0)
   {
     return false;
   }
-  vtkNew<vtkExtractSelection> extractSelection;
-  extractSelection->SetInputData(0, dataset);
-  extractSelection->SetInputData(1, inputSel);
-  extractSelection->Update();
-  vtkDataSet* extracted = vtkDataSet::SafeDownCast(extractSelection->GetOutputDataObject(0));
-  if (extracted && (extracted->GetNumberOfCells() > 0 || extracted->GetNumberOfPoints() > 0))
+  for (const auto& p : pts)
   {
-    CollectCellsFromExtracted(dataset, extracted, selected);
+    origin[0] += p[0];
+    origin[1] += p[1];
+    origin[2] += p[2];
   }
-  return !selected.empty();
+  const double inv = 1.0 / static_cast<double>(n);
+  origin[0] *= inv;
+  origin[1] *= inv;
+  origin[2] *= inv;
+  if (n < 3)
+  {
+    return false;
+  }
+
+  double cov[3][3] = { { 0.0, 0.0, 0.0 }, { 0.0, 0.0, 0.0 }, { 0.0, 0.0, 0.0 } };
+  for (const auto& p : pts)
+  {
+    const double d[3] = { p[0] - origin[0], p[1] - origin[1], p[2] - origin[2] };
+    for (int i = 0; i < 3; ++i)
+    {
+      for (int j = 0; j < 3; ++j)
+      {
+        cov[i][j] += d[i] * d[j];
+      }
+    }
+  }
+  double w[3] = { 0.0, 0.0, 0.0 };
+  double V[3][3] = { { 0.0, 0.0, 0.0 }, { 0.0, 0.0, 0.0 }, { 0.0, 0.0, 0.0 } };
+  vtkMath::Diagonalize3x3(cov, w, V);
+
+  int iMin = 0;
+  int iMax = 0;
+  for (int i = 1; i < 3; ++i)
+  {
+    if (w[i] < w[iMin])
+    {
+      iMin = i;
+    }
+    if (w[i] > w[iMax])
+    {
+      iMax = i;
+    }
+  }
+  int iMid = 0;
+  for (int i = 0; i < 3; ++i)
+  {
+    if (i != iMin && i != iMax)
+    {
+      iMid = i;
+      break;
+    }
+  }
+
+  const double lMax = std::max(w[iMax], 0.0);
+  const double lMid = std::max((iMin == iMax) ? lMax : w[iMid], 0.0);
+  if ((lMax < 1e-30) || (lMid < 1e-8 * lMax))
+  {
+    return false;
+  }
+  normal[0] = V[0][iMin];
+  normal[1] = V[1][iMin];
+  normal[2] = V[2][iMin];
+  return vtkMath::Normalize(normal) > 1e-15;
 }
 
-vtkSmartPointer<vtkPolyData> BuildTrianglePatch(vtkPolyData* mesh, const std::set<vtkIdType>& selected)
+bool AccumulateSurfaceCellNormal(vtkDataSet* ds, vtkIdType cid, double nAcc[3])
 {
-  vtkNew<vtkPoints> pts;
-  std::vector<vtkIdType> meshPidToNew;
-  meshPidToNew.assign(static_cast<size_t>(mesh->GetNumberOfPoints()), -1);
-
-  auto mapPoint = [&](vtkIdType pid) -> vtkIdType {
-    if (pid < 0 || pid >= mesh->GetNumberOfPoints())
-    {
-      return -1;
-    }
-    const size_t ui = static_cast<size_t>(pid);
-    if (meshPidToNew[ui] >= 0)
-    {
-      return meshPidToNew[ui];
-    }
-    double x[3];
-    mesh->GetPoint(pid, x);
-    const vtkIdType nid = pts->InsertNextPoint(x);
-    meshPidToNew[ui] = nid;
-    return nid;
-  };
-
-  vtkNew<vtkCellArray> polys;
-  for (vtkIdType cid : selected)
+  vtkCell* cell = ds->GetCell(cid);
+  if (!cell || cell->GetCellDimension() != 2)
   {
-    if (mesh->GetCellType(cid) != VTK_TRIANGLE)
-    {
-      continue;
-    }
-    vtkIdType npts = 0;
-    const vtkIdType* pids = nullptr;
-    mesh->GetCellPoints(cid, npts, pids);
-    if (npts != 3)
-    {
-      continue;
-    }
-    const vtkIdType a = mapPoint(pids[0]);
-    const vtkIdType b = mapPoint(pids[1]);
-    const vtkIdType c = mapPoint(pids[2]);
-    if (a < 0 || b < 0 || c < 0)
-    {
-      continue;
-    }
-    polys->InsertNextCell(3);
-    polys->InsertCellPoint(a);
-    polys->InsertCellPoint(b);
-    polys->InsertCellPoint(c);
+    return false;
   }
+  const int npts = cell->GetNumberOfPoints();
+  if (npts < 3)
+  {
+    return false;
+  }
+  double p0[3];
+  ds->GetPoint(cell->GetPointId(0), p0);
+  bool any = false;
+  for (int i = 1; i + 1 < npts; ++i)
+  {
+    double p1[3];
+    double p2[3];
+    ds->GetPoint(cell->GetPointId(i), p1);
+    ds->GetPoint(cell->GetPointId(i + 1), p2);
+    const double e1[3] = { p1[0] - p0[0], p1[1] - p0[1], p1[2] - p0[2] };
+    const double e2[3] = { p2[0] - p0[0], p2[1] - p0[1], p2[2] - p0[2] };
+    double c[3];
+    vtkMath::Cross(e1, e2, c);
+    if (vtkMath::Norm(c) < 1e-30)
+    {
+      continue;
+    }
+    nAcc[0] += c[0];
+    nAcc[1] += c[1];
+    nAcc[2] += c[2];
+    any = true;
+  }
+  return any;
+}
 
-  vtkSmartPointer<vtkPolyData> out = vtkSmartPointer<vtkPolyData>::New();
-  out->SetPoints(pts);
-  out->SetPolys(polys);
-  return out;
+bool AverageIncidentSurfaceNormals(vtkDataSet* original, vtkDataSet* extracted, double n[3])
+{
+  n[0] = n[1] = n[2] = 0.0;
+  if (!original || !extracted || extracted->GetNumberOfPoints() == 0)
+  {
+    return false;
+  }
+  BuildLinksIfNeeded(original);
+  vtkIdTypeArray* origIds = OriginalPointIds(extracted);
+  vtkNew<vtkIdList> cellIds;
+  std::set<vtkIdType> seen;
+  const vtkIdType np = extracted->GetNumberOfPoints();
+  for (vtkIdType i = 0; i < np; ++i)
+  {
+    vtkIdType pid = -1;
+    if (origIds)
+    {
+      pid = origIds->GetValue(i);
+    }
+    else
+    {
+      double x[3];
+      extracted->GetPoint(i, x);
+      pid = original->FindPoint(x);
+    }
+    if (pid < 0 || pid >= original->GetNumberOfPoints())
+    {
+      continue;
+    }
+    original->GetPointCells(pid, cellIds);
+    for (vtkIdType k = 0; k < cellIds->GetNumberOfIds(); ++k)
+    {
+      const vtkIdType cid = cellIds->GetId(k);
+      if (!seen.insert(cid).second)
+      {
+        continue;
+      }
+      AccumulateSurfaceCellNormal(original, cid, n);
+    }
+  }
+  return vtkMath::Normalize(n) > 1e-15;
+}
+
+bool AverageDatasetPointNormals(vtkDataSet* original, vtkDataSet* extracted, double n[3])
+{
+  n[0] = n[1] = n[2] = 0.0;
+  if (!extracted)
+  {
+    return false;
+  }
+  vtkDataArray* on = original ? original->GetPointData()->GetNormals() : nullptr;
+  vtkDataArray* en = extracted->GetPointData()->GetNormals();
+  vtkIdTypeArray* origIds = OriginalPointIds(extracted);
+  const vtkIdType np = extracted->GetNumberOfPoints();
+  int used = 0;
+  for (vtkIdType i = 0; i < np; ++i)
+  {
+    double t[3] = { 0.0, 0.0, 0.0 };
+    bool ok = false;
+    if (on && origIds)
+    {
+      const vtkIdType pid = origIds->GetValue(i);
+      if (pid >= 0 && pid < on->GetNumberOfTuples())
+      {
+        on->GetTuple(pid, t);
+        ok = true;
+      }
+    }
+    if (!ok && en && i < en->GetNumberOfTuples())
+    {
+      en->GetTuple(i, t);
+      ok = true;
+    }
+    if (!ok || vtkMath::Normalize(t) < 1e-15)
+    {
+      continue;
+    }
+    n[0] += t[0];
+    n[1] += t[1];
+    n[2] += t[2];
+    ++used;
+  }
+  return used > 0 && vtkMath::Normalize(n) > 1e-15;
+}
+
+bool GatherNormalHint(vtkDataSet* original, vtkDataSet* extracted, double hint[3])
+{
+  if (AverageIncidentSurfaceNormals(original, extracted, hint))
+  {
+    return true;
+  }
+  return AverageDatasetPointNormals(original, extracted, hint);
 }
 
 bool ParseInteractivePacked(const char* s, std::vector<double>& out)
@@ -312,14 +485,16 @@ vtkSmartPointer<vtkPolyData> removeClosestComponent(vtkPolyData* side, const dou
   return o;
 }
 
-/** Area-weighted triangle centroid and summed normal*area. Returns false if no usable triangles. */
-bool ComputePatchCentroidAndNormal(vtkPolyData* patch, double centroid[3], double avgNormal[3])
+/** Area-weighted centroid/normal of triangulated faces (triangles, quads, polygons, strips). */
+bool ComputeFacePatchCentroidAndNormal(vtkPolyData* patch, double centroid[3], double avgNormal[3])
 {
   centroid[0] = centroid[1] = centroid[2] = 0.0;
   avgNormal[0] = avgNormal[1] = avgNormal[2] = 0.0;
 
   vtkNew<vtkTriangleFilter> triF;
   triF->SetInputData(patch);
+  triF->PassVertsOff();
+  triF->PassLinesOff();
   triF->Update();
   vtkPolyData* triMesh = triF->GetOutput();
   if (!triMesh || triMesh->GetNumberOfCells() == 0)
@@ -383,28 +558,7 @@ bool ComputePatchCentroidAndNormal(vtkPolyData* patch, double centroid[3], doubl
 
   if (totalArea < 1e-30)
   {
-    // Point-only patch: use average position and default Z normal
-    const vtkIdType np = patch->GetNumberOfPoints();
-    if (np < 1)
-    {
-      return false;
-    }
-    for (vtkIdType i = 0; i < np; ++i)
-    {
-      double x[3];
-      patch->GetPoint(i, x);
-      centroid[0] += x[0];
-      centroid[1] += x[1];
-      centroid[2] += x[2];
-    }
-    const double inv = 1.0 / static_cast<double>(np);
-    centroid[0] *= inv;
-    centroid[1] *= inv;
-    centroid[2] *= inv;
-    avgNormal[0] = 0.0;
-    avgNormal[1] = 0.0;
-    avgNormal[2] = 1.0;
-    return true;
+    return false;
   }
 
   const double invA = 1.0 / totalArea;
@@ -417,6 +571,94 @@ bool ComputePatchCentroidAndNormal(vtkPolyData* patch, double centroid[3], doubl
     avgNormal[1] = 0.0;
     avgNormal[2] = 1.0;
   }
+  return true;
+}
+
+bool ComputePlaneFromPolyDataPatch(
+  vtkPolyData* pd, vtkDataSet* original, double origin[3], double normal[3])
+{
+  origin[0] = origin[1] = origin[2] = 0.0;
+  normal[0] = 0.0;
+  normal[1] = 0.0;
+  normal[2] = 1.0;
+  if (!pd)
+  {
+    return false;
+  }
+
+  const bool hasFaces = (pd->GetNumberOfPolys() > 0) || (pd->GetNumberOfStrips() > 0);
+  if (hasFaces && ComputeFacePatchCentroidAndNormal(pd, origin, normal))
+  {
+    return true;
+  }
+
+  std::vector<std::array<double, 3>> samples;
+  const bool hasLines = pd->GetNumberOfLines() > 0;
+  if (hasLines)
+  {
+    const vtkIdType nc = pd->GetNumberOfCells();
+    for (vtkIdType cid = 0; cid < nc; ++cid)
+    {
+      vtkCell* cell = pd->GetCell(cid);
+      if (!cell || cell->GetCellDimension() != 1)
+      {
+        continue;
+      }
+      AppendCellPointSamples(pd, cell, samples);
+    }
+  }
+  else
+  {
+    AppendAllPointSamples(pd, samples);
+  }
+  if (samples.empty())
+  {
+    return false;
+  }
+
+  const bool pcaOk = FitPlaneFromPointsPCA(samples, origin, normal);
+  double hint[3] = { 0.0, 0.0, 0.0 };
+  const bool haveHint = GatherNormalHint(original, pd, hint);
+
+  if (pcaOk)
+  {
+    if (haveHint)
+    {
+      OrientNormalWithHint(normal, hint);
+    }
+    return true;
+  }
+
+  if (haveHint)
+  {
+    normal[0] = hint[0];
+    normal[1] = hint[1];
+    normal[2] = hint[2];
+    if (hasLines || samples.size() >= 2)
+    {
+      double dir[3];
+      if (LineDirectionFromSamples(samples, origin, dir))
+      {
+        MakeNormalPerpendicularToDir(normal, dir);
+      }
+    }
+    return vtkMath::Normalize(normal) > 1e-15;
+  }
+
+  if (hasLines || samples.size() >= 2)
+  {
+    double dir[3];
+    if (LineDirectionFromSamples(samples, origin, dir))
+    {
+      vtkMath::Perpendiculars(dir, normal, nullptr, 0.0);
+      return vtkMath::Normalize(normal) > 1e-15;
+    }
+  }
+
+  // Lone point with no incident-face / point-normal hint: still place a plane at the point.
+  normal[0] = 0.0;
+  normal[1] = 0.0;
+  normal[2] = 1.0;
   return true;
 }
 
@@ -451,15 +693,7 @@ bool ComputePlaneFromDatasetSelectionImpl(
     surface->ShallowCopy(surf->GetOutput());
     pd = surface;
   }
-  double centroid[3];
-  if (!ComputePatchCentroidAndNormal(pd, centroid, normal))
-  {
-    return false;
-  }
-  origin[0] = centroid[0];
-  origin[1] = centroid[1];
-  origin[2] = centroid[2];
-  return true;
+  return ComputePlaneFromPolyDataPatch(pd, dataset, origin, normal);
 }
 
 void FillStampNewCellWithMarker(vtkAbstractArray* postArr, vtkIdType cellIdx, double marker)
@@ -600,6 +834,269 @@ void RestoreCellDataAfterFillHoles(vtkPolyData* preFill, vtkPolyData* postFill,
   }
 }
 
+double LoopRadiusAndCentroid(
+  vtkPoints* pts, const std::vector<vtkIdType>& loop, double centroid[3])
+{
+  centroid[0] = centroid[1] = centroid[2] = 0.0;
+  if (!pts || loop.empty())
+  {
+    return 0.0;
+  }
+  for (vtkIdType id : loop)
+  {
+    double x[3];
+    pts->GetPoint(id, x);
+    centroid[0] += x[0];
+    centroid[1] += x[1];
+    centroid[2] += x[2];
+  }
+  const double inv = 1.0 / static_cast<double>(loop.size());
+  centroid[0] *= inv;
+  centroid[1] *= inv;
+  centroid[2] *= inv;
+  double r = 0.0;
+  for (vtkIdType id : loop)
+  {
+    double x[3];
+    pts->GetPoint(id, x);
+    r = std::max(r, std::sqrt(vtkMath::Distance2BetweenPoints(x, centroid)));
+  }
+  return r;
+}
+
+bool LoopLiesOnClipPlane(vtkPoints* pts, const std::vector<vtkIdType>& loop, const double origin[3],
+  const double normal[3], double radius)
+{
+  if (!pts || loop.empty())
+  {
+    return false;
+  }
+  double acc = 0.0;
+  for (vtkIdType id : loop)
+  {
+    double x[3];
+    pts->GetPoint(id, x);
+    acc += std::abs(normal[0] * (x[0] - origin[0]) + normal[1] * (x[1] - origin[1]) +
+      normal[2] * (x[2] - origin[2]));
+  }
+  acc /= static_cast<double>(loop.size());
+  const double tol = std::max(1e-8, 0.1 * std::max(radius, 1e-12));
+  return acc <= tol;
+}
+
+/** Closed boundary loops whose circumradius is <= holeSize. Vertex order follows existing face winding. */
+void CollectClosedBoundaryLoops(
+  vtkPolyData* mesh, double holeSize, std::vector<std::vector<vtkIdType>>& loops)
+{
+  loops.clear();
+  if (!mesh || mesh->GetNumberOfPolys() < 1 || mesh->GetNumberOfPoints() < 3)
+  {
+    return;
+  }
+  vtkPoints* inPts = mesh->GetPoints();
+  vtkCellArray* inPolys = mesh->GetPolys();
+  if (!inPts || !inPolys)
+  {
+    return;
+  }
+
+  vtkNew<vtkPolyData> surf;
+  surf->SetPoints(inPts);
+  surf->SetPolys(inPolys);
+  surf->BuildLinks();
+
+  vtkNew<vtkPolyData> linesPd;
+  vtkNew<vtkCellArray> newLines;
+  linesPd->SetLines(newLines);
+  linesPd->SetPoints(inPts);
+
+  vtkNew<vtkIdList> neighbors;
+  vtkIdType npts = 0;
+  const vtkIdType* pts = nullptr;
+  vtkIdType cellId = 0;
+  for (inPolys->InitTraversal(); inPolys->GetNextCell(npts, pts); ++cellId)
+  {
+    for (vtkIdType i = 0; i < npts; ++i)
+    {
+      const vtkIdType p1 = pts[i];
+      const vtkIdType p2 = pts[(i + 1) % npts];
+      surf->GetCellEdgeNeighbors(cellId, p1, p2, neighbors);
+      if (neighbors->GetNumberOfIds() < 1)
+      {
+        newLines->InsertNextCell(2);
+        newLines->InsertCellPoint(p1);
+        newLines->InsertCellPoint(p2);
+      }
+    }
+  }
+
+  const vtkIdType nLineCells = newLines->GetNumberOfCells();
+  if (nLineCells < 3)
+  {
+    return;
+  }
+
+  linesPd->BuildLinks();
+  std::vector<char> visited(static_cast<size_t>(nLineCells), 0);
+  vtkNew<vtkIdList> endId;
+  endId->SetNumberOfIds(1);
+
+  for (vtkIdType lineId = 0; lineId < nLineCells; ++lineId)
+  {
+    if (visited[static_cast<size_t>(lineId)])
+    {
+      continue;
+    }
+    visited[static_cast<size_t>(lineId)] = 1;
+    linesPd->GetCellPoints(lineId, npts, pts);
+    if (npts < 2)
+    {
+      continue;
+    }
+    std::vector<vtkIdType> loop;
+    loop.push_back(pts[0]);
+    const vtkIdType startId = pts[0];
+    endId->SetId(0, pts[1]);
+    int valid = 1;
+    vtkIdType currentCellId = lineId;
+    int guard = 0;
+    while (startId != endId->GetId(0) && valid && guard++ < nLineCells + 2)
+    {
+      loop.push_back(endId->GetId(0));
+      linesPd->GetCellNeighbors(currentCellId, endId, neighbors);
+      if (neighbors->GetNumberOfIds() != 1)
+      {
+        valid = 0;
+        break;
+      }
+      const vtkIdType neiId = neighbors->GetId(0);
+      visited[static_cast<size_t>(neiId)] = 1;
+      linesPd->GetCellPoints(neiId, npts, pts);
+      endId->SetId(0, (pts[0] != endId->GetId(0) ? pts[0] : pts[1]));
+      currentCellId = neiId;
+    }
+    if (!valid || loop.size() < 3)
+    {
+      continue;
+    }
+    double c[3];
+    const double radius = LoopRadiusAndCentroid(inPts, loop, c);
+    if (radius <= holeSize)
+    {
+      loops.push_back(std::move(loop));
+    }
+  }
+}
+
+void ExtendPointDataForNewPoint(vtkPointData* pd, vtkIdType copyFrom)
+{
+  if (!pd)
+  {
+    return;
+  }
+  const int nArrays = pd->GetNumberOfArrays();
+  for (int ai = 0; ai < nArrays; ++ai)
+  {
+    vtkAbstractArray* arr = pd->GetAbstractArray(ai);
+    if (!arr)
+    {
+      continue;
+    }
+    const vtkIdType src = (copyFrom >= 0 && copyFrom < arr->GetNumberOfTuples()) ? copyFrom : 0;
+    if (arr->GetNumberOfTuples() <= 0)
+    {
+      continue;
+    }
+    arr->InsertNextTuple(src, arr);
+  }
+}
+
+/** Fan triangles from hub to each qualifying clip-plane loop. Loop order is existing face winding,
+ *  so each cap triangle is (hub, b, a) opposite the wall edge a->b. */
+vtkSmartPointer<vtkPolyData> AppendWheelCapsFromPlaneCenter(vtkPolyData* mesh,
+  const std::vector<std::vector<vtkIdType>>& loops, const double hub[3])
+{
+  vtkSmartPointer<vtkPolyData> out = vtkSmartPointer<vtkPolyData>::New();
+  out->DeepCopy(mesh);
+  if (!mesh || loops.empty())
+  {
+    return out;
+  }
+
+  vtkPoints* pts = out->GetPoints();
+  vtkCellArray* polys = out->GetPolys();
+  if (!pts || !polys)
+  {
+    return out;
+  }
+
+  double bb[6];
+  mesh->GetBounds(bb);
+  const double dx = bb[1] - bb[0];
+  const double dy = bb[3] - bb[2];
+  const double dz = bb[5] - bb[4];
+  const double diag = std::sqrt(dx * dx + dy * dy + dz * dz);
+  const double reuseTol2 = std::max(1e-24, (diag * 1e-9) * (diag * 1e-9));
+
+  vtkIdType hubId = -1;
+  double bestDist2 = -1.0;
+  const vtkIdType nOld = pts->GetNumberOfPoints();
+  for (vtkIdType i = 0; i < nOld; ++i)
+  {
+    double x[3];
+    pts->GetPoint(i, x);
+    const double d2 = vtkMath::Distance2BetweenPoints(x, hub);
+    if (bestDist2 < 0.0 || d2 < bestDist2)
+    {
+      bestDist2 = d2;
+      hubId = i;
+    }
+  }
+  if (hubId < 0 || bestDist2 > reuseTol2)
+  {
+    hubId = pts->InsertNextPoint(hub);
+    const vtkIdType copyFrom = loops.front().empty() ? 0 : loops.front().front();
+    ExtendPointDataForNewPoint(out->GetPointData(), copyFrom);
+  }
+
+  for (const auto& loop : loops)
+  {
+    const size_t n = loop.size();
+    if (n < 3)
+    {
+      continue;
+    }
+    for (size_t i = 0; i < n; ++i)
+    {
+      const vtkIdType a = loop[i];
+      const vtkIdType b = loop[(i + 1) % n];
+      if (a == b || a == hubId || b == hubId)
+      {
+        continue;
+      }
+      double pa[3];
+      double pb[3];
+      double ph[3];
+      pts->GetPoint(a, pa);
+      pts->GetPoint(b, pb);
+      pts->GetPoint(hubId, ph);
+      const double e1[3] = { pb[0] - ph[0], pb[1] - ph[1], pb[2] - ph[2] };
+      const double e2[3] = { pa[0] - ph[0], pa[1] - ph[1], pa[2] - ph[2] };
+      double cr[3];
+      vtkMath::Cross(e1, e2, cr);
+      if (vtkMath::Norm(cr) < 1e-30)
+      {
+        continue;
+      }
+      polys->InsertNextCell(3);
+      polys->InsertCellPoint(hubId);
+      polys->InsertCellPoint(b);
+      polys->InsertCellPoint(a);
+    }
+  }
+  return out;
+}
+
 } // namespace
 
 vtkSHYXSelectionPlaneClipper::vtkSHYXSelectionPlaneClipper()
@@ -642,12 +1139,13 @@ void vtkSHYXSelectionPlaneClipper::PrintSelf(ostream& os, vtkIndent indent)
 {
   this->Superclass::PrintSelf(os, indent);
   os << indent << "ClipOffset: " << this->ClipOffset << "\n";
-  os << indent << "InvertPlane: " << this->InvertPlane << "\n";
   os << indent << "UseTipConnectivity: " << this->UseTipConnectivity << "\n";
+  os << indent << "InvertResult: " << this->InvertResult << "\n";
   os << indent << "RemovePositiveHalfSpace: " << this->RemovePositiveHalfSpace << "\n";
   os << indent << "UseInteractiveCutPlanes: " << this->UseInteractiveCutPlanes << "\n";
   os << indent << "FillHoles: " << this->FillHoles << "\n";
   os << indent << "FillHolesMaximumSize: " << this->FillHolesMaximumSize << "\n";
+  os << indent << "WheelCap: " << this->WheelCap << "\n";
   os << indent << "UseCustomFillHoleMarkerValue: " << this->UseCustomFillHoleMarkerValue << "\n";
   os << indent << "FillHoleNewCellDataMarkerValue: " << this->FillHoleNewCellDataMarkerValue << "\n";
   os << indent << "FillHoleStampCellArrayName: "
@@ -738,21 +1236,22 @@ int vtkSHYXSelectionPlaneClipper::RequestData(
 
   if (!havePlane)
   {
-    std::set<vtkIdType> selected;
+    vtkSelection* inputSel = nullptr;
     if (this->GetNumberOfInputConnections(1) > 0)
     {
       vtkInformation* selInfo = inputVector[1]->GetInformationObject(0);
       if (selInfo && selInfo->Has(vtkDataObject::DATA_OBJECT()))
       {
-        vtkSelection* inputSel = vtkSelection::SafeDownCast(selInfo->Get(vtkDataObject::DATA_OBJECT()));
-        if (inputSel && inputSel->GetNumberOfNodes() > 0)
+        inputSel = vtkSelection::SafeDownCast(selInfo->Get(vtkDataObject::DATA_OBJECT()));
+        if (inputSel && inputSel->GetNumberOfNodes() == 0)
         {
-          ExtractSelectedCells(mesh, inputSel, selected);
+          inputSel = nullptr;
         }
       }
     }
 
-    if (selected.empty() && this->SelectionCellArrayName && this->SelectionCellArrayName[0] != '\0')
+    vtkNew<vtkSelection> cellArraySel;
+    if (!inputSel && this->SelectionCellArrayName && this->SelectionCellArrayName[0] != '\0')
     {
       vtkDataArray* arr = mesh->GetCellData()->GetArray(this->SelectionCellArrayName);
       if (!arr)
@@ -762,13 +1261,11 @@ int vtkSHYXSelectionPlaneClipper::RequestData(
       }
       else
       {
+        vtkNew<vtkIdTypeArray> ids;
+        ids->SetNumberOfComponents(1);
         const vtkIdType nc = mesh->GetNumberOfCells();
         for (vtkIdType cid = 0; cid < nc; ++cid)
         {
-          if (mesh->GetCellType(cid) != VTK_TRIANGLE)
-          {
-            continue;
-          }
           bool take = false;
           if (arr->IsIntegral())
           {
@@ -780,36 +1277,36 @@ int vtkSHYXSelectionPlaneClipper::RequestData(
           }
           if (take)
           {
-            selected.insert(cid);
+            ids->InsertNextValue(cid);
           }
+        }
+        if (ids->GetNumberOfTuples() > 0)
+        {
+          vtkNew<vtkSelectionNode> node;
+          node->SetFieldType(vtkSelectionNode::CELL);
+          node->SetContentType(vtkSelectionNode::INDICES);
+          node->SetSelectionList(ids);
+          cellArraySel->AddNode(node);
+          inputSel = cellArraySel;
         }
       }
     }
 
-    vtkSmartPointer<vtkPolyData> patch = BuildTrianglePatch(mesh, selected);
-    if (!patch || patch->GetNumberOfCells() == 0)
+    if (inputSel && ComputePlaneFromDatasetSelectionImpl(mesh, inputSel, centroid, planeNormal))
     {
-      vtkWarningMacro("No selected triangles (use Copy Active Selection on any scene node, "
-                      "or set Selection Cell Array Name). Pass-through input mesh.");
+      havePlane = true;
+      origin[0] = centroid[0] + this->ClipOffset * planeNormal[0];
+      origin[1] = centroid[1] + this->ClipOffset * planeNormal[1];
+      origin[2] = centroid[2] + this->ClipOffset * planeNormal[2];
+    }
+    else
+    {
+      vtkWarningMacro("Could not fit a clip plane from the selection (faces, lines, or points). "
+                      "Use Copy Active Selection on any scene node, or set Selection Cell Array Name. "
+                      "Pass-through input mesh.");
       output->ShallowCopy(mesh);
       return 1;
     }
-    if (!ComputePatchCentroidAndNormal(patch, centroid, planeNormal))
-    {
-      vtkWarningMacro("Could not compute centroid/normal from selection patch.");
-      output->ShallowCopy(mesh);
-      return 1;
-    }
-    if (this->InvertPlane)
-    {
-      planeNormal[0] = -planeNormal[0];
-      planeNormal[1] = -planeNormal[1];
-      planeNormal[2] = -planeNormal[2];
-    }
-    origin[0] = centroid[0] + this->ClipOffset * planeNormal[0];
-    origin[1] = centroid[1] + this->ClipOffset * planeNormal[1];
-    origin[2] = centroid[2] + this->ClipOffset * planeNormal[2];
-    havePlane = true;
   }
 
   if (!havePlane)
@@ -861,25 +1358,33 @@ int vtkSHYXSelectionPlaneClipper::RequestData(
 
     vtkPolyData* tipSide = tipOnPositive ? sidePos.GetPointer() : sideNeg.GetPointer();
     vtkPolyData* bodySide = tipOnPositive ? sideNeg.GetPointer() : sidePos.GetPointer();
+    vtkSmartPointer<vtkPolyData> tipPiece = tipOnPositive ? closestPos : closestNeg;
 
-    vtkSmartPointer<vtkPolyData> keptFromTipSide = removeClosestComponent(tipSide, centroid);
-    const bool hasKept = (keptFromTipSide && keptFromTipSide->GetNumberOfCells() > 0);
-
-    if (!hasKept)
+    if (this->InvertResult)
     {
-      result = bodySide;
+      result = tipPiece;
     }
     else
     {
-      vtkNew<vtkAppendPolyData> merger;
-      merger->AddInputData(bodySide);
-      merger->AddInputData(keptFromTipSide);
-      merger->Update();
-      vtkNew<vtkCleanPolyData> cleaner;
-      cleaner->SetInputConnection(merger->GetOutputPort());
-      cleaner->Update();
-      result = vtkSmartPointer<vtkPolyData>::New();
-      result->DeepCopy(cleaner->GetOutput());
+      vtkSmartPointer<vtkPolyData> keptFromTipSide = removeClosestComponent(tipSide, centroid);
+      const bool hasKept = (keptFromTipSide && keptFromTipSide->GetNumberOfCells() > 0);
+
+      if (!hasKept)
+      {
+        result = bodySide;
+      }
+      else
+      {
+        vtkNew<vtkAppendPolyData> merger;
+        merger->AddInputData(bodySide);
+        merger->AddInputData(keptFromTipSide);
+        merger->Update();
+        vtkNew<vtkCleanPolyData> cleaner;
+        cleaner->SetInputConnection(merger->GetOutputPort());
+        cleaner->Update();
+        result = vtkSmartPointer<vtkPolyData>::New();
+        result->DeepCopy(cleaner->GetOutput());
+      }
     }
   }
   else
@@ -888,7 +1393,9 @@ int vtkSHYXSelectionPlaneClipper::RequestData(
     clipper->SetInputData(mesh);
     clipper->SetClipFunction(plane);
     clipper->SetValue(0.0);
-    if (this->RemovePositiveHalfSpace)
+    const bool removePositive =
+      (this->RemovePositiveHalfSpace != 0) != (this->InvertResult != 0);
+    if (removePositive)
     {
       clipper->InsideOutOff();
     }
@@ -925,8 +1432,31 @@ int vtkSHYXSelectionPlaneClipper::RequestData(
       ? this->FillHolesMaximumSize
       : std::max(diag * 0.35, 1e-6);
 
+    vtkSmartPointer<vtkPolyData> toFill = vtkSmartPointer<vtkPolyData>::New();
+    toFill->ShallowCopy(cleaned);
+    if (this->WheelCap)
+    {
+      std::vector<std::vector<vtkIdType>> loops;
+      CollectClosedBoundaryLoops(cleaned, holeSize, loops);
+      std::vector<std::vector<vtkIdType>> wheelLoops;
+      vtkPoints* cpts = cleaned->GetPoints();
+      for (const auto& loop : loops)
+      {
+        double lc[3];
+        const double radius = LoopRadiusAndCentroid(cpts, loop, lc);
+        if (LoopLiesOnClipPlane(cpts, loop, origin, planeNormal, radius))
+        {
+          wheelLoops.push_back(loop);
+        }
+      }
+      if (!wheelLoops.empty())
+      {
+        toFill = AppendWheelCapsFromPlaneCenter(cleaned, wheelLoops, origin);
+      }
+    }
+
     vtkNew<vtkFillHolesFilter> filler;
-    filler->SetInputData(cleaned);
+    filler->SetInputData(toFill);
     filler->SetHoleSize(holeSize);
     filler->Update();
     RestoreCellDataAfterFillHoles(cleaned, filler->GetOutput(),

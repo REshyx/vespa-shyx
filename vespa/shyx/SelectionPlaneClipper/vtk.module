@@ -1,7 +1,7 @@
 NAME
   vtkSHYXSelectionPlaneClipper
 DESCRIPTION
-  "Clip full vtkPolyData with a plane from selection patch centroid and average normal; optional interactive plane."
+  "Clip full vtkPolyData with a plane from selected faces, lines, or points; optional interactive plane."
 GROUPS
   Vascular
 DEPENDS
@@ -13,3 +13,4 @@ PRIVATE_DEPENDS
   VTK::CommonCore
   VTK::CommonDataModel
   VTK::CommonExecutionModel
+  VTK::CommonMath
