@@ -117,6 +117,8 @@
           Checked = inlet (VMTK source seed); unchecked = outlet (target). Names reflect threshold
           array magnitudes (mean per patch). Voronoi method needs at least one of each when
           Calculate centerline is on. Network method ignores these checks.
+          The Inlet column header has a tri-state checkbox: empty = none, filled = all eligible
+          (non-removed) openings, partial = mixed. Click it to select all or clear all.
         </Documentation>
       </StringVectorProperty>
 
@@ -139,6 +141,9 @@
           Checked openings are omitted from output seed points and from Voronoi source/target seeds
           (treated as deleted). They are still punched for the Network method (all Threshold cells
           are deleted). Unchecked openings remain available for inlet/outlet assignment.
+          The Remove column header has a tri-state checkbox: empty = none, filled = all openings
+          removed, partial = mixed. Click it to select all or clear all. Selecting all Remove also
+          clears Inlet on those rows.
         </Documentation>
       </StringVectorProperty>
 

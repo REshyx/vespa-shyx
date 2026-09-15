@@ -22,17 +22,24 @@
 #include <QHeaderView>
 #include <QLabel>
 #include <QList>
+#include <QMouseEvent>
+#include <QPainter>
 #include <QScopedValueRollback>
 #include <QSet>
 #include <QSignalBlocker>
 #include <QStandardItem>
 #include <QStandardItemModel>
 #include <QString>
+#include <QStyle>
+#include <QStyleOption>
+#include <QStyleOptionHeader>
+#include <QStyleOptionViewItem>
 #include <QTreeView>
 #include <QVBoxLayout>
 #include <QVariant>
 
 #include <algorithm>
+#include <functional>
 #include <limits>
 #include <string>
 #include <vector>
@@ -132,6 +139,152 @@ int duplicateSuffixFromLabel(const QString& name)
     return ok ? n : 1;
 }
 
+bool isCheckableOpeningColumn(int logicalIndex)
+{
+    return logicalIndex == kColInlet || logicalIndex == kColRemove;
+}
+
+/**
+ * Horizontal header that paints a tri-state checkbox on Inlet and Remove.
+ * pqHeaderView only tracks one checkbox rect, so two check columns need this.
+ */
+class OpeningTableHeaderView : public QHeaderView
+{
+public:
+    std::function<Qt::CheckState(int)> GetState;
+    std::function<void(int)> ToggleColumn;
+
+    explicit OpeningTableHeaderView(QWidget* parentObject)
+        : QHeaderView(Qt::Horizontal, parentObject)
+    {
+        this->setHighlightSections(false);
+        this->setSectionsClickable(false);
+    }
+
+protected:
+    QSize sectionSizeFromContents(int logicalIndex) const override
+    {
+        QSize sz = QHeaderView::sectionSizeFromContents(logicalIndex);
+        if (!isCheckableOpeningColumn(logicalIndex))
+        {
+            return sz;
+        }
+
+        QStyleOptionViewItem option;
+        option.initFrom(this);
+        option.features = QStyleOptionViewItem::HasCheckIndicator | QStyleOptionViewItem::HasDisplay;
+        option.viewItemPosition = QStyleOptionViewItem::OnlyOne;
+        const QRect checkRect =
+            this->style()->subElementRect(QStyle::SE_ItemViewItemCheckIndicator, &option, this);
+        const QRect textRect =
+            this->style()->subElementRect(QStyle::SE_ItemViewItemText, &option, this);
+        sz.rwidth() += qMax(textRect.x(), checkRect.width());
+        sz.setHeight(qMax(sz.height(), checkRect.height() + 4));
+        return sz;
+    }
+
+    void paintSection(QPainter* painter, const QRect& rect, int logicalIndex) const override
+    {
+        if (!rect.isValid())
+        {
+            return;
+        }
+        if (!isCheckableOpeningColumn(logicalIndex) || !this->GetState)
+        {
+            this->QHeaderView::paintSection(painter, rect, logicalIndex);
+            this->CheckRects.remove(logicalIndex);
+            return;
+        }
+
+        QStyleOptionHeader hoption;
+        this->initStyleOption(&hoption);
+        hoption.section = logicalIndex;
+        hoption.rect = rect;
+        this->style()->drawControl(QStyle::CE_HeaderSection, &hoption, painter, this);
+
+        QStyleOptionViewItem coption;
+        coption.initFrom(this);
+        coption.features = QStyleOptionViewItem::HasCheckIndicator | QStyleOptionViewItem::HasDisplay;
+        coption.viewItemPosition = QStyleOptionViewItem::OnlyOne;
+        QRect checkRect =
+            this->style()->subElementRect(QStyle::SE_ItemViewItemCheckIndicator, &coption, this);
+        checkRect.moveLeft(rect.x() + checkRect.x());
+        checkRect.moveTop(rect.y() + (rect.height() - checkRect.height()) / 2);
+        coption.rect = checkRect;
+        coption.state = coption.state & ~QStyle::State_HasFocus;
+        switch (this->GetState(logicalIndex))
+        {
+            case Qt::Checked:
+                coption.state |= QStyle::State_On;
+                break;
+            case Qt::PartiallyChecked:
+                coption.state |= QStyle::State_NoChange;
+                break;
+            case Qt::Unchecked:
+            default:
+                coption.state |= QStyle::State_Off;
+                break;
+        }
+        this->style()->drawPrimitive(QStyle::PE_IndicatorItemViewItemCheck, &coption, painter, this);
+        this->CheckRects[logicalIndex] = checkRect;
+
+        QStyleOptionViewItem vioption;
+        vioption.initFrom(this);
+        vioption.features = QStyleOptionViewItem::HasCheckIndicator | QStyleOptionViewItem::HasDisplay;
+        vioption.viewItemPosition = QStyleOptionViewItem::OnlyOne;
+        const QRect textPad =
+            this->style()->subElementRect(QStyle::SE_ItemViewItemText, &vioption, this);
+        const int textOffset = qMax(textPad.x(), checkRect.width() + 2);
+
+        QRect labelRect = rect;
+        labelRect.setLeft(labelRect.x() + textOffset);
+        painter->save();
+        this->QHeaderView::paintSection(painter, labelRect, logicalIndex);
+        painter->restore();
+    }
+
+    void mousePressEvent(QMouseEvent* evt) override
+    {
+        this->PressPosition = evt->pos();
+        if (!this->checkboxAt(evt->pos()).isValid())
+        {
+            this->QHeaderView::mousePressEvent(evt);
+        }
+    }
+
+    void mouseReleaseEvent(QMouseEvent* evt) override
+    {
+        const bool wasClick = (evt->pos() - this->PressPosition).manhattanLength() < 3;
+        const QRect checkRect = this->checkboxAt(this->PressPosition);
+        this->PressPosition = QPoint();
+        if (evt->button() == Qt::LeftButton && wasClick && checkRect.isValid() && this->ToggleColumn)
+        {
+            const int logicalIndex = this->logicalIndexAt(checkRect.center());
+            if (isCheckableOpeningColumn(logicalIndex))
+            {
+                this->ToggleColumn(logicalIndex);
+                return;
+            }
+        }
+        this->QHeaderView::mouseReleaseEvent(evt);
+    }
+
+private:
+    QRect checkboxAt(const QPoint& pos) const
+    {
+        const int logicalIndex = this->logicalIndexAt(pos);
+        const auto it = this->CheckRects.constFind(logicalIndex);
+        if (it != this->CheckRects.cend() && it->contains(pos))
+        {
+            return *it;
+        }
+        return QRect();
+    }
+
+    QPoint PressPosition;
+    mutable QHash<int, QRect> CheckRects;
+};
+
 }
 
 // ---------------------------------------------------------------------------
@@ -144,14 +297,23 @@ pqSHYXOpeningTable::pqSHYXOpeningTable(
     vbox->setSpacing(2);
 
     auto* tip = new QLabel(
-        tr("Apply once to populate openings. Inlet = VMTK source seed; Remove = excluded from output and centerline seeds."),
+        tr("Apply once to populate openings. Inlet = VMTK source seed; Remove = excluded from output and centerline seeds. Header checkboxes select or deselect a whole column."),
         this);
     tip->setWordWrap(true);
     tip->setStyleSheet(QStringLiteral("color: gray; font-size: 11px;"));
     vbox->addWidget(tip);
 
     this->Model = new QStandardItemModel(0, 3, this);
-    this->Model->setHorizontalHeaderLabels({ tr("Inlet"), tr("Remove"), tr("Seed point") });
+    auto* inletHeader = new QStandardItem(tr("Inlet"));
+    inletHeader->setToolTip(tr(
+        "Check openings that are inlets (VMTK source seeds). Click the header checkbox to select all, or to clear all when every eligible inlet is already checked. A mixed column shows a partial check."));
+    auto* removeHeader = new QStandardItem(tr("Remove"));
+    removeHeader->setToolTip(tr(
+        "Check openings to exclude from output seeds and centerline sources. Click the header checkbox to select all, or to clear all when every opening is already removed. A mixed column shows a partial check."));
+    auto* nameHeader = new QStandardItem(tr("Seed point"));
+    this->Model->setHorizontalHeaderItem(kColInlet, inletHeader);
+    this->Model->setHorizontalHeaderItem(kColRemove, removeHeader);
+    this->Model->setHorizontalHeaderItem(kColName, nameHeader);
 
     this->View = new QTreeView(this);
     this->View->setObjectName("SHYXOpeningTable");
@@ -163,7 +325,11 @@ pqSHYXOpeningTable::pqSHYXOpeningTable(
     this->View->setSortingEnabled(false);
     this->View->setModel(this->Model);
 
-    auto* header = this->View->header();
+    auto* header = new OpeningTableHeaderView(this->View);
+    header->GetState = [this](int col) { return this->columnCheckState(col); };
+    header->ToggleColumn = [this](int col) { this->toggleColumnChecks(col); };
+    this->View->setHeader(header);
+    header->setDefaultAlignment(Qt::AlignLeft | Qt::AlignVCenter);
     header->setSectionResizeMode(kColInlet, QHeaderView::ResizeToContents);
     header->setSectionResizeMode(kColRemove, QHeaderView::ResizeToContents);
     header->setSectionResizeMode(kColName, QHeaderView::Stretch);
@@ -326,6 +492,7 @@ void pqSHYXOpeningTable::rebuildFromDynamicProperty(const QString& dynPropName)
     }
 
     this->sortRowsBySeedPointId();
+    this->refreshHeader();
 }
 
 // ---------------------------------------------------------------------------
@@ -357,6 +524,7 @@ void pqSHYXOpeningTable::onItemChanged(QStandardItem* item)
     }
 
     this->updateRowAppearance(row);
+    this->refreshHeader();
 
     if (col == kColInlet)
     {
@@ -493,5 +661,117 @@ void pqSHYXOpeningTable::sortRowsBySeedPointId()
         {
             this->Model->appendRow(row.items);
         }
+    }
+}
+
+// ---------------------------------------------------------------------------
+bool pqSHYXOpeningTable::rowEligibleForColumn(int row, int col) const
+{
+    if (!this->Model || row < 0 || row >= this->Model->rowCount())
+    {
+        return false;
+    }
+    if (col == kColRemove)
+    {
+        return true;
+    }
+    if (col != kColInlet)
+    {
+        return false;
+    }
+    auto* removeItem = this->Model->item(row, kColRemove);
+    return !removeItem || removeItem->checkState() != Qt::Checked;
+}
+
+// ---------------------------------------------------------------------------
+Qt::CheckState pqSHYXOpeningTable::columnCheckState(int col) const
+{
+    if (!this->Model || (col != kColInlet && col != kColRemove))
+    {
+        return Qt::Unchecked;
+    }
+
+    int eligible = 0;
+    int checked = 0;
+    for (int r = 0; r < this->Model->rowCount(); ++r)
+    {
+        if (!this->rowEligibleForColumn(r, col))
+        {
+            continue;
+        }
+        ++eligible;
+        auto* item = this->Model->item(r, col);
+        if (item && item->checkState() == Qt::Checked)
+        {
+            ++checked;
+        }
+    }
+
+    if (eligible == 0 || checked == 0)
+    {
+        return Qt::Unchecked;
+    }
+    if (checked == eligible)
+    {
+        return Qt::Checked;
+    }
+    return Qt::PartiallyChecked;
+}
+
+// ---------------------------------------------------------------------------
+void pqSHYXOpeningTable::toggleColumnChecks(int col)
+{
+    if (!this->Model || (col != kColInlet && col != kColRemove))
+    {
+        return;
+    }
+
+    const bool checkAll = this->columnCheckState(col) != Qt::Checked;
+    const Qt::CheckState newState = checkAll ? Qt::Checked : Qt::Unchecked;
+
+    bool anyChanged = false;
+    {
+        QSignalBlocker blocker(this->Model);
+        for (int r = 0; r < this->Model->rowCount(); ++r)
+        {
+            if (!this->rowEligibleForColumn(r, col))
+            {
+                continue;
+            }
+            auto* item = this->Model->item(r, col);
+            if (!item || item->checkState() == newState)
+            {
+                continue;
+            }
+            anyChanged = true;
+            item->setCheckState(newState);
+            if (col == kColRemove && checkAll)
+            {
+                if (auto* inlet = this->Model->item(r, kColInlet))
+                {
+                    inlet->setCheckState(Qt::Unchecked);
+                }
+            }
+            this->updateRowAppearance(r);
+        }
+    }
+
+    if (!anyChanged)
+    {
+        this->refreshHeader();
+        return;
+    }
+
+    this->writeBackProperty(this->InletPropName);
+    this->writeBackProperty(this->ExcludedPropName);
+    this->refreshHeader();
+}
+
+// ---------------------------------------------------------------------------
+void pqSHYXOpeningTable::refreshHeader()
+{
+    if (this->View && this->View->header() && this->View->header()->viewport())
+    {
+        this->View->header()->viewport()->update();
     }
 }

@@ -2158,7 +2158,10 @@ const ShyxExtra kShyxExtra[] = {
     "ComputeCenterlineAttributes (Abscissas, ParallelTransportNormals), "
     "ExtractCenterlineBranches (CenterlineIds, TractIds, GroupIds, Blanking; Voronoi intended), "
     "ComputeCenterlineGeometry (Length/Curvature/Torsion/Tortuosity, Frenet frames). "
-    "Order is attributes then branches then geometry." },
+    "Order is attributes then branches then geometry. "
+    "Openings table Inlet/Remove column headers have a tri-state checkbox "
+    "(none / mixed / all); click to select or clear the column. "
+    "Inlet header select-all skips removed rows; Remove select-all unchecks those inlets." },
   { "SHYXSkeletonEndClipper",
     "Vascular step 3 (one-node combo of steps 1-2; standalone filters unchanged). "
     "Single watertight surface input. Port0 clipped mesh, port1 skeleton lines plus "
