@@ -2178,7 +2178,9 @@ const ShyxExtra kShyxExtra[] = {
     "BlockSelectors / BlockVisibilities as Hide Block). Side and node rows stay linked." },
   { "SHYXPartitionedCollectionBoundaryAssignment",
     "Vascular step 8. Call inspect_pipeline with the PDC name first. After area sort, side/node ENTITY_IDs are "
-    "rewritten so rank follows numbering (largest -> smallest existing IDs). Port0 collection, "
+    "rewritten so rank follows numbering (largest -> smallest existing IDs). Enable Repart when inlets were "
+    "already merged into one side set: it splits same-name patches by connected regions into original_n "
+    "(side and node) before classify / options / optional Merge inlets. Port0 collection, "
     "port1 assignment debug. Export writes Exodus + options + Nodeset + current .pvsm beside the "
     "chosen .exo." },
   { "SHYXPartitionedCollectionBoundaryFields", "Adds boundary field arrays on an assigned PDC." },

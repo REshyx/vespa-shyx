@@ -8,14 +8,16 @@
 
 | Port | 内容 |
 |------|------|
-| 0 | 输入 PDC（按面积名次重写 side/node 的 `ENTITY_ID`；Single outlet + Merge inlets 时再把多个入口合成一对）+ FieldData 文本戳 |
+| 0 | 输入 PDC（可选 **Repart** 按连通域拆同名 patch；按面积名次重写 side/node 的 `ENTITY_ID`；Single outlet + Merge inlets 时再把多个入口合成一对）+ FieldData 文本戳 |
 | 1 | 解析两段文本绘制：Point Label 标出 **全部** wall/inlet/outlet 的 sideset id（映射/合并后）；**仅入口**画 AABB + 法向（数值来自 options 文件中的 inlet_*，**合并前**各入口，bounds 按 `1/BoundsScale` 还原） |
 
 **面积排序后重写 ENTITY_ID**：现有 node/side 号池按升序赋给面积名次。12 个开口时典型为最大面 side `14`（wall）、第二大 `15`（Single inlet 时的入口）、其余 `16…`。几何与块名不变；Pipeline Browser 里块的先后仍是上游顺序，变的是各块上的 `ENTITY_ID`。
 
 **Custom adapter**（默认开）：前两行（表头 + `nodeset: ...` 真实 ENTITY_ID）不变；数据行 sideset id 重映射为 wall→3、inlet→1、outlet→21 起顺延。
 
-**Merge inlets into one side set**（默认开）：仅在 **Single outlet** 下生效；先按各入口统计 inlet_*，再合并；Boundary assignment 看合并后映射。
+**Repart**（默认关）：在面积排序之前，把**同名** side/node 对按面连通域拆开，重命名为 `原名_1`、`原名_2`…（side 与对应 node 都拆），重建一份 PDC，再走后面的分类 / OPT / 可选 Merge inlets。已做过 **Merge inlets**、一个 side set 里有多块互不连通入口时打开此项，否则面积排序会把合并后的入口当成一个开口，options 里的 `inlet_*` 也对不上。单连通的同名组（典型 wall / 单出口）保持原名不拆。
+
+**Merge inlets into one side set**（默认开）：仅在 **Single outlet** 下生效；先按各入口统计 inlet_*，再合并；Boundary assignment 看合并后映射。与 Repart 可同时开：先拆开算 OPT，再合并回一对写入 port 0。
 
 第二个文本为完整 **options 文件**（非片段）：
 - **Single inlet** → `options_template_single_inlet.txt`（PV / `options_PV_BJSJT_20260605`）
@@ -38,6 +40,8 @@
 - 同时含两者或都不含 → 不改动
 
 按钮 **Export port 0 (.exo) + options + Nodeset + .pvsm**：选目录后按上述名称写出四份文件（options / Nodeset 不加扩展名；`.pvsm` 为当前 ParaView 管线/视图状态）。
+
+已有 Exodus 网格、只要 options 时，可用同目录 `generate_options_from_exo.py`（**pvpython** + 本仓库 `VESPAPlugin.dll`）：按文件名选 HV/PV，默认参数并打开 **Repart**，在每个 `.exo` 旁写出 `options_<stem>`。
 
 ## 典型管线
 

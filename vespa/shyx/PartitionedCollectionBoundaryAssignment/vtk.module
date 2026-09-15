@@ -1,7 +1,7 @@
 NAME
   vtkSHYXPartitionedCollectionBoundaryAssignment
 DESCRIPTION
-  "Reorder partitioned side/node sets by area and classify wall/inlet/outlet for BC map and inlet OPT text."
+  "Reorder partitioned side/node sets by area and classify wall/inlet/outlet for BC map and inlet OPT text. Optional Repart splits same-name patches by connectivity before classification."
 GROUPS
   Vascular
 DEPENDS
@@ -9,5 +9,6 @@ DEPENDS
   VTK::CommonDataModel
   VTK::CommonExecutionModel
   VTK::FiltersCore
+  VTK::FiltersGeometry
   VTK::FiltersSources
   VTK::IOIOSS

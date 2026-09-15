@@ -5,6 +5,7 @@
 #include <vtkArrowSource.h>
 #include <vtkCellArray.h>
 #include <vtkCellData.h>
+#include <vtkCleanPolyData.h>
 #include <vtkCompositeDataSet.h>
 #include <vtkDataAssembly.h>
 #include <vtkDataObject.h>
@@ -26,6 +27,7 @@
 #include <vtkPointData.h>
 #include <vtkPoints.h>
 #include <vtkPolyData.h>
+#include <vtkPolyDataConnectivityFilter.h>
 #include <vtkSmartPointer.h>
 #include <vtkStringArray.h>
 #include <vtkTriangle.h>
@@ -373,6 +375,292 @@ void BuildIossAssemblyForPairs(vtkPartitionedDataSetCollection* coll, bool hasEl
   coll->SetDataAssembly(rootAsm);
 }
 
+struct SideNodePairGeom
+{
+  vtkSmartPointer<vtkPolyData> Side;
+  vtkSmartPointer<vtkPolyData> Node;
+  int SideEntityId = 0;
+  int NodeEntityId = 0;
+  std::string SideName;
+  std::string NodeName;
+};
+
+/**
+ * vtkPolyDataConnectivityFilter often keeps the full input point list. Drop unused vertices
+ * without merging coincident points.
+ */
+void StripUnreferencedPoints(vtkPolyData* pd)
+{
+  if (!pd || pd->GetNumberOfPoints() == 0)
+  {
+    return;
+  }
+  vtkNew<vtkCleanPolyData> clean;
+  clean->SetInputData(pd);
+  clean->PointMergingOff();
+  clean->ConvertLinesToPointsOff();
+  clean->ConvertPolysToLinesOff();
+  clean->ConvertStripsToPolysOff();
+  clean->Update();
+  if (vtkPolyData* out = clean->GetOutput())
+  {
+    pd->DeepCopy(out);
+  }
+}
+
+void SplitPolyDataByConnectedRegions(
+  vtkPolyData* pd, std::vector<vtkSmartPointer<vtkPolyData>>* outPieces)
+{
+  outPieces->clear();
+  if (!pd || pd->GetNumberOfCells() == 0)
+  {
+    return;
+  }
+
+  vtkNew<vtkPolyDataConnectivityFilter> probe;
+  probe->SetInputData(pd);
+  probe->SetExtractionModeToAllRegions();
+  probe->ColorRegionsOn();
+  probe->Update();
+
+  const int nRegions = static_cast<int>(probe->GetNumberOfExtractedRegions());
+  if (nRegions <= 1)
+  {
+    vtkSmartPointer<vtkPolyData> copy = vtkSmartPointer<vtkPolyData>::New();
+    copy->DeepCopy(pd);
+    outPieces->push_back(copy);
+    return;
+  }
+
+  vtkNew<vtkPolyDataConnectivityFilter> conn;
+  conn->SetInputData(pd);
+  conn->SetExtractionModeToSpecifiedRegions();
+  conn->ColorRegionsOff();
+  for (int r = 0; r < nRegions; ++r)
+  {
+    conn->InitializeSpecifiedRegionList();
+    conn->AddSpecifiedRegion(r);
+    conn->Update();
+    vtkPolyData* out = conn->GetOutput();
+    if (!out || out->GetNumberOfCells() == 0)
+    {
+      continue;
+    }
+    vtkSmartPointer<vtkPolyData> copy = vtkSmartPointer<vtkPolyData>::New();
+    copy->DeepCopy(out);
+    StripUnreferencedPoints(copy);
+    if (copy->GetNumberOfCells() > 0)
+    {
+      outPieces->push_back(copy);
+    }
+  }
+
+  if (outPieces->empty())
+  {
+    vtkSmartPointer<vtkPolyData> copy = vtkSmartPointer<vtkPolyData>::New();
+    copy->DeepCopy(pd);
+    outPieces->push_back(copy);
+  }
+}
+
+bool RebuildCollectionFromPairs(vtkPartitionedDataSetCollection* coll,
+  const PartitionedCollectionLayout& srcLayout, const std::vector<SideNodePairGeom>& pairs)
+{
+  if (!coll || pairs.empty())
+  {
+    return false;
+  }
+
+  vtkSmartPointer<vtkDataObject> elementCopy;
+  int elementEntityId = 1;
+  std::string elementName = "tetrahedra";
+  if (srcLayout.HasElementBlock)
+  {
+    vtkDataSet* elemDs = GetDataSetFromPdcBlock(coll, srcLayout.ElementBlockPdcIndex);
+    if (elemDs)
+    {
+      elementCopy.TakeReference(elemDs->NewInstance());
+      elementCopy->DeepCopy(elemDs);
+    }
+    elementEntityId = ReadEntityIdFromMeta(coll, srcLayout.ElementBlockPdcIndex, 1);
+    elementName = ReadBlockNameFromMeta(coll, srcLayout.ElementBlockPdcIndex, "tetrahedra");
+  }
+
+  const unsigned int nOutPairs = static_cast<unsigned int>(pairs.size());
+  const bool hasElement = srcLayout.HasElementBlock && elementCopy != nullptr;
+  const unsigned int nBlocks = (hasElement ? 1u : 0u) + 2u * nOutPairs;
+
+  vtkNew<vtkPartitionedDataSetCollection> rebuilt;
+  rebuilt->SetNumberOfPartitionedDataSets(nBlocks);
+
+  unsigned int cursor = 0;
+  unsigned int elementIndex = 0;
+  if (hasElement)
+  {
+    elementIndex = cursor;
+    SetPartitionDataSetBlock(rebuilt, cursor, elementCopy);
+    SetIossBlockMeta(rebuilt, cursor, elementName.c_str(), elementEntityId);
+    ++cursor;
+  }
+
+  std::vector<unsigned int> nodeIndices(nOutPairs);
+  std::vector<unsigned int> sideIndices(nOutPairs);
+  std::vector<std::string> sideNames(nOutPairs);
+  std::vector<std::string> nodeNames(nOutPairs);
+  for (unsigned int i = 0; i < nOutPairs; ++i)
+  {
+    nodeIndices[i] = cursor;
+    SetPartitionDataSetBlock(rebuilt, cursor, pairs[i].Node);
+    SetIossBlockMeta(rebuilt, cursor, pairs[i].NodeName.c_str(), pairs[i].NodeEntityId);
+    nodeNames[i] = pairs[i].NodeName;
+    ++cursor;
+  }
+  for (unsigned int i = 0; i < nOutPairs; ++i)
+  {
+    sideIndices[i] = cursor;
+    SetPartitionDataSetBlock(rebuilt, cursor, pairs[i].Side);
+    SetIossBlockMeta(rebuilt, cursor, pairs[i].SideName.c_str(), pairs[i].SideEntityId);
+    sideNames[i] = pairs[i].SideName;
+    ++cursor;
+  }
+
+  BuildIossAssemblyForPairs(
+    rebuilt, hasElement, elementIndex, nodeIndices, sideIndices, sideNames, nodeNames);
+  coll->DeepCopy(rebuilt);
+  return true;
+}
+
+double ComputeSurfaceArea(vtkPolyData* pd);
+
+/**
+ * Group side/node pairs by side-set name, append each group, split by face connectivity, and
+ * rename pieces to original_n (side and node). Returns true if coll was rebuilt.
+ */
+bool RepartSameNamePatchesByConnectivity(
+  vtkPartitionedDataSetCollection* coll, const PartitionedCollectionLayout& layout)
+{
+  if (!coll)
+  {
+    return false;
+  }
+
+  const unsigned int nPairs = static_cast<unsigned int>(
+    std::min(layout.SideSetPdcIndices.size(), layout.NodeSetPdcIndices.size()));
+  if (nPairs == 0)
+  {
+    return false;
+  }
+
+  std::vector<SideNodePairGeom> src(nPairs);
+  std::vector<std::string> nameOrder;
+  std::map<std::string, std::vector<unsigned int>> groups;
+  for (unsigned int i = 0; i < nPairs; ++i)
+  {
+    SideNodePairGeom& pair = src[i];
+    pair.Side =
+      DeepCopyPolyDataOrEmpty(GetDataSetFromPdcBlock(coll, layout.SideSetPdcIndices[i]));
+    pair.Node =
+      DeepCopyPolyDataOrEmpty(GetDataSetFromPdcBlock(coll, layout.NodeSetPdcIndices[i]));
+    if (pair.Node->GetNumberOfPoints() == 0 && pair.Side->GetNumberOfPoints() > 0)
+    {
+      pair.Node = BuildNodeSetPolyData(pair.Side);
+    }
+    pair.SideEntityId =
+      ReadEntityIdFromMeta(coll, layout.SideSetPdcIndices[i], static_cast<int>(i + 1));
+    pair.NodeEntityId =
+      ReadEntityIdFromMeta(coll, layout.NodeSetPdcIndices[i], pair.SideEntityId);
+    pair.SideName =
+      ReadBlockNameFromMeta(coll, layout.SideSetPdcIndices[i], "side" + std::to_string(i));
+    pair.NodeName = ReadBlockNameFromMeta(
+      coll, layout.NodeSetPdcIndices[i], "node_" + pair.SideName);
+    if (groups.find(pair.SideName) == groups.end())
+    {
+      nameOrder.push_back(pair.SideName);
+    }
+    groups[pair.SideName].push_back(i);
+  }
+
+  std::vector<SideNodePairGeom> outPairs;
+  outPairs.reserve(nPairs);
+  bool changed = false;
+  for (const std::string& name : nameOrder)
+  {
+    const std::vector<unsigned int>& idxs = groups[name];
+    vtkSmartPointer<vtkPolyData> combined;
+    if (idxs.size() == 1)
+    {
+      combined = src[idxs.front()].Side;
+    }
+    else
+    {
+      changed = true;
+      vtkNew<vtkAppendPolyData> append;
+      for (unsigned int idx : idxs)
+      {
+        if (src[idx].Side &&
+          (src[idx].Side->GetNumberOfCells() > 0 || src[idx].Side->GetNumberOfPoints() > 0))
+        {
+          append->AddInputData(src[idx].Side);
+        }
+      }
+      combined = vtkSmartPointer<vtkPolyData>::New();
+      if (append->GetNumberOfInputConnections(0) > 0)
+      {
+        append->Update();
+        combined->DeepCopy(append->GetOutput());
+      }
+    }
+
+    std::vector<vtkSmartPointer<vtkPolyData>> pieces;
+    SplitPolyDataByConnectedRegions(combined, &pieces);
+    std::stable_sort(pieces.begin(), pieces.end(),
+      [](const vtkSmartPointer<vtkPolyData>& a, const vtkSmartPointer<vtkPolyData>& b) {
+        return ComputeSurfaceArea(a) > ComputeSurfaceArea(b);
+      });
+
+    const bool keepOriginal = (idxs.size() == 1 && pieces.size() <= 1);
+    if (keepOriginal)
+    {
+      outPairs.push_back(src[idxs.front()]);
+      continue;
+    }
+
+    changed = true;
+    const SideNodePairGeom& first = src[idxs.front()];
+    if (pieces.empty())
+    {
+      outPairs.push_back(first);
+      continue;
+    }
+
+    for (size_t k = 0; k < pieces.size(); ++k)
+    {
+      const std::string suffix = "_" + std::to_string(k + 1);
+      SideNodePairGeom piece;
+      piece.Side = pieces[k];
+      SetContiguousCellGlobalIdsPolyData(piece.Side);
+      piece.Node = BuildNodeSetPolyData(piece.Side);
+      piece.SideName = first.SideName + suffix;
+      piece.NodeName = first.NodeName + suffix;
+      piece.SideEntityId = first.SideEntityId;
+      piece.NodeEntityId = first.NodeEntityId;
+      outPairs.push_back(std::move(piece));
+    }
+  }
+
+  if (!changed || outPairs.empty())
+  {
+    return false;
+  }
+
+  for (unsigned int i = 0; i < static_cast<unsigned int>(outPairs.size()); ++i)
+  {
+    outPairs[i].SideEntityId = static_cast<int>(i + 1);
+    outPairs[i].NodeEntityId = static_cast<int>(i + 1);
+  }
+  return RebuildCollectionFromPairs(coll, layout, outPairs);
+}
+
 /**
  * Rebuild coll so classified inlets become one side/node pair. Non-inlet pairs keep relative
  * area-sorted order; the merged inlet is appended. Returns false if fewer than two inlets.
@@ -486,68 +774,25 @@ bool MergeInletPairsIntoOneSideSet(vtkPartitionedDataSetCollection* coll,
     outPairs.push_back(std::move(merged));
   }
 
-  vtkSmartPointer<vtkDataObject> elementCopy;
-  unsigned int elementEntityId = 1;
-  std::string elementName = "tetrahedra";
-  if (sortedLayout.HasElementBlock)
+  std::vector<SideNodePairGeom> geoms;
+  geoms.reserve(outPairs.size());
+  for (const KeptPair& pair : outPairs)
   {
-    vtkDataSet* elemDs = GetDataSetFromPdcBlock(coll, sortedLayout.ElementBlockPdcIndex);
-    if (elemDs)
-    {
-      elementCopy.TakeReference(elemDs->NewInstance());
-      elementCopy->DeepCopy(elemDs);
-    }
-    elementEntityId = static_cast<unsigned int>(
-      ReadEntityIdFromMeta(coll, sortedLayout.ElementBlockPdcIndex, 1));
-    elementName = ReadBlockNameFromMeta(coll, sortedLayout.ElementBlockPdcIndex, "tetrahedra");
+    SideNodePairGeom geom;
+    geom.Side = pair.Side;
+    geom.Node = pair.Node;
+    geom.SideEntityId = pair.SideEntityId;
+    geom.NodeEntityId = pair.NodeEntityId;
+    geom.SideName = pair.SideName;
+    geom.NodeName = pair.NodeName;
+    geoms.push_back(std::move(geom));
+  }
+  if (!RebuildCollectionFromPairs(coll, sortedLayout, geoms))
+  {
+    return false;
   }
 
   const unsigned int nOutPairs = static_cast<unsigned int>(outPairs.size());
-  const unsigned int nBlocks =
-    (sortedLayout.HasElementBlock && elementCopy ? 1u : 0u) + 2u * nOutPairs;
-
-  vtkNew<vtkPartitionedDataSetCollection> rebuilt;
-  rebuilt->SetNumberOfPartitionedDataSets(nBlocks);
-
-  unsigned int cursor = 0;
-  unsigned int elementIndex = 0;
-  const bool hasElement = sortedLayout.HasElementBlock && elementCopy != nullptr;
-  if (hasElement)
-  {
-    elementIndex = cursor;
-    SetPartitionDataSetBlock(rebuilt, cursor, elementCopy);
-    SetIossBlockMeta(rebuilt, cursor, elementName.c_str(), static_cast<int>(elementEntityId));
-    ++cursor;
-  }
-
-  std::vector<unsigned int> nodeIndices(nOutPairs);
-  std::vector<unsigned int> sideIndices(nOutPairs);
-  std::vector<std::string> sideNames(nOutPairs);
-  std::vector<std::string> nodeNames(nOutPairs);
-  for (unsigned int i = 0; i < nOutPairs; ++i)
-  {
-    nodeIndices[i] = cursor;
-    SetPartitionDataSetBlock(rebuilt, cursor, outPairs[i].Node);
-    SetIossBlockMeta(
-      rebuilt, cursor, outPairs[i].NodeName.c_str(), outPairs[i].NodeEntityId);
-    nodeNames[i] = outPairs[i].NodeName;
-    ++cursor;
-  }
-  for (unsigned int i = 0; i < nOutPairs; ++i)
-  {
-    sideIndices[i] = cursor;
-    SetPartitionDataSetBlock(rebuilt, cursor, outPairs[i].Side);
-    SetIossBlockMeta(
-      rebuilt, cursor, outPairs[i].SideName.c_str(), outPairs[i].SideEntityId);
-    sideNames[i] = outPairs[i].SideName;
-    ++cursor;
-  }
-
-  BuildIossAssemblyForPairs(
-    rebuilt, hasElement, elementIndex, nodeIndices, sideIndices, sideNames, nodeNames);
-
-  coll->DeepCopy(rebuilt);
-
   outSideEntityIds->clear();
   outRoles->clear();
   outSideEntityIds->reserve(nOutPairs);
@@ -1410,6 +1655,7 @@ void vtkSHYXPartitionedCollectionBoundaryAssignment::PrintSelf(ostream& os, vtkI
 {
   this->Superclass::PrintSelf(os, indent);
   os << indent << "FlowBoundaryMode: " << this->FlowBoundaryMode << "\n";
+  os << indent << "Repart: " << this->Repart << "\n";
   os << indent << "MergeInletsIntoOneSideSet: " << this->MergeInletsIntoOneSideSet << "\n";
   os << indent << "CustomAdapter: " << this->CustomAdapter << "\n";
   os << indent << "BoundaryAssignmentText: "
@@ -1477,7 +1723,7 @@ int vtkSHYXPartitionedCollectionBoundaryAssignment::RequestData(
     return 0;
   }
 
-  // Port 0: start from input; ENTITY_IDs remapped to area rank; may rewrite assembly when merging.
+  // Port 0: start from input; optional Repart; ENTITY_IDs remapped to area rank; may merge inlets.
   output->DeepCopy(input);
   debugOutput->Initialize();
 
@@ -1513,6 +1759,20 @@ int vtkSHYXPartitionedCollectionBoundaryAssignment::RequestData(
                     << ") differs from side set count (" << layout.SideSetPdcIndices.size()
                     << "). Pairing by minimum count.");
   }
+  if (this->GetRepart() != 0)
+  {
+    if (RepartSameNamePatchesByConnectivity(output, layout))
+    {
+      vtkDataAssembly* repartAssembly = output->GetDataAssembly();
+      if (!ParsePartitionedCollectionLayout(repartAssembly, &layout))
+      {
+        vtkWarningMacro(<< "Repart rebuilt the collection but assembly layout is missing. "
+                        << "Passing through unchanged.");
+        return finishEmpty("# no side/node sets (repart assembly layout)\n");
+      }
+    }
+  }
+
   const unsigned int nPairs =
     static_cast<unsigned int>(std::min(layout.NodeSetPdcIndices.size(), layout.SideSetPdcIndices.size()));
 

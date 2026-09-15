@@ -5,7 +5,7 @@
                  label="SHYX Partitioned Collection Boundary Assignment">
       <Documentation
           short_help="SHYX Partitioned Collection Boundary Assignment: Classify wall/inlet/outlet; rewrite ENTITY_IDs by area rank; port 1 = inlet OPT debug geometry."
-          long_help="Accepts vtkPartitionedDataSetCollection (e.g. from SHYX DataSet To Partitioned Collection). Sorts side/node pairs by side-set area (descending) for classification, then rewrites those pairs' Exodus ENTITY_IDs from the existing ID pools so rank follows numbering (largest patch gets the smallest side/node IDs, like Sort By Area on DataSet To Partitioned Collection). Emits Boundary assignment + a full options file (PV template for Single inlet, HV template for Single outlet; inlet_* filled pre-merge). Optional Merge inlets (default on, Single outlet): after per-inlet OPT stats, merges inlet side/node sets into one pair on port 0 — assignment text is post-merge. Port 0 is the collection (IDs remapped; possibly merged) with FieldData stamps. Port 1 is drawn from those two texts: Point Label for every sideset id; AABB/normals for inlets only (OPT values, bounds restored by 1/BoundsScale). Does not write BoundaryRadialValue / BoundaryVariable arrays — use SHYX Partitioned Collection Boundary Fields for that."/>
+          long_help="Accepts vtkPartitionedDataSetCollection (e.g. from SHYX DataSet To Partitioned Collection). Optional Repart: group same-name side/node pairs, split each by connected regions into original_n, then continue. Sorts side/node pairs by side-set area (descending) for classification, then rewrites those pairs' Exodus ENTITY_IDs from the existing ID pools so rank follows numbering (largest patch gets the smallest side/node IDs, like Sort By Area on DataSet To Partitioned Collection). Emits Boundary assignment + a full options file (PV template for Single inlet, HV template for Single outlet; inlet_* filled pre-merge). Optional Merge inlets (default on, Single outlet): after per-inlet OPT stats, merges inlet side/node sets into one pair on port 0 — assignment text is post-merge. Port 0 is the collection (IDs remapped; possibly merged) with FieldData stamps. Port 1 is drawn from those two texts: Point Label for every sideset id; AABB/normals for inlets only (OPT values, bounds restored by 1/BoundsScale). Does not write BoundaryRadialValue / BoundaryVariable arrays — use SHYX Partitioned Collection Boundary Fields for that."/>
 
       <OutputPort name="Partitioned collection" index="0" id="port0"/>
       <OutputPort name="Assignment debug" index="1" id="port1"/>
@@ -33,10 +33,26 @@
           next (sole inlet or outlet), and remaining openings continue sequentially. Index 0 is
           always wall (largest). Index 1 is the single inlet (mode 0) or single outlet (mode 1);
           remaining openings take the other role. The options file fills inlet_* from classified
-          inlets (always computed before any inlet merge).
+          inlets (always computed before any inlet merge). Enable Repart first when the input
+          already merged inlets into one side set (disconnected islands under one name).
           The property panel auto-selects this from the top-level source filename when possible:
           basename contains "plaque" → Single inlet; contains "aorta" → Single outlet
           (re-applied only when that upstream file path changes).
+        </Documentation>
+      </IntVectorProperty>
+
+      <IntVectorProperty name="Repart" label="Repart"
+          command="SetRepart" number_of_elements="1" default_values="0"
+          animateable="0">
+        <BooleanDomain name="bool"/>
+        <Documentation>
+          When enabled, before area-rank classification, group side/node pairs that share the same
+          side-set name, split each group by face-connected regions, and rename pieces to
+          original_1, original_2, ... (both the side set and its node set). Rebuilds port 0 as a
+          new PDC, then the usual sort / classify / options / optional Merge inlets continue.
+          Use this when inlets were already merged (Merge inlets) so each opening is classified
+          separately and inlet_* lines in the options file are per island. No effect when every
+          same-name group is already a single connected region.
         </Documentation>
       </IntVectorProperty>
 
@@ -72,6 +88,7 @@
 
       <PropertyGroup label="Flow boundary mode">
         <Property name="FlowBoundaryMode"/>
+        <Property name="Repart"/>
         <Property name="MergeInletsIntoOneSideSet"/>
         <Property name="CustomAdapter"/>
       </PropertyGroup>
@@ -132,9 +149,9 @@
         <Documentation>
           After Apply, a complete solver options file: Single inlet uses the PV template;
           Single outlet uses the HV template. Inlet_* lines are filled from classified inlets
-          (always pre-merge). -num_outlet is set from the outlet count. Scales below apply only
-          to the inlet_* values. Also stored on output FieldData as SHYXInletOptText.
-          Shown via shyx_boundary_assignment_info (refreshes after dataUpdated).
+          (after optional Repart, always pre-merge). -num_outlet is set from the outlet count.
+          Scales below apply only to the inlet_* values. Also stored on output FieldData as
+          SHYXInletOptText. Shown via shyx_boundary_assignment_info (refreshes after dataUpdated).
         </Documentation>
       </StringVectorProperty>
 

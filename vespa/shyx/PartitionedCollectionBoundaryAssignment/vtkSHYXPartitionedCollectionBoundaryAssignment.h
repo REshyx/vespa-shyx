@@ -10,6 +10,11 @@
  * - index 1: sole inlet (SINGLE_INLET) or sole outlet (SINGLE_OUTLET)
  * - remaining: the other role
  *
+ * Optional Repart (default off): before area-rank classification, group side/node pairs that
+ * share the same side-set name, split each group by face-connected regions, and rename pieces
+ * to original_1, original_2, ... (side and matching node). Use this when inlets were already
+ * merged into one side set so each opening can be classified and listed in the options file.
+ *
  * Optional MergeInletsIntoOneSideSet (default on): in SINGLE_OUTLET mode, after per-inlet OPT
  * stats are collected, append all classified inlet side/node sets into one pair on port 0.
  * BoundaryAssignmentText reflects the post-merge map; InletOptText is a full options file
@@ -19,8 +24,8 @@
  * ENTITY_IDs), but remaps data-row sideset ids: wall→3, inlet→1, outlets→21,22,... in row order.
  *
  * Ports:
- * - 0: input vtkPartitionedDataSetCollection (ENTITY_IDs remapped to area rank; inlets may also
- *   be merged) + FieldData stamps
+ * - 0: input vtkPartitionedDataSetCollection (optional Repart split; ENTITY_IDs remapped to area
+ *   rank; inlets may also be merged) + FieldData stamps
  * - 1: debug vtkPolyData built from the two texts — Point Label for all sideset ids;
  *   AABB/normals for inlets only (from Inlet OPT values)
  *
@@ -56,6 +61,14 @@ public:
    */
   vtkSetClampMacro(FlowBoundaryMode, int, SINGLE_INLET, SINGLE_OUTLET);
   vtkGetMacro(FlowBoundaryMode, int);
+
+  /**
+   * When non-zero: before area sort / classification, split same-name side/node pairs by connected
+   * regions into original_n pieces on a new PDC. Then the usual rank / OPT / optional merge run.
+   */
+  vtkSetMacro(Repart, int);
+  vtkGetMacro(Repart, int);
+  vtkBooleanMacro(Repart, int);
 
   /**
    * When non-zero (default): in SINGLE_OUTLET mode, merge all classified inlets into one side/node
@@ -110,6 +123,7 @@ protected:
   void CopyInfoString(char*& dest, const char* text);
 
   int FlowBoundaryMode = SINGLE_INLET;
+  int Repart = 0;
   int MergeInletsIntoOneSideSet = 1;
   int CustomAdapter = 1;
   char* BoundaryAssignmentText = nullptr;
