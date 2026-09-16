@@ -18,12 +18,14 @@
         port 1 (seed points) and excluded from centerline seeds (treated as deleted). Assign **Inlets** only among
         openings that remain unchecked here.
 
-        Changing **Threshold array** clears prior inlet/outlet and remove checks and rebuilds the opening
-        list on the next Apply/update.
+        Changing **Threshold array** clears prior inlet/outlet, remove, and Extra_n roles
+        and rebuilds the opening list on the next Apply/update.
 
         Output 0 is VMTK geometry when **Calculate centerline** is on. **Centerline method**
         **Voronoi tree** needs at least one checked inlet and one unchecked outlet among
-        non-removed openings (closed surface; source–target tree, loops drop the cheaper arm).
+        non-removed openings (closed surface; source–target tree, loops drop the cheaper arm),
+        and/or an Extra_n column with both in and out (independent many-to-many traces after
+        the tree; Delaunay/Voronoi from the last Apply on the same surface are reused).
         **Network** deletes every cell that passed the threshold (typically **EndpointIndex**
         caps) so each patch becomes a boundary ring, then runs vtkvmtkPolyDataNetworkExtraction
         (keeps loops; inlet checks are unused). Otherwise output 0 is empty.
@@ -147,9 +149,40 @@
         </Documentation>
       </StringVectorProperty>
 
+      <IntVectorProperty name="ExtraColumnCount"
+                         command="SetExtraColumnCount"
+                         number_of_elements="1"
+                         default_values="0"
+                         animateable="0"
+                         panel_visibility="never">
+        <IntRangeDomain name="range" min="0" max="16"/>
+        <Documentation>
+          Number of Extra_n columns on the openings table (0–16). Use **Add Extra** /
+          **Remove Extra** on the table. Each Extra_n is an independent many-to-many extra
+          Voronoi group (in × out) after the tree, reusing the cached Delaunay/Voronoi.
+        </Documentation>
+      </IntVectorProperty>
+
+      <StringVectorProperty name="ExtraRoles"
+                            command="SetExtraRole"
+                            number_of_elements="0"
+                            number_of_elements_per_command="3"
+                            repeat_command="1"
+                            clean_command="RemoveAllExtraRoles"
+                            animateable="0"
+                            panel_visibility="never">
+        <Documentation>
+          Extra_n cell roles as (columnIndex, openingName, in|out) triples. Column 0 is
+          Extra_1. Default —— cells are omitted. Each Extra_n column is one extra Voronoi
+          group: every in in that column is Fast-Marched to every out in the same column.
+        </Documentation>
+      </StringVectorProperty>
+
       <PropertyGroup label="Openings (inlets / removed)" panel_widget="shyx_openings_table">
         <Property name="InletStatus" function="Inlet"/>
         <Property name="ExcludedStatus" function="Excluded"/>
+        <Property name="ExtraColumnCount" function="ExtraColumnCount"/>
+        <Property name="ExtraRoles" function="ExtraRoles"/>
       </PropertyGroup>
 
       <IntVectorProperty name="CalculateCenterline"
@@ -177,6 +210,9 @@
         <Documentation>
           Voronoi tree: vtkvmtkPolyDataCenterlines on the closed input. Checked openings are
           sources (inlets), unchecked are targets. A vascular loop keeps only the cheaper arm.
+          **Add Extra** appends Extra_1, Extra_2, … columns (—— / in / out). Each Extra_n
+          is an independent many-to-many extra group after the tree, reusing the cached
+          Delaunay/Voronoi. **Remove Extra** drops the last Extra_n column.
 
           Network: delete every cell whose Threshold array magnitude is &gt; 0 (the same patches
           listed as openings, typically EndpointIndex caps on a watertight Clipper output).

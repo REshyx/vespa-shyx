@@ -4,7 +4,8 @@
 
 **Centerline method**（需打开 Calculate centerline）：
 
-- **Voronoi tree (source–target)**：`vtkvmtkPolyDataCenterlines`，封闭面 + inlet/outlet 种子。环只保留代价更低的一臂。一条 cell = 一条 source→target 路径（父血管段上多条路径重叠）。
+- **Voronoi tree (source–target)**：`vtkvmtkPolyDataCenterlines`，封闭面 + inlet/outlet 种子。环只保留代价更低的一臂。一条 cell = 一条 source→target 路径（父血管段上多条路径重叠）。多 inlet 时每个 target 只接到代价最低的那个 source，其它 source 可能没有路径。
+- **Extra_n 列**：开口表 **Add Extra** 追加 Extra_1、Extra_2…（最多 16 列），**Remove Extra** 删掉最后一列。每列默认 **——**，可改成 **in** / **out**。树算完后，同一 Extra_n 里每个 in 连到该列每一个 out（多对多，各列互不影响）。Delaunay / Voronoi 缓存在这个滤镜上，同一张表面再 Apply **只重跑 Fast Marching**。
 - **Network (punch openings, keep loops)**：把 Threshold 数组（默认 `EndpointIndex`）幅度 > 0 的单元从副本上删掉，每个端帽变成边界环，再跑 `vtkvmtkPolyDataNetworkExtraction`。不使用 inlet/outlet 勾选。一条 cell = 图上的一条分支。
 
 **Centerline post-process**（需打开 Calculate centerline；默认全关，顺序固定：attributes → branches → geometry）：

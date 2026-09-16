@@ -14,6 +14,8 @@
  * unchecked entries are targets (outlets). \c ExcludedOpeningSelection — checked entries are omitted
  * from seed output and from centerline seeds (deleted openings). Changing the threshold array
  * clears prior checks and rebuilds the lists on the next RequestData.
+ * ExtraColumnCount / ExtraRoles: optional Extra_1 … Extra_n columns. Each column is an
+ * independent many-to-many extra Voronoi group (in × out). Delaunay/Voronoi are cached.
  *
  * CenterlineMethod (when CalculateCenterline is on):
  * - 0 Voronoi: vtkvmtkPolyDataCenterlines on the closed input (source = checked inlets,
@@ -42,10 +44,15 @@
 #include "vtkSHYXVmtkOpeningCenterlinesModule.h"
 
 #include <string>
+#include <vector>
 
+#include <vtkIdList.h>
+#include <vtkPolyData.h>
 #include <vtkSmartPointer.h>
+#include <vtkUnstructuredGrid.h>
 
 class vtkDataArraySelection;
+class vtkvmtkPolyDataCenterlines;
 
 VTK_ABI_NAMESPACE_BEGIN
 
@@ -98,6 +105,12 @@ public:
   vtkDataArraySelection* GetInletSelection();
   vtkDataArraySelection* GetExcludedOpeningSelection();
 
+  vtkGetMacro(ExtraColumnCount, int);
+  void SetExtraColumnCount(int count);
+
+  void RemoveAllExtraRoles();
+  void SetExtraRole(const char* columnIndex, const char* openingName, const char* role);
+
   /** Monotonic counter bumped whenever opening names / selections are rebuilt (ParaView domain refresh). */
   vtkGetMacro(OpeningListRevision, int);
 
@@ -118,6 +131,11 @@ private:
   static void ClearAllArrays(vtkDataArraySelection* sel);
   void InvalidateInletSelectionIfOpeningThresholdChanged();
   void ApplyCenterlinePostProcess(vtkPolyData* centerlines);
+  void ClearVoronoiCache();
+  bool VoronoiCacheMatches(vtkPolyData* surface) const;
+  void StoreVoronoiCache(vtkvmtkPolyDataCenterlines* centerlines, vtkPolyData* surface);
+  int RunVoronoiCenterlines(
+    vtkPolyData* surface, vtkIdList* sources, vtkIdList* targets, vtkPolyData* out);
 
   int CalculateCenterline = 0;
   int CenterlineMethod = 0;
@@ -133,6 +151,23 @@ private:
 
   vtkSmartPointer<vtkDataArraySelection> InletSelection;
   vtkSmartPointer<vtkDataArraySelection> ExcludedOpeningSelection;
+
+  int ExtraColumnCount = 0;
+  struct ExtraRoleEntry
+  {
+    int Column = 0;
+    std::string Name;
+    std::string Role;
+  };
+  std::vector<ExtraRoleEntry> ExtraRoles;
+
+  vtkSmartPointer<vtkUnstructuredGrid> CachedDelaunay;
+  vtkSmartPointer<vtkPolyData> CachedVoronoi;
+  vtkSmartPointer<vtkIdList> CachedPoleIds;
+  vtkIdType CachedSurfaceNPoints = -1;
+  vtkIdType CachedSurfaceNCells = -1;
+  vtkMTimeType CachedPointsMTime = 0;
+  int CachedFlipNormals = -1;
 
   /** Last threshold-array fingerprint; empty until first RequestData so pvsm-restored checks are kept. */
   std::string CachedOpeningThresholdFingerprint;

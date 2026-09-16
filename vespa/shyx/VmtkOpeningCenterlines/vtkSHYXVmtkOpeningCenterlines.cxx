@@ -6,6 +6,7 @@
 #include "vtkvmtkPolyDataCenterlines.h"
 #include "vtkvmtkPolyDataNetworkExtraction.h"
 
+#include <vtkAppendPolyData.h>
 #include <vtkCellData.h>
 #include <vtkCleanPolyData.h>
 #include <vtkDataArray.h>
@@ -19,16 +20,21 @@
 #include <vtkNew.h>
 #include <vtkObjectFactory.h>
 #include <vtkPointData.h>
+#include <vtkPoints.h>
 #include <vtkPolyData.h>
 #include <vtkPolyDataConnectivityFilter.h>
 #include <vtkIdList.h>
+#include <vtkUnstructuredGrid.h>
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
 #include <limits>
 #include <set>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
+#include <utility>
 #include <vector>
 
 VTK_ABI_NAMESPACE_BEGIN
@@ -47,6 +53,26 @@ bool CopyIfNonEmpty(vtkPolyData* dst, vtkPolyData* src)
   }
   dst->ShallowCopy(src);
   return true;
+}
+
+void AppendCenterlines(vtkPolyData* dst, vtkPolyData* add)
+{
+  if (!dst || !add || add->GetNumberOfCells() == 0)
+  {
+    return;
+  }
+  if (dst->GetNumberOfCells() == 0)
+  {
+    dst->DeepCopy(add);
+    return;
+  }
+  vtkNew<vtkPolyData> left;
+  left->ShallowCopy(dst);
+  vtkNew<vtkAppendPolyData> app;
+  app->AddInputData(left);
+  app->AddInputData(add);
+  app->Update();
+  dst->ShallowCopy(app->GetOutput());
 }
 
 } // namespace
@@ -94,6 +120,7 @@ void vtkSHYXVmtkOpeningCenterlines::InvalidateInletSelectionIfOpeningThresholdCh
   {
     ClearAllArrays(this->InletSelection);
     ClearAllArrays(this->ExcludedOpeningSelection);
+    this->ExtraRoles.clear();
     this->CachedOpeningThresholdFingerprint = fp;
     this->InletSelection->Modified();
     this->ExcludedOpeningSelection->Modified();
@@ -519,6 +546,172 @@ vtkDataArraySelection* vtkSHYXVmtkOpeningCenterlines::GetExcludedOpeningSelectio
   return this->ExcludedOpeningSelection;
 }
 
+void vtkSHYXVmtkOpeningCenterlines::SetExtraColumnCount(int count)
+{
+  if (count < 0)
+  {
+    count = 0;
+  }
+  if (count > 16)
+  {
+    count = 16;
+  }
+  if (this->ExtraColumnCount == count)
+  {
+    return;
+  }
+  this->ExtraColumnCount = count;
+  this->ExtraRoles.erase(std::remove_if(this->ExtraRoles.begin(), this->ExtraRoles.end(),
+                           [count](const ExtraRoleEntry& e) { return e.Column >= count; }),
+    this->ExtraRoles.end());
+  this->Modified();
+}
+
+void vtkSHYXVmtkOpeningCenterlines::RemoveAllExtraRoles()
+{
+  if (this->ExtraRoles.empty())
+  {
+    return;
+  }
+  this->ExtraRoles.clear();
+  this->Modified();
+}
+
+void vtkSHYXVmtkOpeningCenterlines::SetExtraRole(
+  const char* columnIndex, const char* openingName, const char* role)
+{
+  if (!columnIndex || !openingName || !role)
+  {
+    return;
+  }
+  char* end = nullptr;
+  const long col = std::strtol(columnIndex, &end, 10);
+  if (end == columnIndex || col < 0 || col > 15)
+  {
+    return;
+  }
+  const std::string name = openingName;
+  const std::string r = role;
+  if (name.empty() || (r != "in" && r != "out"))
+  {
+    return;
+  }
+  ExtraRoleEntry e;
+  e.Column = static_cast<int>(col);
+  e.Name = name;
+  e.Role = r;
+  this->ExtraRoles.push_back(std::move(e));
+  this->Modified();
+}
+
+void vtkSHYXVmtkOpeningCenterlines::ClearVoronoiCache()
+{
+  this->CachedDelaunay = nullptr;
+  this->CachedVoronoi = nullptr;
+  this->CachedPoleIds = nullptr;
+  this->CachedSurfaceNPoints = -1;
+  this->CachedSurfaceNCells = -1;
+  this->CachedPointsMTime = 0;
+  this->CachedFlipNormals = -1;
+}
+
+bool vtkSHYXVmtkOpeningCenterlines::VoronoiCacheMatches(vtkPolyData* surface) const
+{
+  if (!surface || !this->CachedDelaunay || !this->CachedVoronoi || !this->CachedPoleIds)
+  {
+    return false;
+  }
+  if (surface->GetNumberOfPoints() != this->CachedSurfaceNPoints ||
+    surface->GetNumberOfCells() != this->CachedSurfaceNCells ||
+    this->FlipNormals != this->CachedFlipNormals)
+  {
+    return false;
+  }
+  vtkPoints* pts = surface->GetPoints();
+  const vtkMTimeType ptsMTime = pts ? pts->GetMTime() : 0;
+  return ptsMTime == this->CachedPointsMTime;
+}
+
+void vtkSHYXVmtkOpeningCenterlines::StoreVoronoiCache(
+  vtkvmtkPolyDataCenterlines* centerlines, vtkPolyData* surface)
+{
+  if (!centerlines || !surface || !centerlines->GetDelaunayTessellation() ||
+    !centerlines->GetVoronoiDiagram() || !centerlines->GetPoleIds())
+  {
+    this->ClearVoronoiCache();
+    return;
+  }
+  this->CachedDelaunay = vtkSmartPointer<vtkUnstructuredGrid>::New();
+  this->CachedDelaunay->DeepCopy(centerlines->GetDelaunayTessellation());
+  this->CachedVoronoi = vtkSmartPointer<vtkPolyData>::New();
+  this->CachedVoronoi->DeepCopy(centerlines->GetVoronoiDiagram());
+  this->CachedPoleIds = vtkSmartPointer<vtkIdList>::New();
+  this->CachedPoleIds->DeepCopy(centerlines->GetPoleIds());
+  this->CachedSurfaceNPoints = surface->GetNumberOfPoints();
+  this->CachedSurfaceNCells = surface->GetNumberOfCells();
+  vtkPoints* pts = surface->GetPoints();
+  this->CachedPointsMTime = pts ? pts->GetMTime() : 0;
+  this->CachedFlipNormals = this->FlipNormals;
+}
+
+int vtkSHYXVmtkOpeningCenterlines::RunVoronoiCenterlines(
+  vtkPolyData* surface, vtkIdList* sources, vtkIdList* targets, vtkPolyData* out)
+{
+  if (!surface || !sources || !targets || !out)
+  {
+    return 0;
+  }
+  if (sources->GetNumberOfIds() < 1 || targets->GetNumberOfIds() < 1)
+  {
+    return 0;
+  }
+
+  const bool reuse = this->VoronoiCacheMatches(surface);
+  vtkNew<vtkvmtkPolyDataCenterlines> centerlines;
+  centerlines->SetInputData(surface);
+  centerlines->SetSourceSeedIds(sources);
+  centerlines->SetTargetSeedIds(targets);
+  centerlines->SetRadiusArrayName(kRadiusArrayName);
+  centerlines->SetFlipNormals(this->FlipNormals);
+  centerlines->SetDelaunayTolerance(1e-3);
+  centerlines->SetCenterlineResampling(0);
+  centerlines->SetResamplingStepLength(1.0);
+  centerlines->SetAppendEndPointsToCenterlines(this->AppendEndPointsToCenterlines);
+  centerlines->SetSimplifyVoronoi(0);
+  const int stopFM =
+    (this->StopFastMarchingOnReachingTarget != 0 && targets->GetNumberOfIds() == 1) ? 1 : 0;
+  centerlines->SetStopFastMarchingOnReachingTarget(stopFM);
+
+  vtkNew<vtkUnstructuredGrid> delaunayWork;
+  vtkNew<vtkPolyData> voronoiWork;
+  vtkNew<vtkIdList> poleWork;
+  if (reuse)
+  {
+    this->SetProgressText("VMTK Fast Marching (cached Voronoi)");
+    delaunayWork->ShallowCopy(this->CachedDelaunay);
+    voronoiWork->DeepCopy(this->CachedVoronoi);
+    poleWork->DeepCopy(this->CachedPoleIds);
+    centerlines->GenerateDelaunayTessellationOff();
+    centerlines->SetDelaunayTessellation(delaunayWork);
+    centerlines->GenerateVoronoiDiagramOff();
+    centerlines->SetVoronoiDiagram(voronoiWork);
+    centerlines->SetPoleIds(poleWork);
+  }
+  else
+  {
+    this->SetProgressText("VMTK Delaunay / Voronoi");
+    this->ClearVoronoiCache();
+  }
+
+  centerlines->Update();
+  if (!reuse)
+  {
+    this->StoreVoronoiCache(centerlines, surface);
+  }
+  out->ShallowCopy(centerlines->GetOutput());
+  return 1;
+}
+
 vtkMTimeType vtkSHYXVmtkOpeningCenterlines::GetMTime()
 {
   vtkMTimeType t = this->Superclass::GetMTime();
@@ -547,6 +740,7 @@ void vtkSHYXVmtkOpeningCenterlines::PrintSelf(ostream& os, vtkIndent indent)
   os << indent << "ComputeCenterlineAttributes: " << this->ComputeCenterlineAttributes << "\n";
   os << indent << "ExtractCenterlineBranches: " << this->ExtractCenterlineBranches << "\n";
   os << indent << "ComputeCenterlineGeometry: " << this->ComputeCenterlineGeometry << "\n";
+  os << indent << "ExtraColumnCount: " << this->ExtraColumnCount << "\n";
 }
 
 void vtkSHYXVmtkOpeningCenterlines::ApplyCenterlinePostProcess(vtkPolyData* centerlines)
@@ -670,6 +864,7 @@ int vtkSHYXVmtkOpeningCenterlines::RequestData(vtkInformation* vtkNotUsed(reques
     vtkWarningMacro(<< "No threshold array selected (choose Threshold array on the input surface).");
     ClearAllArrays(this->InletSelection);
     ClearAllArrays(this->ExcludedOpeningSelection);
+    this->ExtraRoles.clear();
     this->InletSelection->Modified();
     this->ExcludedOpeningSelection->Modified();
     ++this->OpeningListRevision;
@@ -688,6 +883,7 @@ int vtkSHYXVmtkOpeningCenterlines::RequestData(vtkInformation* vtkNotUsed(reques
       << "No cells passed the scalar threshold (check Threshold array; rule is magnitude > 0).");
     ClearAllArrays(this->InletSelection);
     ClearAllArrays(this->ExcludedOpeningSelection);
+    this->ExtraRoles.clear();
     this->InletSelection->Modified();
     this->ExcludedOpeningSelection->Modified();
     ++this->OpeningListRevision;
@@ -822,6 +1018,12 @@ int vtkSHYXVmtkOpeningCenterlines::RequestData(vtkInformation* vtkNotUsed(reques
       !namesUnchanged(this->ExcludedOpeningSelection, names);
     syncOne(this->InletSelection);
     syncOne(this->ExcludedOpeningSelection);
+    {
+      std::unordered_set<std::string> live(names.begin(), names.end());
+      this->ExtraRoles.erase(std::remove_if(this->ExtraRoles.begin(), this->ExtraRoles.end(),
+                               [&live](const ExtraRoleEntry& e) { return live.count(e.Name) == 0; }),
+        this->ExtraRoles.end());
+    }
     if (listChanged)
     {
       ++this->OpeningListRevision;
@@ -949,15 +1151,6 @@ int vtkSHYXVmtkOpeningCenterlines::RequestData(vtkInformation* vtkNotUsed(reques
     return 1;
   }
 
-  if (activeNames.size() < 2)
-  {
-    vtkWarningMacro(
-      << "Calculate Centerline requires at least two non-removed openings (found "
-      << activeNames.size() << ").");
-    this->Modified();
-    return 1;
-  }
-
   vtkNew<vtkIdList> sourceIds;
   vtkNew<vtkIdList> targetIds;
   for (size_t i = 0; i < activeNames.size(); ++i)
@@ -973,10 +1166,69 @@ int vtkSHYXVmtkOpeningCenterlines::RequestData(vtkInformation* vtkNotUsed(reques
     }
   }
 
-  if (sourceIds->GetNumberOfIds() < 1 || targetIds->GetNumberOfIds() < 1)
+  const bool haveTree = sourceIds->GetNumberOfIds() >= 1 && targetIds->GetNumberOfIds() >= 1;
+
+  std::unordered_map<std::string, vtkIdType> openingPid;
+  openingPid.reserve(activeNames.size());
+  for (size_t i = 0; i < activeNames.size(); ++i)
   {
-    vtkWarningMacro(<< "Calculate Centerline needs at least one checked inlet (source) and one "
-                        "unchecked outlet (target). Adjust Inlets (openings).");
+    openingPid[activeNames[i]] = activeSurfacePid[i];
+  }
+
+  struct ExtraGroup
+  {
+    std::vector<std::string> SourceNames;
+    std::vector<vtkIdType> SourcePids;
+    std::vector<std::string> TargetNames;
+    std::vector<vtkIdType> TargetPids;
+  };
+  const int nExtraCols = this->ExtraColumnCount > 0 ? this->ExtraColumnCount : 0;
+  std::vector<ExtraGroup> extraGroups(static_cast<size_t>(nExtraCols));
+  for (const ExtraRoleEntry& e : this->ExtraRoles)
+  {
+    if (e.Column < 0 || e.Column >= nExtraCols)
+    {
+      continue;
+    }
+    const auto it = openingPid.find(e.Name);
+    if (it == openingPid.end())
+    {
+      continue;
+    }
+    ExtraGroup& g = extraGroups[static_cast<size_t>(e.Column)];
+    if (e.Role == "in")
+    {
+      if (std::find(g.SourceNames.begin(), g.SourceNames.end(), e.Name) != g.SourceNames.end())
+      {
+        continue;
+      }
+      g.SourceNames.push_back(e.Name);
+      g.SourcePids.push_back(it->second);
+    }
+    else if (e.Role == "out")
+    {
+      if (std::find(g.TargetNames.begin(), g.TargetNames.end(), e.Name) != g.TargetNames.end())
+      {
+        continue;
+      }
+      g.TargetNames.push_back(e.Name);
+      g.TargetPids.push_back(it->second);
+    }
+  }
+  bool haveExtra = false;
+  for (const ExtraGroup& g : extraGroups)
+  {
+    if (!g.SourceNames.empty() && !g.TargetNames.empty())
+    {
+      haveExtra = true;
+      break;
+    }
+  }
+  if (!haveTree && !haveExtra)
+  {
+    vtkWarningMacro(<< "Voronoi centerlines need at least one checked inlet and one unchecked "
+                       "outlet, or an Extra_n column with both in and out. Adjust the openings "
+                       "table.");
     this->Modified();
     return 1;
   }
@@ -985,20 +1237,84 @@ int vtkSHYXVmtkOpeningCenterlines::RequestData(vtkInformation* vtkNotUsed(reques
   vmtkSurface->ShallowCopy(input);
   EnsurePointGlobalIds(vmtkSurface);
 
-  vtkNew<vtkvmtkPolyDataCenterlines> centerlines;
-  centerlines->SetInputData(vmtkSurface);
-  centerlines->SetSourceSeedIds(sourceIds);
-  centerlines->SetTargetSeedIds(targetIds);
-  centerlines->SetRadiusArrayName(kRadiusArrayName);
-  centerlines->SetFlipNormals(this->FlipNormals);
-  centerlines->SetDelaunayTolerance(1e-3);
-  centerlines->SetCenterlineResampling(0);
-  centerlines->SetResamplingStepLength(1.0);
-  centerlines->SetAppendEndPointsToCenterlines(this->AppendEndPointsToCenterlines);
-  centerlines->SetSimplifyVoronoi(0);
-  centerlines->SetStopFastMarchingOnReachingTarget(this->StopFastMarchingOnReachingTarget);
-  centerlines->Update();
-  outCenterlines->ShallowCopy(centerlines->GetOutput());
+  if (!this->VoronoiCacheMatches(vmtkSurface))
+  {
+    this->ClearVoronoiCache();
+  }
+
+  if (haveTree)
+  {
+    vtkNew<vtkPolyData> treeOut;
+    if (!this->RunVoronoiCenterlines(vmtkSurface, sourceIds, targetIds, treeOut))
+    {
+      vtkErrorMacro("Voronoi tree centerlines failed.");
+      this->Modified();
+      return 0;
+    }
+    AppendCenterlines(outCenterlines, treeOut);
+  }
+
+  size_t extraWork = 0;
+  size_t extraTotal = 0;
+  for (const ExtraGroup& g : extraGroups)
+  {
+    extraTotal += g.SourceNames.size();
+  }
+  for (size_t gi = 0; gi < extraGroups.size(); ++gi)
+  {
+    const ExtraGroup& g = extraGroups[gi];
+    if (g.SourceNames.empty() || g.TargetNames.empty())
+    {
+      if (!g.SourceNames.empty() || !g.TargetNames.empty())
+      {
+        vtkWarningMacro(<< "Extra_" << (gi + 1)
+                        << " needs at least one in and one out; skipped.");
+      }
+      continue;
+    }
+    for (size_t si = 0; si < g.SourceNames.size(); ++si)
+    {
+      vtkNew<vtkIdList> extraSources;
+      extraSources->InsertNextId(g.SourcePids[si]);
+      vtkNew<vtkIdList> extraTargets;
+      for (size_t ti = 0; ti < g.TargetNames.size(); ++ti)
+      {
+        if (g.TargetNames[ti] == g.SourceNames[si])
+        {
+          continue;
+        }
+        extraTargets->InsertNextId(g.TargetPids[ti]);
+      }
+      if (extraTargets->GetNumberOfIds() < 1)
+      {
+        vtkWarningMacro(<< "Extra_" << (gi + 1) << " in '" << g.SourceNames[si]
+                        << "' has no out to connect to.");
+        ++extraWork;
+        continue;
+      }
+      if (extraTotal > 0)
+      {
+        this->UpdateProgress(
+          0.55 + 0.35 * static_cast<double>(extraWork) / static_cast<double>(extraTotal));
+      }
+      ++extraWork;
+      vtkNew<vtkPolyData> extraOut;
+      if (!this->RunVoronoiCenterlines(vmtkSurface, extraSources, extraTargets, extraOut))
+      {
+        vtkWarningMacro(<< "Extra_" << (gi + 1) << " traces from '" << g.SourceNames[si]
+                        << "' failed.");
+        continue;
+      }
+      if (extraOut->GetNumberOfCells() == 0)
+      {
+        vtkWarningMacro(<< "Extra_" << (gi + 1) << " traces from '" << g.SourceNames[si]
+                        << "' produced no paths.");
+        continue;
+      }
+      AppendCenterlines(outCenterlines, extraOut);
+    }
+  }
+
   this->ApplyCenterlinePostProcess(outCenterlines);
 
   this->Modified();

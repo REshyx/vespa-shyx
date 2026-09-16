@@ -8,12 +8,15 @@
 #include "vtkSMProperty.h"
 #include "vtkSMPropertyGroup.h"
 #include "vtkSMProxy.h"
-#include "vtkSMStringVectorProperty.h"
 
 #include <vtkSmartPointer.h>
 
+#include <QAbstractItemDelegate>
+#include <QAbstractItemModel>
+#include <QAbstractItemView>
 #include <QBrush>
 #include <QColor>
+#include <QComboBox>
 #include <QDynamicPropertyChangeEvent>
 #include <QEvent>
 #include <QFont>
@@ -23,13 +26,17 @@
 #include <QLabel>
 #include <QList>
 #include <QMouseEvent>
+#include <QObject>
 #include <QPainter>
+#include <QPushButton>
 #include <QScopedValueRollback>
 #include <QSet>
 #include <QSignalBlocker>
 #include <QStandardItem>
 #include <QStandardItemModel>
 #include <QString>
+#include <QStringList>
+#include <QStyledItemDelegate>
 #include <QStyle>
 #include <QStyleOption>
 #include <QStyleOptionHeader>
@@ -50,8 +57,115 @@ namespace
 constexpr int kColInlet = 0;
 constexpr int kColRemove = 1;
 constexpr int kColName = 2;
+constexpr int kColFirstExtra = 3;
+constexpr int kMaxExtraCols = 16;
 
 constexpr int kRoleOpeningName = Qt::UserRole + 1;
+constexpr int kRoleExtraMode = Qt::UserRole + 2;
+
+constexpr int kExtraRemove = 0;
+constexpr int kExtraInlet = 1;
+constexpr int kExtraOutlet = 2;
+
+QString extraModeText(int mode)
+{
+    switch (mode)
+    {
+        case kExtraInlet:
+            return QStringLiteral("in");
+        case kExtraOutlet:
+            return QStringLiteral("out");
+        default:
+            return QStringLiteral("——");
+    }
+}
+
+void setExtraMode(QStandardItem* item, int mode)
+{
+    if (!item)
+    {
+        return;
+    }
+    if (mode != kExtraInlet && mode != kExtraOutlet)
+    {
+        mode = kExtraRemove;
+    }
+    item->setData(mode, kRoleExtraMode);
+    item->setText(extraModeText(mode));
+}
+
+int extraModeOf(QStandardItem* item)
+{
+    if (!item)
+    {
+        return kExtraRemove;
+    }
+    const QVariant v = item->data(kRoleExtraMode);
+    if (v.isValid())
+    {
+        const int mode = v.toInt();
+        if (mode == kExtraInlet || mode == kExtraOutlet || mode == kExtraRemove)
+        {
+            return mode;
+        }
+    }
+    return kExtraRemove;
+}
+
+QStandardItem* makeExtraItem(int mode = kExtraRemove)
+{
+    auto* extraItem = new QStandardItem(extraModeText(mode));
+    extraItem->setData(mode, kRoleExtraMode);
+    extraItem->setFlags(
+        Qt::ItemIsEnabled | Qt::ItemIsSelectable | Qt::ItemIsEditable | Qt::ItemNeverHasChildren);
+    extraItem->setTextAlignment(Qt::AlignCenter);
+    return extraItem;
+}
+
+class ExtraAddDelegate : public QStyledItemDelegate
+{
+public:
+    using QStyledItemDelegate::QStyledItemDelegate;
+
+    QWidget* createEditor(QWidget* parent, const QStyleOptionViewItem&,
+        const QModelIndex&) const override
+    {
+        auto* cb = new QComboBox(parent);
+        cb->addItem(QStringLiteral("——"), kExtraRemove);
+        cb->addItem(QStringLiteral("in"), kExtraInlet);
+        cb->addItem(QStringLiteral("out"), kExtraOutlet);
+        QObject::connect(cb, QOverload<int>::of(&QComboBox::activated), cb, [this, cb]() {
+            auto* self = const_cast<ExtraAddDelegate*>(this);
+            Q_EMIT self->commitData(cb);
+            Q_EMIT self->closeEditor(cb, QAbstractItemDelegate::NoHint);
+        });
+        return cb;
+    }
+
+    void setEditorData(QWidget* editor, const QModelIndex& index) const override
+    {
+        auto* cb = qobject_cast<QComboBox*>(editor);
+        if (!cb)
+        {
+            return;
+        }
+        const int mode = index.data(kRoleExtraMode).toInt();
+        const int idx = cb->findData(mode);
+        cb->setCurrentIndex(idx >= 0 ? idx : 0);
+    }
+
+    void setModelData(QWidget* editor, QAbstractItemModel* model, const QModelIndex& index) const
+        override
+    {
+        auto* cb = qobject_cast<QComboBox*>(editor);
+        if (!cb || !model)
+        {
+            return;
+        }
+        model->setData(index, cb->currentData().toInt(), kRoleExtraMode);
+        model->setData(index, cb->currentText(), Qt::DisplayRole);
+    }
+};
 
 vtkSMArraySelectionDomain* findArraySelectionDomain(vtkSMProperty* prop)
 {
@@ -95,6 +209,10 @@ vtkSMProperty* propertyFromGroup(
 
 QString openingNameOfRow(QStandardItemModel* model, int row)
 {
+    if (!model || row < 0 || row >= model->rowCount())
+    {
+        return QString();
+    }
     if (auto* item = model->item(row, kColName))
     {
         return item->data(kRoleOpeningName).toString();
@@ -297,23 +415,16 @@ pqSHYXOpeningTable::pqSHYXOpeningTable(
     vbox->setSpacing(2);
 
     auto* tip = new QLabel(
-        tr("Apply once to populate openings. Inlet = VMTK source seed; Remove = excluded from output and centerline seeds. Header checkboxes select or deselect a whole column."),
+        tr("Apply once to populate openings. Inlet = VMTK tree source; unchecked = tree outlet. "
+           "Remove = excluded from seeds. Add Extra appends Extra_1, Extra_2, … columns "
+           "(—— / in / out); each Extra_n is an independent many-to-many extra Voronoi group. "
+           "Remove Extra drops the last Extra_n. Header checkboxes select a whole column."),
         this);
     tip->setWordWrap(true);
     tip->setStyleSheet(QStringLiteral("color: gray; font-size: 11px;"));
     vbox->addWidget(tip);
 
     this->Model = new QStandardItemModel(0, 3, this);
-    auto* inletHeader = new QStandardItem(tr("Inlet"));
-    inletHeader->setToolTip(tr(
-        "Check openings that are inlets (VMTK source seeds). Click the header checkbox to select all, or to clear all when every eligible inlet is already checked. A mixed column shows a partial check."));
-    auto* removeHeader = new QStandardItem(tr("Remove"));
-    removeHeader->setToolTip(tr(
-        "Check openings to exclude from output seeds and centerline sources. Click the header checkbox to select all, or to clear all when every opening is already removed. A mixed column shows a partial check."));
-    auto* nameHeader = new QStandardItem(tr("Seed point"));
-    this->Model->setHorizontalHeaderItem(kColInlet, inletHeader);
-    this->Model->setHorizontalHeaderItem(kColRemove, removeHeader);
-    this->Model->setHorizontalHeaderItem(kColName, nameHeader);
 
     this->View = new QTreeView(this);
     this->View->setObjectName("SHYXOpeningTable");
@@ -321,30 +432,48 @@ pqSHYXOpeningTable::pqSHYXOpeningTable(
     this->View->setAllColumnsShowFocus(true);
     this->View->setUniformRowHeights(true);
     this->View->setSelectionBehavior(QAbstractItemView::SelectRows);
-    this->View->setEditTriggers(QAbstractItemView::NoEditTriggers);
+    this->View->setEditTriggers(QAbstractItemView::SelectedClicked | QAbstractItemView::DoubleClicked |
+        QAbstractItemView::EditKeyPressed);
     this->View->setSortingEnabled(false);
     this->View->setModel(this->Model);
+    this->ExtraDelegate = new ExtraAddDelegate(this->View);
 
     auto* header = new OpeningTableHeaderView(this->View);
     header->GetState = [this](int col) { return this->columnCheckState(col); };
     header->ToggleColumn = [this](int col) { this->toggleColumnChecks(col); };
     this->View->setHeader(header);
     header->setDefaultAlignment(Qt::AlignLeft | Qt::AlignVCenter);
-    header->setSectionResizeMode(kColInlet, QHeaderView::ResizeToContents);
-    header->setSectionResizeMode(kColRemove, QHeaderView::ResizeToContents);
-    header->setSectionResizeMode(kColName, QHeaderView::Stretch);
     header->setStretchLastSection(true);
 
     vbox->addWidget(this->View, 1);
 
+    auto* extraBtns = new QHBoxLayout();
+    extraBtns->setContentsMargins(0, 0, 0, 0);
+    extraBtns->setSpacing(4);
+    this->AddExtraBtn = new QPushButton(tr("Add Extra"), this);
+    this->AddExtraBtn->setToolTip(tr(
+        "Append Extra_n. Each Extra_n column is one extra Voronoi group: every in in that "
+        "column connects to every out in the same column, reusing the cached Delaunay/Voronoi."));
+    this->RemoveExtraBtn = new QPushButton(tr("Remove Extra"), this);
+    this->RemoveExtraBtn->setToolTip(tr("Remove the last Extra_n column."));
+    extraBtns->addWidget(this->AddExtraBtn);
+    extraBtns->addWidget(this->RemoveExtraBtn);
+    extraBtns->addStretch(1);
+    vbox->addLayout(extraBtns);
+
+    this->applyExtraColumnLayout();
+
     QObject::connect(this->Model, &QStandardItemModel::itemChanged,
         this, &pqSHYXOpeningTable::onItemChanged);
+    QObject::connect(this->AddExtraBtn, &QPushButton::clicked, this, &pqSHYXOpeningTable::onAddExtra);
+    QObject::connect(
+        this->RemoveExtraBtn, &QPushButton::clicked, this, &pqSHYXOpeningTable::onRemoveExtra);
 
-    // Resolve member properties (XML may use function="Inlet"/"Excluded" or just name).
-    vtkSMProperty* inletProp =
-        propertyFromGroup(smgroup, smproxy, "Inlet", "InletStatus");
-    vtkSMProperty* excludedProp =
-        propertyFromGroup(smgroup, smproxy, "Excluded", "ExcludedStatus");
+    vtkSMProperty* inletProp = propertyFromGroup(smgroup, smproxy, "Inlet", "InletStatus");
+    vtkSMProperty* excludedProp = propertyFromGroup(smgroup, smproxy, "Excluded", "ExcludedStatus");
+    vtkSMProperty* extraCountProp =
+        propertyFromGroup(smgroup, smproxy, "ExtraColumnCount", "ExtraColumnCount");
+    vtkSMProperty* extraRolesProp = propertyFromGroup(smgroup, smproxy, "ExtraRoles", "ExtraRoles");
 
     if (inletProp)
     {
@@ -372,11 +501,342 @@ pqSHYXOpeningTable::pqSHYXOpeningTable(
             SIGNAL(excludedChanged()), excludedProp);
     }
 
+    if (extraCountProp)
+    {
+        this->addPropertyLink(
+            this, "extraColumnCount", SIGNAL(extraColumnCountChanged()), extraCountProp);
+    }
+    if (extraRolesProp)
+    {
+        this->addPropertyLink(this, "extraRoles", SIGNAL(extraRolesChanged()), extraRolesProp);
+    }
+
     this->setChangeAvailableAsChangeFinished(true);
 }
 
 // ---------------------------------------------------------------------------
 pqSHYXOpeningTable::~pqSHYXOpeningTable() = default;
+
+// ---------------------------------------------------------------------------
+int pqSHYXOpeningTable::nameColumn() const
+{
+    return kColName;
+}
+
+bool pqSHYXOpeningTable::isExtraColumn(int col) const
+{
+    return col >= kColFirstExtra && col < kColFirstExtra + this->ExtraColumns;
+}
+
+int pqSHYXOpeningTable::extraColumnCount() const
+{
+    return this->ExtraColumns;
+}
+
+void pqSHYXOpeningTable::setExtraColumnCount(int count)
+{
+    if (count < 0)
+    {
+        count = 0;
+    }
+    if (count > kMaxExtraCols)
+    {
+        count = kMaxExtraCols;
+    }
+    if (this->ExtraColumns == count && this->Model &&
+        this->Model->columnCount() == kColFirstExtra + this->ExtraColumns)
+    {
+        this->updateExtraButtons();
+        return;
+    }
+    this->ExtraColumns = count;
+    this->applyExtraColumnLayout();
+}
+
+QList<QStandardItem*> pqSHYXOpeningTable::makeRowItems(const QString& name) const
+{
+    auto* inletItem = new QStandardItem();
+    inletItem->setFlags(
+        Qt::ItemIsEnabled | Qt::ItemIsSelectable | Qt::ItemIsUserCheckable | Qt::ItemNeverHasChildren);
+    inletItem->setCheckState(Qt::Unchecked);
+    inletItem->setTextAlignment(Qt::AlignCenter);
+
+    auto* removeItem = new QStandardItem();
+    removeItem->setFlags(
+        Qt::ItemIsEnabled | Qt::ItemIsSelectable | Qt::ItemIsUserCheckable | Qt::ItemNeverHasChildren);
+    removeItem->setCheckState(Qt::Unchecked);
+    removeItem->setTextAlignment(Qt::AlignCenter);
+
+    QList<QStandardItem*> items;
+    items << inletItem << removeItem;
+
+    auto* nameItem = new QStandardItem(name);
+    nameItem->setData(name, kRoleOpeningName);
+    nameItem->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable | Qt::ItemNeverHasChildren);
+    items << nameItem;
+
+    for (int e = 0; e < this->ExtraColumns; ++e)
+    {
+        items << makeExtraItem();
+    }
+    return items;
+}
+
+void pqSHYXOpeningTable::applyExtraColumnLayout()
+{
+    if (!this->Model)
+    {
+        return;
+    }
+
+    QSignalBlocker blocker(this->Model);
+
+    struct SavedRow
+    {
+        Qt::CheckState Inlet = Qt::Unchecked;
+        Qt::CheckState Remove = Qt::Unchecked;
+        QList<int> Extras;
+        QString Name;
+    };
+    QList<SavedRow> saved;
+    saved.reserve(this->Model->rowCount());
+    for (int r = 0; r < this->Model->rowCount(); ++r)
+    {
+        SavedRow row;
+        if (auto* inlet = this->Model->item(r, kColInlet))
+        {
+            row.Inlet = inlet->checkState();
+        }
+        if (auto* remove = this->Model->item(r, kColRemove))
+        {
+            row.Remove = remove->checkState();
+        }
+        const int oldExtraCount = qMax(0, this->Model->columnCount() - kColFirstExtra);
+        for (int e = 0; e < oldExtraCount; ++e)
+        {
+            row.Extras.push_back(extraModeOf(this->Model->item(r, kColFirstExtra + e)));
+        }
+        row.Name = openingNameOfRow(this->Model, r);
+        saved.push_back(row);
+    }
+
+    this->Model->removeRows(0, this->Model->rowCount());
+    this->Model->setColumnCount(kColFirstExtra + this->ExtraColumns);
+
+    auto* inletHeader = new QStandardItem(tr("Inlet"));
+    inletHeader->setToolTip(tr(
+        "Check openings that are inlets (VMTK source seeds). Click the header checkbox to select all, or to clear all when every eligible inlet is already checked. A mixed column shows a partial check."));
+    auto* removeHeader = new QStandardItem(tr("Remove"));
+    removeHeader->setToolTip(tr(
+        "Check openings to exclude from output seeds and centerline sources. Click the header checkbox to select all, or to clear all when every opening is already removed. A mixed column shows a partial check."));
+    auto* nameHeader = new QStandardItem(tr("Seed point"));
+    this->Model->setHorizontalHeaderItem(kColInlet, inletHeader);
+    this->Model->setHorizontalHeaderItem(kColRemove, removeHeader);
+    this->Model->setHorizontalHeaderItem(kColName, nameHeader);
+    for (int e = 0; e < this->ExtraColumns; ++e)
+    {
+        auto* extraHeader = new QStandardItem(QStringLiteral("Extra_%1").arg(e + 1));
+        extraHeader->setToolTip(tr(
+            "Extra Voronoi traces after the inlet/outlet tree. Default —— (not extra). "
+            "in / out in this column: every Extra_%1 in is connected to every Extra_%1 out "
+            "(many-to-many), reusing the cached Delaunay/Voronoi.")
+                .arg(e + 1));
+        this->Model->setHorizontalHeaderItem(kColFirstExtra + e, extraHeader);
+    }
+
+    for (const SavedRow& row : saved)
+    {
+        auto items = this->makeRowItems(row.Name);
+        if (items.size() >= 2)
+        {
+            items[kColInlet]->setCheckState(row.Inlet);
+            items[kColRemove]->setCheckState(row.Remove);
+        }
+        for (int e = 0; e < this->ExtraColumns; ++e)
+        {
+            const int mode = (e < row.Extras.size()) ? row.Extras[e] : kExtraRemove;
+            setExtraMode(items[kColFirstExtra + e], mode);
+        }
+        this->Model->appendRow(items);
+    }
+
+    if (this->View)
+    {
+        for (int c = 0; c < this->Model->columnCount(); ++c)
+        {
+            this->View->setItemDelegateForColumn(c, nullptr);
+        }
+        for (int e = 0; e < this->ExtraColumns; ++e)
+        {
+            this->View->setItemDelegateForColumn(kColFirstExtra + e, this->ExtraDelegate);
+        }
+        if (auto* header = this->View->header())
+        {
+            header->setSectionResizeMode(kColInlet, QHeaderView::ResizeToContents);
+            header->setSectionResizeMode(kColRemove, QHeaderView::ResizeToContents);
+            header->setSectionResizeMode(kColName, QHeaderView::Stretch);
+            for (int e = 0; e < this->ExtraColumns; ++e)
+            {
+                header->setSectionResizeMode(kColFirstExtra + e, QHeaderView::ResizeToContents);
+            }
+            header->setStretchLastSection(this->ExtraColumns == 0);
+        }
+    }
+
+    for (int r = 0; r < this->Model->rowCount(); ++r)
+    {
+        this->updateRowAppearance(r);
+    }
+    this->updateExtraButtons();
+    this->refreshHeader();
+}
+
+void pqSHYXOpeningTable::updateExtraButtons()
+{
+    if (this->AddExtraBtn)
+    {
+        this->AddExtraBtn->setEnabled(this->ExtraColumns < kMaxExtraCols);
+    }
+    if (this->RemoveExtraBtn)
+    {
+        this->RemoveExtraBtn->setEnabled(this->ExtraColumns > 0);
+    }
+}
+
+void pqSHYXOpeningTable::onAddExtra()
+{
+    if (this->ExtraColumns >= kMaxExtraCols)
+    {
+        return;
+    }
+    ++this->ExtraColumns;
+    this->applyExtraColumnLayout();
+    Q_EMIT this->extraColumnCountChanged();
+}
+
+void pqSHYXOpeningTable::onRemoveExtra()
+{
+    if (this->ExtraColumns <= 0)
+    {
+        return;
+    }
+    --this->ExtraColumns;
+    this->applyExtraColumnLayout();
+    Q_EMIT this->extraColumnCountChanged();
+    Q_EMIT this->extraRolesChanged();
+}
+
+QStringList pqSHYXOpeningTable::extraRoles() const
+{
+    QStringList roles;
+    if (!this->Model)
+    {
+        return roles;
+    }
+    for (int e = 0; e < this->ExtraColumns; ++e)
+    {
+        const int col = kColFirstExtra + e;
+        for (int r = 0; r < this->Model->rowCount(); ++r)
+        {
+            const int mode = extraModeOf(this->Model->item(r, col));
+            if (mode != kExtraInlet && mode != kExtraOutlet)
+            {
+                continue;
+            }
+            const QString name = openingNameOfRow(this->Model, r);
+            if (name.isEmpty())
+            {
+                continue;
+            }
+            roles << QString::number(e) << name << extraModeText(mode);
+        }
+    }
+    return roles;
+}
+
+void pqSHYXOpeningTable::setExtraRoles(const QStringList& roles)
+{
+    if (!this->Model || this->Model->rowCount() == 0)
+    {
+        this->PendingExtraRoles = roles;
+        this->HavePendingExtraRoles = true;
+        return;
+    }
+    this->HavePendingExtraRoles = false;
+    this->PendingExtraRoles.clear();
+    QScopedValueRollback<bool> guard(this->UpdatingFromDynamicProperty, true);
+    QSignalBlocker blocker(this->Model);
+
+    for (int r = 0; r < this->Model->rowCount(); ++r)
+    {
+        this->clearExtraModesOnRow(r);
+    }
+
+    QHash<QString, int> rowOf;
+    for (int r = 0; r < this->Model->rowCount(); ++r)
+    {
+        rowOf.insert(openingNameOfRow(this->Model, r), r);
+    }
+
+    for (int i = 0; i + 2 < roles.size(); i += 3)
+    {
+        bool ok = false;
+        const int extraIdx = roles[i].toInt(&ok);
+        if (!ok || extraIdx < 0 || extraIdx >= this->ExtraColumns)
+        {
+            continue;
+        }
+        const QString name = roles[i + 1];
+        const QString role = roles[i + 2];
+        int mode = kExtraRemove;
+        if (role == QLatin1String("in"))
+        {
+            mode = kExtraInlet;
+        }
+        else if (role == QLatin1String("out"))
+        {
+            mode = kExtraOutlet;
+        }
+        else
+        {
+            continue;
+        }
+        const int row = rowOf.value(name, -1);
+        if (row < 0)
+        {
+            continue;
+        }
+        setExtraMode(this->Model->item(row, kColFirstExtra + extraIdx), mode);
+    }
+
+    for (int r = 0; r < this->Model->rowCount(); ++r)
+    {
+        this->updateRowAppearance(r);
+    }
+}
+
+bool pqSHYXOpeningTable::rowHasAnyExtra(int row) const
+{
+    for (int e = 0; e < this->ExtraColumns; ++e)
+    {
+        if (extraModeOf(this->Model->item(row, kColFirstExtra + e)) != kExtraRemove)
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
+void pqSHYXOpeningTable::clearExtraModesOnRow(int row)
+{
+    for (int e = 0; e < this->ExtraColumns; ++e)
+    {
+        if (auto* extraItem = this->Model->item(row, kColFirstExtra + e))
+        {
+            setExtraMode(extraItem, kExtraRemove);
+        }
+    }
+}
 
 // ---------------------------------------------------------------------------
 bool pqSHYXOpeningTable::event(QEvent* e)
@@ -410,7 +870,6 @@ void pqSHYXOpeningTable::rebuildFromDynamicProperty(const QString& dynPropName)
     const bool isInletCol = (dynPropName == this->InletPropName);
     const int targetCol = isInletCol ? kColInlet : kColRemove;
 
-    // Index existing rows by opening name to avoid wiping the other column's state.
     QHash<QString, int> rowOf;
     for (int r = 0; r < this->Model->rowCount(); ++r)
     {
@@ -434,24 +893,7 @@ void pqSHYXOpeningTable::rebuildFromDynamicProperty(const QString& dynPropName)
         if (row < 0)
         {
             row = this->Model->rowCount();
-
-            auto* inletItem = new QStandardItem();
-            inletItem->setFlags(
-                Qt::ItemIsEnabled | Qt::ItemIsSelectable | Qt::ItemIsUserCheckable | Qt::ItemNeverHasChildren);
-            inletItem->setCheckState(Qt::Unchecked);
-            inletItem->setTextAlignment(Qt::AlignCenter);
-
-            auto* removeItem = new QStandardItem();
-            removeItem->setFlags(
-                Qt::ItemIsEnabled | Qt::ItemIsSelectable | Qt::ItemIsUserCheckable | Qt::ItemNeverHasChildren);
-            removeItem->setCheckState(Qt::Unchecked);
-            removeItem->setTextAlignment(Qt::AlignCenter);
-
-            auto* nameItem = new QStandardItem(name);
-            nameItem->setData(name, kRoleOpeningName);
-            nameItem->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable | Qt::ItemNeverHasChildren);
-
-            this->Model->appendRow({ inletItem, removeItem, nameItem });
+            this->Model->appendRow(this->makeRowItems(name));
             rowOf.insert(name, row);
         }
 
@@ -465,9 +907,6 @@ void pqSHYXOpeningTable::rebuildFromDynamicProperty(const QString& dynPropName)
         }
     }
 
-    // Drop rows that are no longer present in the incoming property AND not in the other prop.
-    // We only know about the *current* dynamic property here; rebuild prunes against incomingNames
-    // only when both lists agree. Conservative: keep rows that any column still reports.
     if (!rows.isEmpty())
     {
         QSet<QString> incomingSet(incomingNames.begin(), incomingNames.end());
@@ -476,9 +915,8 @@ void pqSHYXOpeningTable::rebuildFromDynamicProperty(const QString& dynPropName)
             const QString rowName = openingNameOfRow(this->Model, r);
             if (!incomingSet.contains(rowName))
             {
-                // Only remove if the row is empty on the *other* column too (i.e., unchecked there).
                 auto* otherItem = this->Model->item(r, isInletCol ? kColRemove : kColInlet);
-                if (otherItem && otherItem->checkState() == Qt::Unchecked)
+                if (otherItem && otherItem->checkState() == Qt::Unchecked && !this->rowHasAnyExtra(r))
                 {
                     this->Model->removeRow(r);
                 }
@@ -493,6 +931,13 @@ void pqSHYXOpeningTable::rebuildFromDynamicProperty(const QString& dynPropName)
 
     this->sortRowsBySeedPointId();
     this->refreshHeader();
+    if (this->HavePendingExtraRoles)
+    {
+        const QStringList pending = this->PendingExtraRoles;
+        this->HavePendingExtraRoles = false;
+        this->PendingExtraRoles.clear();
+        this->setExtraRoles(pending);
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -505,12 +950,11 @@ void pqSHYXOpeningTable::onItemChanged(QStandardItem* item)
 
     const int col = item->column();
     const int row = item->row();
-    if (col != kColInlet && col != kColRemove)
+    if (col != kColInlet && col != kColRemove && !this->isExtraColumn(col))
     {
         return;
     }
 
-    // Removing an opening implies it cannot also be an inlet → auto-uncheck inlet.
     if (col == kColRemove && item->checkState() == Qt::Checked)
     {
         if (auto* inlet = this->Model->item(row, kColInlet))
@@ -519,6 +963,20 @@ void pqSHYXOpeningTable::onItemChanged(QStandardItem* item)
             {
                 QSignalBlocker blocker(this->Model);
                 inlet->setCheckState(Qt::Unchecked);
+            }
+        }
+        QSignalBlocker blocker(this->Model);
+        this->clearExtraModesOnRow(row);
+    }
+
+    if (this->isExtraColumn(col) && extraModeOf(item) != kExtraRemove)
+    {
+        if (auto* removeItem = this->Model->item(row, kColRemove))
+        {
+            if (removeItem->checkState() != Qt::Unchecked)
+            {
+                QSignalBlocker blocker(this->Model);
+                removeItem->setCheckState(Qt::Unchecked);
             }
         }
     }
@@ -530,11 +988,16 @@ void pqSHYXOpeningTable::onItemChanged(QStandardItem* item)
     {
         this->writeBackProperty(this->InletPropName);
     }
+    else if (this->isExtraColumn(col))
+    {
+        Q_EMIT this->extraRolesChanged();
+        this->writeBackProperty(this->ExcludedPropName);
+    }
     else
     {
-        // Remove change may have flipped the inlet column above; push both.
         this->writeBackProperty(this->InletPropName);
         this->writeBackProperty(this->ExcludedPropName);
+        Q_EMIT this->extraRolesChanged();
     }
 }
 
@@ -574,7 +1037,7 @@ void pqSHYXOpeningTable::writeBackProperty(const QString& dynPropName)
     {
         Q_EMIT this->inletChanged();
     }
-    else
+    else if (dynPropName == this->ExcludedPropName)
     {
         Q_EMIT this->excludedChanged();
     }
@@ -588,7 +1051,7 @@ void pqSHYXOpeningTable::updateRowAppearance(int row)
         return;
     }
 
-    auto* nameItem = this->Model->item(row, kColName);
+    auto* nameItem = this->Model->item(row, this->nameColumn());
     auto* inletItem = this->Model->item(row, kColInlet);
     auto* removeItem = this->Model->item(row, kColRemove);
     if (!nameItem || !inletItem || !removeItem)
@@ -598,21 +1061,32 @@ void pqSHYXOpeningTable::updateRowAppearance(int row)
 
     const bool removed = removeItem->checkState() == Qt::Checked;
 
-    // Suppress itemChanged signals so cosmetic updates don't re-trigger writeBack.
     QSignalBlocker blocker(this->Model);
 
     QFont font = nameItem->font();
     font.setStrikeOut(removed);
     nameItem->setFont(font);
-
     nameItem->setForeground(removed ? QBrush(QColor(150, 150, 150)) : QBrush());
 
     Qt::ItemFlags inletFlags = Qt::ItemIsSelectable | Qt::ItemIsUserCheckable | Qt::ItemNeverHasChildren;
+    Qt::ItemFlags extraFlags = Qt::ItemIsSelectable | Qt::ItemNeverHasChildren;
     if (!removed)
     {
         inletFlags |= Qt::ItemIsEnabled;
+        extraFlags |= Qt::ItemIsEnabled | Qt::ItemIsEditable;
+    }
+    else
+    {
+        this->clearExtraModesOnRow(row);
     }
     inletItem->setFlags(inletFlags);
+    for (int e = 0; e < this->ExtraColumns; ++e)
+    {
+        if (auto* extraItem = this->Model->item(row, kColFirstExtra + e))
+        {
+            extraItem->setFlags(extraFlags);
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -731,7 +1205,6 @@ void pqSHYXOpeningTable::toggleColumnChecks(int col)
 
     bool anyChanged = false;
     {
-        // Skip onItemChanged writeBack, but keep model dataChanged so rows repaint.
         QScopedValueRollback<bool> guard(this->UpdatingFromColumnToggle, true);
         for (int r = 0; r < this->Model->rowCount(); ++r)
         {
@@ -752,6 +1225,7 @@ void pqSHYXOpeningTable::toggleColumnChecks(int col)
                 {
                     inlet->setCheckState(Qt::Unchecked);
                 }
+                this->clearExtraModesOnRow(r);
             }
             this->updateRowAppearance(r);
         }
@@ -765,6 +1239,7 @@ void pqSHYXOpeningTable::toggleColumnChecks(int col)
 
     this->writeBackProperty(this->InletPropName);
     this->writeBackProperty(this->ExcludedPropName);
+    Q_EMIT this->extraRolesChanged();
     this->refreshHeader();
     this->refreshItems();
 }

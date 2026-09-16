@@ -14,6 +14,9 @@
 #include "vtkIdList.h"
 #include "vtkInformation.h"
 #include "vtkMapper.h"
+#include "vtkOpenGLActor.h"
+#include "vtkOpenGLRenderWindow.h"
+#include "vtkOpenGLState.h"
 #include "vtkPoints.h"
 #include "vtkPointData.h"
 #include "vtkPolyData.h"
@@ -27,6 +30,7 @@
 #include "vtkPVView.h"
 #include "vtkRenderer.h"
 #include "vtkTextProperty.h"
+#include "vtk_glad.h"
 
 #include <cstring>
 #include <set>
@@ -40,6 +44,50 @@ bool IsExplicitNoneArray(const char* s)
 {
   return s && (strcmp(s, "None") == 0 || strcmp(s, "(null)") == 0);
 }
+
+/**
+ * Fast-mapper labels have to live in the main 3D renderer. Overlay (used by the
+ * old vtkActor2D path) does not clear depth, so 3D glyphs vanish there.
+ * OccludeLabels=off therefore disables GL_DEPTH_TEST for this actor only.
+ */
+class vtkPointLabelGLActor : public vtkOpenGLActor
+{
+public:
+  static vtkPointLabelGLActor* New()
+  {
+    auto* self = new vtkPointLabelGLActor;
+    self->InitializeObjectBase();
+    return self;
+  }
+  vtkTypeMacro(vtkPointLabelGLActor, vtkOpenGLActor);
+
+  vtkSetMacro(DisableDepthTest, int);
+  vtkGetMacro(DisableDepthTest, int);
+
+  void Render(vtkRenderer* ren, vtkMapper* mapper) override
+  {
+    vtkOpenGLRenderWindow* win =
+      vtkOpenGLRenderWindow::SafeDownCast(ren ? ren->GetRenderWindow() : nullptr);
+    vtkOpenGLState* state = win ? win->GetState() : nullptr;
+    if (state && this->DisableDepthTest != 0)
+    {
+      vtkOpenGLState::ScopedglEnableDisable depthTest(state, GL_DEPTH_TEST);
+      state->vtkglDisable(GL_DEPTH_TEST);
+      this->Superclass::Render(ren, mapper);
+      return;
+    }
+    this->Superclass::Render(ren, mapper);
+  }
+
+protected:
+  vtkPointLabelGLActor() = default;
+  ~vtkPointLabelGLActor() override = default;
+  int DisableDepthTest = 1;
+
+private:
+  vtkPointLabelGLActor(const vtkPointLabelGLActor&) = delete;
+  void operator=(const vtkPointLabelGLActor&) = delete;
+};
 
 /**
  * Build a polydata whose points are exactly those referenced by vertex cells: vtkPolyData::verts
@@ -167,6 +215,7 @@ void vtkPointLabelRepresentation::SetOccludeLabels(int val)
     return;
   }
   this->OccludeLabels = val;
+  this->ApplyOcclusionMode();
   this->Modified();
 }
 
@@ -275,7 +324,7 @@ vtkPointLabelRepresentation::vtkPointLabelRepresentation()
   this->LabelMapper->SetTextAnchor(vtkFastLabeledDataMapper::Center);
   this->LabelMapper->SetResolveCoincidentTopologyToPolygonOffset();
 
-  this->LabelActor = vtkActor::New();
+  this->LabelActor = vtkPointLabelGLActor::New();
   this->LabelActor->SetMapper(this->LabelMapper);
   this->LabelActor->SetVisibility(0);
   this->LabelActor->PickableOff();
@@ -300,7 +349,7 @@ vtkPointLabelRepresentation::vtkPointLabelRepresentation()
   this->WarningObserver->SetCallback(&vtkPointLabelRepresentation::OnWarningEvent);
   this->WarningObserver->SetClientData(this);
   this->LabelMapper->AddObserver(vtkCommand::WarningEvent, this->WarningObserver);
-  this->ApplyDepthOffset();
+  this->ApplyOcclusionMode();
 }
 
 //------------------------------------------------------------------------------
@@ -538,11 +587,23 @@ void vtkPointLabelRepresentation::UpdateLabelTransform()
 }
 
 //------------------------------------------------------------------------------
+void vtkPointLabelRepresentation::ApplyOcclusionMode()
+{
+  if (auto* a = vtkPointLabelGLActor::SafeDownCast(this->LabelActor))
+  {
+    // 0 = always on top (no depth test); 1 = hidden by nearer geometry.
+    a->SetDisableDepthTest(this->OccludeLabels ? 0 : 1);
+  }
+  this->ApplyDepthOffset();
+}
+
+//------------------------------------------------------------------------------
 void vtkPointLabelRepresentation::PlaceLabelActor()
 {
   // vtkFastLabeledDataMapper is a 3D geometry-shader mapper. The overlay
   // renderer is for vtkActor2D and does not clear depth, so 3D labels there
-  // never show. Always put the actor in the main renderer.
+  // never show. Always put the actor in the main renderer; OccludeLabels
+  // toggles depth testing instead of moving renderers.
   if (this->OverlayRenderer)
   {
     this->OverlayRenderer->RemoveActor(this->LabelActor);
@@ -551,7 +612,7 @@ void vtkPointLabelRepresentation::PlaceLabelActor()
   {
     this->MainRenderer->AddActor(this->LabelActor);
   }
-  this->ApplyDepthOffset();
+  this->ApplyOcclusionMode();
 }
 
 //------------------------------------------------------------------------------
