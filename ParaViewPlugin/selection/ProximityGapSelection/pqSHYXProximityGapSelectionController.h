@@ -1,6 +1,8 @@
 #ifndef pqSHYXProximityGapSelectionController_h
 #define pqSHYXProximityGapSelectionController_h
 
+#include "pqSHYXStatusNotifier.h"
+
 #include <QObject>
 #include <QPointer>
 #include <QString>
@@ -77,7 +79,8 @@ private:
   void updateActionTooltip();
   void promptEpsilon();
   void scaleEpsilonAndSelect(double factor);
-  static void reportStatus(const QString& message);
+  static void reportStatus(const QString& message,
+    pqSHYXStatusNotifier::Level level = pqSHYXStatusNotifier::Level::Info);
 
   bool resolveActivePolyData(pqOutputPort*& portOut, vtkPolyData*& pdOut);
   static double suggestEpsilon(vtkPolyData* pd);

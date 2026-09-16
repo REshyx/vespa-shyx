@@ -23,6 +23,9 @@
  * SampleDistance, both endpoints are kept as a single segment (the branch is never dropped
  * for being too short).
  *
+ * After the enabled steps, a 1-component point array named Degree stores each vertex's
+ * undirected line degree (number of distinct incident VTK_LINE / VTK_POLY_LINE edges).
+ *
  * @sa vtkCleanPolyData vtkSplineFilter
  */
 

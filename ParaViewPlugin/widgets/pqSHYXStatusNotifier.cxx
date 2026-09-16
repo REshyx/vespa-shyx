@@ -3,7 +3,6 @@
 #include "pqCoreUtilities.h"
 
 #include <QFont>
-#include <QFontMetrics>
 #include <QLabel>
 #include <QMainWindow>
 #include <QMenu>
@@ -25,11 +24,32 @@ constexpr int kChipMaxWidth = 560;
 constexpr int kProgressReserve = 380;
 constexpr int kPopupLabelWidth = 480;
 
+constexpr char kBaseStyle[] =
+  "QToolButton { text-align: left; padding-left: 6px; padding-right: 8px; "
+  "border-radius: 3px; }"
+  "QToolButton::menu-indicator { image: none; }";
+
 QPointer<pqSHYXStatusNotifier>& notifierInstance()
 {
   static QPointer<pqSHYXStatusNotifier> inst;
   return inst;
 }
+}
+
+//-----------------------------------------------------------------------------
+QString pqSHYXStatusNotifier::levelColor(Level level)
+{
+  const bool dark = pqCoreUtilities::isDarkTheme();
+  switch (level)
+  {
+    case Level::Warning:
+      return dark ? QStringLiteral("#e3b341") : QStringLiteral("#9a6700");
+    case Level::Error:
+      return dark ? QStringLiteral("#ff7b72") : QStringLiteral("#cf222e");
+    case Level::Info:
+    default:
+      return dark ? QStringLiteral("#3fb950") : QStringLiteral("#1a7f37");
+  }
 }
 
 //-----------------------------------------------------------------------------
@@ -45,9 +65,27 @@ pqSHYXStatusNotifier* pqSHYXStatusNotifier::instance()
 }
 
 //-----------------------------------------------------------------------------
-void pqSHYXStatusNotifier::show(const QString& message)
+void pqSHYXStatusNotifier::info(const QString& message)
 {
-  instance()->showMessage(message);
+  show(message, Level::Info);
+}
+
+//-----------------------------------------------------------------------------
+void pqSHYXStatusNotifier::warning(const QString& message)
+{
+  show(message, Level::Warning);
+}
+
+//-----------------------------------------------------------------------------
+void pqSHYXStatusNotifier::error(const QString& message)
+{
+  show(message, Level::Error);
+}
+
+//-----------------------------------------------------------------------------
+void pqSHYXStatusNotifier::show(const QString& message, Level level)
+{
+  instance()->showMessage(message, level);
 }
 
 //-----------------------------------------------------------------------------
@@ -111,12 +149,10 @@ bool pqSHYXStatusNotifier::ensureInstalled()
     this->Button->setPopupMode(QToolButton::InstantPopup);
     this->Button->setFocusPolicy(Qt::NoFocus);
     this->Button->setCursor(Qt::PointingHandCursor);
-    this->Button->setStyleSheet(QStringLiteral(
-      "QToolButton { text-align: left; padding-left: 4px; }"
-      "QToolButton::menu-indicator { image: none; }"));
     this->Button->setText(QString::fromUtf8(kCollapsedLabel));
     this->Button->setToolTip(
       tr("SHYX Information. Click to show recent messages; click elsewhere to close."));
+    this->applyChipStyle(/*colored=*/false);
 
     this->Menu = new QMenu(this->Button);
     this->Menu->setObjectName(QStringLiteral("SHYXStatusMenu"));
@@ -135,7 +171,7 @@ bool pqSHYXStatusNotifier::ensureInstalled()
 }
 
 //-----------------------------------------------------------------------------
-void pqSHYXStatusNotifier::showMessage(const QString& message)
+void pqSHYXStatusNotifier::showMessage(const QString& message, Level level)
 {
   const QString trimmed = message.trimmed();
   if (trimmed.isEmpty())
@@ -156,9 +192,10 @@ void pqSHYXStatusNotifier::showMessage(const QString& message)
   }
 
   this->LastMessage = trimmed;
-  if (this->History.isEmpty() || this->History.front() != trimmed)
+  this->LastLevel = level;
+  if (this->History.isEmpty() || this->History.front().text != trimmed)
   {
-    this->History.prepend(trimmed);
+    this->History.prepend({ trimmed, level });
     while (this->History.size() > kHistoryLimit)
     {
       this->History.removeLast();
@@ -170,6 +207,45 @@ void pqSHYXStatusNotifier::showMessage(const QString& message)
 }
 
 //-----------------------------------------------------------------------------
+void pqSHYXStatusNotifier::applyChipStyle(bool colored)
+{
+  if (!this->Button)
+  {
+    return;
+  }
+  if (!colored)
+  {
+    this->Button->setStyleSheet(QString::fromUtf8(kBaseStyle));
+    return;
+  }
+
+  const bool dark = pqCoreUtilities::isDarkTheme();
+  QString bg;
+  switch (this->LastLevel)
+  {
+    case Level::Warning:
+      bg = dark ? QStringLiteral("rgba(227, 179, 65, 0.22)")
+                : QStringLiteral("rgba(154, 103, 0, 0.16)");
+      break;
+    case Level::Error:
+      bg = dark ? QStringLiteral("rgba(255, 123, 114, 0.22)")
+                : QStringLiteral("rgba(207, 34, 46, 0.14)");
+      break;
+    case Level::Info:
+    default:
+      bg = dark ? QStringLiteral("rgba(63, 185, 80, 0.22)")
+                : QStringLiteral("rgba(26, 127, 55, 0.14)");
+      break;
+  }
+  const QString color = levelColor(this->LastLevel);
+  this->Button->setStyleSheet(QStringLiteral(
+    "QToolButton { text-align: left; padding-left: 6px; padding-right: 8px; "
+    "border-radius: 3px; color: %1; background: %2; font-weight: 600; }"
+    "QToolButton::menu-indicator { image: none; }")
+                                .arg(color, bg));
+}
+
+//-----------------------------------------------------------------------------
 void pqSHYXStatusNotifier::applyChipText(const QString& text, bool expanded)
 {
   if (!this->Button)
@@ -177,6 +253,7 @@ void pqSHYXStatusNotifier::applyChipText(const QString& text, bool expanded)
     return;
   }
   this->Button->show();
+  this->applyChipStyle(/*colored=*/expanded);
 
   if (!expanded)
   {
@@ -229,12 +306,14 @@ void pqSHYXStatusNotifier::rebuildMenu()
   }
   else
   {
-    for (const QString& line : this->History)
+    for (const HistoryItem& entry : this->History)
     {
-      auto* item = new QLabel(line, wrap);
+      auto* item = new QLabel(entry.text, wrap);
       item->setWordWrap(true);
       item->setTextInteractionFlags(Qt::TextSelectableByMouse);
       item->setMaximumWidth(kPopupLabelWidth);
+      item->setStyleSheet(
+        QStringLiteral("color: %1;").arg(levelColor(entry.level)));
       layout->addWidget(item);
     }
   }

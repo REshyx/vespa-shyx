@@ -134,7 +134,7 @@ private:
   vtkSmartPointer<vtkDataArraySelection> InletSelection;
   vtkSmartPointer<vtkDataArraySelection> ExcludedOpeningSelection;
 
-  /** Last threshold-array fingerprint; used to reset the inlet list when the array changes. */
+  /** Last threshold-array fingerprint; empty until first RequestData so pvsm-restored checks are kept. */
   std::string CachedOpeningThresholdFingerprint;
 
   int OpeningListRevision = 0;

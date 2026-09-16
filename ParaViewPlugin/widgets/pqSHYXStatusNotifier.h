@@ -1,10 +1,10 @@
 #ifndef pqSHYXStatusNotifier_h
 #define pqSHYXStatusNotifier_h
 
+#include <QList>
 #include <QObject>
 #include <QPointer>
 #include <QString>
-#include <QStringList>
 
 class QMenu;
 class QStatusBar;
@@ -12,14 +12,15 @@ class QTimer;
 class QToolButton;
 
 /**
- * Injects a compact SHYX notice chip on the left of ParaView's status bar
- * (window-left, not stuck to the progress bar). Informational client-tool
- * messages (Select Connected, Grow, …) go here instead of vtkOutputWindow /
- * Output Messages.
+ * Status-bar notices on the left of the ParaView window (not Output Messages).
  *
- * A fresh notice expands the chip to elided text; after a few seconds it
- * collapses to "SHYX Information". Click the chip to open a popup of recent notices;
- * click elsewhere to dismiss it.
+ *   pqSHYXStatusNotifier::info("…");     // green
+ *   pqSHYXStatusNotifier::warning("…");  // yellow
+ *   pqSHYXStatusNotifier::error("…");    // red
+ *
+ * A fresh notice expands the chip; after a few seconds it collapses to
+ * "SHYX Information". Click the chip for recent notices; click elsewhere
+ * to dismiss the popup.
  */
 class pqSHYXStatusNotifier : public QObject
 {
@@ -27,20 +28,38 @@ class pqSHYXStatusNotifier : public QObject
   typedef QObject Superclass;
 
 public:
+  enum class Level
+  {
+    Info,
+    Warning,
+    Error
+  };
+
   static pqSHYXStatusNotifier* instance();
-  static void show(const QString& message);
+  static void info(const QString& message);
+  static void warning(const QString& message);
+  static void error(const QString& message);
+  static void show(const QString& message, Level level = Level::Info);
   static void shutdown();
 
 private:
+  struct HistoryItem
+  {
+    QString text;
+    Level level = Level::Info;
+  };
+
   explicit pqSHYXStatusNotifier(QObject* parent = nullptr);
   ~pqSHYXStatusNotifier() override;
 
   Q_DISABLE_COPY(pqSHYXStatusNotifier)
 
   bool ensureInstalled();
-  void showMessage(const QString& message);
+  void showMessage(const QString& message, Level level);
   void applyChipText(const QString& text, bool expanded);
+  void applyChipStyle(bool colored);
   void rebuildMenu();
+  static QString levelColor(Level level);
 
 private Q_SLOTS:
   void collapseChip();
@@ -51,7 +70,8 @@ private:
   QPointer<QMenu> Menu;
   QTimer* CollapseTimer = nullptr;
   QString LastMessage;
-  QStringList History;
+  Level LastLevel = Level::Info;
+  QList<HistoryItem> History;
 };
 
 #endif

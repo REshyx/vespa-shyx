@@ -1,6 +1,8 @@
 #ifndef pqSHYXGrowSelectionWithSimilarController_h
 #define pqSHYXGrowSelectionWithSimilarController_h
 
+#include "pqSHYXStatusNotifier.h"
+
 #include <QObject>
 #include <QPointer>
 #include <QString>
@@ -113,7 +115,8 @@ private:
   void installButtonExtras();
   void updateActionTooltip();
   void promptDihedralThreshold();
-  static void reportStatus(const QString& message);
+  static void reportStatus(const QString& message,
+    pqSHYXStatusNotifier::Level level = pqSHYXStatusNotifier::Level::Info);
   void stopHoldRepeat();
   GrowStatus growOnce(bool quietSuccess);
 

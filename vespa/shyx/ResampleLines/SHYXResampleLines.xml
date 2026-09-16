@@ -16,7 +16,8 @@
         along arc length. If that distance is greater than or equal to the branch length, both
         endpoints are kept as one segment (short branches are not deleted). Closed loops with
         no features are resampled around the cycle; a loop shorter than the spacing keeps its
-        original vertices. Each step can run alone; all off passes the input through.
+        original vertices. Each step can run alone; all off passes the input through. After
+        the enabled steps, point array Degree is the undirected line degree of each vertex.
       </Documentation>
 
       <InputProperty name="Input" command="SetInputConnection">

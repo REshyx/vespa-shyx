@@ -456,10 +456,13 @@ vtkSHYXGraphRepresentation::vtkSHYXGraphRepresentation()
     mask->SetOnRatio(1);
     mask->SetMaximumNumberOfPoints(this->MaximumNumberOfLabels);
     mask->RandomModeOff();
+    mask->GenerateVerticesOn();
     mapper = vtkFastLabeledDataMapper::New();
     mapper->SetInputConnection(mask->GetOutputPort());
     mapper->SetLabelModeToLabelFieldData();
     mapper->SetTextAnchor(vtkFastLabeledDataMapper::Center);
+    mapper->SetResolveCoincidentTopologyToPolygonOffset();
+    mapper->SetRelativeCoincidentTopologyPolygonOffsetParameters(0.0, -8.0);
     mapper->AddObserver(vtkCommand::WarningEvent, this->WarningObserver);
     prop = vtkTextProperty::New();
     prop->SetFontSize(this->LabelFontSize);
@@ -471,6 +474,7 @@ vtkSHYXGraphRepresentation::vtkSHYXGraphRepresentation()
     actor->SetMapper(mapper);
     actor->SetVisibility(0);
     actor->PickableOff();
+    actor->SetUseBounds(false);
     actor->ForceTranslucentOn();
     if (vtkProperty* ap = actor->GetProperty())
     {
@@ -890,17 +894,19 @@ bool vtkSHYXGraphRepresentation::AddToView(vtkView* view)
   if (rview)
   {
     vtkRenderer* main = rview->GetRenderer();
-    vtkRenderer* overlay = rview->GetNonCompositedRenderer();
     this->MainRenderer = main;
     main->AddActor(this->VertexActor);
     main->AddActor(this->LineActor);
     main->AddActor(this->FaceActor);
     main->AddActor(this->VolumeFaceActor);
     main->AddActor(this->VolumeEdgeActor);
-    overlay->AddActor(this->VertexLabelActor);
-    overlay->AddActor(this->LineLabelActor);
-    overlay->AddActor(this->FaceLabelActor);
-    overlay->AddActor(this->VolumeLabelActor);
+    // vtkFastLabeledDataMapper is a 3D GS mapper — it must live in the main
+    // renderer. The overlay renderer is for vtkActor2D; its depth buffer is not
+    // cleared (EraseOff) so 3D labels there are clipped/discarded.
+    main->AddActor(this->VertexLabelActor);
+    main->AddActor(this->LineLabelActor);
+    main->AddActor(this->FaceLabelActor);
+    main->AddActor(this->VolumeLabelActor);
   }
   const bool ok = this->Superclass::AddToView(view);
   this->HideDefaultSurfaceActors();
@@ -914,16 +920,15 @@ bool vtkSHYXGraphRepresentation::RemoveFromView(vtkView* view)
   if (rview)
   {
     vtkRenderer* main = rview->GetRenderer();
-    vtkRenderer* overlay = rview->GetNonCompositedRenderer();
     main->RemoveActor(this->VertexActor);
     main->RemoveActor(this->LineActor);
     main->RemoveActor(this->FaceActor);
     main->RemoveActor(this->VolumeFaceActor);
     main->RemoveActor(this->VolumeEdgeActor);
-    overlay->RemoveActor(this->VertexLabelActor);
-    overlay->RemoveActor(this->LineLabelActor);
-    overlay->RemoveActor(this->FaceLabelActor);
-    overlay->RemoveActor(this->VolumeLabelActor);
+    main->RemoveActor(this->VertexLabelActor);
+    main->RemoveActor(this->LineLabelActor);
+    main->RemoveActor(this->FaceLabelActor);
+    main->RemoveActor(this->VolumeLabelActor);
     this->MainRenderer = nullptr;
   }
   return this->Superclass::RemoveFromView(view);

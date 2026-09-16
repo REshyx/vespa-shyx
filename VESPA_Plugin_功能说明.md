@@ -68,7 +68,7 @@
 | SHYX Adaptive Isotropic Remesher | CGAL ≥ 6 |
 | SHYX Remesh With Endpoint | CGAL ≥ 6；**Vascular** |
 | SHYX Convex Hull | |
-| SHYX Resample Lines | 线网 LineMerge / Fuse / Sample 三步可独立开关；LineMerge 二叉树两两合并；短分支保留两端 |
+| SHYX Resample Lines | 线网 LineMerge / Fuse / Sample 三步可独立开关；LineMerge 二叉树两两合并；短分支保留两端；输出点数组 Degree |
 | SHYX Disconnected Region Fuse | |
 | SHYX Selection Extrude / Extrude | Extrude 接替 Point Extrude：Point/Poly + Front/Side/Back |
 | SHYX Selection Append Patches | 选区 / 管线 / box·sphere 抽出为 PDC patch |
@@ -713,7 +713,7 @@
 | **SHYX Subset Coarsen** | 子集粗化：折叠到原端点，不加新点、存活点坐标不变；Cost Strategy：QEM / 最小角 |
 | **SHYX Remesh With Endpoint** | Vascular 第 4 步；CGAL ≥ 6；与 Adaptive Remesher 同模块 |
 | **SHYX Convex Hull** | 纯 VTK 凸包 |
-| **SHYX Resample Lines** | LineMerge / Fuse / Sample 三步独立开关（默认都开）；LineMerge 二叉树两两合并，把落在已有线上（容差 1e-4×包围盒最长边）的点并上去；Fuse 容差 1e-6×最长边；Sample Distance 默认 0.01×最长边；度≠2 为特征点；短于间距的分支只留两端 |
+| **SHYX Resample Lines** | LineMerge / Fuse / Sample 三步独立开关（默认都开）；LineMerge 二叉树两两合并，把落在已有线上（容差 1e-4×包围盒最长边）的点并上去；Fuse 容差 1e-6×最长边；Sample Distance 默认 0.01×最长边；度≠2 为特征点；短于间距的分支只留两端；结束后写点数组 Degree |
 | **SHYX Selection Extrude** | 选区连通块挤出（共享帽顶点） |
 | **SHYX Extrude** | Point / Poly；Front/Side/Back；Use Selection 默认关；与 Threshold 独立（同时开则交集） |
 | **SHYX Selection Append Patches** | 选区 / 管线几何 / box·sphere 进 PDC；不收未选父网格单元 |
@@ -766,7 +766,7 @@
 - 从点云重建时，一般顺序：点云 → **VESPA PCA Estimate Normals** → **VESPA Poisson** 或 **Advancing Front**；若点云较乱可考虑先 **SHYX Alpha Wrapping** 再后续处理。
 - **SHYX TetGen** 与 **SHYX Surface to Volume Mesh** 均可从表面生成体积网格：TetGen 基于 TetGen 库，参数更直观；后者基于 CGAL Mesh_3，可精细控制表面与体积质量。
 - **SHYX Bidirectional Streamline Merge** 适用于 **Stream Tracer** 等产生的双向折线，需正确设置 **SeedIds** 数组（单元或点数据）。
-- **SHYX Resample Lines** 用于骨架/中心线等多分支折线：**LineMerge**、**Fuse** 与 **Sample** 是三步独立开关（默认都开）。LineMerge 按二叉树两两合并（先并成对，再并结果），重叠主干尽早收掉；点落在已有折线上或距离小于 **Line Merge Tolerance**（默认 1e-4×包围盒最长边）则并到前面的线上（重叠内点丢掉，分叉处可在前线上插点）；只开 Fuse 则近点合并后输出（容差 1e-6×包围盒最长边）；只开 Sample 则不合并、按 **Sample Distance** 在各分支上等距重采样；三步都关则原样输出。分叉与端点（线度数 ≠ 2）保留；短于间距的分支只留两端，不会被删。
+- **SHYX Resample Lines** 用于骨架/中心线等多分支折线：**LineMerge**、**Fuse** 与 **Sample** 是三步独立开关（默认都开）。LineMerge 按二叉树两两合并（先并成对，再并结果），重叠主干尽早收掉；点落在已有折线上或距离小于 **Line Merge Tolerance**（默认 1e-4×包围盒最长边）则并到前面的线上（重叠内点丢掉，分叉处可在前线上插点）；只开 Fuse 则近点合并后输出（容差 1e-6×包围盒最长边）；只开 Sample 则不合并、按 **Sample Distance** 在各分支上等距重采样；三步都关则原样输出。分叉与端点（线度数 ≠ 2）保留；短于间距的分支只留两端，不会被删。处理结束后写点数组 **Degree**（最终无向线度数）。
 - **SHYX Vector Field Topology**、**SHYX Vortex Criteria**、**SHYX FTLE**、**SHYX Clebsch Map** 等流场工具对数据类型与数组名要求不同，请以各节说明与 ParaView 属性面板为准。
 - **SHYX Disconnected Region Fuse** 在不连通域的最近处连接。**Fuse Method** 可选合点中点、小域贴大域、或不删点而加线/两个桥接三角形。默认 **Fuse Within Input** 开。
 - **SHYX Image Morphology** 作用于 **`vtkImageData` 点标量**（体素），不是网格面环 DilateLayers，也不是 **Gradient Magnitude**（有限差分）或 **Median**。形态学梯度 = 膨胀 − 侵蚀；核大小是 **Kernel Size**（默认 3 3 3，椭圆核）。Binary 下 **Binary Match** 默认 **Threshold**（`>= 0.5` 为前景，输出 1/0），也可两值严格相等。

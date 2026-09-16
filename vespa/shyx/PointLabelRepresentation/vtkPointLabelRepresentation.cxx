@@ -267,16 +267,19 @@ vtkPointLabelRepresentation::vtkPointLabelRepresentation()
   this->PointMask->SetMaximumNumberOfPoints(this->MaximumNumberOfLabels);
   this->PointMask->RandomModeOff();
   this->PointMask->SetRandomModeType(vtkMaskPoints::RANDOM_SAMPLING);
+  this->PointMask->GenerateVerticesOn();
 
   this->LabelMapper = vtkFastLabeledDataMapper::New();
   this->LabelMapper->SetInputConnection(this->PointMask->GetOutputPort());
   this->LabelMapper->SetLabelModeToLabelFieldData();
   this->LabelMapper->SetTextAnchor(vtkFastLabeledDataMapper::Center);
+  this->LabelMapper->SetResolveCoincidentTopologyToPolygonOffset();
 
   this->LabelActor = vtkActor::New();
   this->LabelActor->SetMapper(this->LabelMapper);
   this->LabelActor->SetVisibility(0);
   this->LabelActor->PickableOff();
+  this->LabelActor->SetUseBounds(false);
   this->LabelActor->ForceTranslucentOn();
   if (vtkProperty* ap = this->LabelActor->GetProperty())
   {
@@ -297,6 +300,7 @@ vtkPointLabelRepresentation::vtkPointLabelRepresentation()
   this->WarningObserver->SetCallback(&vtkPointLabelRepresentation::OnWarningEvent);
   this->WarningObserver->SetClientData(this);
   this->LabelMapper->AddObserver(vtkCommand::WarningEvent, this->WarningObserver);
+  this->ApplyDepthOffset();
 }
 
 //------------------------------------------------------------------------------
@@ -460,8 +464,9 @@ void vtkPointLabelRepresentation::ApplyDepthOffset()
   {
     return;
   }
-  const double units = (this->OccludeLabels != 0) ? this->DepthOffset : 0.0;
-  this->LabelMapper->SetRelativeCoincidentTopologyPolygonOffsetParameters(0.0, units);
+  // Always pull label quads toward the camera. Zero offset z-fights with the
+  // surface and the numbers vanish even when the mapper is in the main renderer.
+  this->LabelMapper->SetRelativeCoincidentTopologyPolygonOffsetParameters(0.0, this->DepthOffset);
 }
 
 //------------------------------------------------------------------------------
@@ -535,26 +540,16 @@ void vtkPointLabelRepresentation::UpdateLabelTransform()
 //------------------------------------------------------------------------------
 void vtkPointLabelRepresentation::PlaceLabelActor()
 {
-  vtkRenderer* want = nullptr;
-  if (this->OccludeLabels != 0)
-  {
-    want = this->MainRenderer;
-  }
-  else
-  {
-    want = this->OverlayRenderer;
-  }
-  if (this->MainRenderer && this->MainRenderer != want)
-  {
-    this->MainRenderer->RemoveActor(this->LabelActor);
-  }
-  if (this->OverlayRenderer && this->OverlayRenderer != want)
+  // vtkFastLabeledDataMapper is a 3D geometry-shader mapper. The overlay
+  // renderer is for vtkActor2D and does not clear depth, so 3D labels there
+  // never show. Always put the actor in the main renderer.
+  if (this->OverlayRenderer)
   {
     this->OverlayRenderer->RemoveActor(this->LabelActor);
   }
-  if (want)
+  if (this->MainRenderer)
   {
-    want->AddActor(this->LabelActor);
+    this->MainRenderer->AddActor(this->LabelActor);
   }
   this->ApplyDepthOffset();
 }

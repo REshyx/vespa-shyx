@@ -2302,7 +2302,8 @@ const ShyxExtra kShyxExtra[] = {
     "degree != 2 are features and are kept. Each step can run alone; all off passes "
     "the input through. If spacing >= branch length, both endpoints stay as one "
     "segment; short branches are not deleted. Closed all-degree-2 loops are resampled "
-    "around the cycle." },
+    "around the cycle. Point array Degree is written last: undirected line degree of "
+    "each vertex on the final network." },
   { "SHYXDisconnectedRegionFuse",
     "Join disconnected regions at a vertex pair with gap <= FuseThreshold (Kruskal). "
     "ComplianceWeight 0 = Euclidean nearest (default); 1 = among pairs inside T, prefer "

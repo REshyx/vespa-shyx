@@ -665,9 +665,10 @@ void pqSHYXProximityGapSelectionController::promptEpsilon()
 }
 
 //-----------------------------------------------------------------------------
-void pqSHYXProximityGapSelectionController::reportStatus(const QString& message)
+void pqSHYXProximityGapSelectionController::reportStatus(
+  const QString& message, pqSHYXStatusNotifier::Level level)
 {
-  pqSHYXStatusNotifier::show(message);
+  pqSHYXStatusNotifier::show(message, level);
 }
 
 //-----------------------------------------------------------------------------
@@ -1214,7 +1215,8 @@ void pqSHYXProximityGapSelectionController::computeAndApply(bool quietSuccess)
   {
     this->reportStatus(
       tr("SHYX Proximity Gap Selection: no visible vtkPolyData in the view "
-         "(select a surface representation)."));
+         "(select a surface representation)."),
+      pqSHYXStatusNotifier::Level::Error);
     return;
   }
 
@@ -1239,7 +1241,8 @@ void pqSHYXProximityGapSelectionController::computeAndApply(bool quietSuccess)
   if (!(eps > 0.0))
   {
     this->reportStatus(
-      tr("SHYX Proximity Gap Selection: could not determine a gap distance ε."));
+      tr("SHYX Proximity Gap Selection: could not determine a gap distance ε."),
+      pqSHYXStatusNotifier::Level::Error);
     return;
   }
 
@@ -1264,7 +1267,8 @@ void pqSHYXProximityGapSelectionController::computeAndApply(bool quietSuccess)
            "components; if this is a single closed surface there is no gap to select "
            "(ε = %2).")
           .arg(nComp)
-          .arg(eps, 0, 'g', 6));
+          .arg(eps, 0, 'g', 6),
+        pqSHYXStatusNotifier::Level::Warning);
     }
     else
     {
@@ -1272,7 +1276,8 @@ void pqSHYXProximityGapSelectionController::computeAndApply(bool quietSuccess)
         tr("SHYX Proximity Gap Selection: %1 connected components, but none "
            "approach within ε = %2. Increase ε (wheel on the button).")
           .arg(nComp)
-          .arg(eps, 0, 'g', 6));
+          .arg(eps, 0, 'g', 6),
+        pqSHYXStatusNotifier::Level::Warning);
     }
     return;
   }

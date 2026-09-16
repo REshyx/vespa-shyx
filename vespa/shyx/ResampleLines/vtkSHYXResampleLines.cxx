@@ -10,6 +10,7 @@
 #include "vtkFieldData.h"
 #include "vtkInformation.h"
 #include "vtkInformationVector.h"
+#include "vtkIntArray.h"
 #include "vtkMath.h"
 #include "vtkNew.h"
 #include "vtkObjectFactory.h"
@@ -98,6 +99,33 @@ void BuildLineGraph(vtkPolyData* pd, std::vector<std::vector<vtkIdType>>& adj, s
       AddUndirectedEdge(adj, edges, pts[i], pts[i + 1]);
     }
   }
+}
+
+constexpr const char kDegreeArrayName[] = "Degree";
+
+void WritePointLineDegree(vtkPolyData* pd)
+{
+  if (!pd || !pd->GetPoints())
+  {
+    return;
+  }
+  const vtkIdType nPts = pd->GetNumberOfPoints();
+  if (nPts <= 0)
+  {
+    return;
+  }
+  std::vector<std::vector<vtkIdType>> adj;
+  std::set<EdgeKey> edges;
+  BuildLineGraph(pd, adj, edges);
+  vtkNew<vtkIntArray> degree;
+  degree->SetName(kDegreeArrayName);
+  degree->SetNumberOfComponents(1);
+  degree->SetNumberOfTuples(nPts);
+  for (vtkIdType i = 0; i < nPts; ++i)
+  {
+    degree->SetValue(i, static_cast<int>(adj[static_cast<size_t>(i)].size()));
+  }
+  pd->GetPointData()->AddArray(degree);
 }
 
 vtkIdType OtherNeighbor(const std::vector<vtkIdType>& nbrs, vtkIdType prev)
@@ -1033,6 +1061,7 @@ int vtkSHYXResampleLines::RequestData(
   {
     vtkWarningMacro(<< "LineMerge, Fuse and Sample are all off; passing input through.");
     output->ShallowCopy(input);
+    WritePointLineDegree(output);
     return 1;
   }
 
@@ -1094,6 +1123,7 @@ int vtkSHYXResampleLines::RequestData(
   {
     output->ShallowCopy(lines);
     output->GetFieldData()->PassData(input->GetFieldData());
+    WritePointLineDegree(output);
     return 1;
   }
 
@@ -1151,6 +1181,7 @@ int vtkSHYXResampleLines::RequestData(
   outLines->Squeeze();
   outPD->Squeeze();
   output->GetFieldData()->PassData(input->GetFieldData());
+  WritePointLineDegree(output);
   return 1;
 }
 

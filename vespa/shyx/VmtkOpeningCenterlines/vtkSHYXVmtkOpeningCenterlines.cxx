@@ -82,6 +82,14 @@ void vtkSHYXVmtkOpeningCenterlines::InvalidateInletSelectionIfOpeningThresholdCh
     arrayTag += std::to_string(ai->Get(vtkDataObject::FIELD_ASSOCIATION()));
   }
   const std::string fp = arrayTag;
+  // First RequestData after construction (including pvsm restore): cache the
+  // array fingerprint only. Clearing here would wipe InletStatus / ExcludedStatus
+  // that Server Manager already pushed from the state file.
+  if (this->CachedOpeningThresholdFingerprint.empty())
+  {
+    this->CachedOpeningThresholdFingerprint = fp;
+    return;
+  }
   if (fp != this->CachedOpeningThresholdFingerprint)
   {
     ClearAllArrays(this->InletSelection);
@@ -768,8 +776,29 @@ int vtkSHYXVmtkOpeningCenterlines::RequestData(vtkInformation* vtkNotUsed(reques
   }
 
   // Rebuild vtkDataArraySelection in SurfacePointId order; keep prior check state by name.
+  // Do not Modified() the filter here: that retriggers RequestData and races pvsm restore.
   {
+    auto namesUnchanged = [](vtkDataArraySelection* sel, const std::vector<std::string>& want) {
+      if (!sel || static_cast<size_t>(sel->GetNumberOfArrays()) != want.size())
+      {
+        return false;
+      }
+      for (size_t i = 0; i < want.size(); ++i)
+      {
+        const char* existing = sel->GetArrayName(static_cast<int>(i));
+        if (!existing || want[i] != existing)
+        {
+          return false;
+        }
+      }
+      return true;
+    };
+
     auto syncOne = [&](vtkDataArraySelection* sel) {
+      if (namesUnchanged(sel, names))
+      {
+        return;
+      }
       std::unordered_map<std::string, bool> enabled;
       enabled.reserve(static_cast<size_t>(sel->GetNumberOfArrays()));
       for (int j = 0; j < sel->GetNumberOfArrays(); ++j)
@@ -787,15 +816,17 @@ int vtkSHYXVmtkOpeningCenterlines::RequestData(vtkInformation* vtkNotUsed(reques
         const bool wasEnabled = it != enabled.end() && it->second;
         sel->AddArray(nm.c_str(), wasEnabled);
       }
+      sel->Modified();
     };
+    const bool listChanged = !namesUnchanged(this->InletSelection, names) ||
+      !namesUnchanged(this->ExcludedOpeningSelection, names);
     syncOne(this->InletSelection);
     syncOne(this->ExcludedOpeningSelection);
+    if (listChanged)
+    {
+      ++this->OpeningListRevision;
+    }
   }
-
-  this->InletSelection->Modified();
-  this->ExcludedOpeningSelection->Modified();
-  ++this->OpeningListRevision;
-  this->Modified();
 
   std::vector<std::string> activeNames;
   std::vector<vtkIdType> activeSurfacePid;

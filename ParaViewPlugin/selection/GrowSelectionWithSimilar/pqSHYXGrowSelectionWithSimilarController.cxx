@@ -540,9 +540,10 @@ void pqSHYXGrowSelectionWithSimilarController::promptDihedralThreshold()
 }
 
 //-----------------------------------------------------------------------------
-void pqSHYXGrowSelectionWithSimilarController::reportStatus(const QString& message)
+void pqSHYXGrowSelectionWithSimilarController::reportStatus(
+  const QString& message, pqSHYXStatusNotifier::Level level)
 {
-  pqSHYXStatusNotifier::show(message);
+  pqSHYXStatusNotifier::show(message, level);
 }
 
 //-----------------------------------------------------------------------------
@@ -699,7 +700,8 @@ pqSHYXGrowSelectionWithSimilarController::growOnce(bool quietSuccess)
   if (!resolveActiveSelection(port, ds, nullptr, this->View))
   {
     this->reportStatus(
-      tr("SHYX Grow Selection With Similar: no active cell selection to grow."));
+      tr("SHYX Grow Selection With Similar: no active cell selection to grow."),
+      pqSHYXStatusNotifier::Level::Error);
     return GrowStatus::Error;
   }
 
@@ -708,7 +710,8 @@ pqSHYXGrowSelectionWithSimilarController::growOnce(bool quietSuccess)
   {
     this->reportStatus(
       tr("SHYX Grow Selection With Similar: active data is not vtkPolyData "
-         "(surface mesh required)."));
+         "(surface mesh required)."),
+      pqSHYXStatusNotifier::Level::Error);
     return GrowStatus::Error;
   }
 
@@ -717,7 +720,8 @@ pqSHYXGrowSelectionWithSimilarController::growOnce(bool quietSuccess)
   {
     this->reportStatus(
       tr("SHYX Grow Selection With Similar: could not resolve selected cell IDs "
-         "(need a cell selection)."));
+         "(need a cell selection)."),
+      pqSHYXStatusNotifier::Level::Error);
     return GrowStatus::Error;
   }
 
@@ -727,7 +731,8 @@ pqSHYXGrowSelectionWithSimilarController::growOnce(bool quietSuccess)
     this->reportStatus(
       tr("SHYX Grow Selection With Similar: selection did not grow "
          "(no adjacent faces within %1° normal angle).")
-        .arg(SharedDihedralThresholdDegrees, 0, 'g', 4));
+        .arg(SharedDihedralThresholdDegrees, 0, 'g', 4),
+      pqSHYXStatusNotifier::Level::Warning);
     return GrowStatus::NoGrowth;
   }
 
@@ -799,7 +804,7 @@ pqSHYXGrowSelectionWithSimilarController::GrowUntilCompleteByNormal(
   {
     result.message =
       tr("SHYX Select Similar / By Normal: no active cell selection to grow.");
-    reportStatus(result.message);
+    reportStatus(result.message, pqSHYXStatusNotifier::Level::Error);
     return result;
   }
 
@@ -808,7 +813,7 @@ pqSHYXGrowSelectionWithSimilarController::GrowUntilCompleteByNormal(
   {
     result.message = tr("SHYX Select Similar / By Normal: active data is not vtkPolyData "
                         "(surface mesh required).");
-    reportStatus(result.message);
+    reportStatus(result.message, pqSHYXStatusNotifier::Level::Error);
     return result;
   }
 
@@ -817,7 +822,7 @@ pqSHYXGrowSelectionWithSimilarController::GrowUntilCompleteByNormal(
   {
     result.message = tr("SHYX Select Similar / By Normal: could not resolve selected cell IDs "
                         "(need a cell selection).");
-    reportStatus(result.message);
+    reportStatus(result.message, pqSHYXStatusNotifier::Level::Error);
     return result;
   }
 
@@ -894,7 +899,7 @@ pqSHYXGrowSelectionWithSimilarController::GrowUntilCompleteByNormal(
     result.message = tr("SHYX Select Similar / By Normal: selection did not grow "
                         "(no adjacent faces within %1° normal angle).")
                        .arg(SharedDihedralThresholdDegrees, 0, 'g', 4);
-    reportStatus(result.message);
+    reportStatus(result.message, pqSHYXStatusNotifier::Level::Warning);
     return result;
   }
 
@@ -926,7 +931,7 @@ pqSHYXGrowSelectionWithSimilarController::FillUnselectedInterior(
   if (!resolveActiveSelection(port, ds, hintRepresentation, nullptr))
   {
     result.message = tr("SHYX Fill Interior: no active cell selection.");
-    reportStatus(result.message);
+    reportStatus(result.message, pqSHYXStatusNotifier::Level::Error);
     return result;
   }
 
@@ -935,7 +940,7 @@ pqSHYXGrowSelectionWithSimilarController::FillUnselectedInterior(
   {
     result.message = tr("SHYX Fill Interior: active data is not vtkPolyData "
                         "(surface mesh required).");
-    reportStatus(result.message);
+    reportStatus(result.message, pqSHYXStatusNotifier::Level::Error);
     return result;
   }
 
@@ -944,7 +949,7 @@ pqSHYXGrowSelectionWithSimilarController::FillUnselectedInterior(
   {
     result.message = tr("SHYX Fill Interior: could not resolve selected cell IDs "
                         "(need a cell selection).");
-    reportStatus(result.message);
+    reportStatus(result.message, pqSHYXStatusNotifier::Level::Error);
     return result;
   }
 
@@ -953,7 +958,7 @@ pqSHYXGrowSelectionWithSimilarController::FillUnselectedInterior(
   if (nCells <= 0)
   {
     result.message = tr("SHYX Fill Interior: mesh has no cells.");
-    reportStatus(result.message);
+    reportStatus(result.message, pqSHYXStatusNotifier::Level::Error);
     return result;
   }
 
@@ -1036,7 +1041,7 @@ pqSHYXGrowSelectionWithSimilarController::FillUnselectedInterior(
   if (nComp == 0)
   {
     result.message = tr("SHYX Fill Interior: no unselected faces to fill.");
-    reportStatus(result.message);
+    reportStatus(result.message, pqSHYXStatusNotifier::Level::Warning);
     return result;
   }
 
@@ -1095,7 +1100,7 @@ pqSHYXGrowSelectionWithSimilarController::FillUnselectedInterior(
     result.message =
       tr("SHYX Fill Interior: no enclosed unselected faces "
          "(need a closed loop of selected faces around an interior region).");
-    reportStatus(result.message);
+    reportStatus(result.message, pqSHYXStatusNotifier::Level::Warning);
     return result;
   }
 
@@ -1125,7 +1130,7 @@ pqSHYXGrowSelectionWithSimilarController::SelectConnectedRegion(
   if (!resolveActiveSelection(port, ds, hintRepresentation, nullptr))
   {
     result.message = tr("SHYX Select Connected: no active point or cell selection.");
-    reportStatus(result.message);
+    reportStatus(result.message, pqSHYXStatusNotifier::Level::Error);
     return result;
   }
 
@@ -1136,7 +1141,7 @@ pqSHYXGrowSelectionWithSimilarController::SelectConnectedRegion(
   {
     result.message = tr("SHYX Select Connected: could not resolve selected IDs "
                         "(need a point or cell selection).");
-    reportStatus(result.message);
+    reportStatus(result.message, pqSHYXStatusNotifier::Level::Error);
     return result;
   }
 
@@ -1148,7 +1153,7 @@ pqSHYXGrowSelectionWithSimilarController::SelectConnectedRegion(
   {
     result.message = tr("SHYX Select Connected: mesh has no %1.")
                        .arg(isPoint ? tr("points") : tr("cells"));
-    reportStatus(result.message);
+    reportStatus(result.message, pqSHYXStatusNotifier::Level::Error);
     return result;
   }
 
@@ -1169,7 +1174,7 @@ pqSHYXGrowSelectionWithSimilarController::SelectConnectedRegion(
   if (nSeed == 0)
   {
     result.message = tr("SHYX Select Connected: no valid selected IDs in the active dataset.");
-    reportStatus(result.message);
+    reportStatus(result.message, pqSHYXStatusNotifier::Level::Error);
     return result;
   }
 
@@ -1272,7 +1277,7 @@ pqSHYXGrowSelectionWithSimilarController::SelectConnectedRegion(
                         "(%1 %2).")
                        .arg(nReached)
                        .arg(entityWord());
-    reportStatus(result.message);
+    reportStatus(result.message, pqSHYXStatusNotifier::Level::Warning);
     return result;
   }
 
@@ -1310,7 +1315,7 @@ pqSHYXGrowSelectionWithSimilarController::InvertSelection(
   if (!resolveActiveSelection(port, ds, hintRepresentation, nullptr))
   {
     result.message = tr("SHYX Invert Selection: no active cell selection.");
-    reportStatus(result.message);
+    reportStatus(result.message, pqSHYXStatusNotifier::Level::Error);
     return result;
   }
 
@@ -1319,7 +1324,7 @@ pqSHYXGrowSelectionWithSimilarController::InvertSelection(
   {
     result.message = tr("SHYX Invert Selection: could not resolve selected cell IDs "
                         "(need a cell selection).");
-    reportStatus(result.message);
+    reportStatus(result.message, pqSHYXStatusNotifier::Level::Error);
     return result;
   }
 
@@ -1327,7 +1332,7 @@ pqSHYXGrowSelectionWithSimilarController::InvertSelection(
   if (nCells <= 0)
   {
     result.message = tr("SHYX Invert Selection: mesh has no cells.");
-    reportStatus(result.message);
+    reportStatus(result.message, pqSHYXStatusNotifier::Level::Error);
     return result;
   }
 

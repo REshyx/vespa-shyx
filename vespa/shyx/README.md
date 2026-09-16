@@ -14,7 +14,7 @@ SHYX 是本仓库里 **一个作者命名空间**（[`vespa/shyx/`](.)），不�
 * [**Alpha Wrapping**](./AlphaWrapping/README.md) — 点云/三角汤 → 水密 2-流形；Alpha/Offset 默认按包围盒最长边刷新（CGAL ≥ 5.5）
 * [**Hole Fill**](./HoleFill/README.md) / [**Repair Degeneracies**](./RepairDegeneracies/README.md) / [**Edge Collapse**](./EdgeCollapse/README.md) / [**Subset Coarsen**](./SubsetCoarsen/README.md) / [**Boolean (relaxed)**](./BooleanOperation/README.md) / [**Shape Smoothing**](./ShapeSmoothing/README.md) — CGAL PMP
 * [**Convex Hull**](./ConvexHullFilter/README.md)
-* [**Resample Lines**](./ResampleLines/README.md) — 线网 LineMerge / Fuse / Sample 三步可独立开关；LineMerge 二叉树两两合并；短分支保留两端
+* [**Resample Lines**](./ResampleLines/README.md) — 线网 LineMerge / Fuse / Sample 三步可独立开关；LineMerge 二叉树两两合并；短分支保留两端；输出点数组 Degree
 * [**Disconnected Region Fuse**](./DisconnectedRegionFuse/README.md)
 * [**Selection Extrude**](./SelectionExtrude/README.md) / [**Extrude**](./Extrude/README.md) / [**Selection Append Patches**](./SelectionAppendPatches/README.md) / [**Delete Selected Cells**](./DeleteSelectedCells/README.md) / [**Extract Selection**](./ExtractSelectedCells/README.md) / [**Flip Selected Cells Winding**](./FlipSelectedCellsWinding/README.md)
 * [**Selection: Fill, Alpha Wrap, Union**](./SelectionFillAlphaReunion/README.md) — CGAL ≥ 5.5；Alpha/Offset 默认 0 = 选区 AABB 最长边的 10%；Reset 按选区（[`SelectionBoundsDomain`](./SelectionBoundsDomain/README.md)）
