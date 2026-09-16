@@ -1,4 +1,5 @@
 #include "pqSHYXProximityGapSelectionController.h"
+#include "pqSHYXStatusNotifier.h"
 
 #include "pqActiveObjects.h"
 #include "pqDataRepresentation.h"
@@ -20,7 +21,6 @@
 #include "vtkIdList.h"
 #include "vtkMath.h"
 #include "vtkNew.h"
-#include "vtkOutputWindow.h"
 #include "vtkPoints.h"
 #include "vtkPolyData.h"
 #include "vtkSMPropertyHelper.h"
@@ -665,13 +665,9 @@ void pqSHYXProximityGapSelectionController::promptEpsilon()
 }
 
 //-----------------------------------------------------------------------------
-void pqSHYXProximityGapSelectionController::reportToOutputWindow(const QString& message)
+void pqSHYXProximityGapSelectionController::reportStatus(const QString& message)
 {
-  const QByteArray utf8 = message.toUtf8();
-  if (vtkOutputWindow* win = vtkOutputWindow::GetInstance())
-  {
-    win->DisplayWarningText((utf8 + "\n").constData());
-  }
+  pqSHYXStatusNotifier::show(message);
 }
 
 //-----------------------------------------------------------------------------
@@ -1216,7 +1212,7 @@ void pqSHYXProximityGapSelectionController::computeAndApply(bool quietSuccess)
   vtkPolyData* pd = nullptr;
   if (!this->resolveActivePolyData(port, pd))
   {
-    this->reportToOutputWindow(
+    this->reportStatus(
       tr("SHYX Proximity Gap Selection: no visible vtkPolyData in the view "
          "(select a surface representation)."));
     return;
@@ -1242,7 +1238,7 @@ void pqSHYXProximityGapSelectionController::computeAndApply(bool quietSuccess)
   }
   if (!(eps > 0.0))
   {
-    this->reportToOutputWindow(
+    this->reportStatus(
       tr("SHYX Proximity Gap Selection: could not determine a gap distance ε."));
     return;
   }
@@ -1262,7 +1258,7 @@ void pqSHYXProximityGapSelectionController::computeAndApply(bool quietSuccess)
   {
     if (nComp < 2)
     {
-      this->reportToOutputWindow(
+      this->reportStatus(
         tr("SHYX Proximity Gap Selection: only %1 connected component(s). "
            "Closed shells that do not share vertices should count as separate "
            "components; if this is a single closed surface there is no gap to select "
@@ -1272,7 +1268,7 @@ void pqSHYXProximityGapSelectionController::computeAndApply(bool quietSuccess)
     }
     else
     {
-      this->reportToOutputWindow(
+      this->reportStatus(
         tr("SHYX Proximity Gap Selection: %1 connected components, but none "
            "approach within ε = %2. Increase ε (wheel on the button).")
           .arg(nComp)
@@ -1284,7 +1280,7 @@ void pqSHYXProximityGapSelectionController::computeAndApply(bool quietSuccess)
   this->applyCellSelection(port, cells);
   if (!quietSuccess)
   {
-    this->reportToOutputWindow(
+    this->reportStatus(
       tr("SHYX Proximity Gap Selection: selected %1 cell(s) from %2 contact "
          "vertices (ε = %3%4%5).")
         .arg(cells.size())

@@ -30,6 +30,7 @@ description: >-
   - **RenderView 选择右键**：`ParaViewPlugin/selection/SelectSimilar/`，有点或 cell 选择时加 **Select Connected**（当前选区所在连通区域：点沿网格、线共顶点、面共边、体共面）、有 cell 选择时还有 **Invert Selection**（反选）、**Select Similar** 子菜单（现有 **By Normal**）和 **Fill Interior**。By Normal 一次扩到没有相似邻面为止，复用 `GrowSelectionWithSimilar` 的二面角阈值，不是标题栏那种一环一环点。Fill Interior 把被当前选区完全围住的未选面补进选择（开放网格上仍连到开口的区域不填）。
   - **3D widget 表示**：支架/圆柱（`SHYX*WidgetRepresentation.xml`，与对应滤镜同目录），不是 Display 下拉项。
   - **View 停靠窗**：SHYX AI Assistant（`ParaViewPlugin/AIAssistant/pqSHYXAI*`），不是 pipeline filter。
+  - **状态栏提示**：`ParaViewPlugin/widgets/pqSHYXStatusNotifier*`，进度条左侧 SHYX chip。选择工具的成功/失败计数走这里，不要 `vtkOutputWindow` / Output Messages。
 - **SHYX 实现**：每个 **VTK 算子或表示** 在 `vespa/shyx/<FeatureName>/` 下；至少包含 `vtk.module`、`CMakeLists.txt`（`vtk_module_add_module`，`shyx` 里通常带 `FORCE_STATIC`）和 `SHYX*.xml`（`vespa_plugin_xml(...)`）。标题栏选择工具只有 `ParaViewPlugin/selection/` 下的 `pq*`。AI 面板 UI 是 `ParaViewPlugin/AIAssistant/pqSHYXAI*`（`vespa/shyx/AIAssistant/` 只有 README，没有 VTK 模块或 SM XML）；不要 `SHYXAIAssistant()`。
 - **ParaView 插件包**：`ParaViewPlugin/CMakeLists.txt` 里 `paraview_add_plugin(VESPAPlugin ...)` 的 `SERVER_MANAGER_XML` **自动收集**各模块 `vespa_plugin_xml()` 声明的文件，外加 `ParaViewPlugin/smxml/` 里的上游聚合 XML；**一个 DLL（VESPAPlugin）** 聚合已构建模块，而不是每个算子一个插件目标。
 - **注册入口**：`ParaViewPlugin/paraview.plugin` 只描述插件名；`paraview_plugin_build` 与主工程里的 `VESPA_BUILD_PV_PLUGIN` 一起驱动构建。

@@ -77,7 +77,7 @@ private:
   void updateActionTooltip();
   void promptEpsilon();
   void scaleEpsilonAndSelect(double factor);
-  static void reportToOutputWindow(const QString& message);
+  static void reportStatus(const QString& message);
 
   bool resolveActivePolyData(pqOutputPort*& portOut, vtkPolyData*& pdOut);
   static double suggestEpsilon(vtkPolyData* pd);

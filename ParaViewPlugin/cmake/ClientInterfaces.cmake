@@ -127,7 +127,9 @@ list(APPEND vespa_plugin_qt_auto_sources
 list(APPEND vespa_plugin_qt_auto_interfaces pqSHYXSelectSimilarContextMenu)
 list(APPEND vespa_plugin_qt_auto_sources
   selection/SelectSimilar/pqSHYXSelectSimilarContextMenu.cxx
-  selection/SelectSimilar/pqSHYXSelectSimilarContextMenu.h)
+  selection/SelectSimilar/pqSHYXSelectSimilarContextMenu.h
+  widgets/pqSHYXStatusNotifier.cxx
+  widgets/pqSHYXStatusNotifier.h)
 
 paraview_plugin_add_dock_window(
   CLASS_NAME pqSHYXAIAssistantPanel

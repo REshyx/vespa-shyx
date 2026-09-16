@@ -1,6 +1,7 @@
 #include "pqSHYXGrowSelectionWithSimilarAutoStart.h"
 
 #include "pqSHYXGrowSelectionWithSimilarViewFrameActions.h"
+#include "pqSHYXStatusNotifier.h"
 
 #include "pqApplicationCore.h"
 #include "pqInterfaceTracker.h"
@@ -69,6 +70,8 @@ void pqSHYXGrowSelectionWithSimilarAutoStart::onStartup()
 //-----------------------------------------------------------------------------
 void pqSHYXGrowSelectionWithSimilarAutoStart::onShutdown()
 {
+  pqSHYXStatusNotifier::shutdown();
+
   if (!this->Interface)
   {
     return;

@@ -25,8 +25,9 @@ class vtkPolyData;
  * Title-bar action: grow the current cell selection by one ring of edge-adjacent
  * faces whose normal–normal angle is at most a dihedral threshold (degrees).
  * Click once for a single ring; press-and-hold to keep growing until no more
- * similar neighbors. Right-click the button to edit the threshold. Reports a
- * Warning to the Output Window when the selection does not grow.
+ * similar neighbors. Right-click the button to edit the threshold. Status
+ * lines go to the bottom SHYX notice (left of the progress bar), not Output
+ * Messages.
  */
 class pqSHYXGrowSelectionWithSimilarController : public QObject
 {
@@ -112,7 +113,7 @@ private:
   void installButtonExtras();
   void updateActionTooltip();
   void promptDihedralThreshold();
-  static void reportToOutputWindow(const QString& message);
+  static void reportStatus(const QString& message);
   void stopHoldRepeat();
   GrowStatus growOnce(bool quietSuccess);
 
