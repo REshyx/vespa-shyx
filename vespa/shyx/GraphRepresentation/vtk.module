@@ -13,4 +13,4 @@ PRIVATE_DEPENDS
   VTK::CommonCore
   VTK::CommonDataModel
   VTK::RenderingCore
-  VTK::RenderingLabel
+  VTK::RenderingOpenGL2

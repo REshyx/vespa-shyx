@@ -26,7 +26,7 @@ class vtkPolyData;
  * faces whose normal–normal angle is at most a dihedral threshold (degrees).
  * Click once for a single ring; press-and-hold to keep growing until no more
  * similar neighbors. Right-click the button to edit the threshold. Status
- * lines go to the bottom SHYX notice (left of the progress bar), not Output
+ * lines go to the bottom SHYX notice (status bar, window-left), not Output
  * Messages.
  */
 class pqSHYXGrowSelectionWithSimilarController : public QObject

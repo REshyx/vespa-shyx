@@ -154,7 +154,7 @@ Vascular 顺序（[`VESPAVascularCategory.xml`](../ParaViewPlugin/smxml/VESPAVas
 | Fill Interior（选择右键，填充被选区围住的未选面） | `ParaViewPlugin/selection/SelectSimilar/` + Grow controller | （无独立图标） |
 | Select Connected（选择右键，选中当前连通点/线/面/体） | `ParaViewPlugin/selection/SelectSimilar/` + Grow controller | （无独立图标） |
 | Invert Selection（选择右键，反选） | `ParaViewPlugin/selection/SelectSimilar/` + Grow controller | （无独立图标） |
-| Status notices（进度条左侧 SHYX 提示） | `ParaViewPlugin/widgets/pqSHYXStatusNotifier.*` | （无） |
+| Status notices（状态栏左侧 SHYX 提示） | `ParaViewPlugin/widgets/pqSHYXStatusNotifier.*` | （无） |
 | Vascular 菜单/工具条 | `ParaViewPlugin/VascularCategory/` + [`smxml/VESPAVascularCategory.xml`](../ParaViewPlugin/smxml/VESPAVascularCategory.xml) | （各滤镜 fluent 图标） |
 
 ---

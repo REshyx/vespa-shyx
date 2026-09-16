@@ -12,12 +12,13 @@ class QTimer;
 class QToolButton;
 
 /**
- * Injects a compact SHYX notice chip immediately left of ParaView's progress
- * bar. Informational client-tool messages (Select Connected, Grow, …) go here
- * instead of vtkOutputWindow / Output Messages.
+ * Injects a compact SHYX notice chip on the left of ParaView's status bar
+ * (window-left, not stuck to the progress bar). Informational client-tool
+ * messages (Select Connected, Grow, …) go here instead of vtkOutputWindow /
+ * Output Messages.
  *
  * A fresh notice expands the chip to elided text; after a few seconds it
- * collapses to "SHYX". Click the chip to open a popup of recent notices;
+ * collapses to "SHYX Information". Click the chip to open a popup of recent notices;
  * click elsewhere to dismiss it.
  */
 class pqSHYXStatusNotifier : public QObject

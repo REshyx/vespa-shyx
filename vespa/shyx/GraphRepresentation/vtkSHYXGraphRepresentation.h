@@ -7,17 +7,18 @@
 #include "vtkSHYXGraphRepresentationModule.h"
 #include "vtkGeometryRepresentationWithFaces.h"
 #include "vtkSmartPointer.h"
+#include "vtkType.h"
 #include "vtkWeakPointer.h"
 
 class vtkActor;
-class vtkActor2D;
 class vtkCallbackCommand;
 class vtkCellCenters;
 class vtkDataObject;
 class vtkDataSet;
 class vtkExtractEdges;
+class vtkFastLabeledDataMapper;
+class vtkGenerateIds;
 class vtkGeometryFilter;
-class vtkLabeledDataMapper;
 class vtkMaskPoints;
 class vtkMergeBlocks;
 class vtkPointGaussianMapper;
@@ -157,6 +158,10 @@ protected:
 
   vtkSmartPointer<vtkDataObject> OriginalInput;
   vtkMergeBlocks* MergeBlocks = nullptr;
+  vtkGenerateIds* GenerateIds = nullptr;
+  vtkWeakPointer<vtkDataSet> CachedDataSet;
+  vtkMTimeType CachedDataMTime = 0;
+  vtkMTimeType CachedPropMTime = 0;
   vtkTransform* LayerTransform = nullptr;
   vtkActor* TransformHelperProp = nullptr;
   vtkCallbackCommand* WarningObserver = nullptr;
@@ -173,25 +178,25 @@ protected:
   vtkPolyDataMapper* VolumeEdgeMapper = nullptr;
   vtkActor* VolumeEdgeActor = nullptr;
 
-  vtkLabeledDataMapper* VertexLabelMapper = nullptr;
-  vtkActor2D* VertexLabelActor = nullptr;
+  vtkFastLabeledDataMapper* VertexLabelMapper = nullptr;
+  vtkActor* VertexLabelActor = nullptr;
   vtkTextProperty* VertexLabelProperty = nullptr;
   vtkMaskPoints* VertexMask = nullptr;
 
-  vtkLabeledDataMapper* LineLabelMapper = nullptr;
-  vtkActor2D* LineLabelActor = nullptr;
+  vtkFastLabeledDataMapper* LineLabelMapper = nullptr;
+  vtkActor* LineLabelActor = nullptr;
   vtkTextProperty* LineLabelProperty = nullptr;
   vtkMaskPoints* LineMask = nullptr;
   vtkCellCenters* LineCenters = nullptr;
 
-  vtkLabeledDataMapper* FaceLabelMapper = nullptr;
-  vtkActor2D* FaceLabelActor = nullptr;
+  vtkFastLabeledDataMapper* FaceLabelMapper = nullptr;
+  vtkActor* FaceLabelActor = nullptr;
   vtkTextProperty* FaceLabelProperty = nullptr;
   vtkMaskPoints* FaceMask = nullptr;
   vtkCellCenters* FaceCenters = nullptr;
 
-  vtkLabeledDataMapper* VolumeLabelMapper = nullptr;
-  vtkActor2D* VolumeLabelActor = nullptr;
+  vtkFastLabeledDataMapper* VolumeLabelMapper = nullptr;
+  vtkActor* VolumeLabelActor = nullptr;
   vtkTextProperty* VolumeLabelProperty = nullptr;
   vtkMaskPoints* VolumeMask = nullptr;
   vtkCellCenters* VolumeCenters = nullptr;

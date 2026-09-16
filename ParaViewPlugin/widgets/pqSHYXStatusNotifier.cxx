@@ -17,9 +17,10 @@
 
 namespace
 {
+constexpr char kCollapsedLabel[] = "SHYX Information";
 constexpr int kCollapseMs = 8000;
 constexpr int kHistoryLimit = 30;
-constexpr int kChipMinWidth = 72;
+constexpr int kChipMinWidth = 140;
 constexpr int kChipMaxWidth = 560;
 constexpr int kProgressReserve = 380;
 constexpr int kPopupLabelWidth = 480;
@@ -110,16 +111,19 @@ bool pqSHYXStatusNotifier::ensureInstalled()
     this->Button->setPopupMode(QToolButton::InstantPopup);
     this->Button->setFocusPolicy(Qt::NoFocus);
     this->Button->setCursor(Qt::PointingHandCursor);
-    this->Button->setStyleSheet(QStringLiteral("QToolButton::menu-indicator { image: none; }"));
-    this->Button->setText(QStringLiteral("SHYX"));
+    this->Button->setStyleSheet(QStringLiteral(
+      "QToolButton { text-align: left; padding-left: 4px; }"
+      "QToolButton::menu-indicator { image: none; }"));
+    this->Button->setText(QString::fromUtf8(kCollapsedLabel));
     this->Button->setToolTip(
-      tr("SHYX notices. Click to show recent messages; click elsewhere to close."));
+      tr("SHYX Information. Click to show recent messages; click elsewhere to close."));
 
     this->Menu = new QMenu(this->Button);
     this->Menu->setObjectName(QStringLiteral("SHYXStatusMenu"));
     this->Button->setMenu(this->Menu);
-    // Leftmost permanent widget: immediately left of pqProgressWidget.
-    bar->insertPermanentWidget(0, this->Button, 0);
+    // Non-permanent: left side of the status bar (permanent widgets sit on the right).
+    bar->insertWidget(0, this->Button, 0);
+    this->Button->show();
   }
 
   if (this->Menu)
@@ -172,13 +176,14 @@ void pqSHYXStatusNotifier::applyChipText(const QString& text, bool expanded)
   {
     return;
   }
+  this->Button->show();
 
   if (!expanded)
   {
     this->Button->setMaximumWidth(QWIDGETSIZE_MAX);
-    this->Button->setText(QStringLiteral("SHYX"));
+    this->Button->setText(text.isEmpty() ? QString::fromUtf8(kCollapsedLabel) : text);
     this->Button->setToolTip(this->LastMessage.isEmpty()
-        ? tr("SHYX notices. Click to show recent messages.")
+        ? tr("SHYX Information. Click to show recent messages.")
         : this->LastMessage);
     this->Button->updateGeometry();
     return;
@@ -210,7 +215,7 @@ void pqSHYXStatusNotifier::rebuildMenu()
   layout->setContentsMargins(10, 8, 10, 8);
   layout->setSpacing(6);
 
-  auto* title = new QLabel(tr("Recent SHYX notices"), wrap);
+  auto* title = new QLabel(tr("SHYX Information"), wrap);
   QFont titleFont = title->font();
   titleFont.setBold(true);
   title->setFont(titleFont);
@@ -242,5 +247,5 @@ void pqSHYXStatusNotifier::rebuildMenu()
 //-----------------------------------------------------------------------------
 void pqSHYXStatusNotifier::collapseChip()
 {
-  this->applyChipText(QStringLiteral("SHYX"), /*expanded=*/false);
+  this->applyChipText(QString::fromUtf8(kCollapsedLabel), /*expanded=*/false);
 }

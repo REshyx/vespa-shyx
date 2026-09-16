@@ -1763,7 +1763,7 @@ QString describeClientTool(const QString& query)
       "  Requires an existing cell selection\n"
       "  Grows by one ring of edge-adjacent faces with normal-normal angle <= threshold\n"
       "  Click once: one ring; press-and-hold: keep growing until no more similar neighbors\n"
-      "  Status notices appear on the SHYX chip left of the ParaView progress bar (not Output Messages)\n"
+      "  Status notices appear on the SHYX chip at the left of the ParaView status bar (not Output Messages)\n"
       "RenderView context menu (when a cell selection is active):\n"
       "  Select Similar → By Normal: grow ALL similar rings in one action (not one click per ring)\n")
       .arg(deg, 0, 'g', 4);
@@ -1798,7 +1798,7 @@ QString describeClientTool(const QString& query)
       "  Disconnected components that do not touch the selection are left unselected\n"
       "  If the mesh is a single connected component of that entity type, this selects all of them\n"
       "  Menu name is Select Connected, not Select All: it does not select the whole mesh\n"
-      "  Result counts are shown on the SHYX status chip left of the progress bar, not Output Messages\n");
+      "  Result counts are shown on the SHYX status chip at the left of the status bar, not Output Messages\n");
   }
   if (invertSel && !sphere && !grow && !selectBlock)
   {

@@ -4,25 +4,21 @@
 #include "vtkPointLabelRepresentation.h"
 
 #include "vtkActor.h"
-#include "vtkActor2D.h"
 #include "vtkAlgorithmOutput.h"
-#include "vtkBillboardTextActor3D.h"
 #include "vtkCallbackCommand.h"
 #include "vtkCommand.h"
 #include "vtkCellArray.h"
 #include "vtkCellType.h"
 #include "vtkDataSet.h"
+#include "vtkFastLabeledDataMapper.h"
 #include "vtkIdList.h"
 #include "vtkInformation.h"
 #include "vtkMapper.h"
 #include "vtkPoints.h"
 #include "vtkPointData.h"
 #include "vtkPolyData.h"
-#include "vtkPolyDataMapper.h"
-#include "vtkPropCollection.h"
 #include "vtkProperty.h"
 #include "vtkUnstructuredGrid.h"
-#include "vtkLabeledDataMapper.h"
 #include "vtkMaskPoints.h"
 #include "vtkMergeBlocks.h"
 #include "vtkObjectFactory.h"
@@ -31,7 +27,6 @@
 #include "vtkPVView.h"
 #include "vtkRenderer.h"
 #include "vtkTextProperty.h"
-#include "vtkTransform.h"
 
 #include <cstring>
 #include <set>
@@ -45,37 +40,6 @@ bool IsExplicitNoneArray(const char* s)
 {
   return s && (strcmp(s, "None") == 0 || strcmp(s, "(null)") == 0);
 }
-
-/**
- * Exposes BuildLabels so occluded (3D billboard) mode can reuse vtkLabeledDataMapper formatting
- * without going through the 2D overlay render path.
- */
-class vtkPointLabelDataMapper : public vtkLabeledDataMapper
-{
-public:
-  static vtkPointLabelDataMapper* New();
-  vtkTypeMacro(vtkPointLabelDataMapper, vtkLabeledDataMapper);
-
-  void RebuildLabels()
-  {
-    this->Update();
-    if (!this->GetInputDataObject(0, 0))
-    {
-      this->NumberOfLabels = 0;
-      return;
-    }
-    this->BuildLabels();
-  }
-
-protected:
-  vtkPointLabelDataMapper() = default;
-  ~vtkPointLabelDataMapper() override = default;
-
-private:
-  vtkPointLabelDataMapper(const vtkPointLabelDataMapper&) = delete;
-  void operator=(const vtkPointLabelDataMapper&) = delete;
-};
-vtkStandardNewMacro(vtkPointLabelDataMapper);
 
 /**
  * Build a polydata whose points are exactly those referenced by vertex cells: vtkPolyData::verts
@@ -304,15 +268,23 @@ vtkPointLabelRepresentation::vtkPointLabelRepresentation()
   this->PointMask->RandomModeOff();
   this->PointMask->SetRandomModeType(vtkMaskPoints::RANDOM_SAMPLING);
 
-  this->LabelMapper = vtkPointLabelDataMapper::New();
+  this->LabelMapper = vtkFastLabeledDataMapper::New();
   this->LabelMapper->SetInputConnection(this->PointMask->GetOutputPort());
-  this->LabelMapper->SetLabelMode(VTK_LABEL_FIELD_DATA);
-  this->LabelMapper->CoordinateSystemWorld();
+  this->LabelMapper->SetLabelModeToLabelFieldData();
+  this->LabelMapper->SetTextAnchor(vtkFastLabeledDataMapper::Center);
 
-  this->LabelActor = vtkActor2D::New();
+  this->LabelActor = vtkActor::New();
   this->LabelActor->SetMapper(this->LabelMapper);
   this->LabelActor->SetVisibility(0);
   this->LabelActor->PickableOff();
+  this->LabelActor->ForceTranslucentOn();
+  if (vtkProperty* ap = this->LabelActor->GetProperty())
+  {
+    ap->LightingOff();
+    ap->SetAmbient(1.0);
+    ap->SetDiffuse(0.0);
+    ap->SetSpecular(0.0);
+  }
 
   this->LabelProperty = vtkTextProperty::New();
   this->LabelProperty->SetFontSize(14);
@@ -320,12 +292,6 @@ vtkPointLabelRepresentation::vtkPointLabelRepresentation()
   this->LabelProperty->SetBold(0);
   this->LabelProperty->SetItalic(0);
   this->LabelMapper->SetLabelTextProperty(this->LabelProperty);
-
-  this->LabelTransform = vtkTransform::New();
-  this->LabelTransform->Identity();
-  this->LabelMapper->SetTransform(this->LabelTransform);
-
-  this->TransformHelperProp = vtkActor::New();
 
   this->WarningObserver = vtkCallbackCommand::New();
   this->WarningObserver->SetCallback(&vtkPointLabelRepresentation::OnWarningEvent);
@@ -347,15 +313,14 @@ vtkPointLabelRepresentation::~vtkPointLabelRepresentation()
     this->WarningObserver->Delete();
     this->WarningObserver = nullptr;
   }
-  this->BillboardActors.clear();
   this->MainRenderer = nullptr;
+  this->OverlayRenderer = nullptr;
+  this->CachedDataSet = nullptr;
   this->MergeBlocks->Delete();
   this->PointMask->Delete();
   this->LabelMapper->Delete();
   this->LabelActor->Delete();
   this->LabelProperty->Delete();
-  this->LabelTransform->Delete();
-  this->TransformHelperProp->Delete();
 }
 
 //------------------------------------------------------------------------------
@@ -395,7 +360,6 @@ void vtkPointLabelRepresentation::SetVisibility(bool val)
   if (!this->ShouldDrawLabels())
   {
     this->LabelActor->VisibilityOff();
-    this->HideOccludedLabelActors();
   }
 }
 
@@ -485,50 +449,19 @@ void vtkPointLabelRepresentation::SetDepthOffset(double units)
     return;
   }
   this->DepthOffset = units;
-  this->ApplyDepthOffsetToAllBillboards();
+  this->ApplyDepthOffset();
   this->Modified();
 }
 
 //------------------------------------------------------------------------------
-void vtkPointLabelRepresentation::ApplyDepthOffsetToBillboard(vtkBillboardTextActor3D* bb)
+void vtkPointLabelRepresentation::ApplyDepthOffset()
 {
-  if (!bb)
+  if (!this->LabelMapper)
   {
     return;
   }
-  const bool wasVisible = bb->GetVisibility() != 0;
-  bb->VisibilityOn();
-  vtkNew<vtkPropCollection> props;
-  bb->GetActors(props);
-  vtkActor* quadActor = vtkActor::SafeDownCast(props->GetItemAsObject(0));
-  if (!wasVisible)
-  {
-    bb->SetVisibility(0);
-  }
-  if (!quadActor)
-  {
-    return;
-  }
-  quadActor->PickableOff();
-  if (vtkProperty* prop = quadActor->GetProperty())
-  {
-    prop->LightingOff();
-  }
-  if (vtkMapper* mapper = quadActor->GetMapper())
-  {
-    // Same mechanism as Surface-With-Edges line offset / selection highlight: negative units pull
-    // toward the camera to reduce z-fighting with coincident surface geometry.
-    mapper->SetRelativeCoincidentTopologyPolygonOffsetParameters(0.0, this->DepthOffset);
-  }
-}
-
-//------------------------------------------------------------------------------
-void vtkPointLabelRepresentation::ApplyDepthOffsetToAllBillboards()
-{
-  for (auto& bb : this->BillboardActors)
-  {
-    this->ApplyDepthOffsetToBillboard(bb);
-  }
+  const double units = (this->OccludeLabels != 0) ? this->DepthOffset : 0.0;
+  this->LabelMapper->SetRelativeCoincidentTopologyPolygonOffsetParameters(0.0, units);
 }
 
 //------------------------------------------------------------------------------
@@ -554,22 +487,16 @@ void vtkPointLabelRepresentation::ConfigurePointMaskSampling(vtkIdType numberOfI
 //------------------------------------------------------------------------------
 void vtkPointLabelRepresentation::SetLabelSource(vtkDataSet* source)
 {
-  if (!source || !this->LabelMapper)
+  if (!source || !this->LabelMapper || !this->PointMask)
   {
     return;
   }
   const vtkIdType n = source->GetNumberOfPoints();
   this->ConfigurePointMaskSampling(n);
-  // Bypass MaskPoints entirely when every point should be labeled — avoids filter undersampling.
-  if (n <= this->MaximumNumberOfLabels)
-  {
-    this->LabelMapper->SetInputData(source);
-  }
-  else
-  {
-    this->PointMask->SetInputData(source);
-    this->LabelMapper->SetInputConnection(this->PointMask->GetOutputPort());
-  }
+  // Always wire through a port: vtkFastLabeledDataMapper::RenderPiece restores
+  // GetInputConnection and drops a pure SetInputData path.
+  this->PointMask->SetInputData(source);
+  this->LabelMapper->SetInputConnection(this->PointMask->GetOutputPort());
 }
 
 //------------------------------------------------------------------------------
@@ -594,30 +521,42 @@ void vtkPointLabelRepresentation::SetMaximumNumberOfLabels(int n)
 //------------------------------------------------------------------------------
 void vtkPointLabelRepresentation::UpdateLabelTransform()
 {
-  if (!this->Actor || !this->TransformHelperProp || !this->LabelTransform)
+  if (!this->Actor || !this->LabelActor)
   {
     return;
   }
-  this->TransformHelperProp->SetOrientation(this->Actor->GetOrientation());
-  this->TransformHelperProp->SetOrigin(this->Actor->GetOrigin());
-  this->TransformHelperProp->SetPosition(this->Actor->GetPosition());
-  this->TransformHelperProp->SetScale(this->Actor->GetScale());
-  this->TransformHelperProp->SetUserTransform(this->Actor->GetUserTransform());
-  double elements[16];
-  this->TransformHelperProp->GetMatrix(elements);
-  this->LabelTransform->SetMatrix(elements);
+  this->LabelActor->SetOrientation(this->Actor->GetOrientation());
+  this->LabelActor->SetOrigin(this->Actor->GetOrigin());
+  this->LabelActor->SetPosition(this->Actor->GetPosition());
+  this->LabelActor->SetScale(this->Actor->GetScale());
+  this->LabelActor->SetUserTransform(this->Actor->GetUserTransform());
 }
 
 //------------------------------------------------------------------------------
-void vtkPointLabelRepresentation::HideOccludedLabelActors()
+void vtkPointLabelRepresentation::PlaceLabelActor()
 {
-  for (auto& bb : this->BillboardActors)
+  vtkRenderer* want = nullptr;
+  if (this->OccludeLabels != 0)
   {
-    if (bb)
-    {
-      bb->VisibilityOff();
-    }
+    want = this->MainRenderer;
   }
+  else
+  {
+    want = this->OverlayRenderer;
+  }
+  if (this->MainRenderer && this->MainRenderer != want)
+  {
+    this->MainRenderer->RemoveActor(this->LabelActor);
+  }
+  if (this->OverlayRenderer && this->OverlayRenderer != want)
+  {
+    this->OverlayRenderer->RemoveActor(this->LabelActor);
+  }
+  if (want)
+  {
+    want->AddActor(this->LabelActor);
+  }
+  this->ApplyDepthOffset();
 }
 
 //------------------------------------------------------------------------------
@@ -633,65 +572,6 @@ void vtkPointLabelRepresentation::UpdateColoringParameters()
     {
       this->Property->SetRepresentation(VTK_SURFACE);
     }
-  }
-}
-
-//------------------------------------------------------------------------------
-void vtkPointLabelRepresentation::SyncOccludedLabelActors()
-{
-  auto* mapper = vtkPointLabelDataMapper::SafeDownCast(this->LabelMapper);
-  if (!mapper || !this->MainRenderer)
-  {
-    this->HideOccludedLabelActors();
-    return;
-  }
-
-  // LabelMapper input is set by SetLabelSource (direct data or MaskPoints).
-  mapper->RebuildLabels();
-
-  const int nLabels = mapper->GetNumberOfLabels();
-  while (static_cast<int>(this->BillboardActors.size()) < nLabels)
-  {
-    vtkSmartPointer<vtkBillboardTextActor3D> bb = vtkSmartPointer<vtkBillboardTextActor3D>::New();
-    bb->SetTextProperty(this->LabelProperty);
-    bb->PickableOff();
-    this->ApplyDepthOffsetToBillboard(bb);
-    // Add directly to the main renderer. Do NOT wrap in vtkPropAssembly: assembly PokeMatrix
-    // clears Prop3D Position to 0 while BillboardTextActor3D builds quads from GetPosition().
-    this->MainRenderer->AddActor(bb);
-    this->BillboardActors.push_back(bb);
-  }
-
-  for (int i = 0; i < nLabels; ++i)
-  {
-    vtkBillboardTextActor3D* bb = this->BillboardActors[static_cast<size_t>(i)];
-    const char* text = mapper->GetLabelText(i);
-    if (!text || !text[0])
-    {
-      bb->VisibilityOff();
-      continue;
-    }
-
-    double pos[3];
-    mapper->GetLabelPosition(i, pos);
-    if (this->LabelTransform)
-    {
-      double world[3];
-      this->LabelTransform->TransformPoint(pos, world);
-      bb->SetPosition(world);
-    }
-    else
-    {
-      bb->SetPosition(pos);
-    }
-    bb->SetInput(text);
-    bb->SetTextProperty(this->LabelProperty);
-    bb->VisibilityOn();
-  }
-
-  for (size_t i = static_cast<size_t>(nLabels); i < this->BillboardActors.size(); ++i)
-  {
-    this->BillboardActors[i]->VisibilityOff();
   }
 }
 
@@ -736,10 +616,9 @@ bool vtkPointLabelRepresentation::AddToView(vtkView* view)
   vtkPVRenderView* rview = vtkPVRenderView::SafeDownCast(view);
   if (rview)
   {
-    // Overlay path (no occlusion): non-composited 2D labels.
-    rview->GetNonCompositedRenderer()->AddActor(this->LabelActor);
-    // Occlusion path: 3D billboards added to MainRenderer in SyncOccludedLabelActors.
+    this->OverlayRenderer = rview->GetNonCompositedRenderer();
     this->MainRenderer = rview->GetRenderer();
+    this->PlaceLabelActor();
   }
   return this->Superclass::AddToView(view);
 }
@@ -750,19 +629,17 @@ bool vtkPointLabelRepresentation::RemoveFromView(vtkView* view)
   vtkPVRenderView* rview = vtkPVRenderView::SafeDownCast(view);
   if (rview)
   {
-    rview->GetNonCompositedRenderer()->RemoveActor(this->LabelActor);
+    if (this->OverlayRenderer)
+    {
+      this->OverlayRenderer->RemoveActor(this->LabelActor);
+    }
     if (this->MainRenderer)
     {
-      for (auto& bb : this->BillboardActors)
-      {
-        if (bb)
-        {
-          this->MainRenderer->RemoveActor(bb);
-        }
-      }
+      this->MainRenderer->RemoveActor(this->LabelActor);
     }
-    this->BillboardActors.clear();
+    this->OverlayRenderer = nullptr;
     this->MainRenderer = nullptr;
+    this->CachedDataSet = nullptr;
   }
   return this->Superclass::RemoveFromView(view);
 }
@@ -778,10 +655,11 @@ int vtkPointLabelRepresentation::ProcessViewRequest(
 
   if (request_type == vtkPVView::REQUEST_RENDER())
   {
+    this->PlaceLabelActor();
     if (!this->ShouldDrawLabels())
     {
       this->LabelActor->VisibilityOff();
-      this->HideOccludedLabelActors();
+      this->CachedDataSet = nullptr;
       return 1;
     }
 
@@ -789,7 +667,7 @@ int vtkPointLabelRepresentation::ProcessViewRequest(
     if (!producerPort)
     {
       this->LabelActor->VisibilityOff();
-      this->HideOccludedLabelActors();
+      this->CachedDataSet = nullptr;
       return 1;
     }
 
@@ -801,7 +679,17 @@ int vtkPointLabelRepresentation::ProcessViewRequest(
     if (!eff)
     {
       this->LabelActor->VisibilityOff();
-      this->HideOccludedLabelActors();
+      this->CachedDataSet = nullptr;
+      return 1;
+    }
+
+    const vtkMTimeType dataMTime = merged ? merged->GetMTime() : 0;
+    const vtkMTimeType propMTime = this->GetMTime();
+    if (this->CachedDataSet == merged && dataMTime == this->CachedDataMTime &&
+      propMTime == this->CachedPropMTime)
+    {
+      this->UpdateLabelTransform();
+      this->LabelActor->SetVisibility(1);
       return 1;
     }
 
@@ -813,7 +701,7 @@ int vtkPointLabelRepresentation::ProcessViewRequest(
       if (!vertexPd || vertexPd->GetNumberOfPoints() == 0)
       {
         this->LabelActor->VisibilityOff();
-        this->HideOccludedLabelActors();
+        this->CachedDataSet = nullptr;
         return 1;
       }
       nLabelPoints = vertexPd->GetNumberOfPoints();
@@ -828,27 +716,18 @@ int vtkPointLabelRepresentation::ProcessViewRequest(
     if (!labelSource || nLabelPoints == 0)
     {
       this->LabelActor->VisibilityOff();
-      this->HideOccludedLabelActors();
+      this->CachedDataSet = nullptr;
       return 1;
     }
 
     this->SetLabelSource(labelSource);
-
     this->LabelMapper->SetFieldDataName(eff);
-    this->LabelMapper->SetLabelMode(VTK_LABEL_FIELD_DATA);
-
+    this->LabelMapper->SetLabelModeToLabelFieldData();
     this->UpdateLabelTransform();
-
-    if (this->OccludeLabels != 0)
-    {
-      this->LabelActor->VisibilityOff();
-      this->SyncOccludedLabelActors();
-    }
-    else
-    {
-      this->HideOccludedLabelActors();
-      this->LabelActor->SetVisibility(1);
-    }
+    this->LabelActor->SetVisibility(1);
+    this->CachedDataSet = merged;
+    this->CachedDataMTime = dataMTime;
+    this->CachedPropMTime = propMTime;
   }
 
   return 1;

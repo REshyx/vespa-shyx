@@ -4,7 +4,6 @@
 #include "vtkSHYXGraphRepresentation.h"
 
 #include "vtkActor.h"
-#include "vtkActor2D.h"
 #include "vtkAlgorithmOutput.h"
 #include "vtkCallbackCommand.h"
 #include "vtkCellArray.h"
@@ -17,12 +16,12 @@
 #include "vtkDataSet.h"
 #include "vtkExtractCells.h"
 #include "vtkExtractEdges.h"
+#include "vtkFastLabeledDataMapper.h"
 #include "vtkGenerateIds.h"
 #include "vtkGeometryFilter.h"
 #include "vtkIdList.h"
 #include "vtkInformation.h"
 #include "vtkInformationVector.h"
-#include "vtkLabeledDataMapper.h"
 #include "vtkMaskPoints.h"
 #include "vtkMath.h"
 #include "vtkMergeBlocks.h"
@@ -351,25 +350,20 @@ void ConfigureMask(vtkMaskPoints* mask, vtkIdType n, int maxLabels)
   }
 }
 
-void SetLabelInput(vtkLabeledDataMapper* mapper, vtkMaskPoints* mask, vtkDataSet* source,
+void SetLabelInput(vtkFastLabeledDataMapper* mapper, vtkMaskPoints* mask, vtkDataSet* source,
   int maxLabels, const char* arrayName, const char* format)
 {
-  if (!mapper || !source)
+  if (!mapper || !source || !mask)
   {
     return;
   }
   const vtkIdType n = source->GetNumberOfPoints();
   ConfigureMask(mask, n, maxLabels);
-  if (n <= maxLabels)
-  {
-    mapper->SetInputData(source);
-  }
-  else if (mask)
-  {
-    mask->SetInputData(source);
-    mapper->SetInputConnection(mask->GetOutputPort());
-  }
-  mapper->SetLabelMode(VTK_LABEL_FIELD_DATA);
+  // Always wire through a port: vtkFastLabeledDataMapper::RenderPiece restores
+  // GetInputConnection and drops a pure SetInputData path.
+  mask->SetInputData(source);
+  mapper->SetInputConnection(mask->GetOutputPort());
+  mapper->SetLabelModeToLabelFieldData();
   mapper->SetFieldDataName(arrayName);
   if (format && format[0])
   {
@@ -443,6 +437,11 @@ vtkSHYXGraphRepresentation::vtkSHYXGraphRepresentation()
   this->MergeBlocks->SetMergePoints(false);
   this->MergeBlocks->SetOutputDataSetType(VTK_UNSTRUCTURED_GRID);
 
+  this->GenerateIds = vtkGenerateIds::New();
+  this->GenerateIds->PointIdsOn();
+  this->GenerateIds->CellIdsOn();
+  this->GenerateIds->FieldDataOff();
+
   this->LayerTransform = vtkTransform::New();
   this->LayerTransform->Identity();
   this->TransformHelperProp = vtkActor::New();
@@ -451,17 +450,16 @@ vtkSHYXGraphRepresentation::vtkSHYXGraphRepresentation()
   this->WarningObserver->SetCallback(&vtkSHYXGraphRepresentation::OnWarningEvent);
   this->WarningObserver->SetClientData(this);
 
-  auto makeLabel = [this](vtkLabeledDataMapper*& mapper, vtkActor2D*& actor, vtkTextProperty*& prop,
+  auto makeLabel = [this](vtkFastLabeledDataMapper*& mapper, vtkActor*& actor, vtkTextProperty*& prop,
                       vtkMaskPoints*& mask) {
     mask = vtkMaskPoints::New();
     mask->SetOnRatio(1);
     mask->SetMaximumNumberOfPoints(this->MaximumNumberOfLabels);
     mask->RandomModeOff();
-    mapper = vtkLabeledDataMapper::New();
+    mapper = vtkFastLabeledDataMapper::New();
     mapper->SetInputConnection(mask->GetOutputPort());
-    mapper->SetLabelMode(VTK_LABEL_FIELD_DATA);
-    mapper->CoordinateSystemWorld();
-    mapper->SetTransform(this->LayerTransform);
+    mapper->SetLabelModeToLabelFieldData();
+    mapper->SetTextAnchor(vtkFastLabeledDataMapper::Center);
     mapper->AddObserver(vtkCommand::WarningEvent, this->WarningObserver);
     prop = vtkTextProperty::New();
     prop->SetFontSize(this->LabelFontSize);
@@ -469,10 +467,18 @@ vtkSHYXGraphRepresentation::vtkSHYXGraphRepresentation()
     prop->SetJustificationToCentered();
     prop->SetVerticalJustificationToCentered();
     mapper->SetLabelTextProperty(prop);
-    actor = vtkActor2D::New();
+    actor = vtkActor::New();
     actor->SetMapper(mapper);
     actor->SetVisibility(0);
     actor->PickableOff();
+    actor->ForceTranslucentOn();
+    if (vtkProperty* ap = actor->GetProperty())
+    {
+      ap->LightingOff();
+      ap->SetAmbient(1.0);
+      ap->SetDiffuse(0.0);
+      ap->SetSpecular(0.0);
+    }
   };
 
   makeLabel(this->VertexLabelMapper, this->VertexLabelActor, this->VertexLabelProperty,
@@ -536,7 +542,7 @@ vtkSHYXGraphRepresentation::~vtkSHYXGraphRepresentation()
   this->SetVolumeArray(nullptr);
   this->SetLabelFormat(nullptr);
 
-  auto dropObs = [this](vtkLabeledDataMapper* m) {
+  auto dropObs = [this](vtkFastLabeledDataMapper* m) {
     if (m && this->WarningObserver)
     {
       m->RemoveObservers(vtkCommand::WarningEvent, this->WarningObserver);
@@ -554,6 +560,7 @@ vtkSHYXGraphRepresentation::~vtkSHYXGraphRepresentation()
   }
 
   this->MergeBlocks->Delete();
+  this->GenerateIds->Delete();
   this->LayerTransform->Delete();
   this->TransformHelperProp->Delete();
 
@@ -828,6 +835,10 @@ void vtkSHYXGraphRepresentation::UpdateLayerTransforms()
   CopyXform(this->FaceActor, this->Actor);
   CopyXform(this->VolumeFaceActor, this->Actor);
   CopyXform(this->VolumeEdgeActor, this->Actor);
+  CopyXform(this->VertexLabelActor, this->Actor);
+  CopyXform(this->LineLabelActor, this->Actor);
+  CopyXform(this->FaceLabelActor, this->Actor);
+  CopyXform(this->VolumeLabelActor, this->Actor);
 }
 
 //------------------------------------------------------------------------------
@@ -926,13 +937,9 @@ void vtkSHYXGraphRepresentation::RebuildFromData(vtkDataSet* ds)
   {
     return;
   }
-  vtkNew<vtkGenerateIds> genIds;
-  genIds->SetInputData(ds);
-  genIds->PointIdsOn();
-  genIds->CellIdsOn();
-  genIds->FieldDataOff();
-  genIds->Update();
-  if (vtkDataSet* withIds = vtkDataSet::SafeDownCast(genIds->GetOutputDataObject(0)))
+  this->GenerateIds->SetInputData(ds);
+  this->GenerateIds->Update();
+  if (vtkDataSet* withIds = vtkDataSet::SafeDownCast(this->GenerateIds->GetOutputDataObject(0)))
   {
     ds = withIds;
   }
@@ -947,7 +954,7 @@ void vtkSHYXGraphRepresentation::RebuildFromData(vtkDataSet* ds)
   const double diag = std::sqrt(dx * dx + dy * dy + dz * dz);
   const double radius = (diag > 0.0 ? 0.012 * diag : 1.0) * (this->VertexScale > 0.0 ? this->VertexScale : 1.0);
 
-  auto wireLabels = [this](vtkLabeledDataMapper* mapper, vtkMaskPoints* mask, vtkActor2D* actor,
+  auto wireLabels = [this](vtkFastLabeledDataMapper* mapper, vtkMaskPoints* mask, vtkActor* actor,
                       vtkDataSet* labelPts, const char* arrayName, bool preferPoint) {
     if (!labelPts || labelPts->GetNumberOfPoints() < 1)
     {
@@ -1062,6 +1069,7 @@ int vtkSHYXGraphRepresentation::ProcessViewRequest(
   if (!this->Superclass::ProcessViewRequest(request_type, inInfo, outInfo))
   {
     this->HideAllLayers();
+    this->CachedDataSet = nullptr;
     return 0;
   }
 
@@ -1085,6 +1093,7 @@ int vtkSHYXGraphRepresentation::ProcessViewRequest(
     if (!graphPort)
     {
       this->HideAllLayers();
+      this->CachedDataSet = nullptr;
       return 1;
     }
 
@@ -1100,9 +1109,22 @@ int vtkSHYXGraphRepresentation::ProcessViewRequest(
     if (!ds)
     {
       this->HideAllLayers();
+      this->CachedDataSet = nullptr;
+      return 1;
+    }
+
+    const vtkMTimeType dataMTime = ds->GetMTime();
+    const vtkMTimeType propMTime = this->GetMTime();
+    if (this->CachedDataSet == ds && dataMTime == this->CachedDataMTime &&
+      propMTime == this->CachedPropMTime)
+    {
+      this->UpdateLayerTransforms();
       return 1;
     }
     this->RebuildFromData(ds);
+    this->CachedDataSet = ds;
+    this->CachedDataMTime = ds->GetMTime();
+    this->CachedPropMTime = this->GetMTime();
   }
 
   return 1;
