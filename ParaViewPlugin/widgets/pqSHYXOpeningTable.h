@@ -46,6 +46,7 @@ private:
     bool rowEligibleForColumn(int row, int col) const;
     void toggleColumnChecks(int col);
     void refreshHeader();
+    void refreshItems();
 
     QStandardItemModel* Model = nullptr;
     QTreeView* View = nullptr;
@@ -55,6 +56,7 @@ private:
 
     bool UpdatingFromDynamicProperty = false;
     bool UpdatingFromUI = false;
+    bool UpdatingFromColumnToggle = false;
 };
 
 #endif

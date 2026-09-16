@@ -13,6 +13,8 @@
 - **Extract branches**：`CenterlineIds`、`TractIds`、`GroupIds`、`Blanking`（面向 Voronoi 重叠路径；Network 会丢掉 `Topology`）
 - **Compute geometry**：`Length` / `Curvature` / `Torsion` / `Tortuosity` 与 Frenet 三轴
 
+要把多条重叠的源→汇路径合成共享顶点的树，或对重叠线做 polyball（不 Merge 时胯部更圆），不要在这里勾 Extract branches，把端口 0 接到 [Centerline Merge](../VmtkCenterlineMerge/README.md)。
+
 参数见同目录 `SHYXVmtkOpeningCenterlines.xml`。
 
 ## 端口 0 数组含义

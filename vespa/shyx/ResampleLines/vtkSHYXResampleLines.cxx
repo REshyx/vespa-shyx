@@ -1,7 +1,9 @@
 #include "vtkSHYXResampleLines.h"
 
+#include "vtkAbstractArray.h"
 #include "vtkBoundingBox.h"
 #include "vtkCellArray.h"
+#include "vtkCellData.h"
 #include "vtkCellType.h"
 #include "vtkCleanPolyData.h"
 #include "vtkDataObject.h"
@@ -14,9 +16,12 @@
 #include "vtkPointData.h"
 #include "vtkPoints.h"
 #include "vtkPolyData.h"
+#include "vtkSmartPointer.h"
+#include "vtkStaticCellLocator.h"
 
 #include <algorithm>
 #include <cmath>
+#include <cstddef>
 #include <set>
 #include <utility>
 #include <vector>
@@ -360,6 +365,614 @@ void ResampleBranch(vtkPoints* inPts, vtkPointData* inPD, vtkPoints* outPts, vtk
   cellIds.push_back(MapFeature(inPts, inPD, outPts, outPD, featureOut, br.ids.back()));
   AppendPolyline(outLines, cellIds);
 }
+
+double Dist2ToSegment(
+  const double x[3], const double a[3], const double b[3], double closest[3], double* t)
+{
+  const double ab[3] = { b[0] - a[0], b[1] - a[1], b[2] - a[2] };
+  const double ax[3] = { x[0] - a[0], x[1] - a[1], x[2] - a[2] };
+  const double ab2 = vtkMath::Dot(ab, ab);
+  if (ab2 <= 0.0)
+  {
+    *t = 0.0;
+    closest[0] = a[0];
+    closest[1] = a[1];
+    closest[2] = a[2];
+    return vtkMath::Distance2BetweenPoints(x, a);
+  }
+  *t = vtkMath::Dot(ax, ab) / ab2;
+  *t = std::max(0.0, std::min(1.0, *t));
+  closest[0] = a[0] + (*t) * ab[0];
+  closest[1] = a[1] + (*t) * ab[1];
+  closest[2] = a[2] + (*t) * ab[2];
+  return vtkMath::Distance2BetweenPoints(x, closest);
+}
+
+struct SegHit
+{
+  size_t poly = 0;
+  size_t seg = 0;
+  vtkIdType id0 = -1;
+  vtkIdType id1 = -1;
+  double t = 0.0;
+  double closest[3] = { 0.0, 0.0, 0.0 };
+  double dist2 = VTK_DOUBLE_MAX;
+};
+
+struct LineMergeState
+{
+  vtkPoints* pts = nullptr;
+  vtkPointData* pd = nullptr;
+  std::vector<std::vector<vtkIdType>> polys;
+  std::vector<vtkIdType> srcCells;
+  size_t nSnap = 0;
+};
+
+void GrowPointData(vtkPointData* pd, vtkIdType newId)
+{
+  if (!pd)
+  {
+    return;
+  }
+  const int n = pd->GetNumberOfArrays();
+  for (int i = 0; i < n; ++i)
+  {
+    vtkAbstractArray* arr = pd->GetAbstractArray(i);
+    if (arr && arr->GetNumberOfTuples() <= newId)
+    {
+      arr->SetNumberOfTuples(newId + 1);
+    }
+  }
+}
+
+bool SegmentBoxMayBeCloserThan(
+  const double p[3], const double a[3], const double b[3], double dist2Limit)
+{
+  double d2 = 0.0;
+  for (int i = 0; i < 3; ++i)
+  {
+    const double lo = std::min(a[i], b[i]);
+    const double hi = std::max(a[i], b[i]);
+    if (p[i] < lo)
+    {
+      const double d = lo - p[i];
+      d2 += d * d;
+    }
+    else if (p[i] > hi)
+    {
+      const double d = p[i] - hi;
+      d2 += d * d;
+    }
+    if (d2 > dist2Limit)
+    {
+      return false;
+    }
+  }
+  return true;
+}
+
+size_t CountAcceptedSegments(const LineMergeState& st)
+{
+  size_t n = 0;
+  const size_t nPolys = std::min(st.nSnap, st.polys.size());
+  for (size_t pi = 0; pi < nPolys; ++pi)
+  {
+    const size_t np = st.polys[pi].size();
+    if (np >= 2)
+    {
+      n += np - 1;
+    }
+  }
+  return n;
+}
+
+SegHit FindClosestOnAccepted(const double p[3], const LineMergeState& st)
+{
+  SegHit best;
+  const size_t nPolys = std::min(st.nSnap, st.polys.size());
+  for (size_t pi = 0; pi < nPolys; ++pi)
+  {
+    const std::vector<vtkIdType>& ids = st.polys[pi];
+    if (ids.size() < 2)
+    {
+      continue;
+    }
+    for (size_t s = 0; s + 1 < ids.size(); ++s)
+    {
+      double a[3], b[3], c[3];
+      st.pts->GetPoint(ids[s], a);
+      st.pts->GetPoint(ids[s + 1], b);
+      if (!SegmentBoxMayBeCloserThan(p, a, b, best.dist2))
+      {
+        continue;
+      }
+      double t = 0.0;
+      const double d2 = Dist2ToSegment(p, a, b, c, &t);
+      if (d2 < best.dist2)
+      {
+        best.dist2 = d2;
+        best.poly = pi;
+        best.seg = s;
+        best.id0 = ids[s];
+        best.id1 = ids[s + 1];
+        best.t = t;
+        best.closest[0] = c[0];
+        best.closest[1] = c[1];
+        best.closest[2] = c[2];
+      }
+    }
+  }
+  return best;
+}
+
+bool PointOnAccepted(const double p[3], const LineMergeState& st, double tol2)
+{
+  const size_t nPolys = std::min(st.nSnap, st.polys.size());
+  for (size_t pi = 0; pi < nPolys; ++pi)
+  {
+    const std::vector<vtkIdType>& ids = st.polys[pi];
+    if (ids.size() < 2)
+    {
+      continue;
+    }
+    for (size_t s = 0; s + 1 < ids.size(); ++s)
+    {
+      double a[3], b[3], c[3];
+      st.pts->GetPoint(ids[s], a);
+      st.pts->GetPoint(ids[s + 1], b);
+      if (!SegmentBoxMayBeCloserThan(p, a, b, tol2))
+      {
+        continue;
+      }
+      double t = 0.0;
+      if (Dist2ToSegment(p, a, b, c, &t) <= tol2)
+      {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+vtkSmartPointer<vtkStaticCellLocator> BuildAcceptedLocator(const LineMergeState& st, vtkPolyData* locPd)
+{
+  vtkNew<vtkCellArray> lines;
+  const size_t nPolys = std::min(st.nSnap, st.polys.size());
+  for (size_t pi = 0; pi < nPolys; ++pi)
+  {
+    const std::vector<vtkIdType>& ids = st.polys[pi];
+    if (ids.size() < 2)
+    {
+      continue;
+    }
+    lines->InsertNextCell(static_cast<vtkIdType>(ids.size()), ids.data());
+  }
+  locPd->Initialize();
+  locPd->SetPoints(st.pts);
+  locPd->SetLines(lines);
+  locPd->BuildCells();
+  vtkSmartPointer<vtkStaticCellLocator> loc = vtkSmartPointer<vtkStaticCellLocator>::New();
+  loc->SetDataSet(locPd);
+  loc->BuildLocator();
+  return loc;
+}
+
+bool LocatorPointOnAccepted(vtkStaticCellLocator* loc, const double p[3], double radius)
+{
+  if (!loc || radius < 0.0)
+  {
+    return false;
+  }
+  double q[3] = { p[0], p[1], p[2] };
+  double closest[3];
+  vtkIdType cellId = -1;
+  int subId = 0;
+  double dist2 = VTK_DOUBLE_MAX;
+  const vtkIdType hit = loc->FindClosestPointWithinRadius(q, radius, closest, cellId, subId, dist2);
+  return hit >= 0 && cellId >= 0 && dist2 <= radius * radius;
+}
+
+vtkIdType SnapOntoAccepted(const double p[3], LineMergeState& st)
+{
+  const SegHit hit = FindClosestOnAccepted(p, st);
+  if (hit.id0 < 0 || hit.id1 < 0)
+  {
+    const vtkIdType id = st.pts->InsertNextPoint(p);
+    GrowPointData(st.pd, id);
+    return id;
+  }
+  constexpr double tEps = 1e-8;
+  if (hit.t <= tEps)
+  {
+    return hit.id0;
+  }
+  if (hit.t >= 1.0 - tEps)
+  {
+    return hit.id1;
+  }
+  const vtkIdType newId = st.pts->InsertNextPoint(hit.closest);
+  GrowPointData(st.pd, newId);
+  if (st.pd)
+  {
+    st.pd->InterpolateEdge(st.pd, newId, hit.id0, hit.id1, hit.t);
+  }
+  st.polys[hit.poly].insert(st.polys[hit.poly].begin() + (hit.seg + 1), newId);
+  return newId;
+}
+
+void AppendUniqueId(std::vector<vtkIdType>& ids, vtkIdType id)
+{
+  if (ids.empty() || ids.back() != id)
+  {
+    ids.push_back(id);
+  }
+}
+
+void AcceptBranch(LineMergeState& st, std::vector<vtkIdType>&& branch, vtkIdType srcCell)
+{
+  if (branch.size() < 2)
+  {
+    return;
+  }
+  st.polys.push_back(std::move(branch));
+  st.srcCells.push_back(srcCell);
+}
+
+void FillIsolatedOffPoints(std::vector<char>& mask, bool closed)
+{
+  const int n = static_cast<int>(mask.size());
+  if (n < 3)
+  {
+    return;
+  }
+  std::vector<char> next = mask;
+  for (int i = 0; i < n; ++i)
+  {
+    if (mask[static_cast<size_t>(i)])
+    {
+      continue;
+    }
+    int prev = i - 1;
+    int nxt = i + 1;
+    if (closed)
+    {
+      prev = (i + n - 1) % n;
+      nxt = (i + 1) % n;
+    }
+    else if (i == 0 || i == n - 1)
+    {
+      continue;
+    }
+    if (mask[static_cast<size_t>(prev)] && mask[static_cast<size_t>(nxt)])
+    {
+      next[static_cast<size_t>(i)] = 1;
+    }
+  }
+  mask.swap(next);
+}
+
+bool MaskAllOn(const std::vector<char>& mask)
+{
+  return std::all_of(mask.begin(), mask.end(), [](char c) { return c != 0; });
+}
+
+bool MaskAllOff(const std::vector<char>& mask)
+{
+  return std::none_of(mask.begin(), mask.end(), [](char c) { return c != 0; });
+}
+
+void EmitSnappedBranch(LineMergeState& st, const std::vector<vtkIdType>& uid, int start, int count,
+  int nUnique, bool wrap, bool snapLeft, bool snapRight, vtkIdType srcCell)
+{
+  std::vector<vtkIdType> branch;
+  auto pointOf = [&](int idx) {
+    double p[3];
+    st.pts->GetPoint(uid[static_cast<size_t>(idx)], p);
+    return SnapOntoAccepted(p, st);
+  };
+  if (snapLeft)
+  {
+    const int left = wrap ? (start + nUnique - 1) % nUnique : start - 1;
+    AppendUniqueId(branch, pointOf(left));
+  }
+  for (int c = 0; c < count; ++c)
+  {
+    const int idx = wrap ? (start + c) % nUnique : start + c;
+    AppendUniqueId(branch, uid[static_cast<size_t>(idx)]);
+  }
+  if (snapRight)
+  {
+    const int right = wrap ? (start + count) % nUnique : start + count;
+    AppendUniqueId(branch, pointOf(right));
+  }
+  AcceptBranch(st, std::move(branch), srcCell);
+}
+
+void CollectFreeRuns(LineMergeState& st, const std::vector<vtkIdType>& uid, const std::vector<char>& mask,
+  bool closed, vtkIdType srcCell)
+{
+  const int n = static_cast<int>(uid.size());
+  if (n < 1)
+  {
+    return;
+  }
+  if (MaskAllOn(mask))
+  {
+    return;
+  }
+  if (MaskAllOff(mask))
+  {
+    std::vector<vtkIdType> branch = uid;
+    if (closed && branch.size() >= 2)
+    {
+      AppendUniqueId(branch, branch.front());
+    }
+    AcceptBranch(st, std::move(branch), srcCell);
+    return;
+  }
+
+  if (closed)
+  {
+    int origin = 0;
+    while (origin < n && !mask[static_cast<size_t>(origin)])
+    {
+      ++origin;
+    }
+    int k = 0;
+    while (k < n)
+    {
+      const int idx = (origin + k) % n;
+      if (mask[static_cast<size_t>(idx)])
+      {
+        ++k;
+        continue;
+      }
+      const int start = idx;
+      int count = 0;
+      while (k < n && !mask[static_cast<size_t>((origin + k) % n)])
+      {
+        ++count;
+        ++k;
+      }
+      EmitSnappedBranch(st, uid, start, count, n, true, true, true, srcCell);
+    }
+    return;
+  }
+
+  int i = 0;
+  while (i < n)
+  {
+    if (mask[static_cast<size_t>(i)])
+    {
+      ++i;
+      continue;
+    }
+    const int start = i;
+    while (i < n && !mask[static_cast<size_t>(i)])
+    {
+      ++i;
+    }
+    EmitSnappedBranch(st, uid, start, i - start, n, false, start > 0, i < n, srcCell);
+  }
+}
+
+vtkSmartPointer<vtkPolyData> EmitMergedPolylines(const LineMergeState& st, vtkCellData* inCD)
+{
+  vtkSmartPointer<vtkPolyData> out = vtkSmartPointer<vtkPolyData>::New();
+  vtkNew<vtkPoints> outPts;
+  outPts->SetDataType(st.pts ? st.pts->GetDataType() : VTK_DOUBLE);
+  vtkNew<vtkCellArray> outLines;
+  const vtkIdType nWork = st.pts ? st.pts->GetNumberOfPoints() : 0;
+  std::vector<vtkIdType> remap(static_cast<size_t>(std::max<vtkIdType>(nWork, 0)), -1);
+  out->SetPoints(outPts);
+  out->SetLines(outLines);
+  vtkPointData* outPD = out->GetPointData();
+  if (st.pd)
+  {
+    outPD->InterpolateAllocate(st.pd, nWork);
+  }
+  const vtkIdType nOutGuess = static_cast<vtkIdType>(st.polys.size());
+  if (inCD)
+  {
+    out->GetCellData()->CopyAllocate(inCD, nOutGuess);
+  }
+
+  vtkIdType oc = 0;
+  for (size_t i = 0; i < st.polys.size(); ++i)
+  {
+    const std::vector<vtkIdType>& ids = st.polys[i];
+    if (ids.size() < 2)
+    {
+      continue;
+    }
+    std::vector<vtkIdType> nid;
+    nid.reserve(ids.size());
+    for (vtkIdType id : ids)
+    {
+      if (id < 0 || id >= nWork)
+      {
+        continue;
+      }
+      const size_t idx = static_cast<size_t>(id);
+      if (remap[idx] < 0)
+      {
+        double q[3];
+        st.pts->GetPoint(id, q);
+        remap[idx] = outPts->InsertNextPoint(q);
+        if (st.pd)
+        {
+          outPD->CopyData(st.pd, id, remap[idx]);
+        }
+      }
+      AppendUniqueId(nid, remap[idx]);
+    }
+    if (nid.size() < 2)
+    {
+      continue;
+    }
+    outLines->InsertNextCell(static_cast<vtkIdType>(nid.size()), nid.data());
+    if (inCD && i < st.srcCells.size())
+    {
+      out->GetCellData()->CopyData(inCD, st.srcCells[i], oc);
+    }
+    ++oc;
+  }
+  outPts->Squeeze();
+  outLines->Squeeze();
+  outPD->Squeeze();
+  out->GetCellData()->Squeeze();
+  return out;
+}
+
+void MergeOnePolyline(
+  LineMergeState& st, const std::vector<vtkIdType>& ids, vtkIdType srcCell, double tolerance)
+{
+  if (ids.size() < 2)
+  {
+    return;
+  }
+  if (st.polys.empty())
+  {
+    st.polys.push_back(ids);
+    st.srcCells.push_back(srcCell);
+    st.nSnap = st.polys.size();
+    return;
+  }
+
+  st.nSnap = st.polys.size();
+  const bool closed = ids.size() >= 3 && ids.front() == ids.back();
+  const int nUnique = closed ? static_cast<int>(ids.size()) - 1 : static_cast<int>(ids.size());
+  if (nUnique < 1)
+  {
+    return;
+  }
+
+  const double tol2 = tolerance * tolerance;
+  vtkNew<vtkPolyData> locPd;
+  vtkSmartPointer<vtkStaticCellLocator> loc;
+  constexpr size_t kLocatorMinSegments = 32;
+  if (tolerance > 0.0 && CountAcceptedSegments(st) >= kLocatorMinSegments)
+  {
+    loc = BuildAcceptedLocator(st, locPd);
+  }
+
+  std::vector<vtkIdType> uid(ids.begin(), ids.begin() + nUnique);
+  std::vector<char> mask(static_cast<size_t>(nUnique), 0);
+  for (int i = 0; i < nUnique; ++i)
+  {
+    double p[3];
+    st.pts->GetPoint(uid[static_cast<size_t>(i)], p);
+    const bool on = loc ? LocatorPointOnAccepted(loc, p, tolerance) : PointOnAccepted(p, st, tol2);
+    mask[static_cast<size_t>(i)] = on ? 1 : 0;
+  }
+  FillIsolatedOffPoints(mask, closed);
+  CollectFreeRuns(st, uid, mask, closed, srcCell);
+}
+
+struct LineNetwork
+{
+  std::vector<std::vector<vtkIdType>> polys;
+  std::vector<vtkIdType> srcCells;
+};
+
+LineNetwork MergeNetworks(LineNetwork&& left, LineNetwork&& right, vtkPoints* pts, vtkPointData* pd,
+  double tolerance)
+{
+  if (left.polys.empty())
+  {
+    return std::move(right);
+  }
+  if (right.polys.empty())
+  {
+    return std::move(left);
+  }
+
+  LineMergeState st;
+  st.pts = pts;
+  st.pd = pd;
+  st.polys = std::move(left.polys);
+  st.srcCells = std::move(left.srcCells);
+  for (size_t i = 0; i < right.polys.size(); ++i)
+  {
+    const vtkIdType src = i < right.srcCells.size() ? right.srcCells[i] : -1;
+    MergeOnePolyline(st, right.polys[i], src, tolerance);
+  }
+
+  LineNetwork out;
+  out.polys = std::move(st.polys);
+  out.srcCells = std::move(st.srcCells);
+  return out;
+}
+
+vtkSmartPointer<vtkPolyData> MergeLaterPolylinesOntoEarlier(vtkPolyData* input, double tolerance)
+{
+  vtkSmartPointer<vtkPolyData> empty = vtkSmartPointer<vtkPolyData>::New();
+  if (!input || !input->GetPoints())
+  {
+    return empty;
+  }
+
+  vtkNew<vtkPoints> workPts;
+  workPts->DeepCopy(input->GetPoints());
+  vtkNew<vtkPointData> workPD;
+  workPD->DeepCopy(input->GetPointData());
+
+  std::vector<LineNetwork> level;
+  input->BuildCells();
+  const vtkIdType nCells = input->GetNumberOfCells();
+  for (vtkIdType c = 0; c < nCells; ++c)
+  {
+    const int type = input->GetCellType(c);
+    if (type != VTK_LINE && type != VTK_POLY_LINE)
+    {
+      continue;
+    }
+    vtkIdType npts = 0;
+    const vtkIdType* pts = nullptr;
+    input->GetCellPoints(c, npts, pts);
+    if (npts < 2 || !pts)
+    {
+      continue;
+    }
+    LineNetwork leaf;
+    leaf.polys.emplace_back(pts, pts + npts);
+    leaf.srcCells.push_back(c);
+    level.push_back(std::move(leaf));
+  }
+
+  while (level.size() > 1)
+  {
+    std::vector<LineNetwork> next;
+    next.reserve((level.size() + 1) / 2);
+    for (size_t i = 0; i < level.size(); i += 2)
+    {
+      if (i + 1 >= level.size())
+      {
+        next.push_back(std::move(level[i]));
+      }
+      else
+      {
+        next.push_back(MergeNetworks(
+          std::move(level[i]), std::move(level[i + 1]), workPts, workPD, tolerance));
+      }
+    }
+    level.swap(next);
+  }
+
+  LineMergeState st;
+  st.pts = workPts;
+  st.pd = workPD;
+  if (!level.empty())
+  {
+    st.polys = std::move(level[0].polys);
+    st.srcCells = std::move(level[0].srcCells);
+  }
+  st.nSnap = st.polys.size();
+
+  vtkSmartPointer<vtkPolyData> out = EmitMergedPolylines(st, input->GetCellData());
+  out->GetFieldData()->PassData(input->GetFieldData());
+  return out;
+}
 } // namespace
 
 vtkSHYXResampleLines::vtkSHYXResampleLines()
@@ -371,8 +984,11 @@ vtkSHYXResampleLines::vtkSHYXResampleLines()
 void vtkSHYXResampleLines::PrintSelf(ostream& os, vtkIndent indent)
 {
   this->Superclass::PrintSelf(os, indent);
+  os << indent << "LineMerge: " << this->LineMerge << "\n";
+  os << indent << "LineMergeTolerance: " << this->LineMergeTolerance << "\n";
   os << indent << "Fuse: " << this->Fuse << "\n";
   os << indent << "FuseTolerance: " << this->FuseTolerance << "\n";
+  os << indent << "Sample: " << this->Sample << "\n";
   os << indent << "SampleDistance: " << this->SampleDistance << "\n";
 }
 
@@ -413,36 +1029,46 @@ int vtkSHYXResampleLines::RequestData(
     return 1;
   }
 
+  if (!this->LineMerge && !this->Fuse && !this->Sample)
+  {
+    vtkWarningMacro(<< "LineMerge, Fuse and Sample are all off; passing input through.");
+    output->ShallowCopy(input);
+    return 1;
+  }
+
   const double bboxMax = LongestBBoxSide(input);
   if (bboxMax <= 0.0)
   {
     vtkWarningMacro(<< "Input has zero bounding-box extent.");
   }
 
-  double fuseTol = this->FuseTolerance;
-  if (fuseTol <= 0.0)
-  {
-    fuseTol = 1e-6 * std::max(bboxMax, 0.0);
-  }
-
-  double sampleDistance = this->SampleDistance;
-  if (sampleDistance <= 0.0)
-  {
-    sampleDistance = 0.01 * std::max(bboxMax, 0.0);
-    vtkWarningMacro(<< "SampleDistance <= 0; using 0.01 * bounding-box longest side (" << sampleDistance
-                    << ").");
-  }
-  if (sampleDistance <= 0.0)
-  {
-    vtkErrorMacro(<< "SampleDistance is not positive.");
-    return 0;
-  }
-
+  vtkSmartPointer<vtkPolyData> mergedHolder;
   vtkPolyData* lines = input;
+  if (this->LineMerge)
+  {
+    double mergeTol = this->LineMergeTolerance;
+    if (mergeTol <= 0.0)
+    {
+      mergeTol = 1e-4 * std::max(bboxMax, 0.0);
+    }
+    mergedHolder = MergeLaterPolylinesOntoEarlier(input, mergeTol);
+    if (!mergedHolder)
+    {
+      vtkErrorMacro(<< "Line merge produced a null dataset.");
+      return 0;
+    }
+    lines = mergedHolder;
+  }
+
   vtkNew<vtkCleanPolyData> cleaner;
   if (this->Fuse)
   {
-    cleaner->SetInputData(input);
+    double fuseTol = this->FuseTolerance;
+    if (fuseTol <= 0.0)
+    {
+      fuseTol = 1e-6 * std::max(bboxMax, 0.0);
+    }
+    cleaner->SetInputData(lines);
     cleaner->PointMergingOn();
     cleaner->ConvertLinesToPointsOff();
     cleaner->ConvertPolysToLinesOff();
@@ -462,6 +1088,26 @@ int vtkSHYXResampleLines::RequestData(
   {
     output->GetFieldData()->PassData(input->GetFieldData());
     return 1;
+  }
+
+  if (!this->Sample)
+  {
+    output->ShallowCopy(lines);
+    output->GetFieldData()->PassData(input->GetFieldData());
+    return 1;
+  }
+
+  double sampleDistance = this->SampleDistance;
+  if (sampleDistance <= 0.0)
+  {
+    sampleDistance = 0.01 * std::max(bboxMax, 0.0);
+    vtkWarningMacro(<< "SampleDistance <= 0; using 0.01 * bounding-box longest side (" << sampleDistance
+                    << ").");
+  }
+  if (sampleDistance <= 0.0)
+  {
+    vtkErrorMacro(<< "SampleDistance is not positive.");
+    return 0;
   }
 
   std::vector<std::vector<vtkIdType>> adj;

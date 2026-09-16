@@ -498,7 +498,7 @@ void pqSHYXOpeningTable::rebuildFromDynamicProperty(const QString& dynPropName)
 // ---------------------------------------------------------------------------
 void pqSHYXOpeningTable::onItemChanged(QStandardItem* item)
 {
-    if (!item || this->UpdatingFromDynamicProperty)
+    if (!item || this->UpdatingFromDynamicProperty || this->UpdatingFromColumnToggle)
     {
         return;
     }
@@ -731,7 +731,8 @@ void pqSHYXOpeningTable::toggleColumnChecks(int col)
 
     bool anyChanged = false;
     {
-        QSignalBlocker blocker(this->Model);
+        // Skip onItemChanged writeBack, but keep model dataChanged so rows repaint.
+        QScopedValueRollback<bool> guard(this->UpdatingFromColumnToggle, true);
         for (int r = 0; r < this->Model->rowCount(); ++r)
         {
             if (!this->rowEligibleForColumn(r, col))
@@ -765,6 +766,7 @@ void pqSHYXOpeningTable::toggleColumnChecks(int col)
     this->writeBackProperty(this->InletPropName);
     this->writeBackProperty(this->ExcludedPropName);
     this->refreshHeader();
+    this->refreshItems();
 }
 
 // ---------------------------------------------------------------------------
@@ -773,5 +775,14 @@ void pqSHYXOpeningTable::refreshHeader()
     if (this->View && this->View->header() && this->View->header()->viewport())
     {
         this->View->header()->viewport()->update();
+    }
+}
+
+// ---------------------------------------------------------------------------
+void pqSHYXOpeningTable::refreshItems()
+{
+    if (this->View && this->View->viewport())
+    {
+        this->View->viewport()->update();
     }
 }

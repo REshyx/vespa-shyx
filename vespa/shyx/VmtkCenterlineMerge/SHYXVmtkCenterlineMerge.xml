@@ -1,0 +1,254 @@
+<?xml version="1.0" ?>
+<ServerManagerConfiguration>
+  <ProxyGroup name="filters">
+    <SourceProxy name="SHYXVmtkCenterlineMerge"
+                 class="vtkSHYXVmtkCenterlineMerge"
+                 label="SHYX VMTK Centerline Merge">
+      <Documentation short_help="SHYX VMTK Centerline Merge: Optional extract, merge, and/or polyball surface (one output).">
+        Input: overlapping centerline polylines (LINE / POLY_LINE) with a point-data radius array
+        (default **MaximumInscribedSphereRadius**). No vessel surface. One output port.
+
+        Three independent steps. All off: passthrough (shallow copy of the input).
+
+        **Extract branches**: vtkvmtkCenterlineBranchExtractor. Output is overlapping tracts with
+        CenterlineIds / TractIds / GroupIds / Blanking. This is the slow pairwise tube test; the
+        result is cached so toggling Merge or Reconstruct does not re-extract unless the input
+        centerlines or radius array change.
+
+        **Merge centerlines**: shown only when Extract is on. vtkvmtkMergeCenterlines on the
+        extracted tracts. MergeBlanked (default on) shares bifurcation vertices.
+
+        **Split by shared endpoints** (default on): partition input polylines whose endpoints
+        lie within max(radius) of each other, then extract and merge each cluster. Extra
+        Appended paths that tube-overlap several inlet groups no longer glue distant branches.
+        One shared-inlet set stays a single cluster (same as the old path).
+
+        **Reconstruct surface**: vtkvmtkPolyBallModeller (polyball line) + isosurface
+        (dist^2 - r^2; IsoValue 0 = tube wall). Reconstruct without Extract/Merge uses the
+        overlapping input (rounder crotch). Reconstruct after Merge models the merged tree
+        (sharper crotch). Reconstruct on: output is the surface; otherwise the current lines.
+
+        Requires VMTK compatible with this ParaView VTK (same as SHYX VMTK Opening Centerlines).
+      </Documentation>
+
+      <OutputPort name="Output" index="0" id="port0"/>
+
+      <InputProperty name="Input" command="SetInputConnection">
+        <ProxyGroupDomain name="groups">
+          <Group name="sources"/>
+          <Group name="filters"/>
+        </ProxyGroupDomain>
+        <DataTypeDomain name="input_type">
+          <DataType value="vtkPolyData"/>
+        </DataTypeDomain>
+        <InputArrayDomain name="centerline_radius_arrays" attribute_type="point" optional="1"/>
+        <Documentation>
+          Overlapping centerline polylines. Each cell should be a full source–target path, not a
+          two-point LINE soup. Point data must include a radius array.
+        </Documentation>
+      </InputProperty>
+
+      <StringVectorProperty name="RadiusArrayName"
+                            label="Radius array"
+                            command="SetInputArrayToProcess"
+                            number_of_elements="5"
+                            element_types="0 0 0 0 2"
+                            default_values="0 0 0 0 MaximumInscribedSphereRadius"
+                            animateable="0">
+        <ArrayListDomain name="radius_array_list"
+                         input_domain_name="centerline_radius_arrays">
+          <RequiredProperties>
+            <Property name="Input" function="Input"/>
+          </RequiredProperties>
+        </ArrayListDomain>
+        <Documentation>
+          Point-data radius used as the inscribed-sphere tube for branch splitting and for polyball
+          reconstruction. Default **MaximumInscribedSphereRadius** (VMTK Voronoi MISR). Network
+          extraction uses the same name for a local ball estimate, which is a poorer split cue.
+        </Documentation>
+        <Hints>
+          <ArraySelectionWidget icon_type="point"/>
+        </Hints>
+      </StringVectorProperty>
+
+      <IntVectorProperty name="ExtractCenterlineBranches"
+                         label="Extract branches"
+                         command="SetExtractCenterlineBranches"
+                         number_of_elements="1"
+                         default_values="1">
+        <BooleanDomain name="bool"/>
+        <Documentation>
+          vtkvmtkCenterlineBranchExtractor: split overlapping source–target paths into tracts and
+          write GroupIds / CenterlineIds / TractIds / Blanking. Merge options appear only when this
+          is on. The tract polydata is cached until the input or radius array changes. All steps
+          off: passthrough.
+        </Documentation>
+      </IntVectorProperty>
+
+      <IntVectorProperty name="MergeCenterlines"
+                         label="Merge centerlines"
+                         command="SetMergeCenterlines"
+                         number_of_elements="1"
+                         default_values="1">
+        <BooleanDomain name="bool"/>
+        <Documentation>
+          vtkvmtkMergeCenterlines: average overlapping tracts in the same GroupId into one polyline
+          per anatomical branch. Shown only when Extract branches is on.
+        </Documentation>
+        <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="visibility"
+                                   property="ExtractCenterlineBranches"
+                                   value="0"
+                                   inverse="1"/>
+        </Hints>
+      </IntVectorProperty>
+
+      <DoubleVectorProperty name="ResamplingStepLength"
+                            label="Resampling step length"
+                            command="SetResamplingStepLength"
+                            number_of_elements="1"
+                            default_values="0.0"
+                            animateable="0">
+        <BoundsDomain mode="scaled_extent" name="bounds" scale_factor="0.01">
+          <RequiredProperties>
+            <Property function="Input" name="Input"/>
+          </RequiredProperties>
+        </BoundsDomain>
+        <Documentation>
+          Absolute point spacing after averaging overlapping tracts. The box is a length.
+          Scale multiplies the current value; Reset fills 1% of the input AABB longest side
+          (BoundsDomain scaled_extent). **0** uses that same 1% on Apply.
+        </Documentation>
+        <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="visibility"
+                                   property="ExtractCenterlineBranches"
+                                   value="0"
+                                   inverse="1"/>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="enabled_state"
+                                   property="MergeCenterlines"
+                                   value="0"
+                                   inverse="1"/>
+        </Hints>
+      </DoubleVectorProperty>
+
+      <IntVectorProperty name="SplitBySharedEndpoints"
+                         label="Split by shared endpoints"
+                         command="SetSplitBySharedEndpoints"
+                         number_of_elements="1"
+                         default_values="1">
+        <BooleanDomain name="bool"/>
+        <Documentation>
+          Partition input polylines by endpoints closer than max(radius), then extract and
+          merge each cluster. Keeps extra overlapping paths from joining unrelated inlet
+          groups. Off: one extractor/merger on the whole input (VMTK's single-tree assumption).
+        </Documentation>
+        <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="visibility"
+                                   property="ExtractCenterlineBranches"
+                                   value="0"
+                                   inverse="1"/>
+        </Hints>
+      </IntVectorProperty>
+
+      <IntVectorProperty name="MergeBlanked"
+                         label="Merge blanked (shared bifurcations)"
+                         command="SetMergeBlanked"
+                         number_of_elements="1"
+                         default_values="1">
+        <BooleanDomain name="bool"/>
+        <Documentation>
+          When on (default), blanked bifurcation tracts become a shared vertex on upstream and
+          downstream branches so Select Connected sees one tree. Turn off to keep branches
+          disconnected at the n-furcation.
+        </Documentation>
+        <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="visibility"
+                                   property="ExtractCenterlineBranches"
+                                   value="0"
+                                   inverse="1"/>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="enabled_state"
+                                   property="MergeCenterlines"
+                                   value="0"
+                                   inverse="1"/>
+        </Hints>
+      </IntVectorProperty>
+
+      <PropertyGroup label="Extract and merge">
+        <Property name="RadiusArrayName"/>
+        <Property name="ExtractCenterlineBranches"/>
+        <Property name="SplitBySharedEndpoints"/>
+        <Property name="MergeCenterlines"/>
+        <Property name="ResamplingStepLength"/>
+        <Property name="MergeBlanked"/>
+      </PropertyGroup>
+
+      <IntVectorProperty name="ReconstructSurface"
+                         label="Reconstruct surface"
+                         command="SetReconstructSurface"
+                         number_of_elements="1"
+                         default_values="0">
+        <BooleanDomain name="bool"/>
+        <Documentation>
+          Polyball isosurface of the current centerlines (after optional Extract / Merge).
+          Output is this surface instead of lines. Off: output the current lines.
+        </Documentation>
+      </IntVectorProperty>
+
+      <IntVectorProperty name="SampleDimensions"
+                         label="Sample dimensions"
+                         command="SetSampleDimensions"
+                         number_of_elements="3"
+                         default_values="64 64 64"
+                         animateable="0">
+        <IntRangeDomain name="range" min="2" max="512"/>
+        <Documentation>
+          Polyball image size (i j k). Larger is smoother and slower. VMTK’s modeller default is
+          around 64³; raise this if thin branches disappear.
+        </Documentation>
+        <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="enabled_state"
+                                   property="ReconstructSurface"
+                                   value="0"
+                                   inverse="1"/>
+        </Hints>
+      </IntVectorProperty>
+
+      <DoubleVectorProperty name="IsoValue"
+                            label="Iso value"
+                            command="SetIsoValue"
+                            number_of_elements="1"
+                            default_values="0.0"
+                            animateable="0"
+                            panel_visibility="advanced">
+        <DoubleRangeDomain name="range" min="-1e12" max="1e12"/>
+        <Documentation>
+          Contour of dist² − r². **0** is the tube wall. Positive values inflate; negative shrink.
+        </Documentation>
+        <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="enabled_state"
+                                   property="ReconstructSurface"
+                                   value="0"
+                                   inverse="1"/>
+        </Hints>
+      </DoubleVectorProperty>
+
+      <PropertyGroup label="Reconstruct">
+        <Property name="ReconstructSurface"/>
+        <Property name="SampleDimensions"/>
+        <Property name="IsoValue"/>
+      </PropertyGroup>
+
+      <Hints>
+        <ShowInMenu category="SHYX" icon=":/VESPA/SHYX_Vmtk_Centerlines.png"/>
+      </Hints>
+    </SourceProxy>
+  </ProxyGroup>
+</ServerManagerConfiguration>

@@ -2162,6 +2162,24 @@ const ShyxExtra kShyxExtra[] = {
     "Openings table Inlet/Remove column headers have a tri-state checkbox "
     "(none / mixed / all); click to select or clear the column. "
     "Inlet header select-all skips removed rows; Remove select-all unchecks those inlets." },
+  { "SHYXVmtkCenterlineMerge",
+    "One output port. Centerline polylines only (no vessel surface). Point radius array default "
+    "MaximumInscribedSphereRadius. Three independent steps; all off = passthrough. "
+    "ExtractCenterlineBranches (default on): vtkvmtkCenterlineBranchExtractor "
+    "(slow pairwise tube test; output tracts with GroupIds/TractIds/CenterlineIds/Blanking). "
+    "MergeCenterlines (default on): vtkvmtkMergeCenterlines (MergeBlanked default on = shared "
+    "bifurcation vertices). Merge checkbox is visible only when Extract is on. "
+    "SplitBySharedEndpoints (default on): partition polylines by endpoints within max(radius), "
+    "then extract+merge each cluster so extra Appended overlapping paths cannot glue distant "
+    "inlet groups; one shared-inlet set is still a single cluster. "
+    "Intended for overlapping Voronoi source-target paths (Append Geometry of several "
+    "Opening Centerlines / VMTK Centerlines outputs). Do not pre-split into two-point "
+    "VTK_LINE cells. ReconstructSurface: polyball line + FlyingEdges on SampleDimensions "
+    "(default 64^3), IsoValue 0 = tube wall of dist^2-r^2. Reconstruct without Extract/Merge "
+    "uses the overlapping input (rounder crotch). Reconstruct after Merge models the merged "
+    "tree (sharper crotch). Reconstruct on -> surface; otherwise current lines. "
+    "ResamplingStepLength is an absolute length; 0 or Reset = 1% of the input AABB "
+    "longest side (BoundsDomain scaled_extent)." },
   { "SHYXSkeletonEndClipper",
     "Vascular step 3 (one-node combo of steps 1-2; standalone filters unchanged). "
     "Single watertight surface input. Port0 clipped mesh, port1 skeleton lines plus "
@@ -2271,12 +2289,19 @@ const ShyxExtra kShyxExtra[] = {
     "on that array. CreateMappedArray writes OutputArrayName (default MappedArray) instead and "
     "activates the new array." },
   { "SHYXResampleLines",
-    "Resample VTK_LINE / VTK_POLY_LINE networks. Fuse (default on) merges points within "
-    "FuseTolerance (0 = 1e-6 * AABB longest side) so nearby ends share a vertex. "
-    "Vertices with line degree != 2 are features and are kept. Each branch is sampled at "
-    "SampleDistance (0 = 0.01 * AABB longest side). If spacing >= branch length, both "
-    "endpoints stay as one segment; short branches are not deleted. Closed all-degree-2 "
-    "loops are resampled around the cycle." },
+    "Three independent steps on VTK_LINE / VTK_POLY_LINE networks (all default on). "
+    "LineMerge pairwise-reduces polylines (binary tree: merge (0,1), (2,3), ... then those "
+    "results) so overlapping trunks collapse early. In each pair the left network is kept; "
+    "vertices within LineMergeTolerance of that network (0 = 1e-4 * AABB longest side) are "
+    "overlapping: interior overlap is dropped and each remaining free run is snapped "
+    "onto the earlier polyline (a vertex is inserted when the closest point is in a "
+    "segment interior). Fuse then merges points within FuseTolerance "
+    "(0 = 1e-6 * AABB longest side) so nearby ends share a vertex. Sample resamples "
+    "each branch at SampleDistance (0 = 0.01 * AABB longest side); vertices with line "
+    "degree != 2 are features and are kept. Each step can run alone; all off passes "
+    "the input through. If spacing >= branch length, both endpoints stay as one "
+    "segment; short branches are not deleted. Closed all-degree-2 loops are resampled "
+    "around the cycle." },
   { "SHYXDisconnectedRegionFuse",
     "Join disconnected regions at a vertex pair with gap <= FuseThreshold (Kruskal). "
     "ComplianceWeight 0 = Euclidean nearest (default); 1 = among pairs inside T, prefer "

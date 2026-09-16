@@ -1,0 +1,13 @@
+NAME
+  vtkSHYXVmtkCenterlineMerge
+DESCRIPTION
+  "Optional VMTK merge of overlapping centerlines and/or polyball surface reconstruction."
+GROUPS
+  Vascular
+DEPENDS
+  VTK::FiltersCore
+  VTK::CommonDataModel
+PRIVATE_DEPENDS
+  VTK::CommonCore
+  VTK::CommonExecutionModel
+  VTK::ImagingCore

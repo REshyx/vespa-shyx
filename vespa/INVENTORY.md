@@ -86,6 +86,7 @@ Vascular 顺序（[`VESPAVascularCategory.xml`](../ParaViewPlugin/smxml/VESPAVas
 | SHYX Partitioned Collection To OpenFOAM | `vtkSHYXPartitionedCollectionToOpenFOAM` | PartitionedCollectionToOpenFOAM | SHYXPartitionedCollectionToOpenFOAM.xml | 复用 Snappy | [有](shyx/PartitionedCollectionToOpenFOAM/README.md) | VTK | |
 | SHYX VMTK Centerlines | `vtkSHYXVmtkPolyDataCenterlines` | VmtkPolyDataCenterlines | SHYXVmtkPolyDataCenterlines.xml | 自有 | [有](shyx/VmtkPolyDataCenterlines/README.md) | VMTK | |
 | SHYX VMTK Opening Centerlines | `vtkSHYXVmtkOpeningCenterlines` | VmtkOpeningCenterlines | SHYXVmtkOpeningCenterlines.xml | 自有 | [有](shyx/VmtkOpeningCenterlines/README.md) | VMTK | |
+| SHYX VMTK Centerline Merge | `vtkSHYXVmtkCenterlineMerge` | VmtkCenterlineMerge | SHYXVmtkCenterlineMerge.xml | 复用 Centerlines | [有](shyx/VmtkCenterlineMerge/README.md) | VMTK | |
 | SHYX Vascular Stent Placement | `vtkSHYXVascularStentPlacement` | VascularStentPlacement | SHYXVascularStentPlacement.xml | 自有 | [有](shyx/VascularStentPlacement/README.md) | VTK | |
 | SHYX Endpoint Stent Placement | `vtkSHYXEndpointStentPlacement` | EndpointStentPlacement | SHYXEndpointStentPlacement.xml | 自有 | [有](shyx/EndpointStentPlacement/README.md) | VTK | |
 

@@ -1,7 +1,7 @@
 NAME
   vtkSHYXResampleLines
 DESCRIPTION
-  "Resample a polyline network at a fixed spacing, preserving degree != 2 feature vertices."
+  "Merge overlapping polylines onto earlier ones, then optional fuse and resample of a line network."
 GROUPS
   Meshing
 DEPENDS
