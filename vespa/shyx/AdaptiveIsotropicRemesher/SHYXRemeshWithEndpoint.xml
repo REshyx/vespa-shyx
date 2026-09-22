@@ -230,6 +230,21 @@
         </Documentation>
       </IntVectorProperty>
 
+      <DoubleVectorProperty command="SetSizingFieldScale"
+                            name="SizingFieldScale"
+                            label="Sizing field scale"
+                            number_of_elements="1"
+                            default_values="1">
+        <DoubleRangeDomain name="range" min="1e-6" max="1e6"/>
+        <Documentation>
+          Uniform multiplier on the **final** wall ICC sizing field, after clamp to [Min, Max],
+          expansion ratio, and **Scale to range**. **1** (default) leaves targets unchanged.
+          **&lt; 1** densifies the remesh; **&gt; 1** coarsens it. Not re-clamped to Min/Max, so
+          the field can leave that interval. Cap remesh is unaffected (still derived from remeshed
+          wall edge lengths). Reapplied when curvature is recomputed each wall remesh iteration.
+        </Documentation>
+      </DoubleVectorProperty>
+
       <PropertyGroup label="Sizing">
         <Property name="MinEdgeLength"/>
         <Property name="MaxEdgeLength"/>
@@ -239,6 +254,7 @@
         <Property name="IccBallRadius"/>
         <Property name="AdaptiveSizingNeighborMaxRatio"/>
         <Property name="ScaleToRange"/>
+        <Property name="SizingFieldScale"/>
       </PropertyGroup>
 
       <!-- Histogram panel: anchor must NOT be panel_visibility=never — pqProxyWidget skips

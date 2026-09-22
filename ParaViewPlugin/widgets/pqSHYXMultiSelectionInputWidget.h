@@ -15,6 +15,9 @@ class vtkSMProxy;
  *
  * After loading a .pvsm the producers no longer hold a view selection, but this
  * filter's Selection property does. Do not recopy from live Inputs in that case.
+ *
+ * After a copy, ResetToDomainDefaults is applied to BoundsDomain properties that
+ * require Selection (Alpha/Offset on Fill-Alpha-Union), same as the Reset button.
  */
 class pqSHYXMultiSelectionInputWidget : public pqPropertyWidget
 {
@@ -33,11 +36,13 @@ private Q_SLOTS:
   void copyFromInputs();
   void onInputsChanged();
   void updateStatusFromProperty();
+  void resetSelectionBoundsPropertiesLater();
 
 private:
   vtkSMProperty* selectionProperty() const;
   void registerCopiedProxies();
   void unregisterOrphanSelectionSources();
+  bool resetSelectionBoundsProperties();
 
   vtkSMProperty* SelectionProperty = nullptr;
   QLabel* StatusLabel = nullptr;

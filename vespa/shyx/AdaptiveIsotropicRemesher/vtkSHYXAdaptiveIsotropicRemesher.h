@@ -199,6 +199,16 @@ public:
 
   //@{
   /**
+   * Uniform multiplier on the **final** ICC sizing field after clamp, expansion ratio, and
+   * ScaleToRange. **1** (default) leaves targets unchanged. **< 1** densifies; **> 1** coarsens.
+   * Not re-clamped to [Min, Max]. Reapplied on each recompute_curvature.
+   */
+  vtkGetMacro(SizingFieldScale, double);
+  vtkSetClampMacro(SizingFieldScale, double, 1.0e-6, 1.0e6);
+  //@}
+
+  //@{
+  /**
    * When true (default), CGAL isotropic remeshing performs **one CGAL iteration per pass** and calls
    * FeatureAwareAdaptiveSizingField::recompute_curvature before each subsequent pass so ICC is
    * re-evaluated on the updated mesh (**full surface** ICC domain; see vtkSHYXFeatureAwareAdaptiveSizingField).
@@ -411,6 +421,7 @@ protected:
   double IccBallRadius       = -1.0;
   double AdaptiveSizingNeighborMaxRatio = 1.6;
   bool   ScaleToRange                          = false;
+  double SizingFieldScale                      = 1.0;
   bool   RemeshRecomputeCurvatureEachIteration = true;
   double ProtectAngle        = 70.0;
   int    NumberOfIterations  = 3;

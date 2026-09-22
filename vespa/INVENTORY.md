@@ -138,7 +138,7 @@ Vascular 顺序（[`VESPAVascularCategory.xml`](../ParaViewPlugin/smxml/VESPAVas
 | Animated Streamline | `vtkAnimatedStreamlineRepresentation` | AnimatedStreamlineRepresentation | AnimatedStreamlineRepresentation.xml | [有](shyx/AnimatedStreamlineRepresentation/README.md) |
 | Point Label | `vtkPointLabelRepresentation` | PointLabelRepresentation | PointLabelRepresentation.xml | [有](shyx/PointLabelRepresentation/README.md) |
 
-自定义 SM Domain（无菜单项）：`vtkSMSHYXSelectionBoundsDomain`（[`SelectionBoundsDomain/`](shyx/SelectionBoundsDomain/)），XML 标签 `SHYXSelectionBoundsDomain`。给 Alpha/Offset 的 Reset 按**选区** AABB 刷新（`SHYXSelectionFillAlphaReunionFilter`）。无 ParaView 插件构建时与 Representation 一并排除。
+自定义 SM Domain（无菜单项）：`vtkSMSHYXSelectionBoundsDomain`（[`SelectionBoundsDomain/`](shyx/SelectionBoundsDomain/)），XML 标签 `SHYXSelectionBoundsDomain`。给 Alpha/Offset 的 Reset 按**选区** AABB 刷新（`SHYXSelectionFillAlphaReunionFilter`）；**Copy Input Selections** 也会对同一 Domain 做一次 Reset。无 ParaView 插件构建时与 Representation 一并排除。
 
 ---
 

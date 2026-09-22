@@ -6,7 +6,9 @@
 #include "vtkCellData.h"
 #include "vtkCellType.h"
 #include "vtkCleanPolyData.h"
+#include "vtkDataArray.h"
 #include "vtkDataObject.h"
+#include "vtkDataSetAttributes.h"
 #include "vtkFieldData.h"
 #include "vtkInformation.h"
 #include "vtkInformationVector.h"
@@ -436,9 +438,156 @@ struct LineMergeState
   size_t nSnap = 0;
 };
 
-void GrowPointData(vtkPointData* pd, vtkIdType newId)
+bool ArrayCovers(vtkAbstractArray* arr, vtkIdType id)
+{
+  return arr && id >= 0 && id < arr->GetNumberOfTuples();
+}
+
+bool IsIntegralArray(vtkAbstractArray* arr)
+{
+  if (!arr)
+  {
+    return false;
+  }
+  switch (arr->GetDataType())
+  {
+    case VTK_CHAR:
+    case VTK_SIGNED_CHAR:
+    case VTK_UNSIGNED_CHAR:
+    case VTK_SHORT:
+    case VTK_UNSIGNED_SHORT:
+    case VTK_INT:
+    case VTK_UNSIGNED_INT:
+    case VTK_LONG:
+    case VTK_UNSIGNED_LONG:
+    case VTK_ID_TYPE:
+    case VTK_LONG_LONG:
+    case VTK_UNSIGNED_LONG_LONG:
+      return true;
+    default:
+      return false;
+  }
+}
+
+// VMTK AppendEndPoints / MergeCenterlines often leave tracer arrays (EdgePCoordArray,
+// EdgeArray, ...) shorter than NumberOfPoints. Growing those with SetNumberOfTuples
+// fills the gap with uninitialized doubles (~1e-312, ±1e307). Drop shorts; trim extras.
+void SyncPointDataToPoints(vtkPointData* pd, vtkIdType nPts)
 {
   if (!pd)
+  {
+    return;
+  }
+  for (int i = pd->GetNumberOfArrays() - 1; i >= 0; --i)
+  {
+    vtkAbstractArray* arr = pd->GetAbstractArray(i);
+    if (!arr)
+    {
+      pd->RemoveArray(i);
+      continue;
+    }
+    const vtkIdType nt = arr->GetNumberOfTuples();
+    if (nt > nPts)
+    {
+      arr->SetNumberOfTuples(nPts);
+    }
+    else if (nt < nPts)
+    {
+      pd->RemoveArray(i);
+    }
+  }
+}
+
+bool IsGarbageFloat(double v)
+{
+  if (!vtkMath::IsFinite(v))
+  {
+    return true;
+  }
+  const double a = std::abs(v);
+  return (a > 0.0 && a < 1e-30) || a > 1e100;
+}
+
+void FillGarbagePointScalars(vtkPolyData* pd)
+{
+  if (!pd || !pd->GetPoints())
+  {
+    return;
+  }
+  const vtkIdType nPts = pd->GetNumberOfPoints();
+  vtkPointData* ptd = pd->GetPointData();
+  if (!ptd || nPts <= 0)
+  {
+    return;
+  }
+
+  std::vector<std::vector<vtkIdType>> adj;
+  std::set<EdgeKey> edges;
+  BuildLineGraph(pd, adj, edges);
+  if (static_cast<vtkIdType>(adj.size()) != nPts)
+  {
+    return;
+  }
+
+  const int nArr = ptd->GetNumberOfArrays();
+  for (int ai = 0; ai < nArr; ++ai)
+  {
+    vtkDataArray* arr = vtkDataArray::SafeDownCast(ptd->GetAbstractArray(ai));
+    if (!arr || arr->GetNumberOfTuples() != nPts || IsIntegralArray(arr))
+    {
+      continue;
+    }
+    const int nComp = arr->GetNumberOfComponents();
+    std::vector<char> valid(static_cast<size_t>(nPts), 1);
+    for (vtkIdType i = 0; i < nPts; ++i)
+    {
+      bool ok = true;
+      for (int c = 0; c < nComp; ++c)
+      {
+        if (IsGarbageFloat(arr->GetComponent(i, c)))
+        {
+          ok = false;
+          break;
+        }
+      }
+      valid[static_cast<size_t>(i)] = ok ? 1 : 0;
+    }
+
+    bool changed = true;
+    int guard = 0;
+    while (changed && guard++ <= nPts)
+    {
+      changed = false;
+      for (vtkIdType i = 0; i < nPts; ++i)
+      {
+        if (valid[static_cast<size_t>(i)])
+        {
+          continue;
+        }
+        vtkIdType src = -1;
+        for (vtkIdType nb : adj[static_cast<size_t>(i)])
+        {
+          if (nb >= 0 && nb < nPts && valid[static_cast<size_t>(nb)])
+          {
+            src = nb;
+            break;
+          }
+        }
+        if (src < 0)
+        {
+          continue;
+        }
+        arr->SetTuple(i, src, arr);
+        valid[static_cast<size_t>(i)] = 1;
+        changed = true;
+      }
+    }
+  }
+}
+
+void CopyPointTuple(vtkPointData* pd, vtkIdType fromId, vtkIdType toId)
+{
+  if (!pd || fromId < 0 || fromId == toId)
   {
     return;
   }
@@ -446,10 +595,50 @@ void GrowPointData(vtkPointData* pd, vtkIdType newId)
   for (int i = 0; i < n; ++i)
   {
     vtkAbstractArray* arr = pd->GetAbstractArray(i);
-    if (arr && arr->GetNumberOfTuples() <= newId)
+    if (!ArrayCovers(arr, fromId))
     {
-      arr->SetNumberOfTuples(newId + 1);
+      continue;
     }
+    arr->InsertTuple(toId, fromId, arr);
+  }
+}
+
+// Do not use vtkPointData::InterpolateEdge on a DeepCopy'd PointData: without
+// InterpolateAllocate, RequiredArrays is empty and InterpolateEdge is a no-op.
+void InterpolatePointEdge(
+  vtkPointData* pd, vtkIdType toId, vtkIdType p1, vtkIdType p2, double t)
+{
+  if (!pd)
+  {
+    return;
+  }
+  constexpr double tEps = 1e-8;
+  if (t <= tEps)
+  {
+    CopyPointTuple(pd, p1, toId);
+    return;
+  }
+  if (t >= 1.0 - tEps)
+  {
+    CopyPointTuple(pd, p2, toId);
+    return;
+  }
+  const int n = pd->GetNumberOfArrays();
+  for (int i = 0; i < n; ++i)
+  {
+    vtkAbstractArray* arr = pd->GetAbstractArray(i);
+    if (!ArrayCovers(arr, p1) || !ArrayCovers(arr, p2))
+    {
+      continue;
+    }
+    const int attr = pd->IsArrayAnAttribute(i);
+    if (attr == vtkDataSetAttributes::GLOBALIDS || attr == vtkDataSetAttributes::PEDIGREEIDS ||
+      attr == vtkDataSetAttributes::PROCESSIDS || IsIntegralArray(arr))
+    {
+      arr->InsertTuple(toId, t < 0.5 ? p1 : p2, arr);
+      continue;
+    }
+    arr->InterpolateTuple(toId, p1, arr, p2, arr, t);
   }
 }
 
@@ -600,13 +789,13 @@ bool LocatorPointOnAccepted(vtkStaticCellLocator* loc, const double p[3], double
   return hit >= 0 && cellId >= 0 && dist2 <= radius * radius;
 }
 
-vtkIdType SnapOntoAccepted(const double p[3], LineMergeState& st)
+vtkIdType SnapOntoAccepted(const double p[3], LineMergeState& st, vtkIdType srcId)
 {
   const SegHit hit = FindClosestOnAccepted(p, st);
   if (hit.id0 < 0 || hit.id1 < 0)
   {
     const vtkIdType id = st.pts->InsertNextPoint(p);
-    GrowPointData(st.pd, id);
+    CopyPointTuple(st.pd, srcId, id);
     return id;
   }
   constexpr double tEps = 1e-8;
@@ -619,11 +808,7 @@ vtkIdType SnapOntoAccepted(const double p[3], LineMergeState& st)
     return hit.id1;
   }
   const vtkIdType newId = st.pts->InsertNextPoint(hit.closest);
-  GrowPointData(st.pd, newId);
-  if (st.pd)
-  {
-    st.pd->InterpolateEdge(st.pd, newId, hit.id0, hit.id1, hit.t);
-  }
+  InterpolatePointEdge(st.pd, newId, hit.id0, hit.id1, hit.t);
   st.polys[hit.poly].insert(st.polys[hit.poly].begin() + (hit.seg + 1), newId);
   return newId;
 }
@@ -695,8 +880,9 @@ void EmitSnappedBranch(LineMergeState& st, const std::vector<vtkIdType>& uid, in
   std::vector<vtkIdType> branch;
   auto pointOf = [&](int idx) {
     double p[3];
-    st.pts->GetPoint(uid[static_cast<size_t>(idx)], p);
-    return SnapOntoAccepted(p, st);
+    const vtkIdType src = uid[static_cast<size_t>(idx)];
+    st.pts->GetPoint(src, p);
+    return SnapOntoAccepted(p, st, src);
   };
   if (snapLeft)
   {
@@ -849,6 +1035,7 @@ vtkSmartPointer<vtkPolyData> EmitMergedPolylines(const LineMergeState& st, vtkCe
   outLines->Squeeze();
   outPD->Squeeze();
   out->GetCellData()->Squeeze();
+  SyncPointDataToPoints(outPD, outPts->GetNumberOfPoints());
   return out;
 }
 
@@ -944,6 +1131,7 @@ vtkSmartPointer<vtkPolyData> MergeLaterPolylinesOntoEarlier(vtkPolyData* input, 
   workPts->DeepCopy(input->GetPoints());
   vtkNew<vtkPointData> workPD;
   workPD->DeepCopy(input->GetPointData());
+  SyncPointDataToPoints(workPD, workPts->GetNumberOfPoints());
 
   std::vector<LineNetwork> level;
   input->BuildCells();
@@ -1090,6 +1278,7 @@ int vtkSHYXResampleLines::RequestData(
   }
 
   vtkNew<vtkCleanPolyData> cleaner;
+  vtkSmartPointer<vtkPolyData> fuseInputHolder;
   if (this->Fuse)
   {
     double fuseTol = this->FuseTolerance;
@@ -1097,7 +1286,16 @@ int vtkSHYXResampleLines::RequestData(
     {
       fuseTol = 1e-6 * std::max(bboxMax, 0.0);
     }
-    cleaner->SetInputData(lines);
+    vtkPolyData* fuseIn = lines;
+    if (fuseIn == input)
+    {
+      fuseInputHolder = vtkSmartPointer<vtkPolyData>::New();
+      fuseInputHolder->ShallowCopy(input);
+      fuseInputHolder->GetPointData()->DeepCopy(input->GetPointData());
+      SyncPointDataToPoints(fuseInputHolder->GetPointData(), fuseInputHolder->GetNumberOfPoints());
+      fuseIn = fuseInputHolder;
+    }
+    cleaner->SetInputData(fuseIn);
     cleaner->PointMergingOn();
     cleaner->ConvertLinesToPointsOff();
     cleaner->ConvertPolysToLinesOff();
@@ -1111,6 +1309,7 @@ int vtkSHYXResampleLines::RequestData(
       vtkErrorMacro(<< "Fuse produced a null dataset.");
       return 0;
     }
+    SyncPointDataToPoints(lines->GetPointData(), lines->GetNumberOfPoints());
   }
 
   if (lines->GetNumberOfPoints() == 0)
@@ -1123,8 +1322,23 @@ int vtkSHYXResampleLines::RequestData(
   {
     output->ShallowCopy(lines);
     output->GetFieldData()->PassData(input->GetFieldData());
+    if (lines != input)
+    {
+      SyncPointDataToPoints(output->GetPointData(), output->GetNumberOfPoints());
+      FillGarbagePointScalars(output);
+    }
     WritePointLineDegree(output);
     return 1;
+  }
+
+  vtkSmartPointer<vtkPolyData> syncedInput;
+  if (lines == input)
+  {
+    syncedInput = vtkSmartPointer<vtkPolyData>::New();
+    syncedInput->ShallowCopy(input);
+    syncedInput->GetPointData()->DeepCopy(input->GetPointData());
+    SyncPointDataToPoints(syncedInput->GetPointData(), syncedInput->GetNumberOfPoints());
+    lines = syncedInput;
   }
 
   double sampleDistance = this->SampleDistance;
@@ -1180,6 +1394,8 @@ int vtkSHYXResampleLines::RequestData(
   outPts->Squeeze();
   outLines->Squeeze();
   outPD->Squeeze();
+  SyncPointDataToPoints(outPD, outPts->GetNumberOfPoints());
+  FillGarbagePointScalars(output);
   output->GetFieldData()->PassData(input->GetFieldData());
   WritePointLineDegree(output);
   return 1;

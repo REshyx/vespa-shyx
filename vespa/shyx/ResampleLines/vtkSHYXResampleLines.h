@@ -9,7 +9,8 @@
  * compared to that network: a vertex whose distance is within LineMergeTolerance is overlapping.
  * Overlapping interior vertices are dropped; each remaining free run is kept as a branch and
  * its overlapping endpoints are snapped onto the earlier polyline (a vertex is inserted when the
- * closest point is in the interior of a segment). LineMergeTolerance <= 0 (XML default) means
+ * closest point is in the interior of a segment, with point data interpolated along that
+ * segment). LineMergeTolerance <= 0 (XML default) means
  * 1e-4 times the longest side of the input axis-aligned bounding box.
  *
  * Fuse merges points closer than FuseTolerance so nearly coincident endpoints become one

@@ -36,7 +36,7 @@
 
 **输出端口**：0 remeshed `vtkPolyData`；1 特征线；2 mask patch；3 sizing/ICC preview。可选 Selection（port 1）或标量范围只重网格一部分；空选区 = 整张表面。
 
-面板其余项（ICC neighborhood / Mesh rings / ICC ball radius、Expansion ratio、Scale to range、ICC size histogram、Detect feature edges、Feature mask、Remesh constraints 等）见同目录 `SHYXAdaptiveIsotropicRemesher.xml`；同模块还有 Vascular 用的 `SHYXRemeshWithEndpoint.xml`。
+面板其余项（ICC neighborhood / Mesh rings / ICC ball radius、Expansion ratio、Scale to range、**Sizing field scale**、ICC size histogram、Detect feature edges、Feature mask、Remesh constraints 等）见同目录 `SHYXAdaptiveIsotropicRemesher.xml`。**`SizingFieldScale`**（默认 1）对 clamp / expansion / Scale to range 之后的 ICC 场做整体缩放，不再夹回 Min/Max；`SHYXRemeshWithEndpoint` 同样有这项（只作用于 wall ICC，cap 仍跟墙边长）。
 
 **卡死恢复：** `RequestData` 进入 CGAL remesh 之前会覆盖 `%TEMP%/shyx_remesh_pre_apply.pvsm`（非 Windows 为 `$TMPDIR` 或 `/tmp`）。ParaView File → Load State 可找回 Apply 前的管线。直方图预览（`EnableRemesh` 关，或 Remesh With Endpoint 的 wall/cap remesh 都关）不写该文件。
 

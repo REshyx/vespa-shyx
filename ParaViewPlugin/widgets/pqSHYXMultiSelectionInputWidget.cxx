@@ -7,9 +7,11 @@
 #include "vtkCommand.h"
 #include "vtkNew.h"
 #include "vtkObject.h"
+#include "vtkSMBoundsDomain.h"
 #include "vtkSMInputProperty.h"
 #include "vtkSMProperty.h"
 #include "vtkSMPropertyHelper.h"
+#include "vtkSMPropertyIterator.h"
 #include "vtkSMProxy.h"
 #include "vtkSMProxyIterator.h"
 #include "vtkSMSession.h"
@@ -19,6 +21,7 @@
 
 #include <QLabel>
 #include <QPushButton>
+#include <QTimer>
 #include <QVBoxLayout>
 
 #include <string>
@@ -166,6 +169,7 @@ pqSHYXMultiSelectionInputWidget::pqSHYXMultiSelectionInputWidget(
   copyBtn->setObjectName("CopyInputSelections");
   copyBtn->setToolTip(tr(
     "Clone each Input connection's current view selection, in Input order. "
+    "Also fills selection-bounded lengths (Alpha / Offset) from the new selection AABB. "
     "After opening a .pvsm the saved Selection on this filter is kept; click this "
     "only if you want to replace it from the current view selections."));
   layout->addWidget(copyBtn);
@@ -283,8 +287,63 @@ void pqSHYXMultiSelectionInputWidget::copyFromInputs()
   }
 
   this->Copying = false;
+  // Push Selection first so SHYXSelectionBoundsDomain can extract the new AABB.
+  const bool resetBounds = this->resetSelectionBoundsProperties();
   this->updateStatusFromProperty();
   Q_EMIT this->changeAvailable();
+  if (!resetBounds && CountPopulatedSelections(selProp) > 0)
+  {
+    // New-filter construction: GatherInformation may not be ready until the
+    // rest of the panel exists. Try once more on the next event-loop turn.
+    QTimer::singleShot(0, this, SLOT(resetSelectionBoundsPropertiesLater()));
+  }
+}
+
+void pqSHYXMultiSelectionInputWidget::resetSelectionBoundsPropertiesLater()
+{
+  if (this->resetSelectionBoundsProperties())
+  {
+    Q_EMIT this->changeAvailable();
+  }
+}
+
+bool pqSHYXMultiSelectionInputWidget::resetSelectionBoundsProperties()
+{
+  vtkSMProxy* filter = this->proxy();
+  vtkSMProperty* selProp = this->selectionProperty();
+  if (!filter || !selProp)
+  {
+    return false;
+  }
+  if (CountPopulatedSelections(selProp) == 0)
+  {
+    return false;
+  }
+
+  filter->UpdateVTKObjects();
+
+  bool any = false;
+  vtkSmartPointer<vtkSMPropertyIterator> iter;
+  iter.TakeReference(filter->NewPropertyIterator());
+  for (iter->Begin(); !iter->IsAtEnd(); iter->Next())
+  {
+    vtkSMProperty* prop = iter->GetProperty();
+    if (!prop || prop->GetInformationOnly() || prop->GetIsInternal())
+    {
+      continue;
+    }
+    vtkSMBoundsDomain* bounds = prop->FindDomain<vtkSMBoundsDomain>();
+    if (!bounds || !bounds->GetRequiredProperty("Selection"))
+    {
+      continue;
+    }
+    bounds->Update(prop);
+    if (prop->ResetToDomainDefaults(/*use_unchecked_values*/ true))
+    {
+      any = true;
+    }
+  }
+  return any;
 }
 
 void pqSHYXMultiSelectionInputWidget::registerCopiedProxies()

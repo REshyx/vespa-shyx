@@ -74,6 +74,8 @@ private:
     void tryConnectEndpointListSelection();
     void disconnectEndpointListSelection();
     void disconnectViewVisibilityLinks();
+    /** Copy EndpointInfo → EndpointStatus so File → Save State records checkbox flags. */
+    void syncEndpointStatusPropertyFromInfo();
     /** Port 1 clip preview is shown in \a view; true if there is no port-1 display in that view yet. */
     bool isClipPreviewPort1VisibleInView(pqView* view) const;
     static int ParseEndpointIndexFromArrayRowLabel(const QString& label);

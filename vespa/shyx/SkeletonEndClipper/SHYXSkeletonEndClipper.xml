@@ -203,7 +203,8 @@
         </ArraySelectionDomain>
         <Documentation>
           Select which skeleton leaf endpoints to clip. Apply once first to discover
-          endpoints from the extracted centerline.
+          endpoints from the extracted centerline. Checkbox state is stored on this
+          property so File / Save State (.pvsm) restores it.
         </Documentation>
       </StringVectorProperty>
 

@@ -2136,11 +2136,15 @@ const ShyxExtra kShyxExtra[] = {
     "1 Euclidean ball (IccBallRadius). Mutually exclusive. "
     "DetectFeatureEdges is OFF by default (no detect_sharp_edges / feature-mask constraints; port 1 empty). "
     "Properties panel ICC size histogram is a live pre-remesh preview (same widget as SHYXRemeshWithEndpoint). "
+    "SizingFieldScale multiplies the final ICC field after clamp / expansion / ScaleToRange "
+    "(default 1; not re-clamped). "
     "Uniform target edge length: VESPA Isotropic Remesher." },
   { "SHYXRemeshWithEndpoint",
     "Vascular step 5: optional endpoint cull then ICC remesh / cap. Filled caps are retagged on "
     "cell EndpointIndex (wall -1, patches 1..n by area). Wall ICC neighborhood same as "
-    "SHYXAdaptiveIsotropicRemesher (mesh rings vs Euclidean ball)." },
+    "SHYXAdaptiveIsotropicRemesher (mesh rings vs Euclidean ball). "
+    "SizingFieldScale multiplies the final wall ICC field after clamp / expansion / ScaleToRange "
+    "(default 1; not re-clamped; cap remesh unchanged)." },
   { "SHYXSkeletonExtraction",
     "Vascular step 1. Input must be watertight triangle mesh. Optional AppendCapEndpoints: "
     "cell EndpointIndex > 0 connected patches, area-weighted centroids joined to nearest "
@@ -2281,8 +2285,9 @@ const ShyxExtra kShyxExtra[] = {
     "then remap by append offset. The panel copies every Input's current selection "
     "(Copy Input Selections). Then fill / alpha wrap / union (CGAL>=5.5). "
     "Alpha and Offset are always absolute lengths; 0 (default) uses 0.1 times the longest AABB "
-    "side of the selected cells (recomputed each Apply). Reset fills that 0.1 suggestion from the "
-    "selection AABB (SHYXSelectionBoundsDomain); Scale multiplies the current value. No "
+    "side of the selected cells (recomputed each Apply). Copy Input Selections fills that 0.1 "
+    "suggestion from the new selection AABB; Reset does the same without recopying "
+    "(SHYXSelectionBoundsDomain); Scale multiplies the current value. No "
     "percent-of-diagonal mode. SelectionCellArrayName is a fallback mask on the merged mesh. "
     "SHYXBridgeCleanupMask (cell array, 1 = cleanup patch) is always written when a bridge "
     "cleanup mask exists; there is no ExportBridgeMask toggle. EnableBridgeRemesh and "

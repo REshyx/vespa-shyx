@@ -56,6 +56,11 @@ namespace pmp_sf = CGAL::Polygon_mesh_processing;
  * zero-initialised target (uncovered by the face range) are excluded from the min/max scan and
  * left at zero. This stretches the curvature-derived distribution to fill the full sizing interval.
  *
+ * Optional size-field scale: when @a size_field_scale is not 1, every positive target is multiplied
+ * by that factor **after** clamp, neighbor-ratio limiting, and scale-to-range. The result is **not**
+ * re-clamped to [short, long], so the field can leave the Min/Max interval. **1** (default) is a
+ * no-op. Applied again on every `recompute_curvature` / `recompute_sizes_from_current_icc_normals`.
+ *
  * Optional uncapped preview: when @a uncapped_sizes_out is non-null, the constructor's first ICC
  * pass also writes per-vertex **unclamped** target lengths (NaN where the ICC formula is undefined)
  * indexed by `vertex_descriptor::idx()`. The pointer is cleared after that pass so later
@@ -94,7 +99,7 @@ public:
   FeatureAwareAdaptiveSizingField(FT tol, std::pair<FT, FT> bounds, const FaceRange& face_range,
     CGAL_Surface& mesh, FT neighbor_max_ratio = FT(0), bool scale_to_range = false,
     std::vector<FT>* uncapped_sizes_out = nullptr, FT icc_ball_radius = FT(-1),
-    int icc_neighborhood_rings = 0)
+    int icc_neighborhood_rings = 0, FT size_field_scale = FT(1))
     : tol_g_(tol)
     , short_g_(bounds.first)
     , long_g_(bounds.second)
@@ -103,6 +108,7 @@ public:
     , uncapped_sizes_out_(uncapped_sizes_out)
     , icc_ball_radius_(icc_ball_radius)
     , icc_neighborhood_rings_(icc_neighborhood_rings > 0 ? icc_neighborhood_rings : 0)
+    , size_field_scale_(size_field_scale)
   {
     map_g_ =
       mesh.template add_property_map<vertex_descriptor, FT>("v:vespa_size_global", FT(0)).first;
@@ -261,6 +267,7 @@ private:
     }
     gradient_limit_vertex_sizes_(mesh);
     scale_to_range_map_(mesh);
+    apply_size_field_scale_(mesh);
   }
 
   /** Unclamped ICC edge length; NaN when curvature is non-positive or the radicand is non-positive. */
@@ -451,6 +458,26 @@ private:
     }
   }
 
+  /**
+   * Multiply every positive map_g_ value by size_field_scale_. No-op when the factor is 1 or
+   * non-positive. Does not re-clamp to [short_g_, long_g_].
+   */
+  void apply_size_field_scale_(CGAL_Surface& mesh)
+  {
+    if (!(size_field_scale_ > FT(0)) || size_field_scale_ == FT(1))
+    {
+      return;
+    }
+    for (vertex_descriptor v : vertices(mesh))
+    {
+      const FT s = get(map_g_, v);
+      if (s > FT(0))
+      {
+        put(map_g_, v, s * size_field_scale_);
+      }
+    }
+  }
+
   VSizeMap map_g_;
   FT       tol_g_;
   FT       short_g_;
@@ -460,6 +487,7 @@ private:
   std::vector<FT>* uncapped_sizes_out_ = nullptr;
   FT       icc_ball_radius_ = FT(-1);
   int      icc_neighborhood_rings_ = 0;
+  FT       size_field_scale_ = FT(1);
   static constexpr int gradient_limit_sweeps_ = 32;
 };
 

@@ -34,6 +34,7 @@
 #include <cstring>
 #include <exception>
 #include <iterator>
+#include <map>
 #include <memory>
 #include <set>
 #include <sstream>
@@ -41,6 +42,19 @@
 #include <vector>
 
 vtkStandardNewMacro(vtkCGALVesselEndClipper);
+
+namespace
+{
+int EndpointIdFromSelectionName(const char* name)
+{
+    int id = 0;
+    if (!name || std::sscanf(name, "Endpoint %d", &id) != 1 || id < 1)
+    {
+        return -1;
+    }
+    return id;
+}
+}
 
 //------------------------------------------------------------------------------
 vtkCGALVesselEndClipper::vtkCGALVesselEndClipper()
@@ -636,9 +650,23 @@ int vtkCGALVesselEndClipper::RequestData(
 
     // ---------------------------------------------------------------
     // 2b. Sync the vtkDataArraySelection with the discovered endpoints.
+    // Names include coordinates ("Endpoint 00001 (x, y, z)"), so a .pvsm
+    // restore or a tiny skeleton change would miss an exact-name match.
+    // Keep the previous enable flag when the Endpoint NNNNN id is the same.
     // ---------------------------------------------------------------
     const vtkMTimeType epSelMTimeBeforeSync =
         this->EndpointSelection ? this->EndpointSelection->GetMTime() : 0;
+
+    std::map<int, int> previousEnabledById;
+    for (int j = 0; j < this->EndpointSelection->GetNumberOfArrays(); ++j)
+    {
+        const char* existing = this->EndpointSelection->GetArrayName(j);
+        const int   id       = EndpointIdFromSelectionName(existing);
+        if (id > 0)
+        {
+            previousEnabledById[id] = this->EndpointSelection->ArrayIsEnabled(existing) ? 1 : 0;
+        }
+    }
 
     std::set<std::string> currentNames;
     for (const auto& ci : clips)
@@ -658,9 +686,12 @@ int vtkCGALVesselEndClipper::RequestData(
         {
             continue;
         }
-        const bool autoSelect =
-            (minBranchLen <= 0.0) || (ci.branchLength >= minBranchLen);
-        if (autoSelect)
+        const int id = EndpointIdFromSelectionName(ci.name.c_str());
+        auto      it = previousEnabledById.find(id);
+        const bool enabled = (it != previousEnabledById.end())
+            ? (it->second != 0)
+            : ((minBranchLen <= 0.0) || (ci.branchLength >= minBranchLen));
+        if (enabled)
         {
             this->EndpointSelection->EnableArray(ci.name.c_str());
         }

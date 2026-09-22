@@ -150,6 +150,7 @@
           endpoints will be clipped. Apply once first to discover
           the endpoints from the centerline input. **Min Branch Length**
           controls which endpoints are checked by default (short branches unchecked).
+          Checkbox state is stored on this property so File / Save State (.pvsm) restores it.
         </Documentation>
       </StringVectorProperty>
 

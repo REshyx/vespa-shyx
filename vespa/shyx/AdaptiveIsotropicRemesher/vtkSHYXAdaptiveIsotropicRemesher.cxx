@@ -234,6 +234,7 @@ void vtkSHYXAdaptiveIsotropicRemesher::PrintSelf(ostream& os, vtkIndent indent)
   os << indent << "IccBallRadius: " << this->IccBallRadius << std::endl;
   os << indent << "AdaptiveSizingNeighborMaxRatio: " << this->AdaptiveSizingNeighborMaxRatio << std::endl;
   os << indent << "ScaleToRange: " << (this->ScaleToRange ? "on" : "off") << std::endl;
+  os << indent << "SizingFieldScale: " << this->SizingFieldScale << std::endl;
   os << indent << "RemeshRecomputeCurvatureEachIteration: "
      << (this->RemeshRecomputeCurvatureEachIteration ? "on" : "off") << std::endl;
   os << indent << "ProtectAngle: " << this->ProtectAngle << std::endl;
@@ -531,14 +532,14 @@ int vtkSHYXAdaptiveIsotropicRemesher::RequestData(
     {
       sizingStorage.emplace(this->AdaptiveTolerance, std::make_pair(minLen, maxLen), remeshFaces,
         cgalMesh->surface, static_cast<double>(this->AdaptiveSizingNeighborMaxRatio),
-        this->ScaleToRange, &uncappedSizes, iccRadius, iccRings);
+        this->ScaleToRange, &uncappedSizes, iccRadius, iccRings, this->SizingFieldScale);
     }
     else
     {
       sizingStorage.emplace(this->AdaptiveTolerance, std::make_pair(minLen, maxLen),
         cgalMesh->surface.faces(), cgalMesh->surface,
         static_cast<double>(this->AdaptiveSizingNeighborMaxRatio),
-        this->ScaleToRange, &uncappedSizes, iccRadius, iccRings);
+        this->ScaleToRange, &uncappedSizes, iccRadius, iccRings, this->SizingFieldScale);
     }
     this->FillUncappedSizeHistogram(uncappedSizes);
     SizingTy& sizing = *sizingStorage;

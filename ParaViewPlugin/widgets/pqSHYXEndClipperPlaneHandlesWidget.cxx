@@ -6,6 +6,7 @@
 #include "pqDataRepresentation.h"
 #include "pqOutputPort.h"
 #include "pqPipelineSource.h"
+#include "pqProxy.h"
 #include "pqProxyWidget.h"
 #include "pqRenderView.h"
 #include "pqRepresentation.h"
@@ -21,12 +22,14 @@
 #include "vtkNew.h"
 #include "vtkPVDataInformation.h"
 #include "vtkPolyData.h"
+#include "vtkSMNewWidgetRepresentationProxy.h"
 #include "vtkSMParaViewPipelineController.h"
 #include "vtkSMPropertyHelper.h"
+#include "vtkSMProxy.h"
 #include "vtkSMRenderViewProxy.h"
 #include "vtkSMSessionProxyManager.h"
 #include "vtkSMSourceProxy.h"
-#include "vtkSMNewWidgetRepresentationProxy.h"
+#include "vtkSMStringVectorProperty.h"
 
 #include <QCheckBox>
 #include <QItemSelectionModel>
@@ -38,6 +41,7 @@
 #include <QVBoxLayout>
 
 #include <cmath>
+#include <cstring>
 #include <sstream>
 #include <string>
 
@@ -124,7 +128,10 @@ pqSHYXEndClipperPlaneHandlesWidget::pqSHYXEndClipperPlaneHandlesWidget(
         }
     }
 
-    QTimer::singleShot(0, this, [this]() { this->tryConnectEndpointListSelection(); });
+    QTimer::singleShot(0, this, [this]() {
+        this->tryConnectEndpointListSelection();
+        this->syncEndpointStatusPropertyFromInfo();
+    });
 }
 
 //-----------------------------------------------------------------------------
@@ -139,7 +146,10 @@ pqSHYXEndClipperPlaneHandlesWidget::~pqSHYXEndClipperPlaneHandlesWidget()
 void pqSHYXEndClipperPlaneHandlesWidget::select()
 {
     this->Superclass::select();
-    QTimer::singleShot(0, this, [this]() { this->tryConnectEndpointListSelection(); });
+    QTimer::singleShot(0, this, [this]() {
+        this->tryConnectEndpointListSelection();
+        this->syncEndpointStatusPropertyFromInfo();
+    });
     this->updatePlaneWidgetsVisibility();
 }
 
@@ -185,6 +195,58 @@ void pqSHYXEndClipperPlaneHandlesWidget::onUseInteractiveToggled(bool /*on*/)
 void pqSHYXEndClipperPlaneHandlesWidget::onPipelineDataUpdated()
 {
     this->rebuildPlaneWidgetsIfNeeded();
+    // Apply pulls EndpointInfo after UpdateDataEvent; defer so the copy sees it.
+    QTimer::singleShot(0, this, [this]() { this->syncEndpointStatusPropertyFromInfo(); });
+}
+
+//-----------------------------------------------------------------------------
+void pqSHYXEndClipperPlaneHandlesWidget::syncEndpointStatusPropertyFromInfo()
+{
+    vtkSMProxy* proxy = this->proxy();
+    if (!proxy)
+    {
+        return;
+    }
+    if (auto* source = vtkSMSourceProxy::SafeDownCast(proxy))
+    {
+        source->UpdatePipelineInformation();
+    }
+
+    auto* info = vtkSMStringVectorProperty::SafeDownCast(proxy->GetProperty("EndpointInfo"));
+    auto* status = vtkSMStringVectorProperty::SafeDownCast(proxy->GetProperty("EndpointStatus"));
+    if (!info || !status || info->GetNumberOfElements() == 0)
+    {
+        return;
+    }
+
+    const unsigned int nInfo = info->GetNumberOfElements();
+    const unsigned int nStatus = status->GetNumberOfElements();
+    bool same = (nInfo == nStatus);
+    if (same)
+    {
+        for (unsigned int i = 0; i < nInfo; ++i)
+        {
+            const char* a = info->GetElement(i);
+            const char* b = status->GetElement(i);
+            if ((a == nullptr) != (b == nullptr) || (a && b && std::strcmp(a, b) != 0))
+            {
+                same = false;
+                break;
+            }
+        }
+    }
+    if (same)
+    {
+        return;
+    }
+
+    const pqProxy::ModifiedState prev =
+        this->PipelineSource ? this->PipelineSource->modifiedState() : pqProxy::UNMODIFIED;
+    status->Copy(info);
+    if (this->PipelineSource && prev != pqProxy::MODIFIED)
+    {
+        this->PipelineSource->setModifiedState(prev);
+    }
 }
 
 //-----------------------------------------------------------------------------

@@ -17,7 +17,8 @@
  * keep the wall value so shared-loop wall triangles are not pulled into cap partitions.
  * Output port 0 is the remeshed wall (+ optional caps), not a rejoin of a separate vessel+caps
  * pipeline. Same ICC sizing stack as vtkSHYXAdaptiveIsotropicRemesher, without selection, feature
- * detection, or mask logic. CGAL split/collapse/flip follow CGAL defaults (all enabled); only
+ * detection, or mask logic, plus **SizingFieldScale** (uniform multiplier on the final wall ICC
+ * field; default 1). CGAL split/collapse/flip follow CGAL defaults (all enabled); only
  * protect/collapse/relax constraint flags are exposed besides sizing and iteration controls.
  *
  * After remesh (or sizing-only when wall remesh is off), port 0 point data includes sizing vs
@@ -111,6 +112,13 @@ public:
     vtkGetMacro(ScaleToRange, bool);
     vtkSetMacro(ScaleToRange, bool);
     vtkBooleanMacro(ScaleToRange, bool);
+    /**
+     * Uniform multiplier applied to the **final** wall ICC sizing field after clamp, expansion
+     * ratio, and ScaleToRange. **1** (default) leaves targets unchanged. **&lt; 1** densifies;
+     * **&gt; 1** coarsens. Not re-clamped to [Min, Max]. Cap remesh is unaffected.
+     */
+    vtkGetMacro(SizingFieldScale, double);
+    vtkSetClampMacro(SizingFieldScale, double, 1.0e-6, 1.0e6);
     vtkGetMacro(RemeshRecomputeCurvatureEachIteration, bool);
     vtkSetMacro(RemeshRecomputeCurvatureEachIteration, bool);
     vtkBooleanMacro(RemeshRecomputeCurvatureEachIteration, bool);
@@ -239,6 +247,7 @@ protected:
     double IccBallRadius = -1.0;
     double AdaptiveSizingNeighborMaxRatio = 1.6;
     bool ScaleToRange = false;
+    double SizingFieldScale = 1.0;
     bool RemeshRecomputeCurvatureEachIteration = true;
     int NumberOfIterations = 3;
     int NumberOfRelaxationSteps = 3;
