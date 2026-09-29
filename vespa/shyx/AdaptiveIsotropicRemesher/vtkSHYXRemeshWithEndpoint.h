@@ -144,9 +144,17 @@ public:
     vtkBooleanMacro(EnableWallRemesh, bool);
     //@}
 
+    //@{
+    /**
+     * When ON, freeze open-boundary loops during wall remesh. Border edges are not split or
+     * collapsed, and each opening vertex is pinned (\c vertex_is_constrained_map) so an incident
+     * collapse cannot delete it and relaxation or projection cannot move it. Collapse constraints
+     * and Relax constraints are ignored. Default OFF.
+     */
     vtkGetMacro(RemeshProtectConstraints, bool);
     vtkSetMacro(RemeshProtectConstraints, bool);
     vtkBooleanMacro(RemeshProtectConstraints, bool);
+    //@}
     vtkGetMacro(RemeshCollapseConstraints, bool);
     vtkSetMacro(RemeshCollapseConstraints, bool);
     vtkBooleanMacro(RemeshCollapseConstraints, bool);

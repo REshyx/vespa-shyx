@@ -4,8 +4,8 @@
                  class="vtkSHYXExtrudeFilter"
                  label="SHYX Extrude">
       <Documentation
-          long_help="Extrudes vtkPolyData as Point (shared vertices along point normals or a point vector array) or Poly (each polygon independently along its face normal, unique vertices per face). Use Selection (off by default) and a Threshold mask are independent: either, both (intersection), or neither (whole mesh). Invert flips the combined set. Output Front / Side / Back are independent: Front is the cap; Side is walls (Point: one ring on the patch boundary; Poly: every scale edge back to the original vertices); Back keeps the original selected faces (reversed when Front is also on). Point with only Front on is in-place displacement (a subset stretches neighboring faces). Creating the filter still copies the Input's active selection into the Selection widget so turning Use Selection on does not require Copy Active Selection unless the pick changed."
-          short_help="SHYX Extrude: Point or Poly; Front/Side/Back; Use Selection (off by default) and Threshold independently."/>
+          long_help="Extrudes vtkPolyData as Point (shared vertices along point normals or a point vector array) or Poly (each polygon independently along its face normal, unique vertices per face). Avoid Intersection (Point only, off by default) places vertices on offset face planes and shortens any that would invert, collapse, or hit a non-adjacent part of the input. Use Selection and Use Mask Array are independent and off by default: off means that input does not restrict the region (all). Either, both (intersection), or neither (whole mesh). Invert flips the combined set. Output Front / Side / Back are independent: Front is the cap; Side is walls (Point: one ring on the patch boundary; Poly: every scale edge back to the original vertices); Back keeps the original selected faces (reversed when Front is also on). Point with only Front on is in-place displacement (a subset stretches neighboring faces). Creating the filter still copies the Input's active selection into the Selection widget so turning Use Selection on does not require Copy Active Selection unless the pick changed."
+          short_help="SHYX Extrude: Point or Poly; Front/Side/Back. Use Selection and Use Mask Array off = all."/>
 
       <InputProperty name="Input" command="SetInputConnection">
         <ProxyGroupDomain name="groups">
@@ -28,8 +28,8 @@
                          animateable="0">
         <BooleanDomain name="bool"/>
         <Documentation>
-          Off by default: the Selection port is ignored. On: restrict to the vtkSelection
-          (independent of the Threshold mask; both on → intersection).
+          Off by default: the Selection port is ignored and the whole mesh is selected.
+          On: restrict to the vtkSelection (independent of Use Mask Array; both on → intersection).
         </Documentation>
       </IntVectorProperty>
 
@@ -43,9 +43,10 @@
           <DataType value="vtkSelection"/>
         </DataTypeDomain>
         <Documentation>
-          vtkSelection used only when Use Selection is on. Independent of the Threshold mask:
-          both on → intersection. Creating the filter copies the Input's active selection so
-          enabling Use Selection does not require Copy Active Selection unless the pick changed.
+          vtkSelection used only when Use Selection is on. Off treats the mesh as fully selected.
+          Independent of Use Mask Array: both on → intersection. Creating the filter copies the
+          Input's active selection so enabling Use Selection does not require Copy Active Selection
+          unless the pick changed.
         </Documentation>
         <Hints>
           <SelectionInput/>
@@ -133,6 +134,28 @@
         <Documentation>Negate the unit direction before applying distance.</Documentation>
       </IntVectorProperty>
 
+      <IntVectorProperty name="AvoidIntersection"
+                         label="Avoid Intersection"
+                         command="SetAvoidIntersection"
+                         number_of_elements="1"
+                         default_values="0"
+                         animateable="0">
+        <BooleanDomain name="bool"/>
+        <Documentation>
+          Point type only. Each face is offset along its normal and each vertex is placed on those
+          planes. Inverted or collapsed faces are smoothed and shortened, and a vertex stops short
+          of a non-adjacent hit on the input, so concave regions can end up shorter than Extrusion
+          Distance. Use Normals and Direction Array are ignored while this is on. Every vertex of a
+          selected face moves, including the in-place (Front only) case.
+        </Documentation>
+        <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="visibility"
+                                   property="ExtrudeType"
+                                   value="0"/>
+        </Hints>
+      </IntVectorProperty>
+
       <IntVectorProperty name="UseNormalsForDirection"
                          label="Use Normals For Direction"
                          command="SetUseNormalsForDirection"
@@ -141,13 +164,22 @@
                          animateable="0">
         <BooleanDomain name="bool"/>
         <Documentation>
-          Point type: on = vtkPolyDataNormals; off = Direction Array. Ignored for Poly (face normals).
+          Point type: on = vtkPolyDataNormals; off = Direction Array. Ignored for Poly (face normals)
+          and while Avoid Intersection is on.
         </Documentation>
         <Hints>
-          <PropertyWidgetDecorator type="GenericDecorator"
-                                   mode="visibility"
-                                   property="ExtrudeType"
-                                   value="0"/>
+          <PropertyWidgetDecorator type="CompositeDecorator">
+            <Expression type="and">
+              <PropertyWidgetDecorator type="GenericDecorator"
+                                       mode="visibility"
+                                       property="ExtrudeType"
+                                       value="0"/>
+              <PropertyWidgetDecorator type="GenericDecorator"
+                                       mode="visibility"
+                                       property="AvoidIntersection"
+                                       value="0"/>
+            </Expression>
+          </PropertyWidgetDecorator>
         </Hints>
       </IntVectorProperty>
 
@@ -165,7 +197,8 @@
           </RequiredProperties>
         </ArrayListDomain>
         <Documentation>
-          3-component point vector; required when Type is Point and Use Normals is off.
+          3-component point vector; required when Type is Point, Use Normals is off, and Avoid
+          Intersection is off.
         </Documentation>
         <Hints>
           <PropertyWidgetDecorator type="CompositeDecorator">
@@ -177,6 +210,10 @@
               <PropertyWidgetDecorator type="GenericDecorator"
                                        mode="visibility"
                                        property="UseNormalsForDirection"
+                                       value="0"/>
+              <PropertyWidgetDecorator type="GenericDecorator"
+                                       mode="visibility"
+                                       property="AvoidIntersection"
                                        value="0"/>
             </Expression>
           </PropertyWidgetDecorator>
@@ -219,6 +256,19 @@
         </Hints>
       </StringVectorProperty>
 
+      <IntVectorProperty name="UseMaskArray"
+                         label="Use Mask Array"
+                         command="SetUseMaskArray"
+                         number_of_elements="1"
+                         default_values="0"
+                         animateable="0">
+        <BooleanDomain name="bool"/>
+        <Documentation>
+          Off by default: the mask is ignored and every cell is extruded (subject to Use Selection).
+          On: restrict by the Threshold mask (independent of Use Selection; both on → intersection).
+        </Documentation>
+      </IntVectorProperty>
+
       <StringVectorProperty name="MaskArrayName"
                             label="Mask Array"
                             command="SetMaskArrayName"
@@ -233,9 +283,13 @@
         </ArrayListDomain>
         <Documentation>
           Point- or cell-centered; same name on both prefers cell data. Tuple magnitude compared
-          with Lower / Between / Upper. Independent of Use Selection: both on → intersection.
+          with Lower / Between / Upper. Used only when Use Mask Array is on.
         </Documentation>
         <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="visibility"
+                                   property="UseMaskArray"
+                                   value="1"/>
           <ArraySelectionWidget/>
         </Hints>
       </StringVectorProperty>
@@ -254,6 +308,12 @@
         <Documentation>
           vtkThreshold-style test on the mask array: x in [Lower, Upper], x &lt;= Lower, or x &gt;= Upper.
         </Documentation>
+        <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="visibility"
+                                   property="UseMaskArray"
+                                   value="1"/>
+        </Hints>
       </IntVectorProperty>
 
       <DoubleVectorProperty name="LowerThreshold"
@@ -265,10 +325,18 @@
         <DoubleRangeDomain name="range" min="-1e308" max="1e308"/>
         <Documentation>Used by Between and Below Lower.</Documentation>
         <Hints>
-          <PropertyWidgetDecorator type="GenericDecorator"
-                                   mode="visibility"
-                                   property="ThresholdMethod"
-                                   values="0 1"/>
+          <PropertyWidgetDecorator type="CompositeDecorator">
+            <Expression type="and">
+              <PropertyWidgetDecorator type="GenericDecorator"
+                                       mode="visibility"
+                                       property="UseMaskArray"
+                                       value="1"/>
+              <PropertyWidgetDecorator type="GenericDecorator"
+                                       mode="visibility"
+                                       property="ThresholdMethod"
+                                       values="0 1"/>
+            </Expression>
+          </PropertyWidgetDecorator>
         </Hints>
       </DoubleVectorProperty>
 
@@ -281,10 +349,18 @@
         <DoubleRangeDomain name="range" min="-1e308" max="1e308"/>
         <Documentation>Used by Between and Above Upper.</Documentation>
         <Hints>
-          <PropertyWidgetDecorator type="GenericDecorator"
-                                   mode="visibility"
-                                   property="ThresholdMethod"
-                                   values="0 2"/>
+          <PropertyWidgetDecorator type="CompositeDecorator">
+            <Expression type="and">
+              <PropertyWidgetDecorator type="GenericDecorator"
+                                       mode="visibility"
+                                       property="UseMaskArray"
+                                       value="1"/>
+              <PropertyWidgetDecorator type="GenericDecorator"
+                                       mode="visibility"
+                                       property="ThresholdMethod"
+                                       values="0 2"/>
+            </Expression>
+          </PropertyWidgetDecorator>
         </Hints>
       </DoubleVectorProperty>
 
@@ -299,6 +375,12 @@
           Point-centered mask to faces: all corners must pass vs any corner. Cell-centered mask
           to points: all incident cells vs any.
         </Documentation>
+        <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="visibility"
+                                   property="UseMaskArray"
+                                   value="1"/>
+        </Hints>
       </IntVectorProperty>
 
       <IntVectorProperty name="Invert"
@@ -326,6 +408,7 @@
       <PropertyGroup label="Distance and direction">
         <Property name="ExtrusionDistance"/>
         <Property name="FlipDirection"/>
+        <Property name="AvoidIntersection"/>
         <Property name="UseNormalsForDirection"/>
         <Property name="DirectionArrayName"/>
         <Property name="UseDistanceMultiplierArray"/>
@@ -333,6 +416,7 @@
       </PropertyGroup>
 
       <PropertyGroup label="Threshold mask">
+        <Property name="UseMaskArray"/>
         <Property name="MaskArrayName"/>
         <Property name="ThresholdMethod"/>
         <Property name="LowerThreshold"/>

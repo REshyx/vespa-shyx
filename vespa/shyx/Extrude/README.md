@@ -5,6 +5,7 @@
 ## Type
 
 - **Point**：沿**顶点法线**（或点矢量数组），顶点共享。只有 Output Front 时原地挪点（子集边界会拉邻面）。打开 Side 或 Back 后改成连通块：选区顶点复制一份做帽，外圈一圈侧壁，沿点法线。
+- **Avoid Intersection**（仅 Point，默认关）：每个面沿面法线平移，顶点取这些偏移平面的交点。帽面翻过去、面积塌掉，或位移撞上不相邻的输入面时，把该顶点缩短，所以凹区和细缝里的实际厚度可以小于 Extrusion Distance。勾选后 Use Normals 和 Direction Array 不参与；选中面的每个顶点都会动，包括只开 Front 的原地挤出。
 - **Poly**：每个选中多边形沿**面法线**独立挤出（每面一套顶点，鳞片/刺猬）。Side 把每条棱接到原网格顶点；相邻选中面之间是缝。
 
 ## Output Front / Side / Back
@@ -13,12 +14,12 @@
 
 ## 挤谁
 
-Selection 默认关（**Use Selection**）。和 Threshold 独立，不是互斥切换：
+**Use Selection** 和 **Use Mask Array** 默认都关。关 = 这一路不裁（全选 / 全部挤出），相关控件隐藏。两路独立，不是互斥：
 
-- Use Selection 开、无 Mask → 该选区（创建时仍会把当前选区拷进 widget，打开开关不必再 Copy Active Selection，除非后来改了选区）；
-- 只有 Mask Array → Threshold（Between / Below Lower / Above Upper，同名优先 CellData，可 All Scalars）；
-- **两个都开 → 交集**；
-- 都关（无 mask）→ 整网。
+- 都关 → 整网；
+- 只开 Use Selection → 该选区（创建时仍会把当前选区拷进 widget，打开开关不必再 Copy Active Selection，除非后来改了选区）；
+- 只开 Use Mask Array → Threshold（Between / Below Lower / Above Upper，同名优先 CellData，可 All Scalars）；
+- **两个都开 → 交集**。
 
 Invert 在组合之后取反。
 

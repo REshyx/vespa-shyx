@@ -355,7 +355,12 @@
                          animateable="0"
                          panel_visibility="advanced">
         <BooleanDomain name="bool"/>
-        <Documentation>CGAL protect_constraints (default OFF). When ON, constrained edges are not split or collapsed.</Documentation>
+        <Documentation>
+          When ON, open-boundary loops of the wall stay fixed: border edges are not split or
+          collapsed, and each opening vertex is pinned so a neighboring collapse cannot delete it
+          and relaxation or projection cannot move it. Collapse constraints and Relax constraints
+          are ignored. Default OFF.
+        </Documentation>
         <Hints>
           <PropertyWidgetDecorator type="GenericDecorator"
                                    mode="enabled_state"
@@ -393,8 +398,15 @@
                          animateable="0"
                          panel_visibility="advanced">
         <BooleanDomain name="bool"/>
-        <Documentation>CGAL relax_constraints during tangential relaxation.</Documentation>
+        <Documentation>
+          CGAL relax_constraints during tangential relaxation. Ignored while Protect constraints
+          is ON, so opening vertices are not slid along the boundary.
+        </Documentation>
         <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="enabled_state"
+                                   property="RemeshProtectConstraints"
+                                   value="0"/>
           <PropertyWidgetDecorator type="GenericDecorator"
                                    mode="enabled_state"
                                    property="EnableWallRemesh"

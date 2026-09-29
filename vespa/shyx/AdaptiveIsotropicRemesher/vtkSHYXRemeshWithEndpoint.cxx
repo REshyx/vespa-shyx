@@ -868,10 +868,36 @@ int vtkSHYXRemeshWithEndpoint::RequestData(
         if (this->EnableWallRemesh)
         {
             auto featureEdges = get(CGAL::edge_is_feature, cgalMesh->surface);
-            for (CGAL_Surface::Edge_index e : cgalMesh->surface.edges())
-            {
-                boost::put(featureEdges, e, false);
-            }
+            // Pinned opening vertices. protect_constraints alone only blocks split/collapse of the
+            // border edges; an incident wall edge can still collapse and delete the opening vertex.
+            // vertex_is_constrained_map keeps that vertex and skips projection. Refreshed each
+            // iteration because remesh inserts vertices (new ones default to unpinned).
+            auto pinnedOpening =
+                cgalMesh->surface.add_property_map<CGAL_Surface::Vertex_index, bool>(
+                    "v:vespa_pin_opening", false).first;
+            auto pinOpeningBoundary = [&]() {
+                for (CGAL_Surface::Vertex_index v : cgalMesh->surface.vertices())
+                {
+                    boost::put(pinnedOpening, v, false);
+                }
+                for (CGAL_Surface::Edge_index e : cgalMesh->surface.edges())
+                {
+                    boost::put(featureEdges, e, false);
+                }
+                if (!this->RemeshProtectConstraints)
+                {
+                    return;
+                }
+                for (CGAL_Surface::Halfedge_index h : cgalMesh->surface.halfedges())
+                {
+                    if (!cgalMesh->surface.is_border(h))
+                    {
+                        continue;
+                    }
+                    boost::put(pinnedOpening, cgalMesh->surface.target(h), true);
+                    boost::put(featureEdges, cgalMesh->surface.edge(h), true);
+                }
+            };
 
             SizingTy& sizing = *sizingStorage;
             const auto remeshNp = [&](unsigned int iteration_count) {
@@ -879,12 +905,15 @@ int vtkSHYXRemeshWithEndpoint::RequestData(
                     .number_of_relaxation_steps(static_cast<unsigned int>(this->NumberOfRelaxationSteps))
                     .protect_constraints(this->RemeshProtectConstraints)
                     .collapse_constraints(this->RemeshCollapseConstraints)
-                    .relax_constraints(this->RemeshRelaxConstraints)
+                    // Relax would slide opening vertices along the border. Protect means frozen.
+                    .relax_constraints(this->RemeshProtectConstraints ? false
+                                                                     : this->RemeshRelaxConstraints)
                     .do_split(true)
                     .do_collapse(true)
                     .do_flip(true)
                     .do_project(this->RemeshDoProject)
-                    .edge_is_constrained_map(featureEdges);
+                    .edge_is_constrained_map(featureEdges)
+                    .vertex_is_constrained_map(pinnedOpening);
             };
 
             const unsigned int remeshIterations = static_cast<unsigned int>(this->NumberOfIterations);
@@ -919,6 +948,7 @@ int vtkSHYXRemeshWithEndpoint::RequestData(
                     sizing.recompute_curvature(cgalMesh->surface);
                 }
                 collectGarbageIfNeeded();
+                pinOpeningBoundary();
                 pmp::isotropic_remeshing(
                     cgalMesh->surface.faces(), sizing, cgalMesh->surface, remeshNp(1));
                 collectGarbageIfNeeded();

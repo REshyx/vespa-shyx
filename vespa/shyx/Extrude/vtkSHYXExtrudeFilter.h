@@ -6,14 +6,17 @@
  * Output Front, coordinates change in place (neighbors stretch on a subset). Turning on Side
  * or Back switches to a connected-patch extrusion: one offset copy per region vertex, optional
  * original faces (Back; reversed if Front is also on), and a single ring of side quads on the
- * patch boundary (Side).
+ * patch boundary (Side). Avoid Intersection (off by default) instead places each vertex on the
+ * offset planes of its faces, then smooths and shortens vertices that would invert, collapse,
+ * or hit a non-adjacent part of the input.
  *
  * Type Poly extrudes each selected polygon independently along its face normal (unique vertices
  * per face). Side walls attach to the original edge vertices; adjacent selected faces do not
  * share cap vertices.
  *
- * Region: Use Selection (off by default) and a Threshold mask are independent. Either, both
- * (intersection), or neither (whole mesh). Invert flips the combined set.
+ * Region: Use Selection and Use Mask Array are independent and off by default. Off means that
+ * input does not restrict the region (all selected / extrude everything from that input).
+ * Either, both (intersection), or neither (whole mesh). Invert flips the combined set.
  */
 
 #ifndef vtkSHYXExtrudeFilter_h
@@ -77,6 +80,11 @@ public:
   vtkGetMacro(UseNormalsForDirection, int);
   vtkBooleanMacro(UseNormalsForDirection, int);
 
+  /** Point type only. Face-plane offset with shortening instead of vertex-normal displacement. */
+  vtkSetMacro(AvoidIntersection, int);
+  vtkGetMacro(AvoidIntersection, int);
+  vtkBooleanMacro(AvoidIntersection, int);
+
   vtkSetStringMacro(DirectionArrayName);
   vtkGetStringMacro(DirectionArrayName);
 
@@ -86,6 +94,11 @@ public:
 
   vtkSetStringMacro(DistanceMultiplierArrayName);
   vtkGetStringMacro(DistanceMultiplierArrayName);
+
+  /** Threshold mask. Ignored unless UseMaskArray is on (off = extrude everything from the mask). */
+  vtkSetMacro(UseMaskArray, int);
+  vtkGetMacro(UseMaskArray, int);
+  vtkBooleanMacro(UseMaskArray, int);
 
   vtkSetStringMacro(MaskArrayName);
   vtkGetStringMacro(MaskArrayName);
@@ -122,10 +135,12 @@ protected:
   double ExtrusionDistance = 1.0;
   int FlipDirection = 0;
   int UseNormalsForDirection = 1;
+  int AvoidIntersection = 0;
   int UseDistanceMultiplierArray = 0;
   char* DirectionArrayName = nullptr;
   char* DistanceMultiplierArrayName = nullptr;
   char* MaskArrayName = nullptr;
+  int UseMaskArray = 0;
   int ThresholdMethod = THRESHOLD_BETWEEN;
   double LowerThreshold = 0.0;
   double UpperThreshold = 1.0;

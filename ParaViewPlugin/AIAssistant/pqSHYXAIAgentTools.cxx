@@ -2144,7 +2144,10 @@ const ShyxExtra kShyxExtra[] = {
     "cell EndpointIndex (wall -1, patches 1..n by area). Wall ICC neighborhood same as "
     "SHYXAdaptiveIsotropicRemesher (mesh rings vs Euclidean ball). "
     "SizingFieldScale multiplies the final wall ICC field after clamp / expansion / ScaleToRange "
-    "(default 1; not re-clamped; cap remesh unchanged)." },
+    "(default 1; not re-clamped; cap remesh unchanged). "
+    "RemeshProtectConstraints ON freezes wall opening loops: border edges are not split or "
+    "collapsed, and opening vertices are pinned (not deleted by an incident collapse, not moved "
+    "by relaxation or projection). Collapse and Relax constraints are ignored while it is ON." },
   { "SHYXSkeletonExtraction",
     "Vascular step 1. Input must be watertight triangle mesh. Optional AppendCapEndpoints: "
     "cell EndpointIndex > 0 connected patches, area-weighted centroids joined to nearest "
@@ -2238,9 +2241,14 @@ const ShyxExtra kShyxExtra[] = {
     "vector array); Type Poly = each polygon along its face normal with unique vertices (scales). "
     "Output Front/Side/Back: Front is the cap (Point with Side and Back off = in-place move); "
     "Side = walls (Point: patch boundary ring; Poly: each scale edge back to original verts); "
-    "Back keeps original selected faces (reversed if Front is also on). Use Selection is off by "
-    "default (the Selection port is ignored). It and the Threshold mask are independent: either, "
-    "both = intersection, neither = all. Invert flips the combined set. Creating the filter still "
+    "Back keeps original selected faces (reversed if Front is also on). Use Selection and Use "
+    "Mask Array are off by default: off ignores that input (all selected / extrude everything) "
+    "and hides its controls. They are independent: either, both = intersection, neither = all. "
+    "Invert flips the combined set. Avoid Intersection (Point only, default off) places vertices "
+    "on offset face planes instead of moving them along vertex normals, then shortens any vertex "
+    "whose face would invert, collapse, or hit a non-adjacent part of the input, so concave "
+    "regions can end up shorter than Extrusion Distance. Use Normals and Direction Array are "
+    "ignored while it is on. Creating the filter still "
     "copies the active selection into the widget so turning Use Selection on does not need Copy "
     "Active Selection unless the pick changed. Old SHYXPointExtrudeFilter() is gone. SHYX "
     "Selection Extrude is still the connected-patch tool along patch/point normals." },
