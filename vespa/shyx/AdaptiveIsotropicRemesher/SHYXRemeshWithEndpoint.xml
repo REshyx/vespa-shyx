@@ -211,8 +211,53 @@
                             default_values="1.6">
         <DoubleRangeDomain name="range" min="0" max="1e6"/>
         <Documentation>
-          **Expansion ratio** R caps ICC sizing jumps along edges; **鈮?1** disables. Set **0** to disable (same semantics as SHYX Adaptive Isotropic Remesher).
+          **Expansion ratio** R caps ICC sizing jumps along edges; **&lt;= 1** disables. Set **0** to disable (same semantics as SHYX Adaptive Isotropic Remesher).
+          With **Anchor boundary size** ON, R is also how fast the field may leave the frozen opening edge length (one hop multiplies or divides by R).
         </Documentation>
+      </DoubleVectorProperty>
+
+      <IntVectorProperty command="SetAnchorBoundarySize"
+                         name="AnchorBoundarySize"
+                         label="Anchor boundary size"
+                         number_of_elements="1"
+                         default_values="0"
+                         animateable="0">
+        <BooleanDomain name="bool"/>
+        <Documentation>
+          When ON, each open-boundary vertex target is the mean length of its border edges, not the
+          ICC value. **Expansion ratio** R &gt; 1 then keeps every wall vertex within
+          [L / R^d, L * R^d] of those anchors (d = hop distance), so the mesh transitions from the
+          opening edge length toward the interior ICC field. R &lt;= 1 only rewrites the boundary
+          vertices. The anchor is the geometric edge length and is not multiplied by
+          **Sizing field scale**. With **Protect constraints** OFF, **Boundary size scale**
+          multiplies the anchor so the opening can be coarsened or refined. With Protect ON the
+          opening stays frozen at its input edge length. Cap remesh is unchanged. Default OFF.
+        </Documentation>
+      </IntVectorProperty>
+
+      <DoubleVectorProperty command="SetBoundarySizeScale"
+                            name="BoundarySizeScale"
+                            label="Boundary size scale"
+                            number_of_elements="1"
+                            default_values="1">
+        <DoubleRangeDomain name="range" min="1e-6" max="1e6"/>
+        <Documentation>
+          Multiplier on the anchored opening edge length. Shown when **Anchor boundary size** is ON
+          and **Protect constraints** is OFF. **1** (default) keeps the input opening edge length.
+          **&gt; 1** coarsens the boundary (longer edges); **&lt; 1** refines it. The factor is
+          measured on the input loops and reused on later iterations, so it does not compound.
+          Not multiplied by **Sizing field scale** and not re-clamped to Min/Max.
+        </Documentation>
+        <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="visibility"
+                                   property="AnchorBoundarySize"
+                                   value="1"/>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="visibility"
+                                   property="RemeshProtectConstraints"
+                                   value="0"/>
+        </Hints>
       </DoubleVectorProperty>
 
       <IntVectorProperty command="SetScaleToRange"
@@ -253,6 +298,8 @@
         <Property name="IccNeighborhoodRings"/>
         <Property name="IccBallRadius"/>
         <Property name="AdaptiveSizingNeighborMaxRatio"/>
+        <Property name="AnchorBoundarySize"/>
+        <Property name="BoundarySizeScale"/>
         <Property name="ScaleToRange"/>
         <Property name="SizingFieldScale"/>
       </PropertyGroup>

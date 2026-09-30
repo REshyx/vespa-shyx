@@ -18,6 +18,7 @@
 #include <limits>
 #include <optional>
 #include <queue>
+#include <set>
 #include <utility>
 #include <vector>
 
@@ -61,6 +62,16 @@ namespace pmp_sf = CGAL::Polygon_mesh_processing;
  * re-clamped to [short, long], so the field can leave the Min/Max interval. **1** (default) is a
  * no-op. Applied again on every `recompute_curvature` / `recompute_sizes_from_current_icc_normals`.
  *
+ * Optional boundary anchor: when @a anchor_boundary_size is true, open-boundary vertices are not
+ * used as Expansion-ratio seeds (their ICC value is discarded). After scale, each border vertex is
+ * set to the mean length of its border edges, and every other vertex is clamped into
+ * \f$[L/R^{d}, L R^{d}]\f$ of those anchors (\f$R\f$ = neighbor_max_ratio, \f$d\f$ = hop distance).
+ * \f$R \le 1\f$ only rewrites the border vertices. The anchor is the geometric edge length, not
+ * multiplied by size_field_scale. When @a boundary_size_scale is not 1, each opening loop's anchor
+ * is that loop's mean border-edge length times the factor (\f$> 1\f$ coarsens, \f$< 1\f$ refines).
+ * The absolute target is taken from the input mesh and reused on later `recompute_curvature`
+ * passes, so the factor is not compounded across remesh iterations.
+ *
  * Optional uncapped preview: when @a uncapped_sizes_out is non-null, the constructor's first ICC
  * pass also writes per-vertex **unclamped** target lengths (NaN where the ICC formula is undefined)
  * indexed by `vertex_descriptor::idx()`. The pointer is cleared after that pass so later
@@ -99,7 +110,8 @@ public:
   FeatureAwareAdaptiveSizingField(FT tol, std::pair<FT, FT> bounds, const FaceRange& face_range,
     CGAL_Surface& mesh, FT neighbor_max_ratio = FT(0), bool scale_to_range = false,
     std::vector<FT>* uncapped_sizes_out = nullptr, FT icc_ball_radius = FT(-1),
-    int icc_neighborhood_rings = 0, FT size_field_scale = FT(1))
+    int icc_neighborhood_rings = 0, FT size_field_scale = FT(1), bool anchor_boundary_size = false,
+    FT boundary_size_scale = FT(1))
     : tol_g_(tol)
     , short_g_(bounds.first)
     , long_g_(bounds.second)
@@ -109,6 +121,8 @@ public:
     , icc_ball_radius_(icc_ball_radius)
     , icc_neighborhood_rings_(icc_neighborhood_rings > 0 ? icc_neighborhood_rings : 0)
     , size_field_scale_(size_field_scale)
+    , anchor_boundary_size_(anchor_boundary_size)
+    , boundary_size_scale_(boundary_size_scale > FT(0) ? boundary_size_scale : FT(1))
   {
     map_g_ =
       mesh.template add_property_map<vertex_descriptor, FT>("v:vespa_size_global", FT(0)).first;
@@ -265,9 +279,19 @@ private:
       }
       put(map_g_, v, vertex_size_(tol_g_, short_g_, long_g_, max_abs));
     }
+    // Lip curvature must not seed Expansion ratio; those vertices are overwritten with
+    // geometric border length after scaling.
+    if (anchor_boundary_size_)
+    {
+      clear_border_vertex_sizes_(mesh);
+    }
     gradient_limit_vertex_sizes_(mesh);
     scale_to_range_map_(mesh);
     apply_size_field_scale_(mesh);
+    if (anchor_boundary_size_)
+    {
+      anchor_boundary_sizes_(mesh);
+    }
   }
 
   /** Unclamped ICC edge length; NaN when curvature is non-positive or the radicand is non-positive. */
@@ -458,6 +482,292 @@ private:
     }
   }
 
+  /** Set every open-boundary vertex target to 0 so it is skipped by later sizing passes. */
+  void clear_border_vertex_sizes_(CGAL_Surface& mesh)
+  {
+    for (CGAL_Surface::Edge_index e : mesh.edges())
+    {
+      const halfedge_descriptor h = mesh.halfedge(e);
+      if (!mesh.is_border(h) && !mesh.is_border(mesh.opposite(h)))
+      {
+        continue;
+      }
+      put(map_g_, mesh.source(h), FT(0));
+      put(map_g_, mesh.target(h), FT(0));
+    }
+  }
+
+  struct BorderLoopTarget
+  {
+    FT cx = 0;
+    FT cy = 0;
+    FT cz = 0;
+    FT target = 0;
+  };
+
+  /**
+   * Set each opening loop to (mean border-edge length * boundary_size_scale_). The absolute
+   * target is captured on the first call (input mesh) and reused later so remesh iterations
+   * do not compound the factor. Loops are matched by centroid.
+   */
+  bool assign_scaled_border_loop_targets_(CGAL_Surface& mesh)
+  {
+    struct Loop
+    {
+      std::vector<vertex_descriptor> verts;
+      FT lenSum = 0;
+      int nEdges = 0;
+      FT cx = 0;
+      FT cy = 0;
+      FT cz = 0;
+    };
+
+    std::vector<Loop> loops;
+    std::set<halfedge_descriptor> visited;
+    for (halfedge_descriptor h : mesh.halfedges())
+    {
+      if (!mesh.is_border(h) || visited.find(h) != visited.end())
+      {
+        continue;
+      }
+      Loop loop;
+      halfedge_descriptor cur = h;
+      do
+      {
+        visited.insert(cur);
+        const vertex_descriptor va = mesh.source(cur);
+        const vertex_descriptor vb = mesh.target(cur);
+        loop.verts.push_back(vb);
+        const Point_3& pa = mesh.point(va);
+        const Point_3& pb = mesh.point(vb);
+        const FT len = CGAL::approximate_sqrt(CGAL::squared_distance(pa, pb));
+        if (len > FT(0))
+        {
+          loop.lenSum += len;
+          ++loop.nEdges;
+        }
+        cur = mesh.next(cur);
+      } while (cur != h);
+      if (loop.nEdges <= 0 || loop.verts.empty())
+      {
+        continue;
+      }
+      for (vertex_descriptor v : loop.verts)
+      {
+        const Point_3& p = mesh.point(v);
+        loop.cx += p.x();
+        loop.cy += p.y();
+        loop.cz += p.z();
+      }
+      const FT n = static_cast<FT>(loop.verts.size());
+      loop.cx /= n;
+      loop.cy /= n;
+      loop.cz /= n;
+      loops.push_back(std::move(loop));
+    }
+    if (loops.empty())
+    {
+      return false;
+    }
+
+    const bool capture = border_loop_targets_.empty();
+    if (capture)
+    {
+      border_loop_targets_.reserve(loops.size());
+    }
+    for (const Loop& loop : loops)
+    {
+      FT target = 0;
+      if (capture)
+      {
+        target = (loop.lenSum / static_cast<FT>(loop.nEdges)) * boundary_size_scale_;
+        border_loop_targets_.push_back(BorderLoopTarget{ loop.cx, loop.cy, loop.cz, target });
+      }
+      else
+      {
+        FT bestD = std::numeric_limits<FT>::infinity();
+        std::size_t best = 0;
+        for (std::size_t i = 0; i < border_loop_targets_.size(); ++i)
+        {
+          const FT dx = loop.cx - border_loop_targets_[i].cx;
+          const FT dy = loop.cy - border_loop_targets_[i].cy;
+          const FT dz = loop.cz - border_loop_targets_[i].cz;
+          const FT d = dx * dx + dy * dy + dz * dz;
+          if (d < bestD)
+          {
+            bestD = d;
+            best = i;
+          }
+        }
+        target = border_loop_targets_[best].target;
+      }
+      for (vertex_descriptor v : loop.verts)
+      {
+        put(map_g_, v, target);
+      }
+    }
+    return true;
+  }
+
+  /**
+   * Write each border vertex to the mean length of its border edges, then clamp every reached
+   * vertex into the Expansion-ratio band of those anchors. R <= 1 only rewrites the border.
+   */
+  void anchor_boundary_sizes_(CGAL_Surface& mesh)
+  {
+    std::size_t maxIdx = 0;
+    for (vertex_descriptor v : vertices(mesh))
+    {
+      maxIdx = (std::max)(maxIdx, static_cast<std::size_t>(v.idx()));
+    }
+    std::vector<FT> lenSum(maxIdx + 1, FT(0));
+    std::vector<int> lenCnt(maxIdx + 1, 0);
+
+    for (CGAL_Surface::Edge_index e : mesh.edges())
+    {
+      const halfedge_descriptor h = mesh.halfedge(e);
+      if (!mesh.is_border(h) && !mesh.is_border(mesh.opposite(h)))
+      {
+        continue;
+      }
+      const vertex_descriptor va = mesh.source(h);
+      const vertex_descriptor vb = mesh.target(h);
+      const FT len = CGAL::approximate_sqrt(CGAL::squared_distance(mesh.point(va), mesh.point(vb)));
+      if (!(len > FT(0)))
+      {
+        continue;
+      }
+      const std::size_t ia = static_cast<std::size_t>(va.idx());
+      const std::size_t ib = static_cast<std::size_t>(vb.idx());
+      lenSum[ia] += len;
+      lenSum[ib] += len;
+      ++lenCnt[ia];
+      ++lenCnt[ib];
+    }
+
+    bool anyBorder = false;
+    const bool useScale = boundary_size_scale_ > FT(0) && boundary_size_scale_ != FT(1);
+    if (useScale)
+    {
+      anyBorder = assign_scaled_border_loop_targets_(mesh);
+    }
+    else
+    {
+      for (vertex_descriptor v : vertices(mesh))
+      {
+        const std::size_t i = static_cast<std::size_t>(v.idx());
+        if (lenCnt[i] > 0)
+        {
+          put(map_g_, v, lenSum[i] / FT(lenCnt[i]));
+          anyBorder = true;
+        }
+      }
+    }
+    if (!anyBorder || !(neighbor_max_ratio_ > FT(1)))
+    {
+      return;
+    }
+
+    const FT R = neighbor_max_ratio_;
+    const FT inf = std::numeric_limits<FT>::infinity();
+    std::vector<FT> upper(maxIdx + 1, inf);
+    std::vector<FT> lower(maxIdx + 1, FT(0));
+    using Node = std::pair<FT, std::size_t>;
+    std::priority_queue<Node, std::vector<Node>, std::greater<Node>> upperHeap;
+    std::priority_queue<Node> lowerHeap;
+
+    for (vertex_descriptor v : vertices(mesh))
+    {
+      const std::size_t i = static_cast<std::size_t>(v.idx());
+      if (lenCnt[i] <= 0)
+      {
+        continue;
+      }
+      const FT s = get(map_g_, v);
+      upper[i] = s;
+      lower[i] = s;
+      upperHeap.push(Node(s, i));
+      lowerHeap.push(Node(s, i));
+    }
+
+    std::vector<vertex_descriptor> byIdx(maxIdx + 1);
+    for (vertex_descriptor v : vertices(mesh))
+    {
+      byIdx[static_cast<std::size_t>(v.idx())] = v;
+    }
+
+    auto relaxTo = [&](std::size_t iu, FT cand, bool takeMin) {
+      const vertex_descriptor u = byIdx[iu];
+      for (halfedge_descriptor h : CGAL::halfedges_around_target(u, mesh))
+      {
+        const vertex_descriptor v = mesh.source(h);
+        const std::size_t iv = static_cast<std::size_t>(v.idx());
+        if (takeMin)
+        {
+          if (cand < upper[iv])
+          {
+            upper[iv] = cand;
+            upperHeap.push(Node(cand, iv));
+          }
+        }
+        else if (cand > lower[iv])
+        {
+          lower[iv] = cand;
+          lowerHeap.push(Node(cand, iv));
+        }
+      }
+    };
+
+    while (!upperHeap.empty())
+    {
+      const Node top = upperHeap.top();
+      upperHeap.pop();
+      if (top.first > upper[top.second])
+      {
+        continue;
+      }
+      relaxTo(top.second, top.first * R, true);
+    }
+    while (!lowerHeap.empty())
+    {
+      const Node top = lowerHeap.top();
+      lowerHeap.pop();
+      if (top.first < lower[top.second])
+      {
+        continue;
+      }
+      relaxTo(top.second, top.first / R, false);
+    }
+
+    for (vertex_descriptor v : vertices(mesh))
+    {
+      const std::size_t i = static_cast<std::size_t>(v.idx());
+      const FT hi = upper[i];
+      const FT lo = lower[i];
+      if (!(hi > FT(0)) || !(hi < inf))
+      {
+        continue;
+      }
+      FT s = get(map_g_, v);
+      if (lo > hi)
+      {
+        s = CGAL::approximate_sqrt(lo * hi);
+      }
+      else
+      {
+        if (s < lo)
+        {
+          s = lo;
+        }
+        if (s > hi)
+        {
+          s = hi;
+        }
+      }
+      put(map_g_, v, s);
+    }
+  }
+
   /**
    * Multiply every positive map_g_ value by size_field_scale_. No-op when the factor is 1 or
    * non-positive. Does not re-clamp to [short_g_, long_g_].
@@ -488,6 +798,9 @@ private:
   FT       icc_ball_radius_ = FT(-1);
   int      icc_neighborhood_rings_ = 0;
   FT       size_field_scale_ = FT(1);
+  bool     anchor_boundary_size_ = false;
+  FT       boundary_size_scale_ = FT(1);
+  std::vector<BorderLoopTarget> border_loop_targets_;
   static constexpr int gradient_limit_sweeps_ = 32;
 };
 

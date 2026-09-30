@@ -2147,7 +2147,13 @@ const ShyxExtra kShyxExtra[] = {
     "(default 1; not re-clamped; cap remesh unchanged). "
     "RemeshProtectConstraints ON freezes wall opening loops: border edges are not split or "
     "collapsed, and opening vertices are pinned (not deleted by an incident collapse, not moved "
-    "by relaxation or projection). Collapse and Relax constraints are ignored while it is ON." },
+    "by relaxation or projection). Collapse and Relax constraints are ignored while it is ON. "
+    "AnchorBoundarySize ON writes opening vertex targets to the mean border-edge length and "
+    "uses Expansion ratio as the per-hop band from that length into the ICC field. "
+    "With Protect constraints OFF, BoundarySizeScale multiplies that anchor "
+    "(>1 coarsens the opening, <1 refines it, 1 keeps the input edge length; not compounded "
+    "across iterations, ignored while Protect is ON). "
+    "Expansion ratio <= 1 only rewrites the boundary vertices." },
   { "SHYXSkeletonExtraction",
     "Vascular step 1. Input must be watertight triangle mesh. Optional AppendCapEndpoints: "
     "cell EndpointIndex > 0 connected patches, area-weighted centroids joined to nearest "

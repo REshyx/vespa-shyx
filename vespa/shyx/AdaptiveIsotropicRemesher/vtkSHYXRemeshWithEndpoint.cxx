@@ -648,6 +648,9 @@ void vtkSHYXRemeshWithEndpoint::PrintSelf(ostream& os, vtkIndent indent)
     os << indent << "IccBallRadius: " << this->IccBallRadius << std::endl;
     os << indent << "AdaptiveSizingNeighborMaxRatio: " << this->AdaptiveSizingNeighborMaxRatio
        << std::endl;
+    os << indent << "AnchorBoundarySize: " << (this->AnchorBoundarySize ? "on" : "off")
+       << std::endl;
+    os << indent << "BoundarySizeScale: " << this->BoundarySizeScale << std::endl;
     os << indent << "ScaleToRange: " << (this->ScaleToRange ? "on" : "off") << std::endl;
     os << indent << "SizingFieldScale: " << this->SizingFieldScale << std::endl;
     os << indent << "RemeshRecomputeCurvatureEachIteration: "
@@ -854,10 +857,14 @@ int vtkSHYXRemeshWithEndpoint::RequestData(
         const int iccRings = (this->IccNeighborhoodMode == 0) ? this->IccNeighborhoodRings : 0;
         const double iccRadius = (this->IccNeighborhoodMode == 1) ? this->IccBallRadius : -1.0;
         std::optional<SizingTy> sizingStorage;
+        const double boundaryScale = (this->AnchorBoundarySize && !this->RemeshProtectConstraints)
+          ? this->BoundarySizeScale
+          : 1.0;
         sizingStorage.emplace(this->AdaptiveTolerance, std::make_pair(minLen, maxLen),
             cgalMesh->surface.faces(), cgalMesh->surface,
             static_cast<double>(this->AdaptiveSizingNeighborMaxRatio), this->ScaleToRange,
-            &uncappedSizes, iccRadius, iccRings, this->SizingFieldScale);
+            &uncappedSizes, iccRadius, iccRings, this->SizingFieldScale, this->AnchorBoundarySize,
+            boundaryScale);
         this->FillUncappedSizeHistogram(uncappedSizes);
 
         if (this->CheckAbort())

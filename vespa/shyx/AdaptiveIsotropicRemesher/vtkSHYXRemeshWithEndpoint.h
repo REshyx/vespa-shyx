@@ -109,6 +109,27 @@ public:
     vtkSetMacro(IccBallRadius, double);
     vtkGetMacro(AdaptiveSizingNeighborMaxRatio, double);
     vtkSetClampMacro(AdaptiveSizingNeighborMaxRatio, double, 0.0, 1.0e6);
+    //@{
+    /**
+     * When ON, open-boundary vertex targets are the mean length of their border edges, and
+     * Expansion ratio clamps the wall field to change by at most that factor per hop away from
+     * the boundary. Border ICC values are not expansion seeds. The anchor is geometric edge
+     * length (not SizingFieldScale). Expansion ratio &lt;= 1 only rewrites the boundary vertices.
+     * With Protect constraints OFF, BoundarySizeScale multiplies that anchor so the opening can
+     * be coarsened or refined. Default OFF. Cap remesh is unaffected.
+     */
+    vtkGetMacro(AnchorBoundarySize, bool);
+    vtkSetMacro(AnchorBoundarySize, bool);
+    vtkBooleanMacro(AnchorBoundarySize, bool);
+    //@}
+    /**
+     * Multiplier on the anchored opening edge length when AnchorBoundarySize is ON and
+     * RemeshProtectConstraints is OFF. **1** (default) keeps the input opening edge length.
+     * **&gt; 1** coarsens the boundary; **&lt; 1** refines it. The factor is taken from the input
+     * loops and is not compounded across remesh iterations. Ignored while Protect constraints is ON.
+     */
+    vtkGetMacro(BoundarySizeScale, double);
+    vtkSetClampMacro(BoundarySizeScale, double, 1.0e-6, 1.0e6);
     vtkGetMacro(ScaleToRange, bool);
     vtkSetMacro(ScaleToRange, bool);
     vtkBooleanMacro(ScaleToRange, bool);
@@ -254,6 +275,8 @@ protected:
     int IccNeighborhoodRings = 1;
     double IccBallRadius = -1.0;
     double AdaptiveSizingNeighborMaxRatio = 1.6;
+    bool AnchorBoundarySize = false;
+    double BoundarySizeScale = 1.0;
     bool ScaleToRange = false;
     double SizingFieldScale = 1.0;
     bool RemeshRecomputeCurvatureEachIteration = true;
