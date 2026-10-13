@@ -72,7 +72,7 @@
 | SHYX Disconnected Region Fuse | |
 | SHYX Selection Extrude / Extrude | Extrude 接替 Point Extrude：Point/Poly + Front/Side/Back |
 | SHYX Selection Append Patches | 选区 / 管线 / box·sphere 抽出为 PDC patch |
-| SHYX Delete Selected Cells / Extract Selection / Flip Selected Cells Winding | Extract 按选区输出 PolyData 或 UnstructuredGrid，不强制 UG；Delete/Extract 均可 Invert Selection |
+| SHYX Delete Selected Cells / Extract Selection / Flip Selected Cells Winding | Extract 按选区输出 PolyData 或 UnstructuredGrid，不强制 UG；Delete/Extract 均可 Invert Selection。三维视图里按 **Ctrl+D** 会新建 Delete 并 Apply |
 | SHYX Selection: Fill, Alpha Wrap, Union | CGAL ≥ 5.5；Alpha/Offset 默认 0 = 选区 AABB 最长边 10% |
 | SHYX Minimum OBB | |
 | SHYX Enhanced Ruler | |
@@ -122,7 +122,7 @@
 | **Point Label**（`PointLabelRepresentation`） | 表面表示上叠加点数据文本标签。 |
 | **Hologram**（`HologramRepresentation`） | 三角线框 + 菲涅尔鬼面 + 模型坐标流动（跟着物体变换）。体网格拆成全部面（含内部）。 |
 
-视图工具：球选（Sphere Selection）、按属性扩张选区（Grow Selection With Similar）、近距断口选区（Proximity Gap Selection，按 ε 选不连通但邻近的接触带）为客户端 Qt，无独立 VTK 模块。复合数据（如 PDC 的 `Part_1`）在 3D 视图右键菜单中有 **Select Block**，会先清除当前选择再选中该 block 的全部 cell。有点或 cell 选择时右键还有 **Select Connected**（选中当前连通的点/线/面/体）、有 cell 选择时还有 **Invert Selection**（反选）、**Select Similar → By Normal**（按法向一次 Grow 完，与标题栏 Grow 共用二面角阈值）和 **Fill Interior**（把被当前选区完全围住的未选面补进选择）。**SHYX AI Assistant** 在 **View** 菜单中作为可勾选停靠窗口（OpenAI 兼容；**Run script** 执行代码框）。
+视图工具：球选（Sphere Selection）、按属性扩张选区（Grow Selection With Similar）、近距断口选区（Proximity Gap Selection，按 ε 选不连通但邻近的接触带）为客户端 Qt，无独立 VTK 模块。复合数据（如 PDC 的 `Part_1`）在 3D 视图右键菜单中有 **Select Block**，会先清除当前选择再选中该 block 的全部 cell。有点或 cell 选择时右键还有 **Select Connected**（选中当前连通的点/线/面/体）、**Delete Selected Cells**（与快捷键 **Ctrl+D** 相同：新建 SHYX Delete Selected Cells 并 Apply）、有 cell 选择时还有 **Invert Selection**（反选）、**Select Similar → By Normal**（按法向一次 Grow 完，与标题栏 Grow 共用二面角阈值）和 **Fill Interior**（把被当前选区完全围住的未选面补进选择）。**SHYX AI Assistant** 在 **View** 菜单中作为可勾选停靠窗口（OpenAI 兼容；**Run script** 执行代码框）。
 
 ---
 

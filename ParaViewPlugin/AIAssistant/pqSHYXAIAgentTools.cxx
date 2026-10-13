@@ -1477,6 +1477,7 @@ QString listFilters(const QString& queryRaw)
       "Grow selection with similar normals; Proximity gap selection. "
       "Block context menu: Select Block. "
       "Selection context menu: Select Connected (connected points/lines/faces/volumes); "
+      "Delete Selected Cells (also Ctrl+D in a RenderView: creates SHYXDeleteSelectedCellsFilter and Applies); "
       "Invert Selection; "
       "Select Similar → By Normal (grow to completion); "
       "Fill Interior (enclosed unselected faces). "
@@ -1817,6 +1818,22 @@ QString describeClientTool(const QString& query)
       "  Selects currently unselected cells and deselects the current selection\n"
       "  Operates on the active dataset (not only vtkPolyData). Complement of all cells\n"
       "  If every cell was selected, the result is an empty selection\n");
+  }
+  const bool deleteShortcut = ql.contains(QLatin1String("delete shortcut")) ||
+    ql.contains(QLatin1String("ctrl+d")) || ql.contains(QLatin1String("ctrl d")) ||
+    ql.contains(QLatin1String("control+d")) || ql.contains(QLatin1String("control d"));
+  if (deleteShortcut && !sphere && !grow)
+  {
+    return QStringLiteral(
+      "SHYX Delete shortcut (RenderView; creates a pipeline filter)\n"
+      "Press Ctrl+D while the 3D view has focus, or right-click a point/cell selection → "
+      "Delete Selected Cells.\n"
+      "This creates SHYXDeleteSelectedCellsFilter on the dataset that owns the selection, "
+      "copies the active selection (same as creating the filter from the menu), and Applies.\n"
+      "Plain D is left for ParaView point selection. Ctrl+D is ignored while focus is outside the 3D view.\n"
+      "Needs a vtkDataSet. Composite / multiblock selections are refused.\n"
+      "Filter parameters: describe_proxy('SHYXDeleteSelectedCellsFilter'). "
+      "InvertSelection stays off.\n");
   }
   if (selectBlock && !sphere && !grow)
   {
@@ -2290,10 +2307,13 @@ const ShyxExtra kShyxExtra[] = {
     "and allow overlapping picks. Unselected parent cells are not kept on port 0. Not the IOSS "
     "DataSetToPartitionedCollection path." },
   { "SHYXDeleteSelectedCellsFilter",
-    "Needs an active cell selection. Creating the filter copies the Input's "
+    "Needs an active cell or point selection. Creating the filter copies the Input's "
     "active selection into the Selection widget (Extract Selection-style); "
     "Copy Active Selection is only needed if the selection changes afterwards. "
-    "InvertSelection (default off) deletes the complement of the selection." },
+    "InvertSelection (default off) deletes the complement of the selection. "
+    "RenderView shortcut Ctrl+D (and the selection context menu Delete Selected Cells) "
+    "creates this filter on the selected vtkDataSet and Applies it. Plain D stays with "
+    "ParaView point selection. Ctrl+D does nothing while focus is outside the 3D view." },
   { "SHYXExtractSelectedCellsFilter",
     "Opposite of SHYX Delete Selected Cells: keeps selected cells. Unlike ParaView "
     "Extract Selection, PolyData input (or a selection of only vertex/line/polygon/strip "
@@ -2533,6 +2553,8 @@ QString lookupShyxDocs(const QString& queryRaw)
       "(clear current selection, then select all cells in that part).\n"
       "   Also: right-click an active point or cell selection → Select Connected "
       "(connected region of that entity: points/lines/faces/volumes; not the whole mesh); "
+      "Delete Selected Cells (Ctrl+D in the RenderView does the same: create "
+      "SHYXDeleteSelectedCellsFilter and Apply); "
       "with a cell selection also Invert Selection; Select Similar → By Normal "
       "(grow all similar-normal rings in one shot); Fill Interior "
       "(add unselected faces enclosed by the current selection).\n"
@@ -3028,8 +3050,9 @@ QJsonArray pqSHYXAIAgentTools::schema(bool allowCaptureScreenshot)
     "For Select Similar / By Normal pass 'select similar'. "
     "For Fill Interior pass 'fill interior'. "
     "For Select Connected (connected points/lines/faces/volumes) pass 'select connected'. "
-    "For Invert Selection pass 'invert'.",
-    QJsonObject{ { QStringLiteral("name"), strArg("XML name, display type (Pulse Glyphs), sphere/grow/proximity gap, select block, select similar, fill interior, select connected, or invert.") } },
+    "For Invert Selection pass 'invert'. "
+    "For the RenderView Ctrl+D shortcut that creates and applies SHYX Delete Selected Cells, pass 'delete shortcut' or 'ctrl+d'.",
+    QJsonObject{ { QStringLiteral("name"), strArg("XML name, display type (Pulse Glyphs), sphere/grow/proximity gap, select block, select similar, fill interior, select connected, invert, or delete shortcut.") } },
     QJsonArray{ QStringLiteral("name") }));
   tools.append(fn("lookup_shyx_docs",
     "SHYX/VESPA usage notes: capability catalog (filters + Display representations + "

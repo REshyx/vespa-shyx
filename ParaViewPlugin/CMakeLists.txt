@@ -71,7 +71,8 @@ if (PARAVIEW_USE_QT)
     "${CMAKE_CURRENT_SOURCE_DIR}/selection/GrowSelectionWithSimilar"
     "${CMAKE_CURRENT_SOURCE_DIR}/selection/ProximityGapSelection"
     "${CMAKE_CURRENT_SOURCE_DIR}/selection/SelectBlock"
-    "${CMAKE_CURRENT_SOURCE_DIR}/selection/SelectSimilar")
+    "${CMAKE_CURRENT_SOURCE_DIR}/selection/SelectSimilar"
+    "${CMAKE_CURRENT_SOURCE_DIR}/selection/DeleteSelectionShortcut")
 endif ()
 
 target_link_libraries(VESPAPlugin

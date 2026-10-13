@@ -8,7 +8,8 @@
 /**
  * Adds selection actions to the RenderView context menu when a point or cell
  * selection is active: "Select Connected" (connected points/lines/faces/volumes),
- * and when a cell selection is active also "Invert Selection", "Select
+ * "Delete Selected Cells" (same as the Ctrl+D shortcut: new SHYX Delete node, then
+ * Apply), and when a cell selection is active also "Invert Selection", "Select
  * Similar" (submenu: By Normal), and "Fill Interior". By Normal grows to
  * completion in one shot using the same dihedral threshold as the title-bar
  * Grow tool. Fill Interior adds unselected faces enclosed by the current

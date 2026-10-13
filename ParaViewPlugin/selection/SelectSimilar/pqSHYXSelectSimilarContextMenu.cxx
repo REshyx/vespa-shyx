@@ -1,11 +1,13 @@
 #include "pqSHYXSelectSimilarContextMenu.h"
 
+#include "pqSHYXDeleteSelectionShortcut.h"
 #include "pqSHYXGrowSelectionWithSimilarController.h"
 
 #include "pqDataRepresentation.h"
 
 #include <QAction>
 #include <QIcon>
+#include <QKeySequence>
 #include <QMenu>
 #include <QPointer>
 
@@ -76,6 +78,17 @@ bool pqSHYXSelectSimilarContextMenu::contextMenu(QMenu* menu, pqView*, const QPo
   QObject::connect(selectConnected, &QAction::triggered, menu,
     [reprPtr]() { pqSHYXGrowSelectionWithSimilarController::SelectConnectedRegion(reprPtr); });
   menu->insertAction(insertBefore, selectConnected);
+
+  QAction* deleteSelected = new QAction(tr("Delete Selected Cells"), menu);
+  deleteSelected->setObjectName(QStringLiteral("actionSHYXDeleteSelectedCells"));
+  deleteSelected->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_D));
+  deleteSelected->setShortcutContext(Qt::WidgetShortcut);
+  deleteSelected->setToolTip(
+    tr("Create SHYX Delete Selected Cells on this dataset and Apply. "
+       "In the 3D view, Ctrl+D does the same thing."));
+  QObject::connect(deleteSelected, &QAction::triggered, menu,
+    []() { pqSHYXDeleteSelectionShortcut::deleteActiveSelection(); });
+  menu->insertAction(insertBefore, deleteSelected);
 
   if (hasCell)
   {

@@ -96,6 +96,18 @@ list(APPEND vespa_plugin_qt_auto_sources
   selection/ProximityGapSelection/pqSHYXProximityGapSelectionController.h)
 
 paraview_plugin_add_auto_start(
+  CLASS_NAME "pqSHYXDeleteSelectionShortcut"
+  STARTUP onStartup
+  SHUTDOWN onShutdown
+  INTERFACES delete_selection_shortcut_interfaces
+  SOURCES delete_selection_shortcut_sources)
+list(APPEND vespa_plugin_qt_auto_interfaces ${delete_selection_shortcut_interfaces})
+list(APPEND vespa_plugin_qt_auto_sources
+  ${delete_selection_shortcut_sources}
+  selection/DeleteSelectionShortcut/pqSHYXDeleteSelectionShortcut.cxx
+  selection/DeleteSelectionShortcut/pqSHYXDeleteSelectionShortcut.h)
+
+paraview_plugin_add_auto_start(
   CLASS_NAME "pqSHYXVascularCategoryAutoStart"
   STARTUP onStartup
   SHUTDOWN onShutdown
