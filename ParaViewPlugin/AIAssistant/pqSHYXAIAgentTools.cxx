@@ -683,7 +683,8 @@ QString displayInfo()
       }
       const QString k = QString::fromUtf8(key);
       if (!k.startsWith(QLatin1String("PG_")) && !k.startsWith(QLatin1String("AS_")) &&
-        !k.startsWith(QLatin1String("PL_")) && !k.startsWith(QLatin1String("PulseGlyph_")))
+        !k.startsWith(QLatin1String("PL_")) && !k.startsWith(QLatin1String("HG_")) &&
+        !k.startsWith(QLatin1String("PulseGlyph_")))
       {
         continue;
       }
@@ -1084,7 +1085,8 @@ bool looksLikeSpecificProxyQuery(const QString& s)
     s.contains(QLatin1String("AnimatedStreamline"), Qt::CaseInsensitive) ||
     s.contains(QLatin1String("Animated Streamline"), Qt::CaseInsensitive) ||
     s.contains(QLatin1String("PointLabel"), Qt::CaseInsensitive) ||
-    s.contains(QLatin1String("Point Label"), Qt::CaseInsensitive);
+    s.contains(QLatin1String("Point Label"), Qt::CaseInsensitive) ||
+    s.contains(QLatin1String("Hologram"), Qt::CaseInsensitive);
 }
 
 bool isCatalogQuery(const QString& q)
@@ -1115,7 +1117,8 @@ bool isShyxDisplayRepresentation(const QString& xml)
 {
   return xml == QLatin1String("PulseGlyphRepresentation") ||
     xml == QLatin1String("AnimatedStreamlineRepresentation") ||
-    xml == QLatin1String("PointLabelRepresentation");
+    xml == QLatin1String("PointLabelRepresentation") ||
+    xml == QLatin1String("HologramRepresentation");
 }
 
 QString representationDisplayName(const QString& xml)
@@ -1131,6 +1134,10 @@ QString representationDisplayName(const QString& xml)
   if (xml == QLatin1String("PointLabelRepresentation"))
   {
     return QStringLiteral("Point Label");
+  }
+  if (xml == QLatin1String("HologramRepresentation"))
+  {
+    return QStringLiteral("Hologram");
   }
   return {};
 }
@@ -1378,7 +1385,7 @@ QString listFilters(const QString& queryRaw)
       {
         line += QStringLiteral("  display='%1'  kind=display  "
                                "python: GetDisplayProperties().Representation = '%2'  "
-                               "then describe_proxy for PG_/AS_/PL_ names")
+                               "then describe_proxy for PG_/AS_/PL_/HG_ names")
                   .arg(display, display);
       }
       else if (xml.contains(QLatin1String("WidgetRepresentation")))
@@ -1439,7 +1446,7 @@ QString listFilters(const QString& queryRaw)
   else if (query.isEmpty())
   {
     out += QStringLiteral(
-      "Representations: (none loaded; expect Pulse Glyphs / Animated Streamline / Point Label)\n");
+      "Representations: (none loaded; expect Pulse Glyphs / Animated Streamline / Point Label / Hologram)\n");
   }
   out += QStringLiteral("Filters/sources:\n");
   const int n = std::min(static_cast<int>(filterHits.size()), kMaxFilterHits);
@@ -2150,9 +2157,12 @@ const ShyxExtra kShyxExtra[] = {
     "by relaxation or projection). Collapse and Relax constraints are ignored while it is ON. "
     "AnchorBoundarySize ON writes opening vertex targets to the mean border-edge length and "
     "uses Expansion ratio as the per-hop band from that length into the ICC field. "
-    "With Protect constraints OFF, BoundarySizeScale multiplies that anchor "
-    "(>1 coarsens the opening, <1 refines it, 1 keeps the input edge length; not compounded "
-    "across iterations, ignored while Protect is ON). "
+    "BoundarySizeScale (default 1) is an independent opening multiplier. "
+    "Anchor OFF: opening vertices use clamped ICC curvature times this factor, not also "
+    "SizingFieldScale; expansion and scale-to-range do not overwrite them. "
+    "Anchor ON and Protect OFF: input opening edge length times this factor "
+    "(not compounded across iterations). "
+    "Hidden when Anchor and Protect are both ON. >1 coarsens, <1 refines. "
     "Expansion ratio <= 1 only rewrites the boundary vertices." },
   { "SHYXSkeletonExtraction",
     "Vascular step 1. Input must be watertight triangle mesh. Optional AppendCapEndpoints: "
@@ -2401,6 +2411,21 @@ const ShyxExtra kShyxExtra[] = {
     "The 0.5-voxel occupancy lock is in output voxels, so factor 2 gives a tighter world-space "
     "round. If the grid changes, only the level set is kept. Not morphology and not "
     "Gaussian. Requires VESPA_USE_VMTK. Python: SHYXImageAntiAlias()." },
+  { "SHYXImageTeasarCenterline",
+    "Centerline polylines from a vtkImageData mask or label volume (TEASAR). Not VMTK "
+    "surface Voronoi (SHYXVmtkOpeningCenterlines / SHYXVmtkPolyDataCenterlines) and not "
+    "CGAL mesh skeleton (SHYXSkeletonExtraction). ForegroundMode 0 Threshold (default, "
+    "scalar >= Threshold 0.5) or 1 Label (positive integers; LabelValue 0 = all labels). "
+    "26-connected components. Output lines. Point data MaximumInscribedSphereRadius is the "
+    "physical distance to background (image spacing). Also ObjectId, ComponentId; cell "
+    "PathId. Scale 1.5 keeps side branches; 4-10 keeps mostly the trunk. ConstRadius is "
+    "in the same physical units as spacing, default 0 (do not copy a nanometer constant). "
+    "Invalidation radius = Scale * radius + ConstRadius (axis-aligned cube). "
+    "FixBranching (default on) recomputes paths with zero penalty on the existing skeleton. "
+    "FixBorders (default on) first connects contacts on the volume boundary. "
+    "Loops are cut into a tree. Internal holes pull the path; close them with "
+    "SHYXImageMorphology first. Does not need VESPA_USE_VMTK. "
+    "Python: SHYXImageTeasarCenterline()." },
   { "PulseGlyphRepresentation",
     "Display representation, not a filter. Display dropdown 'Pulse Glyphs'. "
     "Python: GetDisplayProperties().Representation = 'Pulse Glyphs'. Never call PulseGlyphRepresentation(). "
@@ -2413,6 +2438,17 @@ const ShyxExtra kShyxExtra[] = {
     "Display representation, not a filter. Display dropdown 'Point Label'. "
     "Python: GetDisplayProperties().Representation = 'Point Label'. "
     "Call describe_proxy('Point Label') for PL_* names (PL_ShowPointLabels, PL_PointLabelArray, PL_VertexOnly, ...)." },
+  { "HologramRepresentation",
+    "Display representation, not a filter. Display dropdown 'Hologram'. "
+    "Python: GetDisplayProperties().Representation = 'Hologram'. Never call HologramRepresentation(). "
+    "Lattice: triangle wires stay, a noise field reveals faces. Ghost: fresnel (rim reflection "
+    "or facing-camera) makes triangles appear and disappear, plus the same field. "
+    "Surface meshes are drawn as they are. Volume cells (tets, hexes, voxels, wedges, pyramids, "
+    "3D image and structured grids) are split into every face, including interior faces; quads stay "
+    "quads so diagonals are not wires. "
+    "HG_Flow 0/1/2 is foaming waves (7sBcRG), turbulence warp (NXS3DG), or maelstrom (MflyRf). "
+    "HG_NoiseScale magnifies the patches; HG_NoisePower above 1 keeps only the bright peaks. "
+    "Call describe_proxy('Hologram') for HG_* names (HG_Style, HG_Animate, HG_FresnelMode, HG_Flow, ...)." },
   { "SHYXSphereSelection",
     "Not a filter and not a proxy. RenderView title-bar sphere button. "
     "Selects every visible pipeline node in the view; on a composite parent, every intersecting "
@@ -2488,7 +2524,7 @@ QString lookupShyxDocs(const QString& queryRaw)
       "1) Pipeline filters/sources: Filters → SHYX and Vascular toolbar. "
       "Live XML names: list_filters with empty query.\n"
       "2) Display representations (Display panel Representation dropdown; NOT pipeline nodes):\n"
-      "   Pulse Glyphs, Animated Streamline, Point Label. "
+      "   Pulse Glyphs, Animated Streamline, Point Label, Hologram. "
       "Python: GetDisplayProperties().Representation = 'Pulse Glyphs'.\n"
       "3) RenderView title-bar selection tools (client Qt; no SM proxy / no Python constructor):\n"
       "   Sphere cell selection; Grow selection with similar normals; Proximity gap selection. "
@@ -2505,7 +2541,7 @@ QString lookupShyxDocs(const QString& queryRaw)
       "5) View → SHYX AI Assistant: this dock, not a pipeline filter.\n"
       "Pass a name/topic (remesh, clip, representation, selection, sphere, glyph, ...) to filter notes.\n"
       "For parameter names/defaults: describe_proxy('Pulse Glyphs'), describe_proxy('Animated Streamline'), "
-      "describe_proxy('Point Label'), describe_proxy('sphere'), describe_proxy('grow'), "
+      "describe_proxy('Point Label'), describe_proxy('Hologram'), describe_proxy('sphere'), describe_proxy('grow'), "
       "describe_proxy('proximity gap'), describe_proxy('select block'), describe_proxy('select similar'), "
       "describe_proxy('fill interior'), describe_proxy('select connected'), "
       "describe_proxy('invert').\n");
@@ -2907,7 +2943,7 @@ QJsonArray pqSHYXAIAgentTools::schema(bool allowCaptureScreenshot)
     "(truncated), field type. Use after title-bar/context-menu selection tools and before "
     "SHYX Delete/Extrude/Flip/Fill/Plane Clipper scripts."));
   tools.append(fn("inspect_view",
-    "Active representation (type, visibility, opacity, ColorArrayName, PG_/AS_/PL_ values), "
+    "Active representation (type, visibility, opacity, ColorArrayName, PG_/AS_/PL_/HG_ values), "
     "lookup table (range, log, vector mode), camera, and animation time/timesteps. "
     "Use before Display / LUT / camera / FTLE / streamline edits. Prefer this over a screenshot "
     "when pixels are not needed."));
@@ -2977,7 +3013,7 @@ QJsonArray pqSHYXAIAgentTools::schema(bool allowCaptureScreenshot)
   tools.append(fn("run_code_script", runDescUtf8.constData(), runProps));
   tools.append(fn("list_filters",
     "Search registered ParaView proxies. Empty query (or features/catalog) lists SHYX/VESPA "
-    "filters/sources AND Display representations (Pulse Glyphs, Animated Streamline, Point Label) "
+    "filters/sources AND Display representations (Pulse Glyphs, Animated Streamline, Point Label, Hologram) "
     "plus a reminder of title-bar selection tools. Non-empty query: several keywords separated by "
     "spaces or commas; ALL keywords must match (AND) across XML name, label, menu, short docs, "
     "display name, and SHYX usage notes. Representations are not python constructors.",
@@ -2985,8 +3021,8 @@ QJsonArray pqSHYXAIAgentTools::schema(bool allowCaptureScreenshot)
       strArg("Keywords (AND): remesh clip, mesh repair, Point Label, SHYXMeshChecker. Empty = catalog.") } }));
   tools.append(fn("describe_proxy",
     "Property schema: types, defaults, enums, docs. For filters: XML/python name. "
-    "For SHYX Display types pass 'Pulse Glyphs', 'Animated Streamline', or 'Point Label' "
-    "(returns exposed Python names PG_*/AS_*/PL_*). "
+    "For SHYX Display types pass 'Pulse Glyphs', 'Animated Streamline', 'Point Label', or 'Hologram' "
+    "(returns exposed Python names PG_*/AS_*/PL_*/HG_*). "
     "For title-bar tools pass 'sphere', 'grow', or 'proximity gap' (no SM proxy). "
     "For the block context-menu action pass 'select block'. "
     "For Select Similar / By Normal pass 'select similar'. "

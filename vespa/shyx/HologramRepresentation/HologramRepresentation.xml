@@ -1,0 +1,295 @@
+<ServerManagerConfiguration>
+  <ProxyGroup name="representations">
+    <RepresentationProxy name="HologramRepresentation"
+                         class="vtkHologramRepresentation"
+                         processes="client|dataserver|renderserver"
+                         base_proxygroup="representations"
+                         base_proxyname="SurfaceRepresentation">
+      <Documentation>
+        Triangle-edge hologram. Surface meshes are drawn as they are. Volume cells
+        (tetrahedra, hexahedra, voxels, wedges, pyramids, and 3D image or structured
+        grids) are split into every face, including interior faces. Quads stay quads
+        so the diagonal is not a wire. Lattice keeps the wireframe and lets the flow
+        pattern reveal the faces. Ghost hides faces except where the view
+        grazes them (fresnel) or the scan passes. Solid Color tints both. Line Width
+        is the wire thickness. Not a lattice in empty space: the lines are the mesh edges.
+      </Documentation>
+
+      <IntVectorProperty name="Animate"
+                         command="SetAnimate"
+                         default_values="1"
+                         number_of_elements="1">
+        <BooleanDomain name="bool" />
+        <Documentation>Keep redrawing so the scan moves. Off leaves the band where it is.</Documentation>
+      </IntVectorProperty>
+
+      <IntVectorProperty name="Style"
+                         command="SetStyle"
+                         default_values="1"
+                         number_of_elements="1">
+        <EnumerationDomain name="enum">
+          <Entry text="Lattice" value="0" />
+          <Entry text="Ghost" value="1" />
+        </EnumerationDomain>
+        <Documentation>
+          Lattice: wires stay on, faces show mainly inside the scan.
+          Ghost: wires and faces appear at grazing angles (or toward the camera) and inside the scan.
+        </Documentation>
+      </IntVectorProperty>
+
+      <IntVectorProperty name="Flow"
+                         command="SetFlow"
+                         default_values="0"
+                         number_of_elements="1">
+        <EnumerationDomain name="enum">
+          <Entry text="Foam" value="0" />
+          <Entry text="Turbulence warp" value="1" />
+          <Entry text="Maelstrom" value="2" />
+        </EnumerationDomain>
+        <Documentation>
+          World X/Y/Z pattern. Foam is Shadertoy 7sBcRG. Turbulence warp is NXS3DG.
+          Maelstrom is MflyRf. None of these pick a world axis or a view direction.
+        </Documentation>
+      </IntVectorProperty>
+
+      <DoubleVectorProperty name="WireOpacity"
+                            command="SetWireOpacity"
+                            default_values="0.01"
+                            number_of_elements="1">
+        <DoubleRangeDomain name="range" min="0" max="1" />
+        <Documentation>Opacity of triangle edges. Display Opacity multiplies this.</Documentation>
+      </DoubleVectorProperty>
+
+      <DoubleVectorProperty name="FaceOpacity"
+                            command="SetFaceOpacity"
+                            default_values="0.2"
+                            number_of_elements="1">
+        <DoubleRangeDomain name="range" min="0" max="1" />
+        <Documentation>
+          Strength of the triangle fill. Lattice uses a small resting value plus the scan.
+          Ghost multiplies by the fresnel term.
+        </Documentation>
+      </DoubleVectorProperty>
+
+      <DoubleVectorProperty name="FresnelPower"
+                            command="SetFresnelPower"
+                            default_values="4"
+                            number_of_elements="1">
+        <DoubleRangeDomain name="range" min="0.05" max="12" />
+        <Documentation>
+          Higher packs the reflection into a thinner grazing rim (or a tighter camera-facing spot).
+        </Documentation>
+      </DoubleVectorProperty>
+
+      <IntVectorProperty name="FresnelMode"
+                         command="SetFresnelMode"
+                         default_values="0"
+                         number_of_elements="1">
+        <EnumerationDomain name="enum">
+          <Entry text="Rim (reflection)" value="0" />
+          <Entry text="Facing camera" value="1" />
+        </EnumerationDomain>
+        <Documentation>
+          Rim: triangles light up when the view skims them, like a reflection.
+          Facing camera: triangles facing you are the ones that appear.
+        </Documentation>
+      </IntVectorProperty>
+
+      <DoubleVectorProperty name="ScanStrength"
+                            command="SetScanStrength"
+                            default_values="2"
+                            number_of_elements="1">
+        <DoubleRangeDomain name="range" min="0" max="4" />
+        <Documentation>How strongly the flow lights faces and wires. 0 leaves only the resting fill.</Documentation>
+      </DoubleVectorProperty>
+
+      <DoubleVectorProperty name="ScanSpeed"
+                            command="SetScanSpeed"
+                            default_values="2"
+                            number_of_elements="1">
+        <DoubleRangeDomain name="range" min="-8" max="8" />
+        <Documentation>
+          How fast the pattern changes in place. Foam spins gradients, turbulence
+          twists the warp, maelstrom changes the noise phase. Negative reverses it.
+        </Documentation>
+      </DoubleVectorProperty>
+
+      <DoubleVectorProperty name="BandCount"
+                            command="SetBandCount"
+                            default_values="4"
+                            number_of_elements="1">
+        <DoubleRangeDomain name="range" min="0.5" max="64" />
+        <Documentation>
+          How large the pattern is across the mesh bounds. Foam's demo starts at 4;
+          turbulence and maelstrom sit near 5 to 7.
+        </Documentation>
+      </DoubleVectorProperty>
+
+      <DoubleVectorProperty name="NoiseScale"
+                            command="SetNoiseScale"
+                            default_values="0.5"
+                            number_of_elements="1">
+        <DoubleRangeDomain name="range" min="0.1" max="16" />
+        <Documentation>
+          Magnifies the noise. 1 keeps the size set by Band Count. Larger makes the
+          bright patches bigger.
+        </Documentation>
+      </DoubleVectorProperty>
+
+      <DoubleVectorProperty name="NoisePower"
+                            command="SetNoisePower"
+                            default_values="3"
+                            number_of_elements="1">
+        <DoubleRangeDomain name="range" min="0.2" max="16" />
+        <Documentation>
+          Contrast of the noise. 1 is linear. Higher keeps only the peaks, so a small
+          part of the surface lights up and the rest stays dark.
+        </Documentation>
+      </DoubleVectorProperty>
+    </RepresentationProxy>
+
+    <Extension name="GeometryRepresentation">
+      <RepresentationType subproxy="HologramRepresentation" text="Hologram" />
+      <SubProxy>
+        <Proxy name="HologramRepresentation"
+               proxygroup="representations"
+               proxyname="HologramRepresentation" />
+        <ShareProperties subproxy="SurfaceRepresentation">
+          <Exception name="Input" />
+          <Exception name="Visibility" />
+          <Exception name="Representation" />
+        </ShareProperties>
+        <ExposedProperties>
+          <PropertyGroup label="Hologram">
+            <Property name="Animate" exposed_name="HG_Animate" />
+            <Property name="Style" exposed_name="HG_Style" />
+            <Property name="Flow" exposed_name="HG_Flow" />
+            <Property name="WireOpacity" exposed_name="HG_WireOpacity" />
+            <Property name="FaceOpacity" exposed_name="HG_FaceOpacity" />
+            <Property name="FresnelPower" exposed_name="HG_FresnelPower" />
+            <Property name="FresnelMode" exposed_name="HG_FresnelMode" />
+            <Property name="ScanStrength" exposed_name="HG_ScanStrength" />
+            <Property name="ScanSpeed" exposed_name="HG_ScanSpeed" />
+            <Property name="BandCount" exposed_name="HG_BandCount" />
+            <Property name="NoiseScale" exposed_name="HG_NoiseScale" />
+            <Property name="NoisePower" exposed_name="HG_NoisePower" />
+            <Hints>
+              <PropertyWidgetDecorator type="GenericDecorator"
+                                       mode="visibility"
+                                       property="Representation"
+                                       value="Hologram" />
+            </Hints>
+          </PropertyGroup>
+        </ExposedProperties>
+      </SubProxy>
+    </Extension>
+
+    <Extension name="UnstructuredGridRepresentation">
+      <RepresentationType subproxy="HologramRepresentation" text="Hologram" />
+      <SubProxy>
+        <Proxy name="HologramRepresentation"
+               proxygroup="representations"
+               proxyname="HologramRepresentation" />
+        <ShareProperties subproxy="SurfaceRepresentation">
+          <Exception name="Input" />
+          <Exception name="Visibility" />
+          <Exception name="Representation" />
+        </ShareProperties>
+        <ExposedProperties>
+          <PropertyGroup label="Hologram">
+            <Property name="Animate" exposed_name="HG_Animate" />
+            <Property name="Style" exposed_name="HG_Style" />
+            <Property name="Flow" exposed_name="HG_Flow" />
+            <Property name="WireOpacity" exposed_name="HG_WireOpacity" />
+            <Property name="FaceOpacity" exposed_name="HG_FaceOpacity" />
+            <Property name="FresnelPower" exposed_name="HG_FresnelPower" />
+            <Property name="FresnelMode" exposed_name="HG_FresnelMode" />
+            <Property name="ScanStrength" exposed_name="HG_ScanStrength" />
+            <Property name="ScanSpeed" exposed_name="HG_ScanSpeed" />
+            <Property name="BandCount" exposed_name="HG_BandCount" />
+            <Property name="NoiseScale" exposed_name="HG_NoiseScale" />
+            <Property name="NoisePower" exposed_name="HG_NoisePower" />
+            <Hints>
+              <PropertyWidgetDecorator type="GenericDecorator"
+                                       mode="visibility"
+                                       property="Representation"
+                                       value="Hologram" />
+            </Hints>
+          </PropertyGroup>
+        </ExposedProperties>
+      </SubProxy>
+    </Extension>
+
+    <Extension name="UniformGridRepresentation">
+      <RepresentationType subproxy="HologramRepresentation" text="Hologram" />
+      <SubProxy>
+        <Proxy name="HologramRepresentation"
+               proxygroup="representations"
+               proxyname="HologramRepresentation" />
+        <ShareProperties subproxy="SurfaceRepresentation">
+          <Exception name="Input" />
+          <Exception name="Visibility" />
+          <Exception name="Representation" />
+        </ShareProperties>
+        <ExposedProperties>
+          <PropertyGroup label="Hologram">
+            <Property name="Animate" exposed_name="HG_Animate" />
+            <Property name="Style" exposed_name="HG_Style" />
+            <Property name="Flow" exposed_name="HG_Flow" />
+            <Property name="WireOpacity" exposed_name="HG_WireOpacity" />
+            <Property name="FaceOpacity" exposed_name="HG_FaceOpacity" />
+            <Property name="FresnelPower" exposed_name="HG_FresnelPower" />
+            <Property name="FresnelMode" exposed_name="HG_FresnelMode" />
+            <Property name="ScanStrength" exposed_name="HG_ScanStrength" />
+            <Property name="ScanSpeed" exposed_name="HG_ScanSpeed" />
+            <Property name="BandCount" exposed_name="HG_BandCount" />
+            <Property name="NoiseScale" exposed_name="HG_NoiseScale" />
+            <Property name="NoisePower" exposed_name="HG_NoisePower" />
+            <Hints>
+              <PropertyWidgetDecorator type="GenericDecorator"
+                                       mode="visibility"
+                                       property="Representation"
+                                       value="Hologram" />
+            </Hints>
+          </PropertyGroup>
+        </ExposedProperties>
+      </SubProxy>
+    </Extension>
+
+    <Extension name="StructuredGridRepresentation">
+      <RepresentationType subproxy="HologramRepresentation" text="Hologram" />
+      <SubProxy>
+        <Proxy name="HologramRepresentation"
+               proxygroup="representations"
+               proxyname="HologramRepresentation" />
+        <ShareProperties subproxy="SurfaceRepresentation">
+          <Exception name="Input" />
+          <Exception name="Visibility" />
+          <Exception name="Representation" />
+        </ShareProperties>
+        <ExposedProperties>
+          <PropertyGroup label="Hologram">
+            <Property name="Animate" exposed_name="HG_Animate" />
+            <Property name="Style" exposed_name="HG_Style" />
+            <Property name="Flow" exposed_name="HG_Flow" />
+            <Property name="WireOpacity" exposed_name="HG_WireOpacity" />
+            <Property name="FaceOpacity" exposed_name="HG_FaceOpacity" />
+            <Property name="FresnelPower" exposed_name="HG_FresnelPower" />
+            <Property name="FresnelMode" exposed_name="HG_FresnelMode" />
+            <Property name="ScanStrength" exposed_name="HG_ScanStrength" />
+            <Property name="ScanSpeed" exposed_name="HG_ScanSpeed" />
+            <Property name="BandCount" exposed_name="HG_BandCount" />
+            <Property name="NoiseScale" exposed_name="HG_NoiseScale" />
+            <Property name="NoisePower" exposed_name="HG_NoisePower" />
+            <Hints>
+              <PropertyWidgetDecorator type="GenericDecorator"
+                                       mode="visibility"
+                                       property="Representation"
+                                       value="Hologram" />
+            </Hints>
+          </PropertyGroup>
+        </ExposedProperties>
+      </SubProxy>
+    </Extension>
+  </ProxyGroup>
+</ServerManagerConfiguration>

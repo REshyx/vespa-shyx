@@ -1,0 +1,225 @@
+<?xml version="1.0" ?>
+<ServerManagerConfiguration>
+  <ProxyGroup name="filters">
+    <SourceProxy class="vtkSHYXImageTeasarCenterline"
+                 label="SHYX Image TEASAR Centerlines"
+                 name="SHYXImageTeasarCenterline">
+      <Documentation short_help="Centerline polylines from a vtkImageData mask or label volume (TEASAR).">
+        TEASAR centerlines from a 1-component vtkImageData. Foreground is either
+        voxels &gt;= Threshold, or positive integer labels (26-connected components
+        within each label). Output is polylines with point data
+        MaximumInscribedSphereRadius (physical distance to background).
+        This is not the VMTK surface Voronoi centerline.
+      </Documentation>
+
+      <InputProperty command="SetInputConnection"
+                     name="Input">
+        <ProxyGroupDomain name="groups">
+          <Group name="sources"/>
+          <Group name="filters"/>
+        </ProxyGroupDomain>
+        <DataTypeDomain name="input_type">
+          <DataType value="vtkImageData"/>
+        </DataTypeDomain>
+        <InputArrayDomain attribute_type="point"
+                          name="input_array"
+                          number_of_components="1"/>
+        <Documentation>
+          Uniform rectilinear mask or label volume. Point-centered 1-component scalars.
+        </Documentation>
+      </InputProperty>
+
+      <StringVectorProperty command="SetInputArrayToProcess"
+                            element_types="0 0 0 0 2"
+                            name="SelectInputScalars"
+                            number_of_elements="5"
+                            label="Scalars">
+        <ArrayListDomain attribute_type="Scalars"
+                         name="array_list"
+                         input_domain_name="input_array">
+          <RequiredProperties>
+            <Property function="Input" name="Input"/>
+          </RequiredProperties>
+        </ArrayListDomain>
+        <Documentation>
+          Point scalar array used as the mask or label image.
+        </Documentation>
+      </StringVectorProperty>
+
+      <IntVectorProperty command="SetForegroundMode"
+                         name="ForegroundMode"
+                         label="Foreground"
+                         number_of_elements="1"
+                         default_values="0"
+                         animateable="0">
+        <EnumerationDomain name="enum">
+          <Entry text="Threshold" value="0"/>
+          <Entry text="Label" value="1"/>
+        </EnumerationDomain>
+        <Documentation>
+          Threshold: voxels &gt;= Threshold are one foreground class, then split into
+          26-connected components. Label: each positive integer value is an object
+          (non-integers are ignored), also split into 26-connected components.
+        </Documentation>
+      </IntVectorProperty>
+
+      <DoubleVectorProperty command="SetThreshold"
+                            name="Threshold"
+                            label="Threshold"
+                            number_of_elements="1"
+                            default_values="0.5">
+        <DoubleRangeDomain name="range"/>
+        <Documentation>
+          Threshold mode. A voxel is foreground when its scalar is &gt;= this value.
+        </Documentation>
+        <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="enabled_state"
+                                   property="ForegroundMode"
+                                   value="0"/>
+        </Hints>
+      </DoubleVectorProperty>
+
+      <IntVectorProperty command="SetLabelValue"
+                         name="LabelValue"
+                         label="Label Value"
+                         number_of_elements="1"
+                         default_values="0">
+        <IntRangeDomain name="range"/>
+        <Documentation>
+          Label mode. 0 processes every positive integer label. Any other value
+          processes only that label.
+        </Documentation>
+        <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="enabled_state"
+                                   property="ForegroundMode"
+                                   value="1"/>
+        </Hints>
+      </IntVectorProperty>
+
+      <DoubleVectorProperty command="SetScale"
+                            name="Scale"
+                            label="Scale"
+                            number_of_elements="1"
+                            default_values="1.5">
+        <DoubleRangeDomain name="range" min="0"/>
+        <Documentation>
+          Invalidation radius is scale * distanceToBoundary + const, in the same
+          physical units as the image spacing. Larger scale keeps the backbone and
+          drops short branches. 1.5 keeps side branches; 4 to 10 keeps mostly the trunk.
+        </Documentation>
+      </DoubleVectorProperty>
+
+      <DoubleVectorProperty command="SetConstRadius"
+                            name="ConstRadius"
+                            label="Const"
+                            number_of_elements="1"
+                            default_values="0">
+        <DoubleRangeDomain name="range" min="0"/>
+        <Documentation>
+          Added to the invalidation radius, in image physical units (same as spacing),
+          not voxels. 0 disables the constant term. A value on the order of a vessel
+          radius will erase nearby branches.
+        </Documentation>
+      </DoubleVectorProperty>
+
+      <DoubleVectorProperty command="SetPdrfScale"
+                            name="PdrfScale"
+                            label="Penalty Scale"
+                            number_of_elements="1"
+                            default_values="100000">
+        <DoubleRangeDomain name="range" min="0"/>
+        <Documentation>
+          Weight of the boundary penalty. The path cost at a voxel is
+          penaltyScale * (1 - radius / maxRadius) ^ penaltyExponent, plus the
+          normalized geodesic distance from the root. Large values keep the path
+          farther from the wall.
+        </Documentation>
+      </DoubleVectorProperty>
+
+      <IntVectorProperty command="SetPdrfExponent"
+                         name="PdrfExponent"
+                         label="Penalty Exponent"
+                         number_of_elements="1"
+                         default_values="4">
+        <IntRangeDomain name="range" min="1" max="32"/>
+        <Documentation>
+          Exponent on the normalized boundary term. 4 is the usual setting.
+          Higher values punish the wall more sharply.
+        </Documentation>
+      </IntVectorProperty>
+
+      <IntVectorProperty command="SetDustThreshold"
+                         name="DustThreshold"
+                         label="Dust Threshold"
+                         number_of_elements="1"
+                         default_values="0">
+        <IntRangeDomain name="range" min="0"/>
+        <Documentation>
+          Skip a connected component with fewer than this many voxels. 0 keeps all.
+        </Documentation>
+      </IntVectorProperty>
+
+      <IntVectorProperty command="SetMaxPaths"
+                         name="MaxPaths"
+                         label="Max Paths"
+                         number_of_elements="1"
+                         default_values="0">
+        <IntRangeDomain name="range" min="0"/>
+        <Documentation>
+          Maximum polylines per connected component, including paths forced to
+          volume-boundary contacts. 0 means no limit.
+        </Documentation>
+      </IntVectorProperty>
+
+      <IntVectorProperty command="SetFixBranching"
+                         name="FixBranching"
+                         label="Fix Branching"
+                         number_of_elements="1"
+                         default_values="1">
+        <BooleanDomain name="bool"/>
+        <Documentation>
+          After each path, set the penalty to zero on those voxels and recompute
+          the shortest paths. Later branches fork nearer the junction instead of
+          splitting early off the trunk. Off uses one shortest-path field for every
+          branch and is faster.
+        </Documentation>
+      </IntVectorProperty>
+
+      <IntVectorProperty command="SetFixBorders"
+                         name="FixBorders"
+                         label="Reach Volume Boundary"
+                         number_of_elements="1"
+                         default_values="1">
+        <BooleanDomain name="bool"/>
+        <Documentation>
+          If the foreground touches the volume boundary, draw a path to the
+          max-radius voxel of each contact (ties go to the contact centroid)
+          before the usual farthest-point passes. Turn off when a mask simply
+          runs into the edge of the block and those contacts are not outlets.
+        </Documentation>
+      </IntVectorProperty>
+
+      <PropertyGroup label="Foreground">
+        <Property name="ForegroundMode"/>
+        <Property name="Threshold"/>
+        <Property name="LabelValue"/>
+      </PropertyGroup>
+      <PropertyGroup label="TEASAR">
+        <Property name="Scale"/>
+        <Property name="ConstRadius"/>
+        <Property name="PdrfScale"/>
+        <Property name="PdrfExponent"/>
+        <Property name="DustThreshold"/>
+        <Property name="MaxPaths"/>
+        <Property name="FixBranching"/>
+        <Property name="FixBorders"/>
+      </PropertyGroup>
+
+      <Hints>
+        <ShowInMenu category="SHYX" icon=":/VESPA/SHYX_Vmtk_Centerlines.png"/>
+      </Hints>
+    </SourceProxy>
+  </ProxyGroup>
+</ServerManagerConfiguration>

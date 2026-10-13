@@ -121,6 +121,7 @@ Vascular 顺序（[`VESPAVascularCategory.xml`](../ParaViewPlugin/smxml/VESPAVas
 |----------|----|------|-----|------|--------|------|
 | SHYX Image Morphology | `vtkSHYXImageMorphology` | ImageMorphology | SHYXImageMorphology.xml | 自有（复用 Density Sampler 图） | [有](shyx/ImageMorphology/README.md) | VTK |
 | SHYX Image AntiAlias | `vtkSHYXImageAntiAlias` | ImageAntiAlias | SHYXImageAntiAlias.xml | 自有（复用 Density Sampler 图） | [有](shyx/ImageAntiAlias/README.md) | VMTK（其安装树中的 ITK） |
+| SHYX Image TEASAR Centerlines | `vtkSHYXImageTeasarCenterline` | ImageTeasarCenterline | SHYXImageTeasarCenterline.xml | 复用 VMTK Centerlines 图 | [有](shyx/ImageTeasarCenterline/README.md) | VTK |
 
 ### 工具
 
@@ -137,6 +138,7 @@ Vascular 顺序（[`VESPAVascularCategory.xml`](../ParaViewPlugin/smxml/VESPAVas
 | Pulse Glyphs | `vtkPulseGlyphRepresentation` | PulseGlyphRepresentation | PulseGlyphRepresentation.xml | [有](shyx/PulseGlyphRepresentation/README.md) |
 | Animated Streamline | `vtkAnimatedStreamlineRepresentation` | AnimatedStreamlineRepresentation | AnimatedStreamlineRepresentation.xml | [有](shyx/AnimatedStreamlineRepresentation/README.md) |
 | Point Label | `vtkPointLabelRepresentation` | PointLabelRepresentation | PointLabelRepresentation.xml | [有](shyx/PointLabelRepresentation/README.md) |
+| Hologram | `vtkHologramRepresentation` | HologramRepresentation | HologramRepresentation.xml | [有](shyx/HologramRepresentation/README.md) |
 
 自定义 SM Domain（无菜单项）：`vtkSMSHYXSelectionBoundsDomain`（[`SelectionBoundsDomain/`](shyx/SelectionBoundsDomain/)），XML 标签 `SHYXSelectionBoundsDomain`。给 Alpha/Offset 的 Reset 按**选区** AABB 刷新（`SHYXSelectionFillAlphaReunionFilter`）；**Copy Input Selections** 也会对同一 Domain 做一次 Reset。无 ParaView 插件构建时与 Representation 一并排除。
 

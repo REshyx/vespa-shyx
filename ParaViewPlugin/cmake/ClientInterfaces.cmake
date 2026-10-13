@@ -36,6 +36,18 @@ list(APPEND vespa_plugin_qt_auto_sources
   Representations/pqAnimatedStreamlineAnimationManager.h)
 
 paraview_plugin_add_auto_start(
+  CLASS_NAME "pqHologramAnimationManager"
+  STARTUP onStartup
+  SHUTDOWN onShutdown
+  INTERFACES hologram_autostart_interfaces
+  SOURCES hologram_autostart_sources)
+list(APPEND vespa_plugin_qt_auto_interfaces ${hologram_autostart_interfaces})
+list(APPEND vespa_plugin_qt_auto_sources
+  ${hologram_autostart_sources}
+  Representations/pqHologramAnimationManager.cxx
+  Representations/pqHologramAnimationManager.h)
+
+paraview_plugin_add_auto_start(
   CLASS_NAME "pqSHYXSphereSelectionAutoStart"
   STARTUP onStartup
   SHUTDOWN onShutdown

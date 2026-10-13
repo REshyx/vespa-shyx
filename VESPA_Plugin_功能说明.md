@@ -19,7 +19,7 @@
 | **`VESPA_USE_SMP`** | 部分滤镜内部并行（Density Sampler、Array Probability Point Cull、Clebsch、Bidirectional Streamline Merge、Disconnected Region Fuse、Tet Mesh Region Partition）。**SHYX Radius Neighbor Count** / **SHYX Surface Thickness** / **SHYX Image Morphology** 使用 VTK 自带的 **vtkSMPTools**，不依赖此开关。 |
 | **（CGAL 版本，内部状态）** | CGAL ≥ 5.5 时内部 `VESPA_ALPHA_WRAPPING` 打开（VESPA/SHYX Alpha Wrapping / Selection Fill / Auto Mesh Repair XML）。CGAL ≥ 6.0 时内部 `VESPA_ADAPTIVE_REMESHING` 打开（Adaptive Remesher / Remesh With Endpoint）。二者不是 cmake-gui 用户开关。 |
 
-客户端若使用 Qt 版 ParaView，插件还可注册 **Pulse Glyph** / **Animated Streamline** 相关的自动启动管理器与自定义面板（如数组曲线映射面板）；表示类型仍可在显示面板中选择。
+客户端若使用 Qt 版 ParaView，插件还可注册 **Pulse Glyph** / **Animated Streamline** / **Hologram** 相关的自动启动管理器与自定义面板（如数组曲线映射面板）；表示类型仍可在显示面板中选择。
 
 ---
 
@@ -105,6 +105,7 @@
 | SHYX Auto Streamline / Bidirectional Streamline Merge | |
 | SHYX Image Morphology | 纯 VTK；`vtkImageData` 形态学（胀/蚀/开闭/形态学梯度/顶帽/击中）；勿与 Gradient Magnitude、Median 混淆 |
 | SHYX Image AntiAlias | 需 `VESPA_USE_VMTK`；用 VMTK 自带 ITK 的 Whitaker 抗锯齿消体素台阶；输出 float level set，Contour 0 |
+| SHYX Image TEASAR Centerlines | 纯 VTK；从 `vtkImageData` 提中心线折线（TEASAR），不是 VMTK 表面中心线 |
 
 **Filters → Vascular**（工具条顺序）：Skeleton Extraction → Vessel End Clipper → Skeleton End Clipper → Selection Plane Clipper → Remesh With Endpoint → TetGen → DataSet To Partitioned Collection → Boundary Assignment。
 
@@ -119,6 +120,7 @@
 | **Pulse Glyphs**（`PulseGlyphRepresentation`） | 基于 `Glyph3DRepresentation` 的脉冲缩放/旋转 glyph，GPU 实例化路径上随时间变化。 |
 | **Animated Streamline**（`AnimatedStreamlineRepresentation`） | 基于 `SurfaceRepresentation` 的流线类网格 GPU 动画表示。 |
 | **Point Label**（`PointLabelRepresentation`） | 表面表示上叠加点数据文本标签。 |
+| **Hologram**（`HologramRepresentation`） | 三角线框 + 菲涅尔鬼面 + 模型坐标流动（跟着物体变换）。体网格拆成全部面（含内部）。 |
 
 视图工具：球选（Sphere Selection）、按属性扩张选区（Grow Selection With Similar）、近距断口选区（Proximity Gap Selection，按 ε 选不连通但邻近的接触带）为客户端 Qt，无独立 VTK 模块。复合数据（如 PDC 的 `Part_1`）在 3D 视图右键菜单中有 **Select Block**，会先清除当前选择再选中该 block 的全部 cell。有点或 cell 选择时右键还有 **Select Connected**（选中当前连通的点/线/面/体）、有 cell 选择时还有 **Invert Selection**（反选）、**Select Similar → By Normal**（按法向一次 Grow 完，与标题栏 Grow 共用二面角阈值）和 **Fill Interior**（把被当前选区完全围住的未选面补进选择）。**SHYX AI Assistant** 在 **View** 菜单中作为可勾选停靠窗口（OpenAI 兼容；**Run script** 执行代码框）。
 
@@ -734,6 +736,7 @@
 | **SHYX Auto Streamline** | 自动布种流线 |
 | **SHYX Image Morphology** | `vtkImageData` 点标量形态学。Binary Match 默认 **Threshold**（`>= 0.5` 为前景，结果 1/0），也可两值严格相等。结构元 Box/Cross/Ellipsoid，`KernelSize` 默认 3 3 3 |
 | **SHYX Image AntiAlias** | 需 `VESPA_USE_VMTK`。可选 **Resample Factor**（&gt;1 加密 / &lt;1 减粗 / 1 原网格）再跑 ITK `AntiAliasBinaryImageFilter`。输出 float level set（内正外负），抽表面 Contour 0 |
+| **SHYX Image TEASAR Centerlines** | 从 `vtkImageData` 提中心线折线（TEASAR）。点数组 `MaximumInscribedSphereRadius`。不是 VMTK 表面中心线 |
 
 完整对照（类名 / XML / 图标 / README）见 [`vespa/INVENTORY.md`](vespa/INVENTORY.md)。
 
@@ -748,6 +751,12 @@
 **功能**：在 **Glyph 3D** 表示基础上，为缩放与（可选）旋转提供与时间相关的**脉冲包络**（trunc / pow 等），支持用点数据数组调制缩放。开启 **Shuffle** 时，动画相位使用渲染帧与 **TimeScale** 组合，而非墙钟时间。继承 Glyph 的 glyph 类型、朝向等常规设置。
 
 **常用参数（节选）**：**Animate**、**Integration Scale**、**Time Scale**、**Trunc**、**Pow**、**Overall scale**、**Animation coordinate**（默认常用 `IntegrationTime`）、**Array affects scale** / **Extra scale by array**、**Pulse affects scale** / **Pulse affects rotation**、**Shuffle**、**Rotation sweep XYZ**。
+
+### Hologram（`HologramRepresentation`）
+
+**功能**：全息线框。表面网格按原样画。体网格（四面体、六面体、体素，以及三维 Image / Structured）把每个体单元拆成全部面，内部的面也画；四边形保持为四边形，对角线不当线。**Lattice** 保持三角线框，流动经过时把面点亮。**Ghost**（默认）用菲涅尔让三角面时隐时现：默认掠射反光（Rim），也可改成正对相机才出现（Facing camera）。**HG_Flow** 选 Foam、Turbulence warp 或 Maelstrom，按模型包围盒取样，Display 里平移旋转时图案跟着物体走，本身没有轴向。颜色跟随 Solid Color / 标量着色，线宽用 Line Width。
+
+**常用参数**：**HG_Animate**、**HG_Style**、**HG_Flow**、**HG_WireOpacity**、**HG_FaceOpacity**、**HG_FresnelPower**、**HG_FresnelMode**、**HG_ScanStrength**、**HG_ScanSpeed**、**HG_BandCount**、**HG_NoiseScale**、**HG_NoisePower**。Python：`GetDisplayProperties().Representation = 'Hologram'`。
 
 ### Animated Streamline（`AnimatedStreamlineRepresentation`）
 
@@ -771,6 +780,7 @@
 - **SHYX Disconnected Region Fuse** 在不连通域的最近处连接。**Fuse Method** 可选合点中点、小域贴大域、或不删点而加线/两个桥接三角形。默认 **Fuse Within Input** 开。
 - **SHYX Image Morphology** 作用于 **`vtkImageData` 点标量**（体素），不是网格面环 DilateLayers，也不是 **Gradient Magnitude**（有限差分）或 **Median**。形态学梯度 = 膨胀 − 侵蚀；核大小是 **Kernel Size**（默认 3 3 3，椭圆核）。Binary 下 **Binary Match** 默认 **Threshold**（`>= 0.5` 为前景，输出 1/0），也可两值严格相等。
 - **SHYX Image AntiAlias** 用于二值体**消台阶**（Whitaker 占用约束曲率流）。ITK 与 VMTK 中心线共用 `VMTK_DIR`，不是独立 ITK。输出是 float level set，抽表面用 **Contour 0**。**Resample Factor** &gt;1 先加密再抗锯齿（半个体素锁在更细网格上，世界空间里更圆）；&lt;1 减粗。多标签请先 Threshold；开/闭请用 Image Morphology。
+- **SHYX Image TEASAR Centerlines** 从体素掩膜或整数标签直接出中心线折线，不经过 Marching Cubes / VMTK。`Scale` 1.5 留分支，调大则只留主干；`Const` 与 spacing 同一物理单位，默认 0。点半径数组名与 VMTK 相同：`MaximumInscribedSphereRadius`。环会被拆成树。空洞先用 Image Morphology Close。
 - **SHYX Point Cloud Surface SDF** 在**点云**上写 **SDF**；若要在**规则体素网格**上对**封闭**三角网格求有符号距离场（`vtkImageData`），应使用 CGAL 管线中的 **`vtkCGALSignedDistanceFunction`**（见 CGAL / PMP 模块文档或源码），二者勿混淆。
 - **SHYX Radius Neighbor Count** 用于点云或网格顶点上的**局部密度/邻域规模**分析；半径需与点间距尺度匹配。并行行为由 VTK SMP 后端决定（如与 ParaView 一同构建的 TBB 等）。
 - **SHYX Surface Thickness** 在表面顶点上写壁厚。交叉/kissing 用默认 **Self-proximity**，不要用射线法；找扁掉的小血管看 **ThicknessOverEdgeLength**，不要看绝对 Thickness。

@@ -1,0 +1,13 @@
+NAME
+  vtkSHYXImageTeasarCenterline
+DESCRIPTION
+  "Centerline polylines from a vtkImageData mask or label volume (TEASAR)."
+GROUPS
+  Vascular
+DEPENDS
+  VTK::CommonCore
+  VTK::CommonDataModel
+  VTK::CommonExecutionModel
+  VTK::FiltersCore
+PRIVATE_DEPENDS
+  VTK::ImagingCore

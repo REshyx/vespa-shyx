@@ -230,8 +230,9 @@
           opening edge length toward the interior ICC field. R &lt;= 1 only rewrites the boundary
           vertices. The anchor is the geometric edge length and is not multiplied by
           **Sizing field scale**. With **Protect constraints** OFF, **Boundary size scale**
-          multiplies the anchor so the opening can be coarsened or refined. With Protect ON the
-          opening stays frozen at its input edge length. Cap remesh is unchanged. Default OFF.
+          multiplies that edge length. With Anchor OFF, the same scale instead multiplies the
+          curvature target on opening vertices only. With both Anchor and Protect ON the opening
+          stays frozen at its input edge length. Cap remesh is unchanged. Default OFF.
         </Documentation>
       </IntVectorProperty>
 
@@ -242,21 +243,30 @@
                             default_values="1">
         <DoubleRangeDomain name="range" min="1e-6" max="1e6"/>
         <Documentation>
-          Multiplier on the anchored opening edge length. Shown when **Anchor boundary size** is ON
-          and **Protect constraints** is OFF. **1** (default) keeps the input opening edge length.
-          **&gt; 1** coarsens the boundary (longer edges); **&lt; 1** refines it. The factor is
-          measured on the input loops and reused on later iterations, so it does not compound.
-          Not multiplied by **Sizing field scale** and not re-clamped to Min/Max.
+          Independent multiplier for the opening. **1** (default) leaves boundary vertices on the
+          same pipeline as the wall, including **Sizing field scale**.
+          **Anchor boundary size** OFF: each opening vertex's curvature (ICC) target, after clamp
+          to Min/Max, is multiplied by this factor and then left alone. Expansion ratio and
+          Scale to range do not overwrite those vertices, and **Sizing field scale** does not
+          apply to them. Interior vertices still transition away from the scaled boundary.
+          **Anchor** ON and **Protect constraints** OFF: multiplies the input opening edge length
+          instead (not compounded across iterations).
+          **&gt; 1** coarsens; **&lt; 1** refines. Not re-clamped to Min/Max.
+          Hidden when Anchor and Protect are both ON.
         </Documentation>
         <Hints>
-          <PropertyWidgetDecorator type="GenericDecorator"
-                                   mode="visibility"
-                                   property="AnchorBoundarySize"
-                                   value="1"/>
-          <PropertyWidgetDecorator type="GenericDecorator"
-                                   mode="visibility"
-                                   property="RemeshProtectConstraints"
-                                   value="0"/>
+          <PropertyWidgetDecorator type="CompositeDecorator">
+            <Expression type="or">
+              <PropertyWidgetDecorator type="GenericDecorator"
+                                       mode="visibility"
+                                       property="AnchorBoundarySize"
+                                       value="0"/>
+              <PropertyWidgetDecorator type="GenericDecorator"
+                                       mode="visibility"
+                                       property="RemeshProtectConstraints"
+                                       value="0"/>
+            </Expression>
+          </PropertyWidgetDecorator>
         </Hints>
       </DoubleVectorProperty>
 

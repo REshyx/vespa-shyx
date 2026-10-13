@@ -857,9 +857,10 @@ int vtkSHYXRemeshWithEndpoint::RequestData(
         const int iccRings = (this->IccNeighborhoodMode == 0) ? this->IccNeighborhoodRings : 0;
         const double iccRadius = (this->IccNeighborhoodMode == 1) ? this->IccBallRadius : -1.0;
         std::optional<SizingTy> sizingStorage;
-        const double boundaryScale = (this->AnchorBoundarySize && !this->RemeshProtectConstraints)
-          ? this->BoundarySizeScale
-          : 1.0;
+        // Anchor + Protect freezes the opening at its input edge length, so the scale is unused.
+        // Otherwise the scale applies: curvature*scale when Anchor is off, edge-length*scale when on.
+        const double boundaryScale =
+          (this->AnchorBoundarySize && this->RemeshProtectConstraints) ? 1.0 : this->BoundarySizeScale;
         sizingStorage.emplace(this->AdaptiveTolerance, std::make_pair(minLen, maxLen),
             cgalMesh->surface.faces(), cgalMesh->surface,
             static_cast<double>(this->AdaptiveSizingNeighborMaxRatio), this->ScaleToRange,

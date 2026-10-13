@@ -67,6 +67,7 @@ SHYX 是本仓库里 **一个作者命名空间**（[`vespa/shyx/`](.)），不�
 
 * [**Image Morphology**](./ImageMorphology/README.md) — `vtkImageData` 点标量：膨胀/侵蚀/开闭、形态学梯度、顶帽、击中-击不中（Box / Cross / Ellipsoid）
 * [**Image AntiAlias**](./ImageAntiAlias/README.md) — 二值体素消台阶（Whitaker / ITK `AntiAliasBinaryImageFilter`，ITK 来自 `VMTK_DIR`）；可选 Resample Factor 加密/减粗；需 `VESPA_USE_VMTK`
+* [**Image TEASAR Centerlines**](./ImageTeasarCenterline/README.md) — 从 `vtkImageData` 掩膜/标签提中心线折线（TEASAR），不经过表面，不依赖 VMTK
 
 ## 工具
 
@@ -83,6 +84,7 @@ SHYX 是本仓库里 **一个作者命名空间**（[`vespa/shyx/`](.)），不�
 * [**Pulse Glyph Representation**](./PulseGlyphRepresentation/README.md) — 动画管理器在 `ParaViewPlugin/Representations/pqPulseGlyphAnimationManager`
 * [**Animated Streamline Representation**](./AnimatedStreamlineRepresentation/README.md) — 动画管理器在 `ParaViewPlugin/Representations/pqAnimatedStreamlineAnimationManager`
 * [**Point Label Representation**](./PointLabelRepresentation/README.md) — Display 面板点标签
+* [**Hologram Representation**](./HologramRepresentation/README.md) — 三角线框 + 菲涅尔鬼面 + 三种 flow（Foam / Turbulence warp / Maelstrom）。体网格拆成全部面（含内部）。动画管理器在 `ParaViewPlugin/Representations/pqHologramAnimationManager`
 
 ---
 

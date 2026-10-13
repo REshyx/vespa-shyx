@@ -1,0 +1,19 @@
+NAME
+  vtkHologramRepresentation
+DESCRIPTION
+  "Hologram wires and fresnel faces. Volume cells are drawn as all of their faces."
+GROUPS
+  ParaView
+DEPENDS
+  ParaView::RemotingViews
+PRIVATE_DEPENDS
+  ParaView::RemotingCore
+  ParaView::VTKExtensionsCore
+  VTK::CommonCore
+  VTK::CommonDataModel
+  VTK::CommonExecutionModel
+  VTK::CommonMath
+  VTK::CommonSystem
+  VTK::ParallelCore
+  VTK::RenderingCore
+  VTK::RenderingOpenGL2

@@ -1,0 +1,108 @@
+// SPDX-FileCopyrightText: Copyright (c) Kitware Inc.
+// SPDX-License-Identifier: BSD-3-Clause
+
+#ifndef vtkHologramRepresentation_h
+#define vtkHologramRepresentation_h
+
+#include "vtkHologramRepresentationModule.h"
+#include "vtkGeometryRepresentationWithFaces.h"
+
+class vtkAlgorithm;
+class vtkCallbackCommand;
+class vtkInformation;
+class vtkInformationRequestKey;
+class vtkInformationVector;
+class vtkRenderer;
+
+class VTKHOLOGRAMREPRESENTATION_EXPORT vtkHologramRepresentation
+  : public vtkGeometryRepresentationWithFaces
+{
+public:
+  static vtkHologramRepresentation* New();
+  vtkTypeMacro(vtkHologramRepresentation, vtkGeometryRepresentationWithFaces);
+  void PrintSelf(ostream& os, vtkIndent indent) override;
+
+  vtkSetMacro(Animate, bool);
+  vtkGetMacro(Animate, bool);
+  vtkBooleanMacro(Animate, bool);
+
+  /** 0 = lattice (wires stay, scan reveals faces). 1 = ghost (fresnel gates faces and wires). */
+  vtkSetClampMacro(Style, int, 0, 1);
+  vtkGetMacro(Style, int);
+
+  /** 0 = foaming waves. 1 = turbulence warp. 2 = maelstrom. None of these pick an axis. */
+  vtkSetClampMacro(Flow, int, 0, 2);
+  vtkGetMacro(Flow, int);
+
+  vtkSetClampMacro(WireOpacity, double, 0.0, 1.0);
+  vtkGetMacro(WireOpacity, double);
+
+  vtkSetClampMacro(FaceOpacity, double, 0.0, 1.0);
+  vtkGetMacro(FaceOpacity, double);
+
+  vtkSetClampMacro(FresnelPower, double, 0.05, 12.0);
+  vtkGetMacro(FresnelPower, double);
+
+  /** 0 = rim / grazing reflection. 1 = faces toward the camera. */
+  vtkSetClampMacro(FresnelMode, int, 0, 1);
+  vtkGetMacro(FresnelMode, int);
+
+  vtkSetClampMacro(ScanStrength, double, 0.0, 4.0);
+  vtkGetMacro(ScanStrength, double);
+
+  vtkSetClampMacro(ScanSpeed, double, -8.0, 8.0);
+  vtkGetMacro(ScanSpeed, double);
+
+  vtkSetClampMacro(BandCount, double, 0.5, 64.0);
+  vtkGetMacro(BandCount, double);
+
+  /** Larger than 1 enlarges the noise features. */
+  vtkSetClampMacro(NoiseScale, double, 0.1, 16.0);
+  vtkGetMacro(NoiseScale, double);
+
+  /** Above 1 keeps only the bright peaks. */
+  vtkSetClampMacro(NoisePower, double, 0.2, 16.0);
+  vtkGetMacro(NoisePower, double);
+
+protected:
+  vtkHologramRepresentation();
+  ~vtkHologramRepresentation() override;
+
+  int ProcessViewRequest(
+    vtkInformationRequestKey* request_type, vtkInformation* inInfo, vtkInformation* outInfo) override;
+
+  int RequestData(vtkInformation* request, vtkInformationVector** inputVector,
+    vtkInformationVector* outputVector) override;
+
+  bool AddToView(vtkView* view) override;
+  bool RemoveFromView(vtkView* view) override;
+
+  void UpdateShaderReplacements();
+  void UpdateAnimationObservers();
+  void OnUpdateShader(vtkObject* caller, void* calldata);
+  static void ShaderCallback(
+    vtkObject* caller, unsigned long eid, void* clientdata, void* calldata);
+
+  vtkCallbackCommand* ShaderObserver = nullptr;
+  vtkAlgorithm* VolumeFaces = nullptr;
+  vtkRenderer* BoundRenderer = nullptr;
+  double StartTime = 0.0;
+  bool Animate = true;
+  int Style = 1;
+  int Flow = 0;
+  double WireOpacity = 0.01;
+  double FaceOpacity = 0.2;
+  double FresnelPower = 4.0;
+  int FresnelMode = 0;
+  double ScanStrength = 2.0;
+  double ScanSpeed = 2.0;
+  double BandCount = 4.0;
+  double NoiseScale = 0.5;
+  double NoisePower = 3.0;
+
+private:
+  vtkHologramRepresentation(const vtkHologramRepresentation&) = delete;
+  void operator=(const vtkHologramRepresentation&) = delete;
+};
+
+#endif

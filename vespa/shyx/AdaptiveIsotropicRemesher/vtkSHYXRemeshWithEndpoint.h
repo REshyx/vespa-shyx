@@ -116,17 +116,19 @@ public:
      * the boundary. Border ICC values are not expansion seeds. The anchor is geometric edge
      * length (not SizingFieldScale). Expansion ratio &lt;= 1 only rewrites the boundary vertices.
      * With Protect constraints OFF, BoundarySizeScale multiplies that anchor so the opening can
-     * be coarsened or refined. Default OFF. Cap remesh is unaffected.
+     * be coarsened or refined. With Anchor OFF, BoundarySizeScale instead multiplies the
+     * curvature (ICC) target on opening vertices only. Default OFF. Cap remesh is unaffected.
      */
     vtkGetMacro(AnchorBoundarySize, bool);
     vtkSetMacro(AnchorBoundarySize, bool);
     vtkBooleanMacro(AnchorBoundarySize, bool);
     //@}
     /**
-     * Multiplier on the anchored opening edge length when AnchorBoundarySize is ON and
-     * RemeshProtectConstraints is OFF. **1** (default) keeps the input opening edge length.
-     * **&gt; 1** coarsens the boundary; **&lt; 1** refines it. The factor is taken from the input
-     * loops and is not compounded across remesh iterations. Ignored while Protect constraints is ON.
+     * Boundary size multiplier. **1** (default) leaves the opening on the same pipeline as the wall.
+     * **&gt; 1** coarsens the boundary; **&lt; 1** refines it.
+     * Anchor OFF: each opening vertex's clamped ICC (curvature) target times this factor, not
+     * also times SizingFieldScale. Anchor ON and Protect OFF: input opening edge length times
+     * this factor (not compounded across iterations). Ignored when Anchor and Protect are both ON.
      */
     vtkGetMacro(BoundarySizeScale, double);
     vtkSetClampMacro(BoundarySizeScale, double, 1.0e-6, 1.0e6);

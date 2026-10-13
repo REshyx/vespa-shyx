@@ -67,10 +67,14 @@ namespace pmp_sf = CGAL::Polygon_mesh_processing;
  * set to the mean length of its border edges, and every other vertex is clamped into
  * \f$[L/R^{d}, L R^{d}]\f$ of those anchors (\f$R\f$ = neighbor_max_ratio, \f$d\f$ = hop distance).
  * \f$R \le 1\f$ only rewrites the border vertices. The anchor is the geometric edge length, not
- * multiplied by size_field_scale. When @a boundary_size_scale is not 1, each opening loop's anchor
- * is that loop's mean border-edge length times the factor (\f$> 1\f$ coarsens, \f$< 1\f$ refines).
- * The absolute target is taken from the input mesh and reused on later `recompute_curvature`
- * passes, so the factor is not compounded across remesh iterations.
+ * multiplied by size_field_scale. When @a boundary_size_scale is not 1:
+ * - with @a anchor_boundary_size, each opening loop's anchor is that loop's mean border-edge
+ *   length times the factor. The absolute target is taken from the input mesh and reused on later
+ *   `recompute_curvature` passes, so the factor is not compounded.
+ * - without it, each border vertex keeps its clamped ICC (curvature) target times the factor.
+ *   That value is not also multiplied by size_field_scale, and Expansion ratio / Scale to range
+ *   do not overwrite it. Interior vertices still transition away from those border targets.
+ *   \f$> 1\f$ coarsens, \f$< 1\f$ refines. \f$1\f$ leaves the border on the same pipeline as the wall.
  *
  * Optional uncapped preview: when @a uncapped_sizes_out is non-null, the constructor's first ICC
  * pass also writes per-vertex **unclamped** target lengths (NaN where the ICC formula is undefined)
@@ -279,6 +283,13 @@ private:
       }
       put(map_g_, v, vertex_size_(tol_g_, short_g_, long_g_, max_abs));
     }
+    // Border curvature * Boundary size scale, before expansion. Those vertices stay fixed
+    // through expansion, scale-to-range, and Sizing field scale.
+    fixed_border_.clear();
+    if (!anchor_boundary_size_ && boundary_size_scale_ > FT(0) && boundary_size_scale_ != FT(1))
+    {
+      scale_border_curvature_sizes_(mesh);
+    }
     // Lip curvature must not seed Expansion ratio; those vertices are overwritten with
     // geometric border length after scaling.
     if (anchor_boundary_size_)
@@ -386,6 +397,10 @@ private:
         {
           continue;
         }
+        if (is_fixed_border_(v))
+        {
+          continue;
+        }
         const FT cand = su * R;
         if (cand < sv)
         {
@@ -459,6 +474,10 @@ private:
     FT actual_max = FT(0);
     for (vertex_descriptor v : vertices(mesh))
     {
+      if (is_fixed_border_(v))
+      {
+        continue;
+      }
       const FT s = get(map_g_, v);
       if (s > FT(0))
       {
@@ -474,10 +493,57 @@ private:
     const FT span_out = long_g_ - short_g_;
     for (vertex_descriptor v : vertices(mesh))
     {
+      if (is_fixed_border_(v))
+      {
+        continue;
+      }
       const FT s = get(map_g_, v);
       if (s > FT(0))
       {
         put(map_g_, v, short_g_ + (s - actual_min) * span_out / span_in);
+      }
+    }
+  }
+
+  bool is_fixed_border_(vertex_descriptor v) const
+  {
+    const std::size_t i = static_cast<std::size_t>(v.idx());
+    return i < fixed_border_.size() && fixed_border_[i] != 0;
+  }
+
+  /**
+   * Border target = clamped ICC size * boundary_size_scale_. Marks those vertices so later
+   * expansion, scale-to-range, and Sizing field scale leave them unchanged.
+   */
+  void scale_border_curvature_sizes_(CGAL_Surface& mesh)
+  {
+    std::size_t maxIdx = 0;
+    for (vertex_descriptor v : vertices(mesh))
+    {
+      maxIdx = (std::max)(maxIdx, static_cast<std::size_t>(v.idx()));
+    }
+    fixed_border_.assign(maxIdx + 1, 0);
+    for (CGAL_Surface::Edge_index e : mesh.edges())
+    {
+      const halfedge_descriptor h = mesh.halfedge(e);
+      if (!mesh.is_border(h) && !mesh.is_border(mesh.opposite(h)))
+      {
+        continue;
+      }
+      const vertex_descriptor vs[2] = { mesh.source(h), mesh.target(h) };
+      for (vertex_descriptor v : vs)
+      {
+        const std::size_t i = static_cast<std::size_t>(v.idx());
+        if (fixed_border_[i] != 0)
+        {
+          continue;
+        }
+        fixed_border_[i] = 1;
+        const FT s = get(map_g_, v);
+        if (s > FT(0))
+        {
+          put(map_g_, v, s * boundary_size_scale_);
+        }
       }
     }
   }
@@ -780,6 +846,10 @@ private:
     }
     for (vertex_descriptor v : vertices(mesh))
     {
+      if (is_fixed_border_(v))
+      {
+        continue;
+      }
       const FT s = get(map_g_, v);
       if (s > FT(0))
       {
@@ -801,6 +871,8 @@ private:
   bool     anchor_boundary_size_ = false;
   FT       boundary_size_scale_ = FT(1);
   std::vector<BorderLoopTarget> border_loop_targets_;
+  /** 1 = border vertex already set to curvature * boundary_size_scale_; later passes must not overwrite. */
+  std::vector<char> fixed_border_;
   static constexpr int gradient_limit_sweeps_ = 32;
 };
 
