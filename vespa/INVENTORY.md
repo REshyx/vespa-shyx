@@ -149,6 +149,7 @@ Vascular 顺序（[`VESPAVascularCategory.xml`](../ParaViewPlugin/smxml/VESPAVas
 | 功能 | 代码 | 图标 |
 |------|------|------|
 | Sphere Selection | `ParaViewPlugin/selection/SphereSelection/` | `SHYX_Sphere_Selection.svg` |
+| Polygon Selection（左键加点、右键撤销、双击闭合；按钮右键 Select through） | `ParaViewPlugin/selection/PolygonSelection/` | `SHYX_Polygon_Selection.svg` |
 | Grow Selection With Similar | `ParaViewPlugin/selection/GrowSelectionWithSimilar/` | `SHYX_Grow_Selection_With_Similar.svg` |
 | Proximity Gap Selection | `ParaViewPlugin/selection/ProximityGapSelection/` | `SHYX_Proximity_Gap_Selection.svg` |
 | Select Block（3D 视图 block 右键） | `ParaViewPlugin/selection/SelectBlock/` | ParaView `pqSelectBlock.svg` |

@@ -1474,6 +1474,7 @@ QString listFilters(const QString& queryRaw)
   {
     out += QStringLiteral(
       "RenderView title-bar tools are not proxies: Sphere cell selection; "
+      "Polygon cell selection (click vertices, not the freehand lasso); "
       "Grow selection with similar normals; Proximity gap selection. "
       "Block context menu: Select Block. "
       "Selection context menu: Select Connected (connected points/lines/faces/volumes); "
@@ -1709,6 +1710,36 @@ QString describeClientTool(const QString& query)
     ql.contains(QLatin1String("connected region"));
   const bool invertSel = ql.contains(QLatin1String("invert")) ||
     ql.contains(QLatin1String("shyxinvert"));
+  const bool polygon = ql == QLatin1String("polygon") ||
+    ql.contains(QLatin1String("polygon selection")) ||
+    ql.contains(QLatin1String("polygon cell")) ||
+    ql.contains(QLatin1String("select polygon")) ||
+    ql.contains(QLatin1String("shyxpolygon")) ||
+    ql.contains(QStringLiteral("多边形"));
+  if (polygon && !proximityGap && !sphere && !grow && !selectBlock && !fillInterior &&
+    !selectConnected && !invertSel)
+  {
+    return QStringLiteral(
+      "SHYX Polygon cell selection (RenderView title-bar; not a Server Manager proxy)\n"
+      "No Python constructor and no SM properties. After the user uses it, call inspect_selection.\n"
+      "Independent of the rectangle rubber band (Select Cells On) and of ParaView's freehand lasso "
+      "(Select Cells With Polygon / Select Points With Polygon, which draw while the button is held).\n"
+      "Interaction:\n"
+      "  Toggle: title-bar polygon button (Polygon cell selection)\n"
+      "  Left-click: add a vertex\n"
+      "  Right-click: undo the last vertex (the view context menu does not open)\n"
+      "  Double-click: close and select\n"
+      "  The closing click adds a vertex when it is not on top of the last vertex\n"
+      "  Needs at least 3 vertices\n"
+      "  Stays on after a selection so another polygon can be drawn\n"
+      "  Esc clears the draft, or leaves the mode when the draft is empty\n"
+      "  Right-click the title-bar button (not the 3D view): Select through\n"
+      "    Off (default): visible surface cells, same as Select Cells On\n"
+      "    On: cells whose projection overlaps the polygon, including cells hidden behind the front surface\n"
+      "  Selection modifiers: ParaView add/subtract/toggle (Ctrl/Shift, or the title-bar modifier buttons)\n"
+      "  Middle-drag still pans; mouse wheel still zooms\n"
+      "View right-click still undoes the last vertex; it does not open this menu.\n");
+  }
   if (proximityGap)
   {
     const double eps = pqSHYXProximityGapSelectionController::Epsilon();
@@ -1863,7 +1894,7 @@ QString describeProxy(const QString& query)
   if (!proto)
   {
     return QStringLiteral("No proxy definition matching '%1'. Try list_filters or describe_proxy('sphere') / "
-                          "describe_proxy('proximity gap') / describe_proxy('Pulse Glyphs').")
+                          "describe_proxy('polygon') / describe_proxy('proximity gap') / describe_proxy('Pulse Glyphs').")
       .arg(query.trimmed());
   }
   QString out;
@@ -2467,13 +2498,34 @@ const ShyxExtra kShyxExtra[] = {
     "3D image and structured grids) are split into every face, including interior faces; quads stay "
     "quads so diagonals are not wires. "
     "HG_Flow 0/1/2 is foaming waves (7sBcRG), turbulence warp (NXS3DG), or maelstrom (MflyRf). "
+    "HG_Flow 3 is Scan, a separate mode: the noise is not sampled. HG_ScanAxis is 0 X, 1 Y, 2 Z, "
+    "or 3 view depth. X/Y/Z follow the dataset bounds and Display transforms. View depth is a plane "
+    "perpendicular to the camera, near side of those bounds to the far side. HG_ScanWidth is the "
+    "stripe thickness as a fraction of one period. HG_ScanAxis and HG_ScanWidth are hidden unless "
+    "Flow is Scan. HG_NoiseScale and HG_NoisePower are hidden in Scan. HG_GroupMesh stays available. "
+    "HG_BandCount is noise density, or how many stripes fit across an ungrouped scan. "
+    "HG_ScanSpeed 1 crosses the bounds in about 5 seconds in Scan. "
     "HG_NoiseScale magnifies the patches; HG_NoisePower above 1 keeps only the bright peaks. "
-    "Call describe_proxy('Hologram') for HG_* names (HG_Style, HG_Animate, HG_FresnelMode, HG_Flow, ...)." },
+    "HG_GroupMesh off samples each fragment at its own position, so Scan slices through faces. "
+    "On groups by the original volume cell: every face of one cell shares that cell's centroid, "
+    "so the cell lights as a whole while a neighbor can still be dark. A surface polygon uses its "
+    "own centroid. Grouped Scan is one reveal front along HG_ScanAxis (Band Count is ignored): "
+    "cells behind the front stay lit, HG_ScanWidth is the fade as a fraction of the bounds, then "
+    "the fill restarts. Grouped noise is one value per cell. Fresnel stays per face. Ghost hides "
+    "the noise except at the fresnel. In Scan, the band or the revealed cells fill faces as the "
+    "front passes. "
+    "Call describe_proxy('Hologram') for HG_* names (HG_Style, HG_Animate, HG_FresnelMode, HG_Flow, HG_ScanAxis, HG_GroupMesh, ...)." },
   { "SHYXSphereSelection",
     "Not a filter and not a proxy. RenderView title-bar sphere button. "
     "Selects every visible pipeline node in the view; on a composite parent, every intersecting "
     "block. Call describe_proxy('sphere') for interaction parameters. After the user uses it, "
     "call inspect_selection." },
+  { "SHYXPolygonSelection",
+    "Not a filter and not a proxy. RenderView title-bar polygon button: left-click adds a vertex, "
+    "right-click undoes the last vertex, double-click closes. Right-click the button to toggle "
+    "Select through (off: visible surface cells; on: also cells hidden behind the front surface). "
+    "Independent of the rectangle rubber band and of ParaView's freehand lasso "
+    "(Select Cells With Polygon). Call describe_proxy('polygon'). After use, call inspect_selection." },
   { "SHYXGrowSelectionWithSimilar",
     "Not a filter and not a proxy. RenderView title-bar button: one ring per click, hold to keep growing. "
     "Call describe_proxy('grow') for DihedralThresholdDegrees (default 15). After use, call inspect_selection." },
@@ -2547,7 +2599,8 @@ QString lookupShyxDocs(const QString& queryRaw)
       "   Pulse Glyphs, Animated Streamline, Point Label, Hologram. "
       "Python: GetDisplayProperties().Representation = 'Pulse Glyphs'.\n"
       "3) RenderView title-bar selection tools (client Qt; no SM proxy / no Python constructor):\n"
-      "   Sphere cell selection; Grow selection with similar normals; Proximity gap selection. "
+      "   Sphere cell selection; Polygon cell selection (click vertices; not the freehand lasso); "
+      "Grow selection with similar normals; Proximity gap selection. "
       "After the user uses them, call inspect_selection.\n"
       "   Also: right-click a composite block → Select Block "
       "(clear current selection, then select all cells in that part).\n"
@@ -2563,7 +2616,8 @@ QString lookupShyxDocs(const QString& queryRaw)
       "5) View → SHYX AI Assistant: this dock, not a pipeline filter.\n"
       "Pass a name/topic (remesh, clip, representation, selection, sphere, glyph, ...) to filter notes.\n"
       "For parameter names/defaults: describe_proxy('Pulse Glyphs'), describe_proxy('Animated Streamline'), "
-      "describe_proxy('Point Label'), describe_proxy('Hologram'), describe_proxy('sphere'), describe_proxy('grow'), "
+      "describe_proxy('Point Label'), describe_proxy('Hologram'), describe_proxy('sphere'), "
+      "describe_proxy('polygon'), describe_proxy('grow'), "
       "describe_proxy('proximity gap'), describe_proxy('select block'), describe_proxy('select similar'), "
       "describe_proxy('fill interior'), describe_proxy('select connected'), "
       "describe_proxy('invert').\n");
@@ -3045,14 +3099,14 @@ QJsonArray pqSHYXAIAgentTools::schema(bool allowCaptureScreenshot)
     "Property schema: types, defaults, enums, docs. For filters: XML/python name. "
     "For SHYX Display types pass 'Pulse Glyphs', 'Animated Streamline', 'Point Label', or 'Hologram' "
     "(returns exposed Python names PG_*/AS_*/PL_*/HG_*). "
-    "For title-bar tools pass 'sphere', 'grow', or 'proximity gap' (no SM proxy). "
+    "For title-bar tools pass 'sphere', 'polygon', 'grow', or 'proximity gap' (no SM proxy). "
     "For the block context-menu action pass 'select block'. "
     "For Select Similar / By Normal pass 'select similar'. "
     "For Fill Interior pass 'fill interior'. "
     "For Select Connected (connected points/lines/faces/volumes) pass 'select connected'. "
     "For Invert Selection pass 'invert'. "
     "For the RenderView Ctrl+D shortcut that creates and applies SHYX Delete Selected Cells, pass 'delete shortcut' or 'ctrl+d'.",
-    QJsonObject{ { QStringLiteral("name"), strArg("XML name, display type (Pulse Glyphs), sphere/grow/proximity gap, select block, select similar, fill interior, select connected, invert, or delete shortcut.") } },
+    QJsonObject{ { QStringLiteral("name"), strArg("XML name, display type (Pulse Glyphs), sphere/polygon/grow/proximity gap, select block, select similar, fill interior, select connected, invert, or delete shortcut.") } },
     QJsonArray{ QStringLiteral("name") }));
   tools.append(fn("lookup_shyx_docs",
     "SHYX/VESPA usage notes: capability catalog (filters + Display representations + "

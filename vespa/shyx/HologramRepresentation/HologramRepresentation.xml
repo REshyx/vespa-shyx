@@ -45,10 +45,12 @@
           <Entry text="Foam" value="0" />
           <Entry text="Turbulence warp" value="1" />
           <Entry text="Maelstrom" value="2" />
+          <Entry text="Scan" value="3" />
         </EnumerationDomain>
         <Documentation>
-          World X/Y/Z pattern. Foam is Shadertoy 7sBcRG. Turbulence warp is NXS3DG.
-          Maelstrom is MflyRf. None of these pick a world axis or a view direction.
+          Foam, Turbulence warp, and Maelstrom are noise glued to the mesh (Shadertoy 7sBcRG,
+          NXS3DG, MflyRf). None of them pick an axis. Scan replaces the noise with a band
+          that travels along Scan Axis.
         </Documentation>
       </IntVectorProperty>
 
@@ -100,7 +102,7 @@
                             default_values="2"
                             number_of_elements="1">
         <DoubleRangeDomain name="range" min="0" max="4" />
-        <Documentation>How strongly the flow lights faces and wires. 0 leaves only the resting fill.</Documentation>
+        <Documentation>How strongly the active flow lights faces and wires. 0 leaves only the resting fill.</Documentation>
       </DoubleVectorProperty>
 
       <DoubleVectorProperty name="ScanSpeed"
@@ -109,9 +111,51 @@
                             number_of_elements="1">
         <DoubleRangeDomain name="range" min="-8" max="8" />
         <Documentation>
-          How fast the pattern changes in place. Foam spins gradients, turbulence
-          twists the warp, maelstrom changes the noise phase. Negative reverses it.
+          How fast the active flow changes. Foam spins gradients, turbulence twists the warp,
+          maelstrom changes the noise phase. In Scan, 1 crosses the bounds in about 5 seconds.
+          Negative reverses it.
         </Documentation>
+      </DoubleVectorProperty>
+
+      <IntVectorProperty name="ScanAxis"
+                         command="SetScanAxis"
+                         default_values="0"
+                         number_of_elements="1">
+        <EnumerationDomain name="enum">
+          <Entry text="X" value="0" />
+          <Entry text="Y" value="1" />
+          <Entry text="Z" value="2" />
+          <Entry text="View depth" value="3" />
+        </EnumerationDomain>
+        <Documentation>
+          Axis of the Scan flow. X, Y, and Z move through the dataset bounds and follow
+          Display translation and rotation. View depth moves a plane perpendicular to the
+          camera, from the near side of those bounds to the far side. Band Count is how
+          many stripes fit across the axis.
+        </Documentation>
+        <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="visibility"
+                                   property="HG_Flow"
+                                   value="3"/>
+        </Hints>
+      </IntVectorProperty>
+
+      <DoubleVectorProperty name="ScanWidth"
+                            command="SetScanWidth"
+                            default_values="0.08"
+                            number_of_elements="1">
+        <DoubleRangeDomain name="range" min="0.002" max="0.5" />
+        <Documentation>
+          Thickness of each stripe as a fraction of one period. 0.08 is a thin line; larger is a wider slab.
+          With Group Mesh, Scan is one reveal front and this is how thick that front fades, as a fraction of the bounds.
+        </Documentation>
+        <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="visibility"
+                                   property="HG_Flow"
+                                   value="3"/>
+        </Hints>
       </DoubleVectorProperty>
 
       <DoubleVectorProperty name="BandCount"
@@ -120,7 +164,9 @@
                             number_of_elements="1">
         <DoubleRangeDomain name="range" min="0.5" max="64" />
         <Documentation>
-          How large the pattern is across the mesh bounds. Foam's demo starts at 4;
+          How many features fit across the mesh bounds. Noise flows use this as density.
+          Scan uses it as how many stripes lie along the axis. Group Mesh Scan ignores it
+          and reveals once per pass. Foam's demo starts at 4;
           turbulence and maelstrom sit near 5 to 7.
         </Documentation>
       </DoubleVectorProperty>
@@ -132,8 +178,15 @@
         <DoubleRangeDomain name="range" min="0.1" max="16" />
         <Documentation>
           Magnifies the noise. 1 keeps the size set by Band Count. Larger makes the
-          bright patches bigger.
+          bright patches bigger. Hidden in Scan.
         </Documentation>
+        <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="visibility"
+                                   property="HG_Flow"
+                                   value="3"
+                                   inverse="1"/>
+        </Hints>
       </DoubleVectorProperty>
 
       <DoubleVectorProperty name="NoisePower"
@@ -143,9 +196,31 @@
         <DoubleRangeDomain name="range" min="0.2" max="16" />
         <Documentation>
           Contrast of the noise. 1 is linear. Higher keeps only the peaks, so a small
-          part of the surface lights up and the rest stays dark.
+          part of the surface lights up and the rest stays dark. Hidden in Scan.
         </Documentation>
+        <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="visibility"
+                                   property="HG_Flow"
+                                   value="3"
+                                   inverse="1"/>
+        </Hints>
       </DoubleVectorProperty>
+
+      <IntVectorProperty name="GroupMesh"
+                         command="SetGroupMesh"
+                         default_values="0"
+                         number_of_elements="1">
+        <BooleanDomain name="bool" />
+        <Documentation>
+          Group by the original volume cell. Every face of one cell shares that cell's centroid,
+          so the cell lights as a whole and the next cell can still be dark. Off samples each
+          fragment at its own position, and Scan cuts a slice through the faces. On, Scan reveals
+          cells as one front moves along Scan Axis: cells behind the front stay lit, then the fill
+          restarts. Noise uses one value per cell. A surface polygon uses its own centroid.
+          Fresnel stays per face.
+        </Documentation>
+      </IntVectorProperty>
     </RepresentationProxy>
 
     <Extension name="GeometryRepresentation">
@@ -170,9 +245,12 @@
             <Property name="FresnelMode" exposed_name="HG_FresnelMode" />
             <Property name="ScanStrength" exposed_name="HG_ScanStrength" />
             <Property name="ScanSpeed" exposed_name="HG_ScanSpeed" />
+            <Property name="ScanAxis" exposed_name="HG_ScanAxis" />
+            <Property name="ScanWidth" exposed_name="HG_ScanWidth" />
             <Property name="BandCount" exposed_name="HG_BandCount" />
             <Property name="NoiseScale" exposed_name="HG_NoiseScale" />
             <Property name="NoisePower" exposed_name="HG_NoisePower" />
+            <Property name="GroupMesh" exposed_name="HG_GroupMesh" />
             <Hints>
               <PropertyWidgetDecorator type="GenericDecorator"
                                        mode="visibility"
@@ -206,9 +284,12 @@
             <Property name="FresnelMode" exposed_name="HG_FresnelMode" />
             <Property name="ScanStrength" exposed_name="HG_ScanStrength" />
             <Property name="ScanSpeed" exposed_name="HG_ScanSpeed" />
+            <Property name="ScanAxis" exposed_name="HG_ScanAxis" />
+            <Property name="ScanWidth" exposed_name="HG_ScanWidth" />
             <Property name="BandCount" exposed_name="HG_BandCount" />
             <Property name="NoiseScale" exposed_name="HG_NoiseScale" />
             <Property name="NoisePower" exposed_name="HG_NoisePower" />
+            <Property name="GroupMesh" exposed_name="HG_GroupMesh" />
             <Hints>
               <PropertyWidgetDecorator type="GenericDecorator"
                                        mode="visibility"
@@ -242,9 +323,12 @@
             <Property name="FresnelMode" exposed_name="HG_FresnelMode" />
             <Property name="ScanStrength" exposed_name="HG_ScanStrength" />
             <Property name="ScanSpeed" exposed_name="HG_ScanSpeed" />
+            <Property name="ScanAxis" exposed_name="HG_ScanAxis" />
+            <Property name="ScanWidth" exposed_name="HG_ScanWidth" />
             <Property name="BandCount" exposed_name="HG_BandCount" />
             <Property name="NoiseScale" exposed_name="HG_NoiseScale" />
             <Property name="NoisePower" exposed_name="HG_NoisePower" />
+            <Property name="GroupMesh" exposed_name="HG_GroupMesh" />
             <Hints>
               <PropertyWidgetDecorator type="GenericDecorator"
                                        mode="visibility"
@@ -278,9 +362,12 @@
             <Property name="FresnelMode" exposed_name="HG_FresnelMode" />
             <Property name="ScanStrength" exposed_name="HG_ScanStrength" />
             <Property name="ScanSpeed" exposed_name="HG_ScanSpeed" />
+            <Property name="ScanAxis" exposed_name="HG_ScanAxis" />
+            <Property name="ScanWidth" exposed_name="HG_ScanWidth" />
             <Property name="BandCount" exposed_name="HG_BandCount" />
             <Property name="NoiseScale" exposed_name="HG_NoiseScale" />
             <Property name="NoisePower" exposed_name="HG_NoisePower" />
+            <Property name="GroupMesh" exposed_name="HG_GroupMesh" />
             <Hints>
               <PropertyWidgetDecorator type="GenericDecorator"
                                        mode="visibility"

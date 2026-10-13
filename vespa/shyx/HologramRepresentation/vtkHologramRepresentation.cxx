@@ -21,6 +21,7 @@
 #include "vtkDataObjectTypes.h"
 #include "vtkDataSet.h"
 #include "vtkExplicitStructuredGrid.h"
+#include "vtkFloatArray.h"
 #include "vtkGenericCell.h"
 #include "vtkHexagonalPrism.h"
 #include "vtkHexahedron.h"
@@ -61,10 +62,11 @@
 #include "vtkWedge.h"
 
 #include <algorithm>
+#include <string>
 
 namespace
 {
-void InstallHologramShader(vtkShaderProperty* sp)
+void InstallHologramShader(vtkShaderProperty* sp, bool groupMesh)
 {
   if (!sp)
   {
@@ -105,6 +107,11 @@ void InstallHologramShader(vtkShaderProperty* sp)
     "uniform float hgBandCount;\n"
     "uniform float hgNoiseScale;\n"
     "uniform float hgNoisePower;\n"
+    "uniform float hgScanAxis;\n"
+    "uniform float hgScanWidth;\n"
+    "uniform float hgDepthMin;\n"
+    "uniform float hgDepthExtent;\n"
+    "uniform mat4 hgMCVC;\n"
     "vec3 hgRot(vec3 p, vec3 axis, float ang)\n"
     "{\n"
     "  float c = cos(ang);\n"
@@ -298,12 +305,65 @@ void InstallHologramShader(vtkShaderProperty* sp)
     "  float n2 = hgFbm3(p + vec3(1.7, 9.2, 3.1), t);\n"
     "  float n = hgFbm3(p + vec3(n0, n1, n2), t);\n"
     "  return clamp(3.0 * (n - 0.4), 0.0, 1.5);\n"
+    "}\n"
+    "// One or more stripes traveling along a normalized axis. Speed 1 crosses the\n"
+    "// bounds in about 5 seconds. Width is a fraction of one period.\n"
+    "float hgSweep(float coord, float bands, float time, float speed, float width)\n"
+    "{\n"
+    "  float freq = max(bands, 0.5);\n"
+    "  float travel = time * speed * 0.2;\n"
+    "  float phase = fract((coord - travel) * freq);\n"
+    "  float d = abs(phase - 0.5);\n"
+    "  float w = clamp(width, 0.002, 0.49);\n"
+    "  float core = 1.0 - smoothstep(0.0, w, d);\n"
+    "  float halo = 1.0 - smoothstep(w, min(w * 4.0, 0.5), d);\n"
+    "  return clamp(core + 0.45 * halo, 0.0, 1.0);\n"
+    "}\n"
+    "// Grouped scan: cells behind the front stay on. Width is the fade at the\n"
+    "// front, as a fraction of the bounds. The fill restarts when the front wraps.\n"
+    "float hgReveal(float coord, float time, float speed, float width)\n"
+    "{\n"
+    "  float front = fract(time * speed * 0.2);\n"
+    "  float w = clamp(width, 0.002, 0.49);\n"
+    "  float c = clamp(coord, 0.0, 1.0);\n"
+    "  return smoothstep(0.0, w, front - c + w);\n"
     "}\n",
     false);
 
+  // Grouping carries the volume-cell centroid in tangentMC. The fragment shader
+  // names it *VSOut so the shader cache renames it to *GSOut when the edge
+  // geometry shader is present.
+  const char* flowPos = groupMesh
+    ? "  vec3 flowPos = (shyxGroupMCVSOut - hgScanOrigin) / extent;\n"
+    : "  vec3 flowPos = npos;\n";
+  const char* scanBody = groupMesh
+    ? "    float axisCoord;\n"
+      "    if (hgScanAxis < 0.5)\n"
+      "      axisCoord = clamp(flowPos.x, 0.0, 1.0);\n"
+      "    else if (hgScanAxis < 1.5)\n"
+      "      axisCoord = clamp(flowPos.y, 0.0, 1.0);\n"
+      "    else if (hgScanAxis < 2.5)\n"
+      "      axisCoord = clamp(flowPos.z, 0.0, 1.0);\n"
+      "    else\n"
+      "    {\n"
+      "      vec3 centerVC = (hgMCVC * vec4(shyxGroupMCVSOut, 1.0)).xyz;\n"
+      "      axisCoord = clamp((-centerVC.z - hgDepthMin) / max(hgDepthExtent, 1e-6), 0.0, 1.0);\n"
+      "    }\n"
+      "    band = hgReveal(axisCoord, hgTime, hgScanSpeed, hgScanWidth);\n"
+    : "    float axisCoord;\n"
+      "    if (hgScanAxis < 0.5)\n"
+      "      axisCoord = npos.x;\n"
+      "    else if (hgScanAxis < 1.5)\n"
+      "      axisCoord = npos.y;\n"
+      "    else if (hgScanAxis < 2.5)\n"
+      "      axisCoord = npos.z;\n"
+      "    else\n"
+      "      axisCoord = clamp((-vertexVC.z - hgDepthMin) / max(hgDepthExtent, 1e-6), 0.0, 1.0);\n"
+      "    band = hgSweep(axisCoord, max(hgBandCount, 0.5), hgTime, hgScanSpeed, hgScanWidth);\n";
+
   // Runs after VTK writes gl_FragData[0]. Overwrites it with an unlit hologram:
-  // triangle edges from the edge mask, face alpha from fresnel and/or a moving band.
-  sp->AddFragmentShaderReplacement("//VTK::Light::Impl", false,
+  // triangle edges from the edge mask, face alpha from fresnel and either the flow or a scan band.
+  const std::string lightImpl = std::string(
     "{\n"
     "  vec3 nrm = normalize(normalVCVSOutput);\n"
     "  vec3 vdir = cameraParallel == 1 ? vec3(0.0, 0.0, 1.0) : normalize(-vertexVC.xyz);\n"
@@ -314,22 +374,36 @@ void InstallHologramShader(vtkShaderProperty* sp)
     "  float fres = mix(rim, front, clamp(hgFresnelFacing, 0.0, 1.0));\n"
     "  vec3 modelPos = (hgVCMC * vec4(vertexVC.xyz, 1.0)).xyz;\n"
     "  vec3 extent = max(hgScanExtent, vec3(1e-6));\n"
-    "  vec3 npos = (modelPos - hgScanOrigin) / extent;\n"
+    "  vec3 npos = (modelPos - hgScanOrigin) / extent;\n") +
+    flowPos +
+    std::string(
     "  float bands = max(hgBandCount, 0.5) / max(hgNoiseScale, 0.05);\n"
-    "  float field;\n"
-    "  if (hgFlow < 0.5)\n"
-    "    field = hgFoam(npos, bands, hgTime, hgScanSpeed);\n"
-    "  else if (hgFlow < 1.5)\n"
-    "    field = hgTurbulence(npos, bands, hgTime, hgScanSpeed);\n"
+    "  float field = 0.0;\n"
+    "  float band = 0.0;\n"
+    "  if (hgFlow < 2.5)\n"
+    "  {\n"
+    "    if (hgFlow < 0.5)\n"
+    "      field = hgFoam(flowPos, bands, hgTime, hgScanSpeed);\n"
+    "    else if (hgFlow < 1.5)\n"
+    "      field = hgTurbulence(flowPos, bands, hgTime, hgScanSpeed);\n"
+    "    else\n"
+    "      field = hgMaelstrom(flowPos, bands, hgTime, hgScanSpeed);\n"
+    "    field = pow(clamp(field, 0.0, 1.0), max(hgNoisePower, 0.05));\n"
+    "  }\n"
     "  else\n"
-    "    field = hgMaelstrom(npos, bands, hgTime, hgScanSpeed);\n"
-    "  field = pow(clamp(field, 0.0, 1.0), max(hgNoisePower, 0.05));\n"
-    "  float scan = clamp(field * hgScanStrength, 0.0, 1.5);\n"
+    "  {\n") +
+    scanBody +
+    std::string(
+    "  }\n"
+    "  float noiseScan = clamp(field * hgScanStrength, 0.0, 1.5);\n"
+    "  float bandScan = clamp(band * hgScanStrength, 0.0, 1.5);\n"
+    "  float scan = max(noiseScan, bandScan);\n"
     "  float style = clamp(hgStyle, 0.0, 1.0);\n"
     "  float wireMask = clamp(shyxWire, 0.0, 1.0);\n"
     "  float wireReveal = mix(1.0, clamp(fres * 0.9 + scan, 0.0, 1.0), style);\n"
     "  float wireA = wireMask * hgWireOpacity * wireReveal;\n"
-    "  float faceGate = mix(0.08 + 0.7 * scan, fres * (0.55 + scan), style);\n"
+    "  // Ghost keeps the noise behind fresnel. The sweep still fills faces in the band.\n"
+    "  float faceGate = mix(0.08 + 0.7 * scan, fres * (0.55 + noiseScan) + bandScan, style);\n"
     "  float faceA = (1.0 - wireMask) * hgFaceOpacity * faceGate;\n"
     "  float alpha = clamp(wireA + faceA, 0.0, 1.0);\n"
     "  vec3 tint = diffuseColor;\n"
@@ -338,7 +412,36 @@ void InstallHologramShader(vtkShaderProperty* sp)
     "  vec3 rgb = tint * mix(0.35 + 1.2 * scan, 1.15 + 1.6 * scan, wireMask);\n"
     "  gl_FragData[0] = vec4(rgb, alpha * opacity);\n"
     "}\n"
-    "//VTK::Light::Impl\n",
+    "//VTK::Light::Impl\n");
+  sp->AddFragmentShaderReplacement("//VTK::Light::Impl", false, lightImpl, false);
+
+  if (!groupMesh)
+  {
+    return;
+  }
+
+  // Flat shading does not declare tangentMC. Point tangents hold the cell center.
+  sp->AddVertexShaderReplacement("//VTK::PositionVC::Dec", true,
+    "in vec3 tangentMC;\n"
+    "out vec3 shyxGroupMCVSOut;\n"
+    "//VTK::PositionVC::Dec\n",
+    false);
+  sp->AddVertexShaderReplacement("//VTK::PositionVC::Impl", true,
+    "shyxGroupMCVSOut = tangentMC;\n"
+    "//VTK::PositionVC::Impl\n",
+    false);
+  sp->AddGeometryShaderReplacement("//VTK::PositionVC::Dec", true,
+    "in vec3 shyxGroupMCVSOut[];\n"
+    "out vec3 shyxGroupMCGSOut;\n"
+    "//VTK::PositionVC::Dec\n",
+    false);
+  sp->AddGeometryShaderReplacement("//VTK::PositionVC::Impl", true,
+    "shyxGroupMCGSOut = shyxGroupMCVSOut[i];\n"
+    "//VTK::PositionVC::Impl\n",
+    false);
+  sp->AddFragmentShaderReplacement("//VTK::PositionVC::Dec", true,
+    "in vec3 shyxGroupMCVSOut;\n"
+    "//VTK::PositionVC::Dec\n",
     false);
 }
 } // namespace
@@ -346,6 +449,8 @@ void InstallHologramShader(vtkShaderProperty* sp)
 namespace
 {
 constexpr const char* kVolumeCellIdsArray = "shyxVolumeCellIds";
+constexpr const char* kGroupCenterArray = "shyxGroupCenter";
+constexpr const char* kGroupExpandedArray = "shyxGroupExpanded";
 constexpr unsigned char kSkipGhost = static_cast<unsigned char>(vtkDataSetAttributes::HIDDENCELL |
   vtkDataSetAttributes::DUPLICATECELL | vtkDataSetAttributes::REFINEDCELL);
 
@@ -378,6 +483,15 @@ struct FaceSink
   vtkCellData* OutCD = nullptr;
   vtkCellData* InCD = nullptr;
   vtkIdTypeArray* SourceIds = nullptr;
+  vtkFloatArray* Centers = nullptr;
+  double Center[3] = { 0.0, 0.0, 0.0 };
+
+  void SetCenter(const double c[3])
+  {
+    this->Center[0] = c[0];
+    this->Center[1] = c[1];
+    this->Center[2] = c[2];
+  }
 
   void StampLast(vtkIdType src, vtkIdType count)
   {
@@ -390,6 +504,10 @@ struct FaceSink
     {
       this->OutCD->CopyData(this->InCD, src, first + i);
       this->SourceIds->InsertNextValue(src);
+      if (this->Centers)
+      {
+        this->Centers->InsertNextTuple3(this->Center[0], this->Center[1], this->Center[2]);
+      }
     }
   }
 
@@ -592,9 +710,33 @@ bool UseGenericVolume(unsigned char type)
   return type == VTK_POLYHEDRON || type == VTK_CONVEX_POINT_SET || !vtkCellTypes::IsLinear(type);
 }
 
+void MeanOfPointIds(vtkDataSet* ds, const vtkIdType* ids, vtkIdType n, double out[3])
+{
+  out[0] = out[1] = out[2] = 0.0;
+  if (!ds || !ids || n <= 0)
+  {
+    return;
+  }
+  for (vtkIdType i = 0; i < n; ++i)
+  {
+    double p[3];
+    ds->GetPoint(ids[i], p);
+    out[0] += p[0];
+    out[1] += p[1];
+    out[2] += p[2];
+  }
+  const double inv = 1.0 / static_cast<double>(n);
+  out[0] *= inv;
+  out[1] *= inv;
+  out[2] *= inv;
+}
+
 void EmitCellPoints(vtkDataSet* ds, vtkIdType cellId, unsigned char type, const vtkIdType* pts,
   vtkIdType npts, vtkGenericCell* gen, vtkIdList* triIds, vtkIdList* scratch, FaceSink& sink)
 {
+  double center[3];
+  MeanOfPointIds(ds, pts, npts, center);
+  sink.SetCenter(center);
   const int dim = vtkCellTypes::GetDimension(type);
   if (dim == 2)
   {
@@ -763,6 +905,9 @@ bool EmitImplicitVolume(vtkDataSet* in, FaceSink& sink, vtkAlgorithm* progress)
           corners[6] = base + di + dj + dk;
           corners[7] = base + dj + dk;
         }
+        double center[3];
+        MeanOfPointIds(in, corners, 8, center);
+        sink.SetCenter(center);
         const vtkIdType before = sink.Polys->GetNumberOfCells();
         for (int f = 0; f < 6; ++f)
         {
@@ -854,10 +999,16 @@ void ExtractVolumeFaces(vtkDataSet* in, vtkPolyData* out, vtkAlgorithm* progress
   vtkCellData* outCD = out->GetCellData();
   outCD->CopyAllocate(in->GetCellData(), estimate);
   FaceSink sink;
+  vtkNew<vtkFloatArray> centers;
+  centers->SetName(kGroupCenterArray);
+  centers->SetNumberOfComponents(3);
+  centers->Allocate(estimate * 3);
+
   sink.Polys = polys;
   sink.OutCD = outCD;
   sink.InCD = in->GetCellData();
   sink.SourceIds = srcIds;
+  sink.Centers = centers;
 
   if (vtkExplicitStructuredGrid::SafeDownCast(in))
   {
@@ -883,6 +1034,11 @@ void ExtractVolumeFaces(vtkDataSet* in, vtkPolyData* out, vtkAlgorithm* progress
   }
   out->SetPolys(polys);
   outCD->AddArray(srcIds);
+  if (centers->GetNumberOfTuples() != nout)
+  {
+    centers->SetNumberOfTuples(nout);
+  }
+  outCD->AddArray(centers);
   outCD->RemoveArray(vtkDataSetAttributes::GhostArrayName());
   if (progress)
   {
@@ -955,6 +1111,261 @@ void RestoreVolumeCellIds(vtkDataObject* data)
   for (iter->InitTraversal(); !iter->IsDoneWithTraversal(); iter->GoToNextItem())
   {
     RestoreVolumeCellIds(iter->GetCurrentDataObject());
+  }
+}
+
+void MeanOfIds(vtkPoints* pts, vtkIdList* ids, double out[3])
+{
+  out[0] = out[1] = out[2] = 0.0;
+  const vtkIdType n = ids ? ids->GetNumberOfIds() : 0;
+  if (!pts || n <= 0)
+  {
+    return;
+  }
+  for (vtkIdType i = 0; i < n; ++i)
+  {
+    double p[3];
+    pts->GetPoint(ids->GetId(i), p);
+    out[0] += p[0];
+    out[1] += p[1];
+    out[2] += p[2];
+  }
+  const double inv = 1.0 / static_cast<double>(n);
+  out[0] *= inv;
+  out[1] *= inv;
+  out[2] *= inv;
+}
+
+void WriteCellCenters(vtkCellArray* cells, vtkIdType base, vtkPoints* pts, vtkFloatArray* created)
+{
+  if (!cells || !created)
+  {
+    return;
+  }
+  vtkNew<vtkIdList> ids;
+  const vtkIdType n = cells->GetNumberOfCells();
+  for (vtkIdType c = 0; c < n; ++c)
+  {
+    cells->GetCellAtId(c, ids);
+    double center[3];
+    MeanOfIds(pts, ids, center);
+    created->SetTuple3(base + c, center[0], center[1], center[2]);
+  }
+}
+
+// Volume extraction already stored one centroid per original cell on every
+// face. Surface meshes never went through that path, so each polygon gets its
+// own centroid here. Do not recompute when the volume-cell array is present:
+// a hex face's own centroid is not the hex centroid.
+void EnsureGroupCenters(vtkPolyData* pd)
+{
+  vtkCellData* cd = pd->GetCellData();
+  auto* existing = vtkFloatArray::SafeDownCast(cd->GetArray(kGroupCenterArray));
+  if (existing && existing->GetNumberOfComponents() == 3 &&
+    existing->GetNumberOfTuples() == pd->GetNumberOfCells())
+  {
+    return;
+  }
+  vtkNew<vtkFloatArray> created;
+  created->SetName(kGroupCenterArray);
+  created->SetNumberOfComponents(3);
+  created->SetNumberOfTuples(pd->GetNumberOfCells());
+  vtkPoints* pts = pd->GetPoints();
+  const vtkIdType nVerts = pd->GetNumberOfVerts();
+  const vtkIdType nLines = pd->GetNumberOfLines();
+  const vtkIdType nPolys = pd->GetNumberOfPolys();
+  WriteCellCenters(pd->GetVerts(), 0, pts, created);
+  WriteCellCenters(pd->GetLines(), nVerts, pts, created);
+  WriteCellCenters(pd->GetPolys(), nVerts + nLines, pts, created);
+  WriteCellCenters(pd->GetStrips(), nVerts + nLines + nPolys, pts, created);
+  cd->RemoveArray(kGroupCenterArray);
+  cd->AddArray(created);
+}
+
+void MarkGroupExpanded(vtkPolyData* pd)
+{
+  vtkNew<vtkUnsignedCharArray> mark;
+  mark->SetName(kGroupExpandedArray);
+  mark->SetNumberOfTuples(1);
+  mark->SetValue(0, 1);
+  pd->GetFieldData()->AddArray(mark);
+  pd->Modified();
+}
+
+void FillKeptPoints(vtkPoints* inPts, vtkIdType nKeep, vtkPoints* outPts, vtkPointData* inPD,
+  vtkPointData* outPD, vtkFloatArray* tangents)
+{
+  for (vtkIdType i = 0; i < nKeep; ++i)
+  {
+    double p[3];
+    inPts->GetPoint(i, p);
+    outPts->SetPoint(i, p);
+    outPD->CopyData(inPD, i, i);
+    tangents->SetTuple3(i, p[0], p[1], p[2]);
+  }
+}
+
+void RewriteCellsWithCenter(vtkCellArray* cells, vtkIdType base, vtkFloatArray* centers,
+  vtkPoints* inPts, vtkPoints* outPts, vtkPointData* inPD, vtkPointData* outPD,
+  vtkFloatArray* tangents, vtkIdType& cursor, vtkCellArray* rewritten)
+{
+  if (!cells || !rewritten)
+  {
+    return;
+  }
+  const vtkIdType n = cells->GetNumberOfCells();
+  rewritten->AllocateEstimate((std::max)(n, static_cast<vtkIdType>(1)), 4);
+  vtkNew<vtkIdList> ids;
+  vtkNew<vtkIdList> newIds;
+  for (vtkIdType c = 0; c < n; ++c)
+  {
+    cells->GetCellAtId(c, ids);
+    const vtkIdType npts = ids->GetNumberOfIds();
+    newIds->SetNumberOfIds(npts);
+    double center[3] = { 0.0, 0.0, 0.0 };
+    const vtkIdType tuple = base + c;
+    if (centers && tuple >= 0 && tuple < centers->GetNumberOfTuples())
+    {
+      centers->GetTuple(tuple, center);
+    }
+    else
+    {
+      MeanOfIds(inPts, ids, center);
+    }
+    for (vtkIdType k = 0; k < npts; ++k)
+    {
+      double p[3];
+      inPts->GetPoint(ids->GetId(k), p);
+      outPts->SetPoint(cursor, p);
+      outPD->CopyData(inPD, ids->GetId(k), cursor);
+      tangents->SetTuple3(cursor, center[0], center[1], center[2]);
+      newIds->SetId(k, cursor);
+      ++cursor;
+    }
+    rewritten->InsertNextCell(newIds);
+  }
+}
+
+// Duplicate face vertices so each face can carry its volume-cell centroid in
+// point tangents. Shared points cannot store a per-cell center. Runs on the
+// mapper-facing mesh, after the geometry filter has finished welding.
+void AttachOneGroupCenters(vtkPolyData* pd)
+{
+  if (!pd || !pd->GetPoints() || pd->GetNumberOfPoints() == 0)
+  {
+    return;
+  }
+  if (pd->GetFieldData()->GetAbstractArray(kGroupExpandedArray))
+  {
+    return;
+  }
+
+  EnsureGroupCenters(pd);
+  auto* centers = vtkFloatArray::SafeDownCast(pd->GetCellData()->GetArray(kGroupCenterArray));
+  vtkCellArray* polys = pd->GetPolys();
+  vtkCellArray* strips = pd->GetStrips();
+  const vtkIdType nVerts = pd->GetNumberOfVerts();
+  const vtkIdType nLines = pd->GetNumberOfLines();
+  const vtkIdType nPolys = pd->GetNumberOfPolys();
+  const vtkIdType polyBase = nVerts + nLines;
+  const vtkIdType stripBase = polyBase + nPolys;
+  vtkIdType extra = 0;
+  if (polys)
+  {
+    extra += polys->GetNumberOfConnectivityIds();
+  }
+  if (strips)
+  {
+    extra += strips->GetNumberOfConnectivityIds();
+  }
+
+  vtkPoints* inPts = pd->GetPoints();
+  vtkPointData* inPD = pd->GetPointData();
+  const bool keepOriginal = nVerts > 0 || nLines > 0;
+  const vtkIdType nKeep = keepOriginal ? inPts->GetNumberOfPoints() : 0;
+  const vtkIdType nNew = nKeep + extra;
+  if (nNew <= 0)
+  {
+    MarkGroupExpanded(pd);
+    return;
+  }
+
+  vtkNew<vtkPoints> outPts;
+  outPts->SetDataType(inPts->GetDataType());
+  outPts->SetNumberOfPoints(nNew);
+  vtkNew<vtkPointData> outPD;
+  outPD->CopyAllocate(inPD, nNew);
+  vtkNew<vtkFloatArray> tangents;
+  tangents->SetName("Tangents");
+  tangents->SetNumberOfComponents(3);
+  tangents->SetNumberOfTuples(nNew);
+
+  if (extra == 0)
+  {
+    FillKeptPoints(inPts, nKeep, outPts, inPD, outPD, tangents);
+    pd->SetPoints(outPts);
+    pd->GetPointData()->ShallowCopy(outPD);
+    pd->GetPointData()->SetTangents(tangents);
+    MarkGroupExpanded(pd);
+    return;
+  }
+
+  vtkIdType cursor = 0;
+  if (nKeep > 0)
+  {
+    FillKeptPoints(inPts, nKeep, outPts, inPD, outPD, tangents);
+    cursor = nKeep;
+  }
+  vtkNew<vtkCellArray> newPolys;
+  vtkNew<vtkCellArray> newStrips;
+  RewriteCellsWithCenter(
+    polys, polyBase, centers, inPts, outPts, inPD, outPD, tangents, cursor, newPolys);
+  RewriteCellsWithCenter(
+    strips, stripBase, centers, inPts, outPts, inPD, outPD, tangents, cursor, newStrips);
+
+  pd->SetPoints(outPts);
+  pd->GetPointData()->ShallowCopy(outPD);
+  pd->GetPointData()->SetTangents(tangents);
+  if (polys)
+  {
+    pd->SetPolys(newPolys);
+  }
+  if (strips && strips->GetNumberOfCells() > 0)
+  {
+    pd->SetStrips(newStrips);
+  }
+  MarkGroupExpanded(pd);
+}
+
+void AttachGroupCenters(vtkDataObject* data)
+{
+  if (!data)
+  {
+    return;
+  }
+  if (auto* pd = vtkPolyData::SafeDownCast(data))
+  {
+    AttachOneGroupCenters(pd);
+    return;
+  }
+  auto* cds = vtkCompositeDataSet::SafeDownCast(data);
+  if (!cds)
+  {
+    return;
+  }
+  auto iter = vtk::TakeSmartPointer(cds->NewIterator());
+  if (!iter)
+  {
+    return;
+  }
+  iter->SkipEmptyNodesOn();
+  if (auto* treeIt = vtkDataObjectTreeIterator::SafeDownCast(iter))
+  {
+    treeIt->VisitOnlyLeavesOn();
+  }
+  for (iter->InitTraversal(); !iter->IsDoneWithTraversal(); iter->GoToNextItem())
+  {
+    AttachGroupCenters(iter->GetCurrentDataObject());
   }
 }
 
@@ -1075,9 +1486,12 @@ vtkHologramRepresentation::vtkHologramRepresentation()
   this->FresnelMode = 0;
   this->ScanStrength = 2.0;
   this->ScanSpeed = 2.0;
+  this->ScanAxis = 0;
+  this->ScanWidth = 0.08;
   this->BandCount = 4.0;
   this->NoiseScale = 0.5;
   this->NoisePower = 3.0;
+  this->GroupMesh = false;
   this->StartTime = vtkTimerLog::GetUniversalTime();
 
   this->ShaderObserver = vtkCallbackCommand::New();
@@ -1209,9 +1623,31 @@ int vtkHologramRepresentation::RequestData(
     this->GeometryFilter->Modified();
   }
   this->MultiBlockMaker->Update();
-  RestoreVolumeCellIds(this->MultiBlockMaker->GetOutputDataObject(0));
+  vtkDataObject* delivered = this->MultiBlockMaker->GetOutputDataObject(0);
+  RestoreVolumeCellIds(delivered);
+  if (this->GroupMesh)
+  {
+    AttachGroupCenters(delivered);
+  }
 
   return this->vtkPVDataRepresentation::RequestData(request, inputVector, outputVector);
+}
+
+void vtkHologramRepresentation::SetGroupMesh(bool group)
+{
+  if (this->GroupMesh == group)
+  {
+    return;
+  }
+  this->GroupMesh = group;
+  // The grouped shader reads tangentMC. A decimated LOD mesh does not have it.
+  this->SetSuppressLOD(group);
+  if (this->VolumeFaces)
+  {
+    this->VolumeFaces->Modified();
+  }
+  this->UpdateShaderReplacements();
+  this->MarkModified();
 }
 
 void vtkHologramRepresentation::UpdateAnimationObservers()
@@ -1232,11 +1668,11 @@ void vtkHologramRepresentation::UpdateShaderReplacements()
 {
   if (this->Actor)
   {
-    InstallHologramShader(this->Actor->GetShaderProperty());
+    InstallHologramShader(this->Actor->GetShaderProperty(), this->GroupMesh);
   }
   if (this->BackfaceActor)
   {
-    InstallHologramShader(this->BackfaceActor->GetShaderProperty());
+    InstallHologramShader(this->BackfaceActor->GetShaderProperty(), this->GroupMesh);
   }
 }
 
@@ -1287,6 +1723,14 @@ void vtkHologramRepresentation::OnUpdateShader(vtkObject* caller, void* calldata
   {
     program->SetUniformf("hgScanSpeed", static_cast<float>(this->ScanSpeed));
   }
+  if (program->IsUniformUsed("hgScanAxis"))
+  {
+    program->SetUniformf("hgScanAxis", static_cast<float>(this->ScanAxis));
+  }
+  if (program->IsUniformUsed("hgScanWidth"))
+  {
+    program->SetUniformf("hgScanWidth", static_cast<float>(this->ScanWidth));
+  }
   if (program->IsUniformUsed("hgBandCount"))
   {
     program->SetUniformf("hgBandCount", static_cast<float>(this->BandCount));
@@ -1299,7 +1743,6 @@ void vtkHologramRepresentation::OnUpdateShader(vtkObject* caller, void* calldata
   {
     program->SetUniformf("hgNoisePower", static_cast<float>(this->NoisePower));
   }
-
   // Noise is sampled in dataset coordinates. Actor::GetBounds() is the
   // world-space AABB, which stays aligned to the world axes when the actor rotates.
   vtkMapper* drawMapper = vtkMapper::SafeDownCast(caller);
@@ -1339,7 +1782,10 @@ void vtkHologramRepresentation::OnUpdateShader(vtkObject* caller, void* calldata
     program->SetUniform3f("hgScanExtent", extent);
   }
 
-  if (program->IsUniformUsed("hgVCMC"))
+  double depthMin = 0.0;
+  double depthExtent = 1.0;
+  if (program->IsUniformUsed("hgVCMC") || program->IsUniformUsed("hgMCVC") ||
+    program->IsUniformUsed("hgDepthMin") || program->IsUniformUsed("hgDepthExtent"))
   {
     // view = WCVC * Actor * model. Invert that so the field is glued to the
     // mesh: Display translation / rotation moves the pattern with the object.
@@ -1347,6 +1793,8 @@ void vtkHologramRepresentation::OnUpdateShader(vtkObject* caller, void* calldata
     // column-major, so transpose first, the same way vtkOpenGLCamera::GetKeyMatrices does.
     vtkNew<vtkMatrix4x4> modelFromView;
     modelFromView->Identity();
+    vtkNew<vtkMatrix4x4> glView;
+    glView->Identity();
     vtkCamera* cam = this->BoundRenderer ? this->BoundRenderer->GetActiveCamera() : nullptr;
     if (cam && cam->GetModelViewTransformMatrix())
     {
@@ -1362,11 +1810,54 @@ void vtkHologramRepresentation::OnUpdateShader(vtkObject* caller, void* calldata
       {
         drawActor->GetMatrix(actorMatrix);
       }
-      vtkMatrix4x4::Multiply4x4(cam->GetModelViewTransformMatrix(), actorMatrix, modelFromView);
+      vtkNew<vtkMatrix4x4> viewFromModel;
+      vtkMatrix4x4::Multiply4x4(cam->GetModelViewTransformMatrix(), actorMatrix, viewFromModel);
+      double nearDepth = 1e300;
+      double farDepth = -1e300;
+      const double xs[2] = { bounds[0], bounds[1] };
+      const double ys[2] = { bounds[2], bounds[3] };
+      const double zs[2] = { bounds[4], bounds[5] };
+      for (int ix = 0; ix < 2; ++ix)
+      {
+        for (int iy = 0; iy < 2; ++iy)
+        {
+          for (int iz = 0; iz < 2; ++iz)
+          {
+            const double in[4] = { xs[ix], ys[iy], zs[iz], 1.0 };
+            double out[4];
+            viewFromModel->MultiplyPoint(in, out);
+            // Camera looks down -Z, so -Z grows from the near side toward the far side.
+            const double depth = -out[2];
+            nearDepth = (std::min)(nearDepth, depth);
+            farDepth = (std::max)(farDepth, depth);
+          }
+        }
+      }
+      depthMin = nearDepth;
+      depthExtent = (std::max)(farDepth - nearDepth, 1e-6);
+      glView->DeepCopy(viewFromModel);
+      modelFromView->DeepCopy(viewFromModel);
       modelFromView->Invert();
     }
-    modelFromView->Transpose();
-    program->SetUniformMatrix("hgVCMC", modelFromView);
+    if (program->IsUniformUsed("hgMCVC"))
+    {
+      // Dataset cell center -> view. Transpose for glUniformMatrix4fv, same as hgVCMC.
+      glView->Transpose();
+      program->SetUniformMatrix("hgMCVC", glView);
+    }
+    if (program->IsUniformUsed("hgVCMC"))
+    {
+      modelFromView->Transpose();
+      program->SetUniformMatrix("hgVCMC", modelFromView);
+    }
+  }
+  if (program->IsUniformUsed("hgDepthMin"))
+  {
+    program->SetUniformf("hgDepthMin", static_cast<float>(depthMin));
+  }
+  if (program->IsUniformUsed("hgDepthExtent"))
+  {
+    program->SetUniformf("hgDepthExtent", static_cast<float>(depthExtent));
   }
 }
 
@@ -1392,7 +1883,10 @@ void vtkHologramRepresentation::PrintSelf(ostream& os, vtkIndent indent)
   os << indent << "FresnelMode: " << this->FresnelMode << "\n";
   os << indent << "ScanStrength: " << this->ScanStrength << "\n";
   os << indent << "ScanSpeed: " << this->ScanSpeed << "\n";
+  os << indent << "ScanAxis: " << this->ScanAxis << "\n";
+  os << indent << "ScanWidth: " << this->ScanWidth << "\n";
   os << indent << "BandCount: " << this->BandCount << "\n";
   os << indent << "NoiseScale: " << this->NoiseScale << "\n";
   os << indent << "NoisePower: " << this->NoisePower << "\n";
+  os << indent << "GroupMesh: " << this->GroupMesh << "\n";
 }

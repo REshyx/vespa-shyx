@@ -64,6 +64,22 @@ list(APPEND vespa_plugin_qt_auto_sources
   selection/SphereSelection/pqSHYXSphereSelectionController.h)
 
 paraview_plugin_add_auto_start(
+  CLASS_NAME "pqSHYXPolygonSelectionAutoStart"
+  STARTUP onStartup
+  SHUTDOWN onShutdown
+  INTERFACES polygon_selection_autostart_interfaces
+  SOURCES polygon_selection_autostart_sources)
+list(APPEND vespa_plugin_qt_auto_interfaces ${polygon_selection_autostart_interfaces})
+list(APPEND vespa_plugin_qt_auto_sources
+  ${polygon_selection_autostart_sources}
+  selection/PolygonSelection/pqSHYXPolygonSelectionAutoStart.cxx
+  selection/PolygonSelection/pqSHYXPolygonSelectionAutoStart.h
+  selection/PolygonSelection/pqSHYXPolygonSelectionViewFrameActions.cxx
+  selection/PolygonSelection/pqSHYXPolygonSelectionViewFrameActions.h
+  selection/PolygonSelection/pqSHYXPolygonSelectionController.cxx
+  selection/PolygonSelection/pqSHYXPolygonSelectionController.h)
+
+paraview_plugin_add_auto_start(
   CLASS_NAME "pqSHYXGrowSelectionWithSimilarAutoStart"
   STARTUP onStartup
   SHUTDOWN onShutdown

@@ -122,7 +122,7 @@
 | **Point Label**（`PointLabelRepresentation`） | 表面表示上叠加点数据文本标签。 |
 | **Hologram**（`HologramRepresentation`） | 三角线框 + 菲涅尔鬼面 + 模型坐标流动（跟着物体变换）。体网格拆成全部面（含内部）。 |
 
-视图工具：球选（Sphere Selection）、按属性扩张选区（Grow Selection With Similar）、近距断口选区（Proximity Gap Selection，按 ε 选不连通但邻近的接触带）为客户端 Qt，无独立 VTK 模块。复合数据（如 PDC 的 `Part_1`）在 3D 视图右键菜单中有 **Select Block**，会先清除当前选择再选中该 block 的全部 cell。有点或 cell 选择时右键还有 **Select Connected**（选中当前连通的点/线/面/体）、**Delete Selected Cells**（与快捷键 **Ctrl+D** 相同：新建 SHYX Delete Selected Cells 并 Apply）、有 cell 选择时还有 **Invert Selection**（反选）、**Select Similar → By Normal**（按法向一次 Grow 完，与标题栏 Grow 共用二面角阈值）和 **Fill Interior**（把被当前选区完全围住的未选面补进选择）。**SHYX AI Assistant** 在 **View** 菜单中作为可勾选停靠窗口（OpenAI 兼容；**Run script** 执行代码框）。
+视图工具：球选（Sphere Selection）、多边形选区（Polygon Selection：左键加点、右键撤销上一点、双击闭合；在标题栏按钮上右键可勾选 Select through，默认只选可见表面 cell，勾选后沿视线把挡住的 cell 也选上）、按属性扩张选区（Grow Selection With Similar）、近距断口选区（Proximity Gap Selection，按 ε 选不连通但邻近的接触带）为客户端 Qt，无独立 VTK 模块。复合数据（如 PDC 的 `Part_1`）在 3D 视图右键菜单中有 **Select Block**，会先清除当前选择再选中该 block 的全部 cell。有点或 cell 选择时右键还有 **Select Connected**（选中当前连通的点/线/面/体）、**Delete Selected Cells**（与快捷键 **Ctrl+D** 相同：新建 SHYX Delete Selected Cells 并 Apply）、有 cell 选择时还有 **Invert Selection**（反选）、**Select Similar → By Normal**（按法向一次 Grow 完，与标题栏 Grow 共用二面角阈值）和 **Fill Interior**（把被当前选区完全围住的未选面补进选择）。**SHYX AI Assistant** 在 **View** 菜单中作为可勾选停靠窗口（OpenAI 兼容；**Run script** 执行代码框）。
 
 ---
 
@@ -754,9 +754,9 @@
 
 ### Hologram（`HologramRepresentation`）
 
-**功能**：全息线框。表面网格按原样画。体网格（四面体、六面体、体素，以及三维 Image / Structured）把每个体单元拆成全部面，内部的面也画；四边形保持为四边形，对角线不当线。**Lattice** 保持三角线框，流动经过时把面点亮。**Ghost**（默认）用菲涅尔让三角面时隐时现：默认掠射反光（Rim），也可改成正对相机才出现（Facing camera）。**HG_Flow** 选 Foam、Turbulence warp 或 Maelstrom，按模型包围盒取样，Display 里平移旋转时图案跟着物体走，本身没有轴向。颜色跟随 Solid Color / 标量着色，线宽用 Line Width。
+**功能**：全息线框。表面网格按原样画。体网格（四面体、六面体、体素，以及三维 Image / Structured）把每个体单元拆成全部面，内部的面也画；四边形保持为四边形，对角线不当线。**Lattice** 保持三角线框，流动经过时把面点亮。**Ghost**（默认）用菲涅尔让三角面时隐时现：默认掠射反光（Rim），也可改成正对相机才出现（Facing camera）。**HG_Flow** 的 Foam、Turbulence warp、Maelstrom 按模型包围盒取样，Display 里平移旋转时图案跟着物体走，噪声本身没有轴向。**Scan** 是单独一档，不再采噪声，只沿 **HG_ScanAxis** 的 X/Y/Z 或视线深度扫一条带；Ghost 里带经过的面会直接填上。**HG_GroupMesh** 对噪声和 Scan 都有效：打开后按体单元中心取样，同一颗单元的所有面同一个亮度，相邻单元各自显现。Scan 里前沿沿轴向推进，扫过的单元保持点亮，走完再来一遍；关掉时 Scan 仍是切过表面的扫带。颜色跟随 Solid Color / 标量着色，线宽用 Line Width。
 
-**常用参数**：**HG_Animate**、**HG_Style**、**HG_Flow**、**HG_WireOpacity**、**HG_FaceOpacity**、**HG_FresnelPower**、**HG_FresnelMode**、**HG_ScanStrength**、**HG_ScanSpeed**、**HG_BandCount**、**HG_NoiseScale**、**HG_NoisePower**。Python：`GetDisplayProperties().Representation = 'Hologram'`。
+**常用参数**：**HG_Animate**、**HG_Style**、**HG_Flow**、**HG_WireOpacity**、**HG_FaceOpacity**、**HG_FresnelPower**、**HG_FresnelMode**、**HG_ScanStrength**、**HG_ScanSpeed**、**HG_ScanAxis**、**HG_ScanWidth**、**HG_BandCount**、**HG_NoiseScale**、**HG_NoisePower**、**HG_GroupMesh**。Python：`GetDisplayProperties().Representation = 'Hologram'`。
 
 ### Animated Streamline（`AnimatedStreamlineRepresentation`）
 

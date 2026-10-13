@@ -30,8 +30,8 @@ public:
   vtkSetClampMacro(Style, int, 0, 1);
   vtkGetMacro(Style, int);
 
-  /** 0 = foaming waves. 1 = turbulence warp. 2 = maelstrom. None of these pick an axis. */
-  vtkSetClampMacro(Flow, int, 0, 2);
+  /** 0 = foaming waves. 1 = turbulence warp. 2 = maelstrom. 3 = scan along ScanAxis. */
+  vtkSetClampMacro(Flow, int, 0, 3);
   vtkGetMacro(Flow, int);
 
   vtkSetClampMacro(WireOpacity, double, 0.0, 1.0);
@@ -53,6 +53,14 @@ public:
   vtkSetClampMacro(ScanSpeed, double, -8.0, 8.0);
   vtkGetMacro(ScanSpeed, double);
 
+  /** Used when Flow is Scan. 0/1/2 = dataset X/Y/Z. 3 = view depth (near side of the bounds to the far side). */
+  vtkSetClampMacro(ScanAxis, int, 0, 3);
+  vtkGetMacro(ScanAxis, int);
+
+  /** Thickness of one stripe as a fraction of its period. */
+  vtkSetClampMacro(ScanWidth, double, 0.002, 0.5);
+  vtkGetMacro(ScanWidth, double);
+
   vtkSetClampMacro(BandCount, double, 0.5, 64.0);
   vtkGetMacro(BandCount, double);
 
@@ -63,6 +71,17 @@ public:
   /** Above 1 keeps only the bright peaks. */
   vtkSetClampMacro(NoisePower, double, 0.2, 16.0);
   vtkGetMacro(NoisePower, double);
+
+  /**
+   * Off: each fragment samples at its own position. Scan is a slice through the faces.
+   * On: every face of one volume cell shares that cell's centroid, so the cell lights
+   * as one piece and neighboring cells appear on their own. A surface polygon uses its
+   * own centroid. Scan reveals cells as the front reaches them; noise is one value per
+   * cell. Fresnel stays per face.
+   */
+  virtual void SetGroupMesh(bool group);
+  vtkGetMacro(GroupMesh, bool);
+  vtkBooleanMacro(GroupMesh, bool);
 
 protected:
   vtkHologramRepresentation();
@@ -96,9 +115,12 @@ protected:
   int FresnelMode = 0;
   double ScanStrength = 2.0;
   double ScanSpeed = 2.0;
+  int ScanAxis = 0;
+  double ScanWidth = 0.08;
   double BandCount = 4.0;
   double NoiseScale = 0.5;
   double NoisePower = 3.0;
+  bool GroupMesh = false;
 
 private:
   vtkHologramRepresentation(const vtkHologramRepresentation&) = delete;
