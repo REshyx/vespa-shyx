@@ -754,7 +754,7 @@
 
 ### Hologram（`HologramRepresentation`）
 
-**功能**：全息线框。表面网格按原样画。体网格（四面体、六面体、体素，以及三维 Image / Structured）把每个体单元拆成全部面，内部的面也画；四边形保持为四边形，对角线不当线。**Lattice** 保持三角线框，流动经过时把面点亮。**Ghost**（默认）用菲涅尔让三角面时隐时现：默认掠射反光（Rim），也可改成正对相机才出现（Facing camera）。**HG_Flow** 的 Foam、Turbulence warp、Maelstrom 按模型包围盒取样，Display 里平移旋转时图案跟着物体走，噪声本身没有轴向。**Scan** 是单独一档，不再采噪声，只沿 **HG_ScanAxis** 的 X/Y/Z 或视线深度扫一条带；Ghost 里带经过的面会直接填上。**HG_GroupMesh** 对噪声和 Scan 都有效：打开后按体单元中心取样，同一颗单元的所有面同一个亮度，相邻单元各自显现。Scan 里前沿沿轴向推进，扫过的单元保持点亮，走完再来一遍；关掉时 Scan 仍是切过表面的扫带。颜色跟随 Solid Color / 标量着色，线宽用 Line Width。
+**功能**：全息线框。表面网格按原样画。体网格（四面体、六面体、体素，以及三维 Image / Structured）把每个体单元拆成全部面，内部的面也画；四边形保持为四边形，对角线不当线。**Lattice** 保持三角线框，流动经过时把面点亮。**Ghost**（默认）用菲涅尔让三角面时隐时现：默认掠射反光（Rim），也可改成正对相机才出现（Facing camera）。**HG_FresnelMode = Uniform** 时不看法线，噪声或扫带把所有面一起变亮。**HG_Flow** 的 Foam、Turbulence warp、Maelstrom 按模型包围盒取样，Display 里平移旋转时图案跟着物体走，噪声本身没有轴向。**Scan** 是单独一档，不再采噪声，只沿 **HG_ScanAxis** 的 X/Y/Z 或视线深度扫一条带；Ghost 里带经过的面会直接填上。**HG_GroupMesh** 对噪声和 Scan 都有效：打开后按体单元中心取样，同一颗单元的所有面同一个亮度。Scan 的速度、条数和带宽与关掉时相同，带内的体单元整颗亮、离开带宽就灭，类似 crinkle slice，已经扫过的面不会留在亮处。颜色跟随 Solid Color / 标量着色，线宽用 Line Width。
 
 **常用参数**：**HG_Animate**、**HG_Style**、**HG_Flow**、**HG_WireOpacity**、**HG_FaceOpacity**、**HG_FresnelPower**、**HG_FresnelMode**、**HG_ScanStrength**、**HG_ScanSpeed**、**HG_ScanAxis**、**HG_ScanWidth**、**HG_BandCount**、**HG_NoiseScale**、**HG_NoisePower**、**HG_GroupMesh**。Python：`GetDisplayProperties().Representation = 'Hologram'`。
 

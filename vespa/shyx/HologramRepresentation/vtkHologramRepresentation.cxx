@@ -101,7 +101,7 @@ void InstallHologramShader(vtkShaderProperty* sp, bool groupMesh)
     "uniform float hgWireOpacity;\n"
     "uniform float hgFaceOpacity;\n"
     "uniform float hgFresnelPower;\n"
-    "uniform float hgFresnelFacing;\n"
+    "uniform float hgFresnelMode;\n"
     "uniform float hgScanStrength;\n"
     "uniform float hgScanSpeed;\n"
     "uniform float hgBandCount;\n"
@@ -318,15 +318,6 @@ void InstallHologramShader(vtkShaderProperty* sp, bool groupMesh)
     "  float core = 1.0 - smoothstep(0.0, w, d);\n"
     "  float halo = 1.0 - smoothstep(w, min(w * 4.0, 0.5), d);\n"
     "  return clamp(core + 0.45 * halo, 0.0, 1.0);\n"
-    "}\n"
-    "// Grouped scan: cells behind the front stay on. Width is the fade at the\n"
-    "// front, as a fraction of the bounds. The fill restarts when the front wraps.\n"
-    "float hgReveal(float coord, float time, float speed, float width)\n"
-    "{\n"
-    "  float front = fract(time * speed * 0.2);\n"
-    "  float w = clamp(width, 0.002, 0.49);\n"
-    "  float c = clamp(coord, 0.0, 1.0);\n"
-    "  return smoothstep(0.0, w, front - c + w);\n"
     "}\n",
     false);
 
@@ -349,7 +340,7 @@ void InstallHologramShader(vtkShaderProperty* sp, bool groupMesh)
       "      vec3 centerVC = (hgMCVC * vec4(shyxGroupMCVSOut, 1.0)).xyz;\n"
       "      axisCoord = clamp((-centerVC.z - hgDepthMin) / max(hgDepthExtent, 1e-6), 0.0, 1.0);\n"
       "    }\n"
-      "    band = hgReveal(axisCoord, hgTime, hgScanSpeed, hgScanWidth);\n"
+      "    band = hgSweep(axisCoord, max(hgBandCount, 0.5), hgTime, hgScanSpeed, hgScanWidth);\n"
     : "    float axisCoord;\n"
       "    if (hgScanAxis < 0.5)\n"
       "      axisCoord = npos.x;\n"
@@ -365,13 +356,17 @@ void InstallHologramShader(vtkShaderProperty* sp, bool groupMesh)
   // triangle edges from the edge mask, face alpha from fresnel and either the flow or a scan band.
   const std::string lightImpl = std::string(
     "{\n"
-    "  vec3 nrm = normalize(normalVCVSOutput);\n"
-    "  vec3 vdir = cameraParallel == 1 ? vec3(0.0, 0.0, 1.0) : normalize(-vertexVC.xyz);\n"
-    "  float facing = clamp(abs(dot(nrm, vdir)), 0.0, 1.0);\n"
-    "  float fresPower = max(hgFresnelPower, 0.05);\n"
-    "  float rim = pow(clamp(1.0 - facing, 0.0, 1.0), fresPower);\n"
-    "  float front = pow(facing, fresPower);\n"
-    "  float fres = mix(rim, front, clamp(hgFresnelFacing, 0.0, 1.0));\n"
+    "  float fres = 1.0;\n"
+    "  if (hgFresnelMode < 1.5)\n"
+    "  {\n"
+    "    vec3 nrm = normalize(normalVCVSOutput);\n"
+    "    vec3 vdir = cameraParallel == 1 ? vec3(0.0, 0.0, 1.0) : normalize(-vertexVC.xyz);\n"
+    "    float facing = clamp(abs(dot(nrm, vdir)), 0.0, 1.0);\n"
+    "    float fresPower = max(hgFresnelPower, 0.05);\n"
+    "    float rim = pow(clamp(1.0 - facing, 0.0, 1.0), fresPower);\n"
+    "    float front = pow(facing, fresPower);\n"
+    "    fres = mix(rim, front, step(0.5, hgFresnelMode));\n"
+    "  }\n"
     "  vec3 modelPos = (hgVCMC * vec4(vertexVC.xyz, 1.0)).xyz;\n"
     "  vec3 extent = max(hgScanExtent, vec3(1e-6));\n"
     "  vec3 npos = (modelPos - hgScanOrigin) / extent;\n") +
@@ -402,7 +397,8 @@ void InstallHologramShader(vtkShaderProperty* sp, bool groupMesh)
     "  float wireMask = clamp(shyxWire, 0.0, 1.0);\n"
     "  float wireReveal = mix(1.0, clamp(fres * 0.9 + scan, 0.0, 1.0), style);\n"
     "  float wireA = wireMask * hgWireOpacity * wireReveal;\n"
-    "  // Ghost keeps the noise behind fresnel. The sweep still fills faces in the band.\n"
+    "  // Ghost multiplies the noise by fresnel. Uniform leaves fres at 1, so the\n"
+    "  // field brightens every face the same way. The sweep still fills the band.\n"
     "  float faceGate = mix(0.08 + 0.7 * scan, fres * (0.55 + noiseScan) + bandScan, style);\n"
     "  float faceA = (1.0 - wireMask) * hgFaceOpacity * faceGate;\n"
     "  float alpha = clamp(wireA + faceA, 0.0, 1.0);\n"
@@ -1711,9 +1707,9 @@ void vtkHologramRepresentation::OnUpdateShader(vtkObject* caller, void* calldata
   {
     program->SetUniformf("hgFresnelPower", static_cast<float>(this->FresnelPower));
   }
-  if (program->IsUniformUsed("hgFresnelFacing"))
+  if (program->IsUniformUsed("hgFresnelMode"))
   {
-    program->SetUniformf("hgFresnelFacing", this->FresnelMode == 1 ? 1.0f : 0.0f);
+    program->SetUniformf("hgFresnelMode", static_cast<float>(this->FresnelMode));
   }
   if (program->IsUniformUsed("hgScanStrength"))
   {

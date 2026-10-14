@@ -2285,7 +2285,7 @@ const ShyxExtra kShyxExtra[] = {
     "already merged into one side set: it splits same-name patches by connected regions into original_n "
     "(side and node) before classify / options / optional Merge inlets. Port0 collection, "
     "port1 assignment debug. Export writes Exodus + options + Nodeset + current .pvsm beside the "
-    "chosen .exo." },
+    "chosen .exo. Pack into .zip writes those four files inside one .zip instead of loose files." },
   { "SHYXPartitionedCollectionBoundaryFields", "Adds boundary field arrays on an assigned PDC." },
   { "SHYXPartitionedCollectionToOpenFOAM",
     "Write an OpenFOAM case (constant/polyMesh + case.foam) from an IOSS PDC that has a volume "
@@ -2494,6 +2494,8 @@ const ShyxExtra kShyxExtra[] = {
     "Python: GetDisplayProperties().Representation = 'Hologram'. Never call HologramRepresentation(). "
     "Lattice: triangle wires stay, a noise field reveals faces. Ghost: fresnel (rim reflection "
     "or facing-camera) makes triangles appear and disappear, plus the same field. "
+    "HG_FresnelMode 2 is Uniform: fresnel is 1, normals are not used, and the noise or scan "
+    "brightens every face the same amount. HG_FresnelPower is hidden in that mode. "
     "Surface meshes are drawn as they are. Volume cells (tets, hexes, voxels, wedges, pyramids, "
     "3D image and structured grids) are split into every face, including interior faces; quads stay "
     "quads so diagonals are not wires. "
@@ -2503,17 +2505,17 @@ const ShyxExtra kShyxExtra[] = {
     "perpendicular to the camera, near side of those bounds to the far side. HG_ScanWidth is the "
     "stripe thickness as a fraction of one period. HG_ScanAxis and HG_ScanWidth are hidden unless "
     "Flow is Scan. HG_NoiseScale and HG_NoisePower are hidden in Scan. HG_GroupMesh stays available. "
-    "HG_BandCount is noise density, or how many stripes fit across an ungrouped scan. "
+    "HG_BandCount is noise density, or how many stripes fit across the scan axis. "
     "HG_ScanSpeed 1 crosses the bounds in about 5 seconds in Scan. "
     "HG_NoiseScale magnifies the patches; HG_NoisePower above 1 keeps only the bright peaks. "
     "HG_GroupMesh off samples each fragment at its own position, so Scan slices through faces. "
     "On groups by the original volume cell: every face of one cell shares that cell's centroid, "
     "so the cell lights as a whole while a neighbor can still be dark. A surface polygon uses its "
-    "own centroid. Grouped Scan is one reveal front along HG_ScanAxis (Band Count is ignored): "
-    "cells behind the front stay lit, HG_ScanWidth is the fade as a fraction of the bounds, then "
-    "the fill restarts. Grouped noise is one value per cell. Fresnel stays per face. Ghost hides "
-    "the noise except at the fresnel. In Scan, the band or the revealed cells fill faces as the "
-    "front passes. "
+    "own centroid. Grouped Scan uses the same speed, HG_BandCount, and HG_ScanWidth as an ungrouped "
+    "scan. The band is a crinkle slice: a volume cell whose center lies in the band lights as a "
+    "whole, and turns off again once the band has passed. Grouped noise is one value per cell. "
+    "Fresnel stays per face unless HG_FresnelMode is Uniform. Ghost hides the noise except at "
+    "the fresnel. In Scan, faces inside the band fill as it passes. "
     "Call describe_proxy('Hologram') for HG_* names (HG_Style, HG_Animate, HG_FresnelMode, HG_Flow, HG_ScanAxis, HG_GroupMesh, ...)." },
   { "SHYXSphereSelection",
     "Not a filter and not a proxy. RenderView title-bar sphere button. "

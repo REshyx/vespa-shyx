@@ -11,7 +11,8 @@
         grids) are split into every face, including interior faces. Quads stay quads
         so the diagonal is not a wire. Lattice keeps the wireframe and lets the flow
         pattern reveal the faces. Ghost hides faces except where the view
-        grazes them (fresnel) or the scan passes. Solid Color tints both. Line Width
+        grazes them (fresnel) or the scan passes. Fresnel Uniform skips the normal,
+        so the same pattern brightens every face together. Solid Color tints both. Line Width
         is the wire thickness. Not a lattice in empty space: the lines are the mesh edges.
       </Documentation>
 
@@ -33,7 +34,8 @@
         </EnumerationDomain>
         <Documentation>
           Lattice: wires stay on, faces show mainly inside the scan.
-          Ghost: wires and faces appear at grazing angles (or toward the camera) and inside the scan.
+          Ghost: wires and faces appear where fresnel allows, and inside the scan.
+          Fresnel Uniform ignores the normal, so Ghost brightens the whole surface together.
         </Documentation>
       </IntVectorProperty>
 
@@ -80,7 +82,14 @@
         <DoubleRangeDomain name="range" min="0.05" max="12" />
         <Documentation>
           Higher packs the reflection into a thinner grazing rim (or a tighter camera-facing spot).
+          Hidden when Fresnel is Uniform.
         </Documentation>
+        <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="visibility"
+                                   property="HG_FresnelMode"
+                                   values="0 1"/>
+        </Hints>
       </DoubleVectorProperty>
 
       <IntVectorProperty name="FresnelMode"
@@ -90,10 +99,12 @@
         <EnumerationDomain name="enum">
           <Entry text="Rim (reflection)" value="0" />
           <Entry text="Facing camera" value="1" />
+          <Entry text="Uniform" value="2" />
         </EnumerationDomain>
         <Documentation>
           Rim: triangles light up when the view skims them, like a reflection.
           Facing camera: triangles facing you are the ones that appear.
+          Uniform: the noise or scan brightens every face the same amount. Normals are not used.
         </Documentation>
       </IntVectorProperty>
 
@@ -148,7 +159,7 @@
         <DoubleRangeDomain name="range" min="0.002" max="0.5" />
         <Documentation>
           Thickness of each stripe as a fraction of one period. 0.08 is a thin line; larger is a wider slab.
-          With Group Mesh, Scan is one reveal front and this is how thick that front fades, as a fraction of the bounds.
+          Group Mesh uses the same thickness. Cells whose centers lie in the band light as a whole, like a crinkle slice.
         </Documentation>
         <Hints>
           <PropertyWidgetDecorator type="GenericDecorator"
@@ -165,8 +176,8 @@
         <DoubleRangeDomain name="range" min="0.5" max="64" />
         <Documentation>
           How many features fit across the mesh bounds. Noise flows use this as density.
-          Scan uses it as how many stripes lie along the axis. Group Mesh Scan ignores it
-          and reveals once per pass. Foam's demo starts at 4;
+          Scan uses it as how many stripes lie along the axis, including Group Mesh.
+          Foam's demo starts at 4;
           turbulence and maelstrom sit near 5 to 7.
         </Documentation>
       </DoubleVectorProperty>
@@ -215,10 +226,11 @@
         <Documentation>
           Group by the original volume cell. Every face of one cell shares that cell's centroid,
           so the cell lights as a whole and the next cell can still be dark. Off samples each
-          fragment at its own position, and Scan cuts a slice through the faces. On, Scan reveals
-          cells as one front moves along Scan Axis: cells behind the front stay lit, then the fill
-          restarts. Noise uses one value per cell. A surface polygon uses its own centroid.
-          Fresnel stays per face.
+          fragment at its own position, and Scan cuts a slice through the faces. On, Scan keeps
+          the same band speed, count, and width, but each volume cell is wholly inside or outside
+          that band from its center, like a crinkle slice. Cells leave the band as it moves on.
+          Noise uses one value per cell. A surface polygon uses its own centroid.
+          Fresnel stays per face, unless Fresnel is Uniform, which ignores the normal.
         </Documentation>
       </IntVectorProperty>
     </RepresentationProxy>

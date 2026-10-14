@@ -97,6 +97,7 @@ if (PARAVIEW_USE_QT)
       VTK::InteractionWidgets
       VTK::IOImage
       VTK::IOIOSS
+      VTK::zlib
       vtkSHYXSelectionPlaneClipper
       vtkSHYXVascularStentPlacement
       vtkSHYXEndpointStentPlacement

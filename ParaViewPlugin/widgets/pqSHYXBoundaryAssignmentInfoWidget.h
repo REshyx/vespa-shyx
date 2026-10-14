@@ -6,6 +6,7 @@
 #include <QPointer>
 #include <QString>
 
+class QCheckBox;
 class QLineEdit;
 class QTextEdit;
 class pqPipelineSource;
@@ -16,7 +17,8 @@ class vtkSMStringVectorProperty;
 /**
  * Read-only multiline texts for Boundary Assignment / full options file, plus one-click
  * export of port 0 (Exodus via vtkIOSSWriter), the two text snippets, and the current
- * ParaView state (.pvsm).
+ * ParaView state (.pvsm). "Pack into .zip" writes those four files inside one archive
+ * instead of leaving them loose in the chosen folder.
  *
  * Default information_only multi_line widgets refresh before RequestData finishes,
  * so the panel stays one Apply behind. This widget re-pulls after dataUpdated.
@@ -72,6 +74,7 @@ private:
   QLineEdit* OptNameEdit = nullptr;
   QLineEdit* BcNameEdit = nullptr;
   QLineEdit* PvsmNameEdit = nullptr;
+  QCheckBox* PackZipCheck = nullptr;
   vtkSMStringVectorProperty* AssignmentProp = nullptr;
   vtkSMStringVectorProperty* InletOptProp = nullptr;
   QString LastAutoKey;

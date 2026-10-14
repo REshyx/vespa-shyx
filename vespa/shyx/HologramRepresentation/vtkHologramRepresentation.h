@@ -43,8 +43,8 @@ public:
   vtkSetClampMacro(FresnelPower, double, 0.05, 12.0);
   vtkGetMacro(FresnelPower, double);
 
-  /** 0 = rim / grazing reflection. 1 = faces toward the camera. */
-  vtkSetClampMacro(FresnelMode, int, 0, 1);
+  /** 0 = rim / grazing reflection. 1 = faces toward the camera. 2 = uniform, no normal. */
+  vtkSetClampMacro(FresnelMode, int, 0, 2);
   vtkGetMacro(FresnelMode, int);
 
   vtkSetClampMacro(ScanStrength, double, 0.0, 4.0);
@@ -76,8 +76,9 @@ public:
    * Off: each fragment samples at its own position. Scan is a slice through the faces.
    * On: every face of one volume cell shares that cell's centroid, so the cell lights
    * as one piece and neighboring cells appear on their own. A surface polygon uses its
-   * own centroid. Scan reveals cells as the front reaches them; noise is one value per
-   * cell. Fresnel stays per face.
+   * own centroid. Scan is a crinkle slice: the same moving band, but a cell is wholly
+   * in or out from its center. Noise is one value per cell. Fresnel stays per face
+   * unless FresnelMode is uniform, which ignores the normal.
    */
   virtual void SetGroupMesh(bool group);
   vtkGetMacro(GroupMesh, bool);

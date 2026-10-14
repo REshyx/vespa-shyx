@@ -39,7 +39,7 @@
 - 文件名含 `aorta` → **Single outlet**（HV）
 - 同时含两者或都不含 → 不改动
 
-按钮 **Export port 0 (.exo) + options + Nodeset + .pvsm**：选目录后按上述名称写出四份文件（options / Nodeset 不加扩展名；`.pvsm` 为当前 ParaView 管线/视图状态）。
+按钮 **Export port 0 (.exo) + options + Nodeset + .pvsm**：选目录后按上述名称写出四份文件（options / Nodeset 不加扩展名；`.pvsm` 为当前 ParaView 管线/视图状态）。勾选 **Pack into .zip** 后改为另存一个 `.zip`：四份文件打进包内（包内文件名仍是上面四栏），目录里不另留散文件。
 
 已有 Exodus 网格、只要 options 时，可用同目录 `generate_options_from_exo.py`（**pvpython** + 本仓库 `VESPAPlugin.dll`）：按文件名选 HV/PV，默认参数并打开 **Repart**，在每个 `.exo` 旁写出 `options_<stem>`。
 
