@@ -51,7 +51,9 @@
 #include <new>
 #include <string>
 
-#include "vtk_zlib.h"
+// Upstream zlib, not vtk_zlib.h. VTK's copy is built with Z_PREFIX and lives in
+// vtkzlib-pv6.0.dll, which official ParaView does not ship.
+#include "zlib.h"
 
 namespace
 {

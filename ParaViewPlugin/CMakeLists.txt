@@ -89,15 +89,17 @@ endif()
 
 if (PARAVIEW_USE_QT)
   include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/FetchLibcurl.cmake")
+  include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/FetchZlib.cmake")
+  target_include_directories(VESPAPlugin BEFORE PRIVATE "${vespa_zlib_SOURCE_DIR}")
   target_link_libraries(VESPAPlugin
     PRIVATE
+      vespa_zlib
       ParaView::RemotingViews
       ParaView::pqApplicationComponents
       VTK::ChartsCore
       VTK::InteractionWidgets
       VTK::IOImage
       VTK::IOIOSS
-      VTK::zlib
       vtkSHYXSelectionPlaneClipper
       vtkSHYXVascularStentPlacement
       vtkSHYXEndpointStentPlacement
