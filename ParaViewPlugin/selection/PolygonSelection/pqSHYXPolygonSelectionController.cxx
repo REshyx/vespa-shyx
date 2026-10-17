@@ -460,6 +460,7 @@ pqSHYXPolygonSelectionController::pqSHYXPolygonSelectionController(
 //-----------------------------------------------------------------------------
 pqSHYXPolygonSelectionController::~pqSHYXPolygonSelectionController()
 {
+  this->TearingDown = true;
   this->disablePolygon();
 }
 
@@ -680,15 +681,17 @@ void pqSHYXPolygonSelectionController::disablePolygon()
   this->Points.clear();
   this->CursorValid = false;
 
-  if (this->View)
+  if (this->TearingDown || !this->View)
   {
-    // Another selection mode may already have installed its own cursor.
-    if (!this->otherSelectionModeChecked())
-    {
-      this->View->setCursor(QCursor());
-    }
-    this->renderView();
+    return;
   }
+
+  // Another selection mode may already have installed its own cursor.
+  if (!this->otherSelectionModeChecked())
+  {
+    this->View->setCursor(QCursor());
+  }
+  this->renderView();
 }
 
 //-----------------------------------------------------------------------------

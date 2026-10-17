@@ -88,6 +88,10 @@ private:
   bool CursorValid = false;
   bool Enabled = false;
   bool SelectThrough = false;
+  // Set from the destructor. The title-bar action (our parent) is destroyed
+  // while the view frame is still inside its own destructor, so QPointer has
+  // not been cleared yet and findChild/render on that frame crashes.
+  bool TearingDown = false;
 };
 
 #endif
