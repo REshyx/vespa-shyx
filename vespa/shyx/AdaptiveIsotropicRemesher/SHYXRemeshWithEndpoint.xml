@@ -145,10 +145,11 @@
                             name="AdaptiveTolerance"
                             label="Adaptive tolerance"
                             number_of_elements="1"
-                            default_values="0.01">
+                            default_values="0.02">
         <DoubleRangeDomain name="range" min="0"/>
         <Documentation>
-          Vespa ICC adaptive sizing tolerance (same role as SHYX Adaptive Isotropic Remesher).
+          Vespa ICC adaptive sizing tolerance (same role as SHYX Adaptive Isotropic Remesher,
+          but default **0.02** here). Must be &gt; 0; smaller is more curvature-sensitive and denser.
         </Documentation>
       </DoubleVectorProperty>
 
@@ -172,10 +173,11 @@
                          name="IccNeighborhoodRings"
                          label="Mesh rings"
                          number_of_elements="1"
-                         default_values="1">
+                         default_values="2">
         <IntRangeDomain name="range" min="1" max="32"/>
         <Documentation>
-          Face-hop count around each vertex. 1 = incident faces only. Not Euclidean distance.
+          Face-hop count around each vertex. **2** (default). 1 = incident faces only.
+          Not Euclidean distance.
         </Documentation>
         <Hints>
           <PropertyWidgetDecorator type="GenericDecorator"

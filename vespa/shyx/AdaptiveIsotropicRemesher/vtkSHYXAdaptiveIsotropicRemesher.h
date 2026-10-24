@@ -380,8 +380,9 @@ public:
   //@{
   /**
    * When ON (default), run CGAL isotropic remesh. When OFF, skip remesh and feature-edge outputs
-   * but still compute the first ICC sizing pass (port 3 preview + uncapped histogram). Not exposed
-   * in ParaView XML; the Properties histogram panel uses this for a live pre-Apply preview.
+   * but still compute the first ICC sizing pass (port 3 preview + uncapped histogram). Exposed in
+   * ParaView as "Enable remesh"; the Properties histogram panel drives its own preview copy with
+   * this off, and File -> Recovery -> Safely Open switches it off before loading a state.
    */
   vtkGetMacro(EnableRemesh, bool);
   vtkSetMacro(EnableRemesh, bool);

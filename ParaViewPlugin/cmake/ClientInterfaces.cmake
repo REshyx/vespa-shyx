@@ -124,6 +124,18 @@ list(APPEND vespa_plugin_qt_auto_sources
   selection/DeleteSelectionShortcut/pqSHYXDeleteSelectionShortcut.h)
 
 paraview_plugin_add_auto_start(
+  CLASS_NAME "pqSHYXRecoveryAutoStart"
+  STARTUP onStartup
+  SHUTDOWN onShutdown
+  INTERFACES recovery_autostart_interfaces
+  SOURCES recovery_autostart_sources)
+list(APPEND vespa_plugin_qt_auto_interfaces ${recovery_autostart_interfaces})
+list(APPEND vespa_plugin_qt_auto_sources
+  ${recovery_autostart_sources}
+  Recovery/pqSHYXRecoveryAutoStart.cxx
+  Recovery/pqSHYXRecoveryAutoStart.h)
+
+paraview_plugin_add_auto_start(
   CLASS_NAME "pqSHYXVascularCategoryAutoStart"
   STARTUP onStartup
   SHUTDOWN onShutdown

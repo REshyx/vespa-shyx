@@ -40,6 +40,7 @@
 #include "vtkSMSourceProxy.h"
 #include "vtkSmartPointer.h"
 
+#include <QDir>
 #include <QJsonArray>
 #include <QJsonObject>
 #include <QJsonValue>
@@ -1853,6 +1854,26 @@ QString describeClientTool(const QString& query)
   const bool deleteShortcut = ql.contains(QLatin1String("delete shortcut")) ||
     ql.contains(QLatin1String("ctrl+d")) || ql.contains(QLatin1String("ctrl d")) ||
     ql.contains(QLatin1String("control+d")) || ql.contains(QLatin1String("control d"));
+  const bool recovery = ql.contains(QLatin1String("recovery")) ||
+    ql.contains(QLatin1String("shyxrecovery")) ||
+    ql.contains(QLatin1String("pre-apply")) || ql.contains(QLatin1String("pre apply")) ||
+    ql.contains(QLatin1String("remesh state"));
+  if (recovery)
+  {
+    return QStringLiteral(
+      "SHYX Recovery (File menu submenu; client Qt; not a Server Manager proxy)\n"
+      "No Python constructor and no SM properties.\n"
+      "File → Recovery lists *.pvsm files in the OS temp folder (%TEMP% on Windows, $TMPDIR or "
+      "/tmp otherwise), newest first.\n"
+      "Temp folder: %1\n"
+      "Known entry: shyx_remesh_pre_apply.pvsm, written by SHYXAdaptiveIsotropicRemesher and "
+      "SHYXRemeshWithEndpoint right before CGAL remesh. Shown as 'Before remesh - "
+      "shyx_remesh_pre_apply.pvsm'.\n"
+      "Menu actions: click a file to load that state; Open Temp Folder...; Refresh.\n"
+      "Loading skips the Load State Options dialog. If the state's data files moved, use "
+      "File → Load State instead.\n")
+      .arg(QDir::tempPath());
+  }
   if (deleteShortcut && !sphere && !grow)
   {
     return QStringLiteral(
@@ -1894,7 +1915,8 @@ QString describeProxy(const QString& query)
   if (!proto)
   {
     return QStringLiteral("No proxy definition matching '%1'. Try list_filters or describe_proxy('sphere') / "
-                          "describe_proxy('polygon') / describe_proxy('proximity gap') / describe_proxy('Pulse Glyphs').")
+                          "describe_proxy('polygon') / describe_proxy('proximity gap') / describe_proxy('Pulse Glyphs') / "
+                          "describe_proxy('recovery').")
       .arg(query.trimmed());
   }
   QString out;
@@ -2219,7 +2241,9 @@ const ShyxExtra kShyxExtra[] = {
     "cell NewCapBranch=1 and warning; leaf (degree 1) extension stays 0. "
     "For already-capped meshes. First Apply keeps the parent mesh visible at Opacity 0.5 "
     "instead of hiding it." },
-  { "SHYXVesselEndClipper", "Vascular step 2. Port0 clipped mesh, port1 clip planes (Point Label)." },
+  { "SHYXVesselEndClipper",
+    "Vascular step 2. Port0 clipped mesh, port1 clip planes (Point Label). "
+    "Apply keeps the parent mesh visible (no input hiding)." },
   { "SHYXVmtkOpeningCenterlines",
     "Threshold cell array (default EndpointIndex > 0) -> openings, port1 seeds (Point Label). "
     "CalculateCenterline + CenterlineMethod: 0 Voronoi vtkvmtkPolyDataCenterlines on the closed "
@@ -2562,6 +2586,10 @@ const ShyxExtra kShyxExtra[] = {
     "Select Block clears the current selection then selects all cells in that block (BLOCK_SELECTORS). "
     "Call describe_proxy('select block'). "
     "After use, call inspect_selection." },
+  { "SHYXRecovery",
+    "Not a filter and not a proxy. File → Recovery lists *.pvsm files in the OS temp folder "
+    "(newest first) and loads one with a click; shyx_remesh_pre_apply.pvsm is the state written "
+    "before an adaptive remesh. Call describe_proxy('recovery')." },
   { "SHYXAIAssistant",
     "Deprecated. The assistant is View → SHYX AI Assistant, not a pipeline filter. Do not create this node." },
 };
@@ -2615,14 +2643,17 @@ QString lookupShyxDocs(const QString& queryRaw)
       "(add unselected faces enclosed by the current selection).\n"
       "4) Widget representations (stent placement 3D widgets, not Display dropdown): "
       "SHYXImplicitCylinderWidgetRepresentation, SHYXEndpointStentWidgetRepresentation.\n"
-      "5) View → SHYX AI Assistant: this dock, not a pipeline filter.\n"
+      "5) File → Recovery (client Qt; not a pipeline filter): submenu listing *.pvsm in the OS "
+      "temp folder, e.g. shyx_remesh_pre_apply.pvsm written before a remesh. "
+      "describe_proxy('recovery').\n"
+      "6) View → SHYX AI Assistant: this dock, not a pipeline filter.\n"
       "Pass a name/topic (remesh, clip, representation, selection, sphere, glyph, ...) to filter notes.\n"
       "For parameter names/defaults: describe_proxy('Pulse Glyphs'), describe_proxy('Animated Streamline'), "
       "describe_proxy('Point Label'), describe_proxy('Hologram'), describe_proxy('sphere'), "
       "describe_proxy('polygon'), describe_proxy('grow'), "
       "describe_proxy('proximity gap'), describe_proxy('select block'), describe_proxy('select similar'), "
       "describe_proxy('fill interior'), describe_proxy('select connected'), "
-      "describe_proxy('invert').\n");
+      "describe_proxy('invert'), describe_proxy('recovery').\n");
   }
 
   for (const ShyxExtra& e : kShyxExtra)
@@ -2699,7 +2730,7 @@ QString lookupShyxDocs(const QString& queryRaw)
     }
   }
   out += QStringLiteral("For property names/enums/defaults call describe_proxy with the XML/python name "
-                        "or display type (Pulse Glyphs, sphere, grow, select block, select similar, fill interior, select connected, invert).\n");
+                        "or display type (Pulse Glyphs, sphere, grow, select block, select similar, fill interior, select connected, invert, recovery).\n");
   if (!query.isEmpty())
   {
     const QString client = describeClientTool(query);
@@ -3107,12 +3138,13 @@ QJsonArray pqSHYXAIAgentTools::schema(bool allowCaptureScreenshot)
     "For Fill Interior pass 'fill interior'. "
     "For Select Connected (connected points/lines/faces/volumes) pass 'select connected'. "
     "For Invert Selection pass 'invert'. "
+    "For the File → Recovery submenu (temp-folder .pvsm list) pass 'recovery'. "
     "For the RenderView Ctrl+D shortcut that creates and applies SHYX Delete Selected Cells, pass 'delete shortcut' or 'ctrl+d'.",
-    QJsonObject{ { QStringLiteral("name"), strArg("XML name, display type (Pulse Glyphs), sphere/polygon/grow/proximity gap, select block, select similar, fill interior, select connected, invert, or delete shortcut.") } },
+    QJsonObject{ { QStringLiteral("name"), strArg("XML name, display type (Pulse Glyphs), sphere/polygon/grow/proximity gap, select block, select similar, fill interior, select connected, invert, recovery, or delete shortcut.") } },
     QJsonArray{ QStringLiteral("name") }));
   tools.append(fn("lookup_shyx_docs",
     "SHYX/VESPA usage notes: capability catalog (filters + Display representations + "
-    "title-bar selection tools), vascular pipeline order, which filter to prefer, multi-port hints, "
+    "title-bar selection tools + File → Recovery), vascular pipeline order, which filter to prefer, multi-port hints, "
     "and live XML short help. Empty query is the full catalog. Keywords are AND across name/docs/"
     "notes (spaces or commas). Then call describe_proxy for property names.",
     QJsonObject{ { QStringLiteral("query"),

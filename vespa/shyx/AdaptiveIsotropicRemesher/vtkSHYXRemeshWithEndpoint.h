@@ -272,9 +272,9 @@ protected:
 
     double MinEdgeLength = 0.0;
     double MaxEdgeLength = 0.0;
-    double AdaptiveTolerance = 0.01;
+    double AdaptiveTolerance = 0.02;
     int IccNeighborhoodMode = 0;
-    int IccNeighborhoodRings = 1;
+    int IccNeighborhoodRings = 2;
     double IccBallRadius = -1.0;
     double AdaptiveSizingNeighborMaxRatio = 1.6;
     bool AnchorBoundarySize = false;

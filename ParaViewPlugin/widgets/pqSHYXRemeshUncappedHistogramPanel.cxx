@@ -452,6 +452,15 @@ void pqSHYXRemeshUncappedHistogramPanel::onPipelineDataUpdated()
 //------------------------------------------------------------------------------
 void pqSHYXRemeshUncappedHistogramPanel::runPreview()
 {
+  // Never pull the pipeline while a state is loading/being restored: the proxy
+  // graph is half-built, and updating it can execute a remesh filter.
+  if (auto* core = pqApplicationCore::instance())
+  {
+    if (core->isLoadingState())
+    {
+      return;
+    }
+  }
   if (!this->computePreviewFromInput())
   {
     this->setHistogramDisplay(QVector<double>(), 0.0, 0.0, 0, 0.0, 0.0, false);
@@ -499,7 +508,11 @@ bool pqSHYXRemeshUncappedHistogramPanel::computePreviewFromInput()
     return false;
   }
 
-  vtkPolyData* inputPd = fetchInputPolyData(filterProxy, /*updateUpstream=*/true);
+  // updateUpstream=false on purpose: fetching data from the upstream port must
+  // not execute the pipeline. A remesh upstream would otherwise re-run CGAL just
+  // because this panel was built (e.g. right after loading a recovery state).
+  // onPipelineDataUpdated() refreshes the preview once the user applies.
+  vtkPolyData* inputPd = fetchInputPolyData(filterProxy, /*updateUpstream=*/false);
   if (!inputPd || inputPd->GetNumberOfPoints() < 1 || inputPd->GetNumberOfCells() < 1)
   {
     return false;
@@ -587,7 +600,7 @@ bool pqSHYXRemeshUncappedHistogramPanel::computePreviewFromInput()
       readIntUnchecked(filterProxy->GetProperty("RemeshRangeAllScalars"), 0) != 0);
     applyRemeshRangeArray(preview, filterProxy->GetProperty("RemeshRangeArrayName"));
 
-    if (vtkSelection* sel = fetchSelection(filterProxy, /*updateUpstream=*/true))
+    if (vtkSelection* sel = fetchSelection(filterProxy, /*updateUpstream=*/false))
     {
       preview->SetInputData(1, sel);
     }

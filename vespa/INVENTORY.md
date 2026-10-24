@@ -159,6 +159,7 @@ Vascular 顺序（[`VESPAVascularCategory.xml`](../ParaViewPlugin/smxml/VESPAVas
 | Delete Selected Cells 快捷键（RenderView 里按 Ctrl+D：新建 SHYX Delete 并 Apply） | `ParaViewPlugin/selection/DeleteSelectionShortcut/` | （无独立图标） |
 | Invert Selection（选择右键，反选） | `ParaViewPlugin/selection/SelectSimilar/` + Grow controller | （无独立图标） |
 | Status notices（状态栏左侧 SHYX 提示） | `ParaViewPlugin/widgets/pqSHYXStatusNotifier.*` | （无） |
+| File → Recovery（temp 文件夹里的 `.pvsm` 下拉，一键载入；含 remesh 前的 `shyx_remesh_pre_apply.pvsm`；**Safely Open** 开关默认开，载入前把所有 representation 的 `Visibility` 写成 0、并把 `SHYXAdaptiveIsotropicRemesher.EnableRemesh` / `SHYXRemeshWithEndpoint.EnableWallRemesh+EnableCapRemesh` 写成 0 再载入（旧状态缺属性就补一条），随后还原原文件，避免恢复时重跑 CGAL） | `ParaViewPlugin/Recovery/` | （无） |
 | Vascular 菜单/工具条 | `ParaViewPlugin/VascularCategory/` + [`smxml/VESPAVascularCategory.xml`](../ParaViewPlugin/smxml/VESPAVascularCategory.xml) | （各滤镜 fluent 图标） |
 
 ---
