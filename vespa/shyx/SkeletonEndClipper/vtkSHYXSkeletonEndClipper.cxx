@@ -149,9 +149,12 @@ vtkDataArraySelection* vtkSHYXSkeletonEndClipper::GetEndpointSelection()
 vtkMTimeType vtkSHYXSkeletonEndClipper::GetMTime()
 {
     vtkMTimeType mTime = this->Superclass::GetMTime();
-    if (vtkDataArraySelection* sel = this->GetEndpointSelection())
+    // Use the clipper's "edit only" selection MTime: the endpoint sync inside
+    // its RequestData is self-inflicted and must not make this wrapper dirty
+    // (that would cost an extra pass through skeleton extraction + clipping).
+    if (this->ClipperFilter)
     {
-        mTime = std::max(mTime, sel->GetMTime());
+        mTime = std::max(mTime, this->ClipperFilter->GetEndpointSelectionEditMTime());
     }
     return mTime;
 }

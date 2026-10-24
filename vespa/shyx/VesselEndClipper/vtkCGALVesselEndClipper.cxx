@@ -127,6 +127,11 @@ void vtkCGALVesselEndClipper::LogUpdateReasonAtRequestData(
     const vtkMTimeType filterMTimeWithSelection = this->GetMTime();
     const vtkMTimeType epSelMTime =
         this->EndpointSelection ? this->EndpointSelection->GetMTime() : 0;
+    // Selection MTime bumps already absorbed by the previous in-RequestData
+    // sync are self-inflicted; only genuine user edits should be reported as a
+    // trigger reason here.
+    const vtkMTimeType epSelMTimeEffective =
+        (epSelMTime > this->AbsorbedSelectionMTime) ? epSelMTime : 0;
     const vtkMTimeType in0MTime = vesselMesh ? vesselMesh->GetMTime() : 0;
     const vtkMTimeType in1MTime = centerline ? centerline->GetMTime() : 0;
     const vtkMTimeType outMTime = existingOutput ? existingOutput->GetMTime() : 0;
@@ -164,13 +169,13 @@ void vtkCGALVesselEndClipper::LogUpdateReasonAtRequestData(
             appendReason("filter parameter MTime increased (ClipOffset/MinBranchLength/TangentDepth/"
                         "CapEndpoints/FairingContinuity/InteractiveCut/UpdateAttributes)");
         }
-        if (epSelMTime > this->LastLoggedEndpointSelectionMTime)
+        if (epSelMTimeEffective > this->LastLoggedEndpointSelectionMTime)
         {
-            appendReason("EndpointSelection MTime increased (endpoint checkboxes changed or prior sync)");
+            appendReason("EndpointSelection MTime increased (endpoint checkboxes changed)");
         }
         if (in0MTime == this->LastLoggedInput0MTime && in1MTime == this->LastLoggedInput1MTime &&
             filterMTimeWithSelection == this->LastLoggedFilterFullMTime &&
-            epSelMTime == this->LastLoggedEndpointSelectionMTime)
+            epSelMTimeEffective == this->LastLoggedEndpointSelectionMTime)
         {
             appendReason(
                 "downstream pipeline refresh / forced REQUEST_DATA (inputs & filter unchanged "
@@ -189,7 +194,8 @@ void vtkCGALVesselEndClipper::LogUpdateReasonAtRequestData(
     }
 
     oss << " | MTime filter=" << filterMTime << " filter+selection=" << filterMTimeWithSelection
-        << " EndpointSelection=" << epSelMTime << " in0=" << in0MTime << " in1=" << in1MTime
+        << " EndpointSelection=" << epSelMTime << " (absorbed=" << this->AbsorbedSelectionMTime
+        << ")" << " in0=" << in0MTime << " in1=" << in1MTime
         << " out0=" << outMTime << " | prev in0=" << this->LastLoggedInput0MTime
         << " prev in1=" << this->LastLoggedInput1MTime
         << " prev filterParams=" << this->LastLoggedFilterParamsMTime
@@ -203,7 +209,7 @@ void vtkCGALVesselEndClipper::LogUpdateReasonAtRequestData(
     this->LastLoggedInput1MTime = in1MTime;
     this->LastLoggedFilterParamsMTime = filterMTime;
     this->LastLoggedFilterFullMTime = filterMTimeWithSelection;
-    this->LastLoggedEndpointSelectionMTime = epSelMTime;
+    this->LastLoggedEndpointSelectionMTime = epSelMTimeEffective;
     this->LastLoggedOutputMTime = outMTime;
 }
 
@@ -246,12 +252,27 @@ vtkDataArraySelection* vtkCGALVesselEndClipper::GetEndpointSelection()
 }
 
 //------------------------------------------------------------------------------
+vtkMTimeType vtkCGALVesselEndClipper::GetEndpointSelectionEditMTime()
+{
+    if (!this->EndpointSelection)
+    {
+        return 0;
+    }
+    const vtkMTimeType selTime = this->EndpointSelection->GetMTime();
+    // Changes up to the absorbed baseline came from our own endpoint sync.
+    return (selTime > this->AbsorbedSelectionMTime) ? selTime : 0;
+}
+
+//------------------------------------------------------------------------------
 vtkMTimeType vtkCGALVesselEndClipper::GetMTime()
 {
     vtkMTimeType mTime = this->Superclass::GetMTime();
-    if (this->EndpointSelection)
+    // Ignore MTime bumps produced by our own endpoint sync inside RequestData
+    // (see AbsorbedSelectionMTime). Real user toggles happen after that sync,
+    // so they always land above the baseline.
+    const vtkMTimeType selTime = this->GetEndpointSelectionEditMTime();
+    if (selTime > 0)
     {
-        vtkMTimeType selTime = this->EndpointSelection->GetMTime();
         mTime = std::max(mTime, selTime);
     }
     return mTime;
@@ -704,13 +725,14 @@ int vtkCGALVesselEndClipper::RequestData(
     if (this->EndpointSelection)
     {
         const vtkMTimeType epSelMTimeAfterSync = this->EndpointSelection->GetMTime();
-        if (epSelMTimeAfterSync > epSelMTimeBeforeSync)
-        {
-            vtkWarningMacro(<< "[SHYXVesselEndClipper] EndpointSelection Modified during RequestData "
-                            << "(endpoint sync: add/remove/enable/disable). MTime "
-                            << epSelMTimeBeforeSync << " -> " << epSelMTimeAfterSync
-                            << " — this can cause an extra pipeline pass on the next update.");
-        }
+        // Absorb the MTime bump caused by the sync above: it is our own change,
+        // not a user edit, so it must not make this filter look dirty (that
+        // would trigger an extra pipeline pass on the next update).
+        this->AbsorbedSelectionMTime = epSelMTimeAfterSync;
+
+        vtkDebugMacro(<< "[SHYXVesselEndClipper] EndpointSelection synced during RequestData "
+                      << "(add/remove/enable/disable). MTime " << epSelMTimeBeforeSync << " -> "
+                      << epSelMTimeAfterSync << " absorbed (no extra pipeline pass expected).");
     }
 
     // ---------------------------------------------------------------

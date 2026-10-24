@@ -41,6 +41,8 @@
 
 按钮 **Export port 0 (.exo) + options + Nodeset + .pvsm**：选目录后按上述名称写出四份文件（options / Nodeset 不加扩展名；`.pvsm` 为当前 ParaView 管线/视图状态）。勾选 **Pack into .zip** 后改为另存一个 `.zip`：四份文件打进包内（包内文件名仍是上面四栏），目录里不另留散文件。
 
+> **导出路径必须是纯 ASCII（不能含中文等字符）**。Exodus 走的是 IOSS 的窄字符路径，中文路径会让写入器在底层失败并可能导致 ParaView 闪退；因此插件在写文件前会先检查 `.exo` 的完整路径，含非 ASCII 字符时只弹 warning 并中止导出（其余文件不会被写出）。请换到纯英文目录、或把中文文件名改成英文后重试。
+
 已有 Exodus 网格、只要 options 时，可用同目录 `generate_options_from_exo.py`（**pvpython** + 本仓库 `VESPAPlugin.dll`）：按文件名选 HV/PV，默认参数并打开 **Repart**，在每个 `.exo` 旁写出 `options_<stem>`。
 
 ## 典型管线

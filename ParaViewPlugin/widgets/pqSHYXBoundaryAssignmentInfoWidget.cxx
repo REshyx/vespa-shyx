@@ -166,6 +166,23 @@ bool writeExodusIossDefault(vtkPartitionedDataSetCollection* input, const QStrin
   return true;
 }
 
+/**
+ * vtkIOSSWriter hands the file name to IOSS/exodus as narrow (UTF-8) bytes. On Windows a
+ * Chinese or otherwise non-ASCII path makes exodus_open fail deep inside the writer and can
+ * crash ParaView, so detect it before any file is touched.
+ */
+bool containsNonAsciiChars(const QString& text)
+{
+  for (const QChar ch : text)
+  {
+    if (ch.unicode() > 0x7f)
+    {
+      return true;
+    }
+  }
+  return false;
+}
+
 QString ensureExtension(QString name, const QString& ext)
 {
   name = name.trimmed();
@@ -1103,6 +1120,20 @@ void pqSHYXBoundaryAssignmentInfoWidget::onExportClicked()
     {
       this->ExoNameEdit->setText(QFileInfo(exoFile).fileName());
     }
+  }
+
+  // Guard before any file is created: only the Exodus file goes through IOSS/exodus narrow-char
+  // I/O (options / Nodeset / .pvsm are written with Qt, which handles Unicode paths). A Chinese
+  // path there can crash the writer, so warn and stop instead of letting ParaView disappear.
+  if (containsNonAsciiChars(exoFile))
+  {
+    QMessageBox::warning(this, tr("Export"),
+      tr("The Exodus path contains Chinese or other non-ASCII characters:\n%1\n\n"
+         "The Exodus/IOSS writer cannot handle this path and may crash ParaView, "
+         "so nothing was written.\n"
+         "Please export to a folder whose full path contains ASCII characters only.")
+        .arg(exoFile));
+    return;
   }
 
   source->UpdatePipeline();

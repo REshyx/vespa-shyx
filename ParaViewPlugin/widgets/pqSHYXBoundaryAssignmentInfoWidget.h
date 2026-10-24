@@ -20,6 +20,10 @@ class vtkSMStringVectorProperty;
  * ParaView state (.pvsm). "Pack into .zip" writes those four files inside one archive
  * instead of leaving them loose in the chosen folder.
  *
+ * Export refuses paths that contain non-ASCII characters (e.g. Chinese folder / file names):
+ * vtkIOSSWriter passes the path to IOSS/exodus as narrow bytes, which can crash ParaView.
+ * The check warns and aborts before anything is written.
+ *
  * Default information_only multi_line widgets refresh before RequestData finishes,
  * so the panel stays one Apply behind. This widget re-pulls after dataUpdated.
  *

@@ -13,7 +13,7 @@ Python：`GetDisplayProperties().Representation = 'Point Label'`，属性用 **e
 | `PL_PointLabelArray` | 空 | 空则用当前 active scalars |
 | `PL_MaximumNumberOfLabels` | 2000 | |
 | `PL_LabelFormat` | | |
-| `PL_LabelColor` | 0.9 0.9 0.95 | |
+| `PL_LabelColor` | 0 0 0（黑） | 浅色背景上的剪裁面数字默认用黑色 |
 | `PL_DepthOffset` | -4 | |
 
 XML：同目录 `PointLabelRepresentation.xml`。

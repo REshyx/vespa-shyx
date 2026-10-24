@@ -122,7 +122,7 @@ protected:
   char* PointLabelArray = nullptr;
   char* LabelFormat = nullptr;
   int MaximumNumberOfLabels = 2000;
-  double LabelColor[3] = { 0.9, 0.9, 0.95 };
+  double LabelColor[3] = { 0.0, 0.0, 0.0 };
   double DepthOffset = -4.0;
 
   vtkMergeBlocks* MergeBlocks = nullptr;

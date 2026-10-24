@@ -115,6 +115,15 @@ public:
      */
     vtkDataArraySelection* GetEndpointSelection();
 
+    /**
+     * EndpointSelection MTime that represents genuine user edits only: bumps
+     * produced by the in-RequestData endpoint sync are excluded. Wrappers that
+     * nest this filter (e.g. vtkSHYXSkeletonEndClipper) must use this instead
+     * of GetEndpointSelection()->GetMTime(), otherwise the sync makes the
+     * wrapper look dirty and costs an extra pipeline pass.
+     */
+    vtkMTimeType GetEndpointSelectionEditMTime();
+
     vtkMTimeType GetMTime() override;
 
     ///@{
@@ -171,6 +180,15 @@ protected:
     bool  UseInteractiveCutPlanes     = false;
 
     vtkSmartPointer<vtkDataArraySelection> EndpointSelection;
+
+    /**
+     * EndpointSelection MTime right after the in-RequestData endpoint sync.
+     * Changes up to this point are self-inflicted by the sync (add/remove/
+     * enable/disable) and must not mark this filter dirty, otherwise every
+     * sync would cost one extra pipeline pass. Only MTime values above this
+     * baseline (i.e. real user checkbox toggles) count in GetMTime().
+     */
+    vtkMTimeType AbsorbedSelectionMTime = 0;
 
     char* OutputMessage = nullptr;
 
