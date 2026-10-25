@@ -98,14 +98,13 @@ bool pqSHYXDeleteSelectionShortcut::eventFilter(QObject*, QEvent* event)
   }
 
   auto* keyEvent = static_cast<QKeyEvent*>(event);
-  const Qt::KeyboardModifiers mods = keyEvent->modifiers();
-  if (keyEvent->key() != Qt::Key_D ||
-    (mods & (Qt::ControlModifier | Qt::ShiftModifier | Qt::AltModifier | Qt::MetaModifier)) !=
-      Qt::ControlModifier)
+  const Qt::KeyboardModifiers mods = keyEvent->modifiers() &
+    (Qt::ControlModifier | Qt::ShiftModifier | Qt::AltModifier | Qt::MetaModifier);
+  if (keyEvent->key() != Qt::Key_Delete || mods != Qt::NoModifier)
   {
     return false;
   }
-  // Leave Ctrl+D to the open context menu (its Delete Selected Cells action).
+  // Leave the open context menu to its own Delete Selected Cells action.
   if (QApplication::activePopupWidget() || !renderViewHasFocus())
   {
     return false;
@@ -126,7 +125,7 @@ void pqSHYXDeleteSelectionShortcut::deleteActiveSelection()
   if (!port || !port->getSelectionInput() || !port->getSource() || !port->getServer())
   {
     pqSHYXStatusNotifier::warning(
-      QObject::tr("SHYX Delete: no active selection. Select cells or points, then press Ctrl+D."));
+      QObject::tr("SHYX Delete: no active selection. Select cells or points, then press Delete."));
     return;
   }
 

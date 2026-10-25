@@ -4,11 +4,11 @@
 #include <QObject>
 
 /**
- * RenderView shortcut: Ctrl+D creates SHYX Delete Selected Cells on the dataset
+ * RenderView shortcut: Delete creates SHYX Delete Selected Cells on the dataset
  * that owns the active selection and Applies it.
  *
- * Plain D is left for ParaView point selection. The shortcut is ignored while
- * focus is outside a RenderView.
+ * Only unmodified Delete is handled (no Ctrl/Shift/Alt/Meta). The shortcut is
+ * ignored while focus is outside a RenderView.
  */
 class pqSHYXDeleteSelectionShortcut : public QObject
 {
