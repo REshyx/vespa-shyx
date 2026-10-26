@@ -97,7 +97,11 @@ private:
   bool snapPoints(double* points, int count, const int* enabled);
   bool snapPoint(int mode, const double in[3], double out[3]);
   vtkRenderer* renderer() const;
+  bool rayPickAtDisplay(double displayX, double displayY, double hit[3]);
   bool rayPickSurfacePoint(const double world[3], double hit[3]);
+  bool surfacePointFromDisplay(double displayX, double displayY, double out[3]);
+  double worldLengthForPixels(const double at[3], double pixels) const;
+  void cameraRightUp(double right[3], double up[3]) const;
 
   /**
    * How a released handle resolves its target vertex.

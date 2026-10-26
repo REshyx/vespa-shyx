@@ -77,6 +77,8 @@ vtkAnimatedStreamlineRepresentation::vtkAnimatedStreamlineRepresentation()
   this->IntegrationScale = 100.0;
   this->Trunc = 2.0;
   this->Pow = 1.0;
+  this->Randomize = false;
+  this->RandomizeScale = 1.0;
   this->StartTime = vtkTimerLog::GetUniversalTime();
   this->SetAnimationCoordinateArray("IntegrationTime");
 
@@ -103,7 +105,7 @@ vtkAnimatedStreamlineRepresentation::vtkAnimatedStreamlineRepresentation()
     this->BackfaceActor->SetForceTranslucent(true);
   }
 
-  this->SyncAnimatedMapperAnimationCoordinateArray();
+  this->SyncAnimatedMapperSettings();
   this->UpdateShaderReplacements();
   this->UpdateAnimationMTime();
 }
@@ -136,7 +138,7 @@ int vtkAnimatedStreamlineRepresentation::ProcessViewRequest(
   }
   if (request_type == vtkPVView::REQUEST_RENDER() && this->Mapper)
   {
-    this->SyncAnimatedMapperAnimationCoordinateArray();
+    this->SyncAnimatedMapperSettings();
     this->Mapper->Update();
     vtkDataObject* input = this->Mapper->GetInputDataObject(0, 0);
     const char* aname = EffectiveAnimationCoordinateArray(this->GetAnimationCoordinateArray());
@@ -151,7 +153,7 @@ int vtkAnimatedStreamlineRepresentation::ProcessViewRequest(
   return ret;
 }
 
-void vtkAnimatedStreamlineRepresentation::SyncAnimatedMapperAnimationCoordinateArray()
+void vtkAnimatedStreamlineRepresentation::SyncAnimatedMapperSettings()
 {
   const char* n = this->GetAnimationCoordinateArray();
   const char* ny = this->GetAnimationCoordinateYArray();
@@ -167,6 +169,11 @@ void vtkAnimatedStreamlineRepresentation::SyncAnimatedMapperAnimationCoordinateA
         yForMapper = ny;
       }
       am->SetAnimationCoordinateYArray(yForMapper);
+      // Per-streamline random phase (baked into tcoord.x by the mapper) plus the integration scale
+      // used to convert pulse cycles into animCoordx units.
+      am->SetRandomize(this->Randomize);
+      am->SetRandomizeScale(this->RandomizeScale);
+      am->SetIntegrationScale(this->IntegrationScale);
     }
   }
 }
@@ -324,6 +331,8 @@ void vtkAnimatedStreamlineRepresentation::PrintSelf(ostream& os, vtkIndent inden
   os << indent << "IntegrationScale: " << this->IntegrationScale << "\n";
   os << indent << "Trunc: " << this->Trunc << "\n";
   os << indent << "Pow: " << this->Pow << "\n";
+  os << indent << "Randomize: " << this->Randomize << "\n";
+  os << indent << "RandomizeScale: " << this->RandomizeScale << "\n";
   os << indent << "AnimationCoordinateArray: "
      << (this->GetAnimationCoordinateArray() ? this->GetAnimationCoordinateArray() : "(null)") << "\n";
   os << indent << "AnimationCoordinateYArray: "

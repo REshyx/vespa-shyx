@@ -124,6 +124,20 @@ list(APPEND vespa_plugin_qt_auto_sources
   selection/DeleteSelectionShortcut/pqSHYXDeleteSelectionShortcut.h)
 
 paraview_plugin_add_auto_start(
+  CLASS_NAME "pqSHYXQuickFilterWheel"
+  STARTUP onStartup
+  SHUTDOWN onShutdown
+  INTERFACES quick_filter_wheel_interfaces
+  SOURCES quick_filter_wheel_sources)
+list(APPEND vespa_plugin_qt_auto_interfaces ${quick_filter_wheel_interfaces})
+list(APPEND vespa_plugin_qt_auto_sources
+  ${quick_filter_wheel_sources}
+  selection/QuickFilterWheel/pqSHYXQuickFilterWheel.cxx
+  selection/QuickFilterWheel/pqSHYXQuickFilterWheel.h
+  selection/QuickFilterWheel/pqSHYXQuickFilterWheelOverlay.cxx
+  selection/QuickFilterWheel/pqSHYXQuickFilterWheelOverlay.h)
+
+paraview_plugin_add_auto_start(
   CLASS_NAME "pqSHYXRecoveryAutoStart"
   STARTUP onStartup
   SHUTDOWN onShutdown

@@ -120,7 +120,7 @@
       <IntVectorProperty name="SphereSeedMode"
                          command="SetSphereSeedMode"
                          label="Sphere sampling"
-                         default_values="0"
+                         default_values="1"
                          number_of_elements="1">
         <EnumerationDomain name="enum">
           <Entry text="Surface (theta x phi grid)" value="0"/>
@@ -136,7 +136,7 @@
       <IntVectorProperty name="SphereInteriorPointCount"
                          command="SetSphereInteriorPointCount"
                          label="Interior points"
-                         default_values="100"
+                         default_values="20"
                          number_of_elements="1">
         <IntRangeDomain name="range" min="1"/>
         <Documentation>

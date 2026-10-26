@@ -30,7 +30,6 @@
 #include "vtkSMRenderViewProxy.h"
 #include "vtkSMSourceProxy.h"
 #include "vtkSphereRepresentation.h"
-#include "vtkSphereSource.h"
 #include "vtkSphereWidget2.h"
 #include "vtkStaticCellLocator.h"
 #include "vtkStaticPointLocator.h"
@@ -176,7 +175,9 @@ void StyleSphereRepresentation(vtkSphereRepresentation* rep)
   rep->SetRepresentationToSurface();
   rep->SetPhiResolution(24);
   rep->SetThetaResolution(32);
-  rep->HandleVisibilityOn();
+  // No surface handle: the radius is edited in the panel (and right-drag still scales), so the
+  // handle would just add a second, conflicting way to change it.
+  rep->HandleVisibilityOff();
   if (auto* p = rep->GetSphereProperty())
   {
     p->SetColor(0.2, 0.65, 1.0);
@@ -187,16 +188,12 @@ void StyleSphereRepresentation(vtkSphereRepresentation* rep)
     p->SetColor(1.0, 0.85, 0.15);
     p->SetOpacity(0.45);
   }
-  if (auto* p = rep->GetHandleProperty())
-  {
-    p->SetColor(0.2, 0.65, 1.0);
-  }
 }
 
 /**
- * vtkSphereRepresentation::SetCenter() rewrites the radius from the handle distance whenever the
- * handle is visible. That silently discards a radius the user just set, so every center update has
- * to put the radius back.
+ * vtkSphereRepresentation::SetCenter() rewrites the radius from the handle distance while the
+ * handle is visible. The handle is off here, but keep this helper: it makes every center update
+ * preserve the radius unconditionally instead of relying on that detail.
  */
 void SetSphereCenterKeepingRadius(vtkSphereRepresentation* rep, const double center[3], double radius)
 {
@@ -241,82 +238,6 @@ void StylePlaneWidget(vtkPlaneWidget* widget)
 }
 
 //-----------------------------------------------------------------------------
-// Sphere representation with the interactions the seed widget advertises:
-//  - left-drag on the sphere body  -> translate (vtkSphereRepresentation::OnSphere).
-//  - left-drag on the surface handle -> change the radius (stock VTK only rotates the handle
-//    there: SetHandleDirection() renormalizes to the current radius, so radius never changed).
-//  - right-drag -> the stock vtkSphereWidget2 scale path.
-//-----------------------------------------------------------------------------
-class vtkSHYXSeedSphereRepresentation : public vtkSphereRepresentation
-{
-public:
-  static vtkSHYXSeedSphereRepresentation* New();
-  vtkTypeMacro(vtkSHYXSeedSphereRepresentation, vtkSphereRepresentation);
-
-  void WidgetInteraction(double e[2]) override
-  {
-    if (this->InteractionState != vtkSphereRepresentation::MovingHandle || !this->Renderer ||
-      !this->SphereSource)
-    {
-      this->Superclass::WidgetInteraction(e);
-      return;
-    }
-
-    vtkCamera* camera = this->Renderer->GetActiveCamera();
-    if (!camera)
-    {
-      return;
-    }
-
-    // Drag on the plane that contains the handle and faces the camera, so the cursor distance
-    // from the (fixed) center maps directly to the radius.
-    double focalPoint[4];
-    vtkInteractorObserver::ComputeWorldToDisplay(this->Renderer, this->LastPickPosition[0],
-      this->LastPickPosition[1], this->LastPickPosition[2], focalPoint);
-    const double z = focalPoint[2];
-
-    double pickPoint[4];
-    vtkInteractorObserver::ComputeDisplayToWorld(this->Renderer, e[0], e[1], z, pickPoint);
-
-    double center[3];
-    this->SphereSource->GetCenter(center);
-    double dir[3] = { pickPoint[0] - center[0], pickPoint[1] - center[1],
-      pickPoint[2] - center[2] };
-    double radius = vtkMath::Norm(dir);
-    if (!std::isfinite(radius) || radius <= 0.0)
-    {
-      return;
-    }
-
-    const double minRadius = 1.0e-06 * (this->InitialLength > 0.0 ? this->InitialLength : 1.0);
-    if (radius < minRadius)
-    {
-      radius = minRadius;
-    }
-
-    this->SphereSource->SetRadius(radius);
-    // |dir| == radius here, so SetHandleDirection() places the handle exactly under the cursor
-    // (its internal factor is radius / |dir| == 1) and updates HandleDirection.
-    this->SetHandleDirection(dir);
-    this->AdaptCenterCursorBounds();
-    this->Modified();
-
-    this->LastEventPosition[0] = e[0];
-    this->LastEventPosition[1] = e[1];
-    this->LastEventPosition[2] = 0.0;
-  }
-
-protected:
-  vtkSHYXSeedSphereRepresentation() = default;
-  ~vtkSHYXSeedSphereRepresentation() override = default;
-
-private:
-  vtkSHYXSeedSphereRepresentation(const vtkSHYXSeedSphereRepresentation&) = delete;
-  void operator=(const vtkSHYXSeedSphereRepresentation&) = delete;
-};
-
-vtkStandardNewMacro(vtkSHYXSeedSphereRepresentation);
-
 //-----------------------------------------------------------------------------
 pqSHYXStreamlineSeedWidget::pqSHYXStreamlineSeedWidget(
   vtkSMProxy* proxy, vtkSMPropertyGroup* group, QWidget* parent)
@@ -385,11 +306,12 @@ void pqSHYXStreamlineSeedWidget::buildUi()
 
   auto* tip = new QLabel(
     tr("Line: drag either endpoint; both endpoints can snap. "
-       "Sphere: left-drag the ball to move it; left-drag the handle (small ball on its surface) to "
-       "change the radius. "
+       "Sphere: left-drag the ball to move it; set Radius in the panel (or right-drag to scale). "
        "Rectangle: drag the corners / normal to resize and rotate. "
        "Snap casts a ray through the cursor onto the Input surface and takes the vertex nearest "
        "that front-most hit (switch to Nearest vertex (3D) to ignore the camera). "
+       "Place in view drops the seed where the camera is looking (Line: 1/3 and 2/3 across the "
+       "viewport, Sphere/Rectangle: viewport center). "
        "Seeds update live; streamlines refresh on Apply (or tick Apply on release)."),
     this);
   tip->setWordWrap(true);
@@ -405,10 +327,14 @@ void pqSHYXStreamlineSeedWidget::buildUi()
   // Items come from the SeedShape EnumerationDomain in linkProperties(); the entry texts are what
   // the SM property round-trips, so they must not be hand-written here.
   topRow->addWidget(this->ShapeCombo, 1);
-  this->PlaceFromBounds = new QPushButton(tr("Place at bounds"), this);
+  this->PlaceFromBounds = new QPushButton(tr("Place in view"), this);
   this->PlaceFromBounds->setObjectName("SHYXStreamlineSeedPlaceAtBounds");
   this->PlaceFromBounds->setToolTip(
-    tr("Put the current seed at the input bounds center with a size proportional to the bounds."));
+    tr("Move the seed to what the camera is looking at, so it always lands inside the view:\n"
+       "Line takes the 1/3 and 2/3 positions across the viewport width;\n"
+       "Sphere and Rectangle take the viewport center.\n"
+       "Each target is ray-picked on the Input surface and snapped to the nearest vertex. "
+       "Sizes are a fraction of the viewport, converted to world units at that depth."));
   topRow->addWidget(this->PlaceFromBounds);
   this->ShowInteractive = new QCheckBox(tr("Show 3D widget"), this);
   this->ShowInteractive->setObjectName("SHYXStreamlineSeedShowWidget");
@@ -501,6 +427,9 @@ void pqSHYXStreamlineSeedWidget::buildUi()
     radiusRow->addWidget(new QLabel(tr("Radius"), this->SphereGroup));
     this->SphereRadius = MakeDoubleSpin(this->SphereGroup);
     this->SphereRadius->setMinimum(0.0);
+    this->SphereRadius->setToolTip(
+      tr("Ball radius. The 3D widget has no radius handle: edit this value to resize, or "
+         "right-drag the ball in the view."));
     radiusRow->addWidget(this->SphereRadius, 1);
     radiusRow->addWidget(new QLabel(tr("Interior points"), this->SphereGroup));
     this->SphereInteriorCount = MakeIntSpin(this->SphereGroup, 1, 100000000);
@@ -936,14 +865,70 @@ void pqSHYXStreamlineSeedWidget::onPlaceFromBounds()
     this->setStatus(tr("No client-side input dataset; edit the seed values manually."));
     return;
   }
+  vtkRenderer* ren = this->renderer();
+  if (!ren || !this->ensureSnapper())
+  {
+    this->setStatus(tr("No active 3D view with an Input surface; edit the seed values manually."));
+    return;
+  }
 
+  int* size = ren->GetSize();
+  if (!size || size[0] <= 0 || size[1] <= 0)
+  {
+    this->setStatus(tr("The 3D view has no size yet; edit the seed values manually."));
+    return;
+  }
+  const double width = static_cast<double>(size[0]);
+  const double height = static_cast<double>(size[1]);
+  const double midX = 0.5 * width;
+  const double midY = 0.5 * height;
+
+  // Place from where the camera actually looks, so the seed always lands inside the current view
+  // instead of at the dataset bounds center (which can be off-screen after zooming/panning).
+  // Line takes the 1/3 and 2/3 points of the viewport width; sphere / rectangle take the center.
+  double lineStart[3];
+  double lineEnd[3];
+  double viewCenter[3];
+  const bool haveStart =
+    this->surfacePointFromDisplay(width / 3.0, midY, lineStart);
+  const bool haveEnd =
+    this->surfacePointFromDisplay(2.0 * width / 3.0, midY, lineEnd);
+  const bool haveCenter = this->surfacePointFromDisplay(midX, midY, viewCenter);
+
+  // Fallback when a ray misses the surface (point cloud, or the view is aimed off the model).
   double b[6];
   input->GetBounds(b);
-  const double center[3] = {
+  const double boundsCenter[3] = {
     0.5 * (b[0] + b[1]), 0.5 * (b[2] + b[3]), 0.5 * (b[4] + b[5])
   };
-  const double length = std::max({ b[1] - b[0], b[3] - b[2], b[5] - b[4], 1e-6 });
+  const double boundsLength = std::max({ b[1] - b[0], b[3] - b[2], b[5] - b[4], 1e-6 });
+
   const int shape = this->currentShape();
+  double anchor[3];
+  if (haveCenter)
+  {
+    std::copy(viewCenter, viewCenter + 3, anchor);
+  }
+  else
+  {
+    std::copy(boundsCenter, boundsCenter + 3, anchor);
+  }
+
+  // Sizes as a fraction of the viewport, converted to world length at the anchor depth, so the
+  // initial gizmo has a sensible on-screen size regardless of dataset units.
+  const double minSide = std::min(width, height);
+  const double radiusPixels = 0.15 * minSide;
+  const double halfSidePixels = 0.20 * minSide;
+  double radius = this->worldLengthForPixels(anchor, radiusPixels);
+  double halfSide = this->worldLengthForPixels(anchor, halfSidePixels);
+  if (!(radius > 0.0) || !std::isfinite(radius))
+  {
+    radius = 0.15 * boundsLength;
+  }
+  if (!(halfSide > 0.0) || !std::isfinite(halfSide))
+  {
+    halfSide = 0.25 * boundsLength;
+  }
 
   // Suppress the per-coordinate sync while the controls are rewritten; one sync + render runs at
   // the end so the 3D widget jumps to the new placement immediately (Apply is not required for the
@@ -951,8 +936,32 @@ void pqSHYXStreamlineSeedWidget::onPlaceFromBounds()
   this->UpdatingFromWidget = true;
   if (shape == 0)
   {
-    const double p1[3] = { center[0] - 0.25 * length, center[1], center[2] };
-    const double p2[3] = { center[0] + 0.25 * length, center[1], center[2] };
+    double p1[3];
+    double p2[3];
+    if (haveStart && haveEnd && !NearlySamePoint(lineStart, lineEnd))
+    {
+      std::copy(lineStart, lineStart + 3, p1);
+      std::copy(lineEnd, lineEnd + 3, p2);
+    }
+    else
+    {
+      // At least one screen position missed the surface: keep the line on screen by running it
+      // along the camera right vector through the anchor, with the same 1/3 -> 2/3 screen span.
+      double right[3] = { 1.0, 0.0, 0.0 };
+      double up[3] = { 0.0, 1.0, 0.0 };
+      this->cameraRightUp(right, up);
+      double span = this->worldLengthForPixels(anchor, width / 3.0);
+      if (!(span > 0.0) || !std::isfinite(span))
+      {
+        span = halfSide;
+      }
+      p1[0] = anchor[0] - span * right[0];
+      p1[1] = anchor[1] - span * right[1];
+      p1[2] = anchor[2] - span * right[2];
+      p2[0] = anchor[0] + span * right[0];
+      p2[1] = anchor[1] + span * right[1];
+      p2[2] = anchor[2] + span * right[2];
+    }
     for (int i = 0; i < 3; ++i)
     {
       if (this->LineP1[i])
@@ -971,21 +980,37 @@ void pqSHYXStreamlineSeedWidget::onPlaceFromBounds()
     {
       if (this->SphereCenter[i])
       {
-        this->SphereCenter[i]->setValue(center[i]);
+        this->SphereCenter[i]->setValue(anchor[i]);
       }
     }
     if (this->SphereRadius)
     {
-      this->SphereRadius->setValue(0.15 * length);
+      this->SphereRadius->setValue(radius);
     }
   }
   else
   {
+    // Rectangle faces the camera: the origin is the center ray hit, the two edges follow the
+    // camera right / up vectors so the plane is parallel to the screen.
+    double right[3] = { 1.0, 0.0, 0.0 };
+    double up[3] = { 0.0, 1.0, 0.0 };
+    this->cameraRightUp(right, up);
+
     const double origin[3] = {
-      center[0] - 0.25 * length, center[1] - 0.25 * length, center[2]
+      anchor[0] - halfSide * right[0] - halfSide * up[0],
+      anchor[1] - halfSide * right[1] - halfSide * up[1],
+      anchor[2] - halfSide * right[2] - halfSide * up[2]
     };
-    const double p1[3] = { origin[0] + 0.5 * length, origin[1], origin[2] };
-    const double p2[3] = { origin[0], origin[1] + 0.5 * length, origin[2] };
+    const double p1[3] = {
+      origin[0] + 2.0 * halfSide * right[0],
+      origin[1] + 2.0 * halfSide * right[1],
+      origin[2] + 2.0 * halfSide * right[2]
+    };
+    const double p2[3] = {
+      origin[0] + 2.0 * halfSide * up[0],
+      origin[1] + 2.0 * halfSide * up[1],
+      origin[2] + 2.0 * halfSide * up[2]
+    };
     for (int i = 0; i < 3; ++i)
     {
       if (this->RectangleOrigin[i])
@@ -1008,9 +1033,55 @@ void pqSHYXStreamlineSeedWidget::onPlaceFromBounds()
   Q_EMIT this->changeAvailable();
   Q_EMIT this->changeFinished();
   const bool autoApply = this->AutoApply && this->AutoApply->isChecked();
-  this->setStatus(autoApply ? tr("Seed placed at the input bounds center. Applying streamlines.")
-                            : tr("Seed placed at the input bounds center. Click Apply to refresh."));
+  const bool placedOnSurface = shape == 0 ? (haveStart || haveEnd) : haveCenter;
+  const QString where = placedOnSurface
+    ? (shape == 0 ? tr("Seed placed on the surface at the 1/3 and 2/3 view positions.")
+                  : tr("Seed placed on the surface at the view center."))
+    : tr("Surface was not hit at the target screen position; placed at the dataset bounds center.");
+  this->setStatus(autoApply ? tr("%1 Applying streamlines.").arg(where)
+                            : tr("%1 Click Apply to refresh.").arg(where));
   this->applyOnRelease();
+}
+
+//-----------------------------------------------------------------------------
+void pqSHYXStreamlineSeedWidget::cameraRightUp(double right[3], double up[3]) const
+{
+  right[0] = 1.0;
+  right[1] = 0.0;
+  right[2] = 0.0;
+  up[0] = 0.0;
+  up[1] = 1.0;
+  up[2] = 0.0;
+
+  vtkRenderer* ren = this->renderer();
+  vtkCamera* camera = ren ? ren->GetActiveCamera() : nullptr;
+  if (!camera)
+  {
+    return;
+  }
+
+  double viewUp[3];
+  double direction[3];
+  camera->GetViewUp(viewUp);
+  camera->GetDirectionOfProjection(direction);
+  if (vtkMath::Normalize(viewUp) <= 0.0 || vtkMath::Normalize(direction) <= 0.0)
+  {
+    return;
+  }
+  // Screen right = view direction x up (VTK looks down -direction, so this keeps right-handed
+  // screen axes); atan-free and stable as long as the camera is not degenerate.
+  double r[3];
+  vtkMath::Cross(direction, viewUp, r);
+  if (vtkMath::Normalize(r) <= 0.0)
+  {
+    return;
+  }
+  right[0] = r[0];
+  right[1] = r[1];
+  right[2] = r[2];
+  up[0] = viewUp[0];
+  up[1] = viewUp[1];
+  up[2] = viewUp[2];
 }
 
 //-----------------------------------------------------------------------------
@@ -1201,11 +1272,13 @@ void pqSHYXStreamlineSeedWidget::createSphereWidget(vtkRenderWindowInteractor* i
   }
 
   auto widget = vtkSmartPointer<vtkSphereWidget2>::New();
-  auto rep = vtkSmartPointer<vtkSHYXSeedSphereRepresentation>::New();
+  auto rep = vtkSmartPointer<vtkSphereRepresentation>::New();
   StyleSphereRepresentation(rep);
   widget->SetRepresentation(rep);
   widget->SetInteractor(iren);
   widget->SetPriority(1.0);
+  // Left-drag translates; the radius has no handle, so it comes from the panel Radius value
+  // (right-drag scaling from vtkSphereWidget2 stays available as a quick 3D adjust).
   widget->TranslationEnabledOn();
   widget->ScalingEnabledOn();
   widget->AddObserver(vtkCommand::StartInteractionEvent, this->WidgetObserver, 1.0);
@@ -1501,27 +1574,18 @@ vtkRenderer* pqSHYXStreamlineSeedWidget::renderer() const
 }
 
 //-----------------------------------------------------------------------------
-bool pqSHYXStreamlineSeedWidget::rayPickSurfacePoint(const double world[3], double hit[3])
+bool pqSHYXStreamlineSeedWidget::rayPickAtDisplay(double displayX, double displayY, double hit[3])
 {
   vtkRenderer* ren = this->renderer();
-  if (!ren || !this->SnapCellLocator)
-  {
-    return false;
-  }
-
-  ren->SetWorldPoint(world[0], world[1], world[2], 1.0);
-  ren->WorldToDisplay();
-  double display[3];
-  ren->GetDisplayPoint(display);
-  if (!std::isfinite(display[0]) || !std::isfinite(display[1]))
+  if (!ren || !this->SnapCellLocator || !std::isfinite(displayX) || !std::isfinite(displayY))
   {
     return false;
   }
 
   double nearPoint[4];
   double farPoint[4];
-  vtkInteractorObserver::ComputeDisplayToWorld(ren, display[0], display[1], 0.0, nearPoint);
-  vtkInteractorObserver::ComputeDisplayToWorld(ren, display[0], display[1], 1.0, farPoint);
+  vtkInteractorObserver::ComputeDisplayToWorld(ren, displayX, displayY, 0.0, nearPoint);
+  vtkInteractorObserver::ComputeDisplayToWorld(ren, displayX, displayY, 1.0, farPoint);
 
   double t = 0.0;
   double x[3] = { 0.0, 0.0, 0.0 };
@@ -1538,6 +1602,73 @@ bool pqSHYXStreamlineSeedWidget::rayPickSurfacePoint(const double world[3], doub
   hit[1] = x[1];
   hit[2] = x[2];
   return true;
+}
+
+//-----------------------------------------------------------------------------
+bool pqSHYXStreamlineSeedWidget::rayPickSurfacePoint(const double world[3], double hit[3])
+{
+  vtkRenderer* ren = this->renderer();
+  if (!ren)
+  {
+    return false;
+  }
+
+  ren->SetWorldPoint(world[0], world[1], world[2], 1.0);
+  ren->WorldToDisplay();
+  double display[3];
+  ren->GetDisplayPoint(display);
+  return this->rayPickAtDisplay(display[0], display[1], hit);
+}
+
+//-----------------------------------------------------------------------------
+bool pqSHYXStreamlineSeedWidget::surfacePointFromDisplay(
+  double displayX, double displayY, double out[3])
+{
+  if (!this->ensureSnapper())
+  {
+    return false;
+  }
+  double hit[3];
+  if (!this->rayPickAtDisplay(displayX, displayY, hit))
+  {
+    return false;
+  }
+  // Same target the Screen ray snap mode uses: the vertex nearest the front-most surface hit.
+  const vtkIdType id = this->SnapLocator->FindClosestPoint(hit);
+  if (id < 0)
+  {
+    out[0] = hit[0];
+    out[1] = hit[1];
+    out[2] = hit[2];
+    return true;
+  }
+  this->SnapSurface->GetPoint(id, out);
+  return true;
+}
+
+//-----------------------------------------------------------------------------
+double pqSHYXStreamlineSeedWidget::worldLengthForPixels(const double at[3], double pixels) const
+{
+  vtkRenderer* ren = this->renderer();
+  if (!ren || !(pixels > 0.0))
+  {
+    return 0.0;
+  }
+
+  ren->SetWorldPoint(at[0], at[1], at[2], 1.0);
+  ren->WorldToDisplay();
+  double display[3];
+  ren->GetDisplayPoint(display);
+
+  double a[4];
+  double b[4];
+  vtkInteractorObserver::ComputeDisplayToWorld(ren, display[0], display[1], display[2], a);
+  vtkInteractorObserver::ComputeDisplayToWorld(ren, display[0] + pixels, display[1], display[2], b);
+  const double dx = a[0] - b[0];
+  const double dy = a[1] - b[1];
+  const double dz = a[2] - b[2];
+  const double length = std::sqrt(dx * dx + dy * dy + dz * dz);
+  return std::isfinite(length) ? length : 0.0;
 }
 
 //-----------------------------------------------------------------------------

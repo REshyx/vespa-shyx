@@ -219,8 +219,8 @@ protected:
   double SphereRadius = 1.0;
   int SphereThetaResolution = 32;
   int SpherePhiResolution = 24;
-  int SphereSeedMode = SphereSurface;
-  vtkIdType SphereInteriorPointCount = 100;
+  int SphereSeedMode = SphereInterior;
+  vtkIdType SphereInteriorPointCount = 20;
   int SphereRandomSeed = 1;
   vtkTypeBool SphereSnapCenter = 1;
 

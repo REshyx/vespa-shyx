@@ -38,6 +38,18 @@ public:
   vtkSetMacro(Pow, double);
   vtkGetMacro(Pow, double);
 
+  /**
+   * Give every connected streamline (polyline or tube) its own random pulse phase, so streamlines
+   * whose seed points lie on a line or a plane do not advance as one layered sheet.
+   */
+  vtkSetMacro(Randomize, bool);
+  vtkGetMacro(Randomize, bool);
+  vtkBooleanMacro(Randomize, bool);
+
+  /** Random phase spread in pulse cycles (0 = none, >= 1 = fully de-synchronized). */
+  vtkSetMacro(RandomizeScale, double);
+  vtkGetMacro(RandomizeScale, double);
+
   vtkSetStringMacro(AnimationCoordinateArray);
   vtkGetStringMacro(AnimationCoordinateArray);
 
@@ -57,7 +69,7 @@ protected:
   void UpdateShaderReplacements();
   void UpdateAnimationMTime();
   void OnUpdateShader(void* calldata);
-  void SyncAnimatedMapperAnimationCoordinateArray();
+  void SyncAnimatedMapperSettings();
   static void ShaderCallback(
     vtkObject* caller, unsigned long eid, void* clientdata, void* calldata);
 
@@ -69,6 +81,8 @@ protected:
   double IntegrationScale;
   double Trunc;
   double Pow;
+  bool Randomize;
+  double RandomizeScale;
 
   /** Point array copied to tcoord.x for the pulse (default IntegrationTime). */
   char* AnimationCoordinateArray = nullptr;

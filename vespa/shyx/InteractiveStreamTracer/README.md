@@ -4,8 +4,7 @@
 
 一个滤镜同时封装 **可交互种子 + `vtkStreamTracer`**。不再需要先在管线里建 Line/Sphere/Plane Source 再接到 Stream Tracer：在属性面板切换 **Seed Shape**，用 3D widget 拖种子，释放时按需吸附到输入表面顶点，然后直接得到流线。
 
-- 输入：**一个**流场数据集（`vtkDataSet`，带 3 分量矢量）。
-- 端口 0：流线。
+- 输入：**一个**流场数据集（`vtkDataSet`，带 3 分量矢量）。- 端口 0：流线。
 - 端口 1：实际使用的种子几何（线 / 球面 / 平面）。
 
 ## 三种种子形状
@@ -13,11 +12,16 @@
 | Seed Shape | 种子几何 | 交互 | 吸附 |
 | :--- | :--- | :--- | :--- |
 | **Line**（0） | `vtkLineSource`，`LineResolution + 1` 个点 | 左键拖两个端点；中间手柄整体平移 | **每个端点独立**：`LineSnapPoint1` / `LineSnapPoint2` |
-| **Sphere**（1） | `vtkSphereSource` 表面点 | **左键拖球体**平移；**左键拖球面上的 handle** 改半径（自定义 `vtkSHYXSeedSphereRepresentation`：半径 = handle 投影平面上光标到球心的距离）；右键仍是 VTK 原生缩放 | 球心：`SphereSnapCenter`（吸附后保留你拖出来的半径） |
+| **Sphere**（1） | `vtkSphereSource` 表面点 / `vtkPointSource` 球内点 | **左键拖球体**平移；**半径在面板 Radius 里改**（3D 上不显示 handle，也不再用拖 handle 改半径）；右键拖拽仍可快速缩放 | 球心：`SphereSnapCenter` |
 | **Rectangle**（2） | `vtkPlaneSource`，矩形平面 | `vtkPlaneWidget`：角点缩放、法向箭头旋转、平面平移 | 原点：`RectangleSnapOrigin`；Point 1 / Point 2 随原点平移，保持尺寸与朝向 |
 
 > **Apply on release 默认关闭**：拖完/输入完只更新种子，流线要点 **Apply** 才刷新（勾选后松手自动 Apply）。
-> **Place at bounds** 把当前种子放到输入包围盒中心、尺寸按包围盒比例初始化；它**立即**移动 3D widget，不需要先 Apply。
+> **Place in view** 把当前种子放到**相机正在看的地方**，保证落在当前视图内（不再是包围盒中心，缩放/平移后可能跑到视野外）：
+> - **Line**：取视口宽度 **1/3** 和 **2/3** 处两个屏幕位置，各自打射线命中 Input 表面并吸到最近顶点；
+> - **Sphere / Rectangle**：取**视口中心**打射线，命中点作为球心 / 矩形原点；
+> - 尺寸按视口比例（球半径 15% 短边、矩形半边长 20% 短边）换算成命中深度处的世界长度；
+> - 矩形两条边沿相机 right / up，所以初始就是正对屏幕的平面；
+> - 某条射线没打中表面时回退到数据集包围盒中心（状态栏会提示），不会没反应。
 
 ## 吸附规则（vessel / stent）
 
@@ -60,12 +64,12 @@ Theta 调大 → 竖瓣更密；Phi 调大 → 横圈更密。两者都只影响
 
 | 模式 | 种子来源 | 数量由谁决定 |
 | :--- | :--- | :--- |
-| **Surface (theta x phi grid)**（默认） | `vtkSphereSource` 的顶点 | Theta / Phi 网格 |
-| **Interior (point count)** | `vtkPointSource` 在球内均匀撒点（`rho = R·u^⅓`） | **Interior points** 数字框，精确等于该值 |
+| **Surface (theta x phi grid)** | `vtkSphereSource` 的顶点 | Theta / Phi 网格 |
+| **Interior (point count)**（默认） | `vtkPointSource` 在球内均匀撒点（`rho = R·u^⅓`） | **Interior points** 数字框，精确等于该值 |
 
 Interior 模式下：
 
-- **Interior points**：球内种子点数，默认 100，是**精确值**（不是网格近似）；
+- **Interior points**：球内种子点数，默认 **20**，是**精确值**（不是网格近似）；
 - **Random seed**（Advanced）：同样的点数 + 同样的种子 → 每次 Apply 位置完全一致；改种子就换一套分布；
 - 球的 center / radius 仍然由 3D widget 控制，拖球、拖 handle 都照常；
 - 面板底部显示 `Interior sampling: N seed points uniformly inside the ball.`。
@@ -83,8 +87,8 @@ Interior 模式与 Surface 模式互斥，切换时另一组控件会灰显/隐�
 | **LineSnapPoint1 / LineSnapPoint2** | on | 释放时把该端点吸到最近表面顶点 |
 | **SphereCenter** | `0 0 0` | 球心 |
 | **SphereRadius** | 1.0 | 半径；≤0 时用包围盒最长边的 15% |
-| **SphereSeedMode** | Surface | 0 Surface（球面网格）/ 1 Interior（球内均匀撒点） |
-| **SphereInteriorPointCount** | 100 | Interior 模式的种子数，精确值 |
+| **SphereSeedMode** | Interior | 0 Surface（球面网格）/ 1 Interior（球内均匀撒点） |
+| **SphereInteriorPointCount** | 20 | Interior 模式的种子数，精确值 |
 | **SphereRandomSeed** | 1 | Interior 采样随机种子（高级）；同种子同结果 |
 | **SphereThetaResolution / SpherePhiResolution** | 32 / 24 | Surface 模式网格：`Theta x (Phi-2) + 2` 个种子 |
 | **SphereSnapCenter** | on | 释放时球心吸附 |
@@ -137,9 +141,7 @@ Show(tracer, view, 'Seeds')             # port 1 seed geometry
 - 模块：`vespa/shyx/InteractiveStreamTracer/`，`vtk.module NAME=vtkSHYXInteractiveStreamTracer`，`GROUPS=Flow`。
 - 纯 VTK：`vtkStreamTracer` + `vtkLineSource` / `vtkSphereSource` / `vtkPointSource` / `vtkPlaneSource` + `vtkDataSetSurfaceFilter` + `vtkStaticPointLocator` / `vtkStaticCellLocator`。
 - 客户端 widget：`ParaViewPlugin/widgets/pqSHYXStreamlineSeedWidget.*`，注册为 `panel_widget="shyx_streamline_seed"`（`PropertyWidgets.cmake`）。3D widget 直接建在 RenderView 的 interactor 上，不新增 SM widget representation XML。
-- 球体交互：本地 `vtkSHYXSeedSphereRepresentation` 继承 `vtkSphereRepresentation`，只覆盖 `WidgetInteraction()`：
-  - `MovingHandle`（左键拖 surface handle）：半径 = 光标在 handle 投影平面上到球心的距离（VTK 原生这里只旋转 handle、半径不变）；随后 `SetHandleDirection()` 把 handle 放到光标处。
-  - `Translating` / `Scaling` 仍走父类，所以左键拖球体平移、右键缩放。
-- **半径保护**：`vtkSphereRepresentation::SetCenter()` 在 handle 可见时会把半径改成「handle 到新球心的距离」。任何移动球心的地方都必须随后把半径写回（`SetSphereCenterKeepingRadius`），否则拖一次位置半径就被冲掉。
+- 球体交互：直接用 `vtkSphereWidget2` + `vtkSphereRepresentation`，**不显示 surface handle**（`HandleVisibilityOff()`）；左键拖球体平移，半径通过面板 **Radius** 修改（右键拖拽仍是 VTK 原生缩放）。
+- **半径保护**：`vtkSphereRepresentation::SetCenter()` 在 handle 可见时会把半径改成「handle 到新球心的距离」。这里 handle 已关闭，但移动球心统一走 `SetSphereCenterKeepingRadius()`，不依赖该细节。
 - **枚举下拉必须按 entry 文本链接**：`pqSMAdaptor::setEnumerationProperty` 只匹配 `EnumerationDomain` 的 entry 文本。用 `addPropertyLink(combo, "currentIndex", ...)` 写进去的是 `"0"/"1"/"2"`，匹配不到任何 entry，属性静默保持不变（表现就是「切了形状但 Apply 后仍是 Line 的种子」）。正确做法是把 item 文本直接用 domain 的 `GetEntryText()` 填，然后链接 `currentText` + `currentTextChanged`（`PopulateEnumCombo()` / `ComboEnumValue()`）。
 - 自定义 `panel_widget` 组内，成员属性上的 `PropertyWidgetDecorator` **不生效**（pqProxyWidget 整个组交给自定义 widget），Sphere 的 sampling/theta/phi 显示与灰显由 widget 自己处理。

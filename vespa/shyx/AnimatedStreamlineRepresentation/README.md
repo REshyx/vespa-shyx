@@ -1,6 +1,6 @@
 # Animated Streamline Representation
 
-Display 下拉 **`Animated Streamline`**。不要构造 representation proxy。Python：`Representation = 'Animated Streamline'`，属性 **`AS_*`**（`disp.AS_Animate`、`AS_TimeScale`、`AS_IntegrationScale`、`AS_OpacityScale`、`AS_Trunc`、`AS_Pow`、`AS_AnimationCoordinateArray`、`AS_AnimationCoordinateYArray`）。
+Display 下拉 **`Animated Streamline`**。不要构造 representation proxy。Python：`Representation = 'Animated Streamline'`，属性 **`AS_*`**（`disp.AS_Animate`、`AS_TimeScale`、`AS_IntegrationScale`、`AS_OpacityScale`、`AS_Trunc`、`AS_Pow`、`AS_Randomize`、`AS_RandomizeScale`、`AS_AnimationCoordinateArray`、`AS_AnimationCoordinateYArray`）。
 
 ## 示意图
 
@@ -48,6 +48,13 @@ Display 下拉 **`Animated Streamline`**。不要构造 representation proxy。P
 * **`Pow` (double)** 
   * **含义**：衰减指数（默认 `1.0`）。
   * **效果**：控制动画拖尾的**消散曲线**。值大于 1 会使透明度非线性快速衰减，值小于 1 则产生更平滑的拖尾过渡。
+* **`Randomize` (bool)** 
+  * **含义**：逐流线随机相位开关（默认 `false`）。
+  * **效果**：种子点排成一条线或一个平面时，各条流线在 `animCoordx` 上的取值几乎同步，脉冲会像**层叠的片状**一起推进。打开后，**每条连通流线（polyline，或包在它外面的 tube 表面）**在写入 `tcoord.x` 时额外加一个随机的相位偏移，同一组件内所有点共用同一个随机数，因此单条流线上的脉冲仍连续，不同流线之间错开。
+  * **注意**：偏移是烘进 `tcoord.x` 的（不新增顶点属性），所以需要 **`AnimationCoordinateArray` 指向的数组存在**；走弧长回退（没有该数组）时不起作用。随机数由连通分量的锚点（点号最小的那个点）坐标做确定性哈希得到，拖滑块或重建纹理坐标时图案不会变；用 `Tube`/`StreamTracer` 生成的网格同样按连通分量分组，一个管套一条线时不会逐三角形乱跳；`MultiBlock`/PDC 每个 block 各一条流线时也会拿到不同相位。
+* **`RandomizeScale` (double)** 
+  * **含义**：随机相位的幅度，单位是**脉冲周期**（默认 `1.0`）。
+  * **效果**：偏移量取 `[0, RandomizeScale)` 个周期，再除以 `IntegrationScale` 换算成 `tcoord.x` 的单位。`0` 等于关闭；`1` 时每条流线的相位在整周期内均匀随机，完全打散；大于 `1` 视觉效果基本不变（只有小数部分参与相位），所以一般用 `0`～`1` 之间做轻微错开。
 * **`AnimationCoordinateArray` (string)** 
   * **含义**：主动画坐标绑定的数据列名（默认 `"IntegrationTime"`）。
   * **效果**：指定用于驱动 Shader 动画演化的物理量数组，通常为流线的积分时间。
