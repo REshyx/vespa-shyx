@@ -2344,6 +2344,29 @@ const ShyxExtra kShyxExtra[] = {
   { "SHYXSelectionExtrudeFilter",
     "Connected-patch extrusion (shared cap vertices), not SHYX Extrude's Poly scales. "
     "Needs an active 3D selection of cells (or Selection Cell Array Name)." },
+  { "SHYXInteractiveStreamTracer",
+    "One filter, three interactive seed shapes: SeedShape 0 Line / 1 Sphere / 2 Rectangle (plane). "
+    "Input is the flow field; every vertex of its surface is a snap target (a volume input is "
+    "converted with vtkDataSetSurfaceFilter, so vessel and stent vertices in the same dataset are "
+    "both candidates). Snap mode is a client-side widget choice: Screen ray (default) casts a ray "
+    "through the cursor, takes the front-most Input surface hit, then its nearest vertex; Nearest "
+    "vertex (3D) ignores the camera. Both write vertex positions, so the filter's own nearest-vertex "
+    "snap in RequestData is idempotent (Python/batch only has the 3D mode). "
+    "Line: LinePoint1 / LinePoint2 snap independently when LineSnapPoint1 / "
+    "LineSnapPoint2 are on; LineResolution is subdivisions (Resolution + 1 seeds). Sphere: "
+    "SphereCenter snaps when SphereSnapCenter is on; in the 3D widget left-drag moves the ball while "
+    "left-drag on its surface handle changes SphereRadius (snapping the center keeps that radius). "
+    "SphereSeedMode 0 Surface = vtkSphereSource vertices, so the seed count is "
+    "SphereThetaResolution x (SpherePhiResolution - 2) + 2 (Theta = longitude slices, "
+    "Phi = pole-to-pole rings; 32 x 24 gives 706) and there are no seeds inside the ball. "
+    "SphereSeedMode 1 Interior = vtkPointSource uniform inside the ball with exactly "
+    "SphereInteriorPointCount seeds, reproducible via SphereRandomSeed. "
+    "Rectangle: RectangleOrigin / RectanglePoint1 / RectanglePoint2 are the "
+    "vtkPlaneSource origin and two edges; RectangleOrigin snaps when RectangleSnapOrigin is on and "
+    "Point1 / Point2 translate with it. Port 0 streamlines, port 1 seed geometry. The panel widget "
+    "is client-side; Python snapping still works because the filter also snaps in RequestData. "
+    "Rectangle port 1 can be added to SHYXSelectionAppendPatches (Add from pipeline) as a patch "
+    "geometry; OpenFOAM polyMesh output remains SHYXPartitionedCollectionToOpenFOAM." },
   { "SHYXSelectionAppendPatches",
     "Add from selection snapshots the 3D-view cell selection into the Patches table (geo_N); "
     "Copy Active Selection is not required. Add from Celldata dropdown lists Input CellData "

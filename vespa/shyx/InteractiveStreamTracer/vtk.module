@@ -1,0 +1,15 @@
+NAME
+  vtkSHYXInteractiveStreamTracer
+DESCRIPTION
+  "Interactive Stream Tracer: line / sphere / rectangle (plane) seed shapes with surface-vertex snapping."
+GROUPS
+  Flow
+DEPENDS
+  VTK::CommonExecutionModel
+  VTK::FiltersCore
+  VTK::FiltersFlowPaths
+  VTK::FiltersGeometry
+  VTK::FiltersSources
+PRIVATE_DEPENDS
+  VTK::CommonCore
+  VTK::CommonDataModel

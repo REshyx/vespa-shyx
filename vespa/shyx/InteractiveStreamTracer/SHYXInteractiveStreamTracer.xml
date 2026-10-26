@@ -1,0 +1,384 @@
+<ServerManagerConfiguration>
+  <ProxyGroup name="filters">
+    <SourceProxy name="SHYXInteractiveStreamTracer"
+                 class="vtkSHYXInteractiveStreamTracer"
+                 label="SHYX Interactive Stream Tracer">
+      <Documentation
+        short_help="Interactive StreamTracer with line / sphere / rectangle seed shapes and surface-vertex snapping."
+        long_help="One flow-field input. SeedShape selects the seed geometry built inside the filter:
+        Line (two endpoints, N samples, each endpoint can snap to the nearest input-surface vertex),
+        Sphere (center + radius, center can snap), or Rectangle (plane; origin / point1 / point2,
+        origin can snap and the two edge points translate with it). Snapping targets every vertex of
+        the input surface; a volume input is converted with vtkDataSetSurfaceFilter, so vessel wall
+        and stent surface vertices in the same dataset are both candidates. The interactive 3D widget
+        writes these properties: line endpoints, sphere center/radius (middle-button drag scales the
+        radius), and rectangle origin/edges. Output port 0 is streamlines; port 1 is the seed geometry.
+        Rectangle port 1 can be added to SHYX Selection Append Patches (Add from pipeline) as a patch
+        geometry, or fed to the PDC / OpenFOAM patch path."/>
+
+      <OutputPort index="0" name="Streamlines"/>
+      <OutputPort index="1" name="Seeds"/>
+
+      <InputProperty command="SetInputConnection" name="Input" label="Flow Field">
+        <ProxyGroupDomain name="groups">
+          <Group name="sources"/>
+          <Group name="filters"/>
+        </ProxyGroupDomain>
+        <DataTypeDomain name="input_type">
+          <DataType value="vtkDataSet"/>
+        </DataTypeDomain>
+        <InputArrayDomain name="input_array1"
+                          number_of_components="3"
+                          optional="0"/>
+        <Documentation>
+          Flow field with a 3-component vector array. Its surface vertices are the snap targets
+          for the line endpoints, sphere center, and rectangle origin.
+        </Documentation>
+      </InputProperty>
+
+      <StringVectorProperty name="SelectInputVectors"
+                            command="SetInputArrayToProcess"
+                            number_of_elements="5"
+                            element_types="0 0 0 0 2"
+                            label="Vectors">
+        <ArrayListDomain name="array_list"
+                         attribute_type="Vectors"
+                         input_domain_name="input_array1">
+          <RequiredProperties>
+            <Property name="Input" function="Input"/>
+          </RequiredProperties>
+        </ArrayListDomain>
+        <Documentation>
+          Vector array used by vtkStreamTracer.
+        </Documentation>
+      </StringVectorProperty>
+
+      <!-- ================= Seed shape ================= -->
+      <IntVectorProperty name="SeedShape"
+                         command="SetSeedShape"
+                         label="Seed Shape"
+                         default_values="0"
+                         number_of_elements="1">
+        <EnumerationDomain name="enum">
+          <Entry text="Line" value="0"/>
+          <Entry text="Sphere" value="1"/>
+          <Entry text="Rectangle (plane)" value="2"/>
+        </EnumerationDomain>
+        <Documentation>
+          Which seed geometry to build. Line and Rectangle expose per-point snap flags; Sphere
+          exposes a center snap flag.
+        </Documentation>
+      </IntVectorProperty>
+
+      <!-- Line -->
+      <DoubleVectorProperty name="LinePoint1"
+                            command="SetLinePoint1"
+                            label="Point 1"
+                            default_values="-1 0 0"
+                            number_of_elements="3"/>
+      <DoubleVectorProperty name="LinePoint2"
+                            command="SetLinePoint2"
+                            label="Point 2"
+                            default_values="1 0 0"
+                            number_of_elements="3"/>
+      <IntVectorProperty name="LineResolution"
+                         command="SetLineResolution"
+                         label="Resolution"
+                         default_values="20"
+                         number_of_elements="1">
+        <IntRangeDomain name="range" min="1" max="100000"/>
+        <Documentation>Number of subdivisions; the line seed has Resolution + 1 points.</Documentation>
+      </IntVectorProperty>
+      <IntVectorProperty name="LineSnapPoint1"
+                         command="SetLineSnapPoint1"
+                         label="Snap point 1 to surface vertex"
+                         default_values="1"
+                         number_of_elements="1">
+        <BooleanDomain name="bool"/>
+      </IntVectorProperty>
+      <IntVectorProperty name="LineSnapPoint2"
+                         command="SetLineSnapPoint2"
+                         label="Snap point 2 to surface vertex"
+                         default_values="1"
+                         number_of_elements="1">
+        <BooleanDomain name="bool"/>
+      </IntVectorProperty>
+
+      <!-- Sphere -->
+      <DoubleVectorProperty name="SphereCenter"
+                            command="SetSphereCenter"
+                            label="Center"
+                            default_values="0 0 0"
+                            number_of_elements="3"/>
+      <DoubleVectorProperty name="SphereRadius"
+                            command="SetSphereRadius"
+                            label="Radius"
+                            default_values="1.0"
+                            number_of_elements="1">
+        <DoubleRangeDomain name="range" min="0"/>
+      </DoubleVectorProperty>
+      <IntVectorProperty name="SphereSeedMode"
+                         command="SetSphereSeedMode"
+                         label="Sphere sampling"
+                         default_values="0"
+                         number_of_elements="1">
+        <EnumerationDomain name="enum">
+          <Entry text="Surface (theta x phi grid)" value="0"/>
+          <Entry text="Interior (point count)" value="1"/>
+        </EnumerationDomain>
+        <Documentation>
+          Surface: seeds are the vertices of a vtkSphereSource tessellation, so the count is
+          Theta Resolution x Phi Resolution (the mesh grid), not a number you type.
+          Interior: seeds are Sphere Interior Points uniformly scattered inside the ball,
+          reproducible with Sphere Random Seed.
+        </Documentation>
+      </IntVectorProperty>
+      <IntVectorProperty name="SphereInteriorPointCount"
+                         command="SetSphereInteriorPointCount"
+                         label="Interior points"
+                         default_values="100"
+                         number_of_elements="1">
+        <IntRangeDomain name="range" min="1"/>
+        <Documentation>
+          Exact number of seeds sampled uniformly inside the ball. Used only by the Interior
+          sampling mode; the Surface mode ignores it and follows the theta/phi grid instead.
+          The panel widget shows or hides it from SphereSeedMode (property decorators do not apply
+          inside a custom group widget).
+        </Documentation>
+      </IntVectorProperty>
+      <IntVectorProperty name="SphereRandomSeed"
+                         command="SetSphereRandomSeed"
+                         label="Random seed"
+                         default_values="1"
+                         number_of_elements="1"
+                         panel_visibility="advanced">
+        <IntRangeDomain name="range"/>
+        <Documentation>
+          Seed for the interior sampler. The same seed and point count give the same positions
+          on every Apply; change it to resample. Ignored in Surface mode.
+        </Documentation>
+      </IntVectorProperty>
+      <IntVectorProperty name="SphereThetaResolution"
+                         command="SetSphereThetaResolution"
+                         label="Theta (longitude) divisions"
+                         default_values="32"
+                         number_of_elements="1">
+        <IntRangeDomain name="range" min="3" max="1000"/>
+        <Documentation>
+          Number of points around the sphere axis (longitude, the "vertical slices").
+          Together with Phi this sets the surface seed count: Theta x (Phi - 2) + 2 vertices.
+          The panel widget disables it in the Interior sampling mode.
+        </Documentation>
+      </IntVectorProperty>
+      <IntVectorProperty name="SpherePhiResolution"
+                         command="SetSpherePhiResolution"
+                         label="Phi (latitude) divisions"
+                         default_values="24"
+                         number_of_elements="1">
+        <IntRangeDomain name="range" min="3" max="1000"/>
+        <Documentation>
+          Number of points pole to pole (latitude, the "horizontal rings"). The two poles are
+          single points, hence (Phi - 2) in the seed count formula.
+          The panel widget disables it in the Interior sampling mode.
+        </Documentation>
+      </IntVectorProperty>
+      <IntVectorProperty name="SphereSnapCenter"
+                         command="SetSphereSnapCenter"
+                         label="Snap center to surface vertex"
+                         default_values="1"
+                         number_of_elements="1">
+        <BooleanDomain name="bool"/>
+      </IntVectorProperty>
+
+      <!-- Rectangle (plane) -->
+      <DoubleVectorProperty name="RectangleOrigin"
+                            command="SetRectangleOrigin"
+                            label="Origin"
+                            default_values="0 0 0"
+                            number_of_elements="3"/>
+      <DoubleVectorProperty name="RectanglePoint1"
+                            command="SetRectanglePoint1"
+                            label="Point 1 (edge)"
+                            default_values="1 0 0"
+                            number_of_elements="3"/>
+      <DoubleVectorProperty name="RectanglePoint2"
+                            command="SetRectanglePoint2"
+                            label="Point 2 (edge)"
+                            default_values="0 1 0"
+                            number_of_elements="3"/>
+      <IntVectorProperty name="RectangleResolutionX"
+                         command="SetRectangleResolutionX"
+                         label="Resolution X"
+                         default_values="10"
+                         number_of_elements="1">
+        <IntRangeDomain name="range" min="1" max="1000"/>
+      </IntVectorProperty>
+      <IntVectorProperty name="RectangleResolutionY"
+                         command="SetRectangleResolutionY"
+                         label="Resolution Y"
+                         default_values="10"
+                         number_of_elements="1">
+        <IntRangeDomain name="range" min="1" max="1000"/>
+      </IntVectorProperty>
+      <IntVectorProperty name="RectangleSnapOrigin"
+                         command="SetRectangleSnapOrigin"
+                         label="Snap origin to surface vertex"
+                         default_values="1"
+                         number_of_elements="1">
+        <BooleanDomain name="bool"/>
+      </IntVectorProperty>
+
+      <!-- ================= StreamTracer ================= -->
+      <IntVectorProperty command="SetIntegrationDirection"
+                         name="IntegrationDirection"
+                         default_values="2"
+                         number_of_elements="1">
+        <EnumerationDomain name="enum">
+          <Entry text="FORWARD" value="0"/>
+          <Entry text="BACKWARD" value="1"/>
+          <Entry text="BOTH" value="2"/>
+        </EnumerationDomain>
+      </IntVectorProperty>
+
+      <IntVectorProperty command="SetIntegratorType"
+                         name="IntegratorType"
+                         default_values="2"
+                         number_of_elements="1">
+        <EnumerationDomain name="enum">
+          <Entry text="Runge-Kutta 2" value="0"/>
+          <Entry text="Runge-Kutta 4" value="1"/>
+          <Entry text="Runge-Kutta 4-5" value="2"/>
+        </EnumerationDomain>
+      </IntVectorProperty>
+
+      <IntVectorProperty command="SetIntegrationStepUnit"
+                         name="IntegrationStepUnit"
+                         label="Integration Step Unit"
+                         default_values="2"
+                         number_of_elements="1"
+                         panel_visibility="advanced">
+        <EnumerationDomain name="enum">
+          <Entry text="Length" value="1"/>
+          <Entry text="Cell Length" value="2"/>
+        </EnumerationDomain>
+      </IntVectorProperty>
+
+      <DoubleVectorProperty command="SetInitialIntegrationStep"
+                            name="InitialIntegrationStep"
+                            label="Initial Step Length"
+                            default_values="0.2"
+                            number_of_elements="1"
+                            panel_visibility="advanced">
+        <DoubleRangeDomain name="range"/>
+      </DoubleVectorProperty>
+
+      <DoubleVectorProperty command="SetMaximumPropagation"
+                            name="MaximumPropagation"
+                            label="Maximum Streamline Length"
+                            default_values="1.0"
+                            number_of_elements="1">
+        <BoundsDomain default_mode="max"
+                      mode="scaled_extent"
+                      name="bounds"
+                      scale_factor="1.0">
+          <RequiredProperties>
+            <Property function="Input" name="Input"/>
+          </RequiredProperties>
+        </BoundsDomain>
+      </DoubleVectorProperty>
+
+      <IntVectorProperty command="SetMaximumNumberOfSteps"
+                         name="MaximumNumberOfSteps"
+                         label="Maximum Steps"
+                         default_values="2000"
+                         number_of_elements="1"
+                         panel_visibility="advanced">
+        <IntRangeDomain name="range"/>
+      </IntVectorProperty>
+
+      <DoubleVectorProperty command="SetTerminalSpeed"
+                            name="TerminalSpeed"
+                            default_values="1.0e-12"
+                            number_of_elements="1"
+                            panel_visibility="advanced">
+        <DoubleRangeDomain name="range"/>
+      </DoubleVectorProperty>
+
+      <IntVectorProperty command="SetInterpolatorType"
+                         name="InterpolatorType"
+                         default_values="0"
+                         number_of_elements="1"
+                         panel_visibility="advanced">
+        <EnumerationDomain name="enum">
+          <Entry text="Interpolator with Point Locator" value="0"/>
+          <Entry text="Interpolator with Cell Locator" value="1"/>
+        </EnumerationDomain>
+      </IntVectorProperty>
+
+      <DoubleVectorProperty command="SetMaximumError"
+                            name="MaximumError"
+                            label="Maximum Error (RK4-5)"
+                            default_values="1.0e-6"
+                            number_of_elements="1"
+                            panel_visibility="advanced">
+        <DoubleRangeDomain name="range" min="0"/>
+      </DoubleVectorProperty>
+
+      <IntVectorProperty command="SetComputeVorticity"
+                         name="ComputeVorticity"
+                         label="Compute Vorticity"
+                         default_values="1"
+                         number_of_elements="1"
+                         panel_visibility="advanced">
+        <BooleanDomain name="bool"/>
+      </IntVectorProperty>
+
+      <!-- ================= Panel layout ================= -->
+      <!-- SeedShape is the visible anchor of the custom group widget. The other seed properties
+           are never shown as raw rows; pqSHYXStreamlineSeedWidget creates typed controls and
+           drives the 3D widgets from them. -->
+      <PropertyGroup label="Interactive seeds"
+                     panel_widget="shyx_streamline_seed">
+        <Property function="SeedShape" name="SeedShape"/>
+        <Property function="LinePoint1" name="LinePoint1"/>
+        <Property function="LinePoint2" name="LinePoint2"/>
+        <Property function="LineResolution" name="LineResolution"/>
+        <Property function="LineSnapPoint1" name="LineSnapPoint1"/>
+        <Property function="LineSnapPoint2" name="LineSnapPoint2"/>
+        <Property function="SphereCenter" name="SphereCenter"/>
+        <Property function="SphereRadius" name="SphereRadius"/>
+        <Property function="SphereSeedMode" name="SphereSeedMode"/>
+        <Property function="SphereInteriorPointCount" name="SphereInteriorPointCount"/>
+        <Property function="SphereRandomSeed" name="SphereRandomSeed"/>
+        <Property function="SphereThetaResolution" name="SphereThetaResolution"/>
+        <Property function="SpherePhiResolution" name="SpherePhiResolution"/>
+        <Property function="SphereSnapCenter" name="SphereSnapCenter"/>
+        <Property function="RectangleOrigin" name="RectangleOrigin"/>
+        <Property function="RectanglePoint1" name="RectanglePoint1"/>
+        <Property function="RectanglePoint2" name="RectanglePoint2"/>
+        <Property function="RectangleResolutionX" name="RectangleResolutionX"/>
+        <Property function="RectangleResolutionY" name="RectangleResolutionY"/>
+        <Property function="RectangleSnapOrigin" name="RectangleSnapOrigin"/>
+      </PropertyGroup>
+
+      <PropertyGroup label="Stream Tracer">
+        <Property name="IntegrationDirection"/>
+        <Property name="IntegratorType"/>
+        <Property name="IntegrationStepUnit"/>
+        <Property name="InitialIntegrationStep"/>
+        <Property name="MaximumPropagation"/>
+        <Property name="MaximumNumberOfSteps"/>
+        <Property name="TerminalSpeed"/>
+        <Property name="InterpolatorType"/>
+        <Property name="MaximumError"/>
+        <Property name="ComputeVorticity"/>
+      </PropertyGroup>
+
+      <Hints>
+        <ShowInMenu category="SHYX" icon=":/VESPA/SHYX_Auto_Streamline.png"/>
+        <RepresentationType view="RenderView" type="Surface" port="0"/>
+        <RepresentationType view="RenderView" type="Surface" port="1"/>
+      </Hints>
+    </SourceProxy>
+  </ProxyGroup>
+</ServerManagerConfiguration>

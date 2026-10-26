@@ -51,6 +51,7 @@ SHYX 是本仓库里 **一个作者命名空间**（[`vespa/shyx/`](.)），不�
 * [**Clebsch Map Filter**](./ClebschMapFilter/README.md) — 可选 MKL
 * [**Vector Field Topology**](./VectorFieldTopology/README.md) — 包装 VTK `vtkVectorFieldTopology`
 * [**Auto Streamline**](./AutoStreamline/README.md)
+* [**Interactive Stream Tracer**](./InteractiveStreamTracer/README.md) — Line / Sphere / Rectangle（平面）种子；端点 / 球心 / 矩形原点释放时吸附表面顶点；球中键调半径
 * [**Bidirectional Streamline Merge**](./BidirectionalStreamlineMerge/README.md)
 
 ## 点云 / 采样 / 映射

@@ -107,6 +107,13 @@ vespa_plugin_group_widget(
     widgets/pqSHYXEndpointStentWidget.h)
 
 vespa_plugin_group_widget(
+  TYPE "shyx_streamline_seed"
+  CLASS_NAME pqSHYXStreamlineSeedWidget
+  FILES
+    widgets/pqSHYXStreamlineSeedWidget.cxx
+    widgets/pqSHYXStreamlineSeedWidget.h)
+
+vespa_plugin_group_widget(
   TYPE "shyx_partitioned_block_names"
   CLASS_NAME pqSHYXPartitionedBlockNamesWidget
   FILES

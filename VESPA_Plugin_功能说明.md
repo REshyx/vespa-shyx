@@ -103,6 +103,7 @@
 | SHYX Vortex Criteria / FTLE / Clebsch Map | Clebsch 可选 MKL |
 | SHYX Vector Field Topology | 包装上游 VTK |
 | SHYX Auto Streamline / Bidirectional Streamline Merge | |
+| SHYX Interactive Stream Tracer | Line / Sphere / Rectangle（平面）可交互种子；释放时吸附表面顶点；球中键调半径 |
 | SHYX Image Morphology | 纯 VTK；`vtkImageData` 形态学（胀/蚀/开闭/形态学梯度/顶帽/击中）；勿与 Gradient Magnitude、Median 混淆 |
 | SHYX Image AntiAlias | 需 `VESPA_USE_VMTK`；用 VMTK 自带 ITK 的 Whitaker 抗锯齿消体素台阶；输出 float level set，Contour 0 |
 | SHYX Image TEASAR Centerlines | 纯 VTK；从 `vtkImageData` 提中心线折线（TEASAR），不是 VMTK 表面中心线 |
@@ -734,6 +735,7 @@
 | **SHYX VMTK Centerlines / Opening Centerlines / Centerline Merge** | 需 `VESPA_USE_VMTK`。Opening Centerlines 端口 0 数组含义见 [`vespa/shyx/VmtkOpeningCenterlines/README.md`](vespa/shyx/VmtkOpeningCenterlines/README.md)。Centerline Merge：单端口；Merge 与 Reconstruct 可单独勾选；Append 多组中心线时默认按共用端点分组再各自 Extract/Merge（[`vespa/shyx/VmtkCenterlineMerge/README.md`](vespa/shyx/VmtkCenterlineMerge/README.md)） |
 | **SHYX Vascular / Endpoint Stent Placement** | 交互圆柱/端点支架 |
 | **SHYX Auto Streamline** | 自动布种流线 |
+| **SHYX Interactive Stream Tracer** | 交互 Line / Sphere / Rectangle 种子，释放吸附表面顶点；球中键调半径；端口 1 输出种子几何 |
 | **SHYX Image Morphology** | `vtkImageData` 点标量形态学。Binary Match 默认 **Threshold**（`>= 0.5` 为前景，结果 1/0），也可两值严格相等。结构元 Box/Cross/Ellipsoid，`KernelSize` 默认 3 3 3 |
 | **SHYX Image AntiAlias** | 需 `VESPA_USE_VMTK`。可选 **Resample Factor**（&gt;1 加密 / &lt;1 减粗 / 1 原网格）再跑 ITK `AntiAliasBinaryImageFilter`。输出 float level set（内正外负），抽表面 Contour 0 |
 | **SHYX Image TEASAR Centerlines** | 从 `vtkImageData` 提中心线折线（TEASAR）。点数组 `MaximumInscribedSphereRadius`。不是 VMTK 表面中心线 |

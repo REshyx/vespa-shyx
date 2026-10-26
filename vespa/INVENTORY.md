@@ -101,6 +101,7 @@ Vascular 顺序（[`VESPAVascularCategory.xml`](../ParaViewPlugin/smxml/VESPAVas
 | SHYX Clebsch Map Filter | `vtkSHYXClebschMapFilter` | ClebschMapFilter | SHYXClebschMapFilter.xml | 自有 | [有](shyx/ClebschMapFilter/README.md) | VTK（可选 MKL） |
 | SHYX Vector Field Topology | `vtkSHYXVectorFieldTopology` | VectorFieldTopology | SHYXVectorFieldTopology.xml | 自有 | [有](shyx/VectorFieldTopology/README.md) | VTK（包装 `vtkVectorFieldTopology`） |
 | SHYX Auto Streamline | `vtkSHYXAutoStreamline` | AutoStreamline | SHYXAutoStreamline.xml | 自有 | [有](shyx/AutoStreamline/README.md) | VTK |
+| SHYX Interactive Stream Tracer | `vtkSHYXInteractiveStreamTracer` | InteractiveStreamTracer | SHYXInteractiveStreamTracer.xml | 复用 Auto Streamline 图 | [有](shyx/InteractiveStreamTracer/README.md) | VTK |
 | SHYX Bidirectional Streamline Merge | `vtkSHYXBidirectionalStreamlineMerge` | BidirectionalStreamlineMerge | SHYXBidirectionalStreamlineMerge.xml | 自有 | [有](shyx/BidirectionalStreamlineMerge/README.md) | VTK |
 
 ### 点云 / 采样 / 映射
