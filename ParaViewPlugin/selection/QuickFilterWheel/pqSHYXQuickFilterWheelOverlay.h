@@ -17,6 +17,8 @@
  * Layout: sector 0 starts at 12 o'clock and the sectors run clockwise, so two
  * items end up as the right half (0) and the left half (1). Labels are drawn
  * tangentially, which keeps them inside the ring for any item count.
+ *
+ * The center hole is the cancel target and shows "esc".
  */
 class pqSHYXQuickFilterWheelOverlay : public QWidget
 {

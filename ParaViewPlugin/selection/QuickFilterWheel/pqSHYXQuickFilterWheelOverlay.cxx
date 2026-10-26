@@ -241,5 +241,5 @@ void pqSHYXQuickFilterWheelOverlay::paintEvent(QPaintEvent*)
   painter.setFont(hint);
   painter.setPen(QColor(168, 172, 180));
   painter.drawText(QRectF(center.x() - kInnerRadius, center.y() - 10.0, 2.0 * kInnerRadius, 20.0),
-    Qt::AlignCenter, tr("Ctrl"));
+    Qt::AlignCenter, tr("esc"));
 }

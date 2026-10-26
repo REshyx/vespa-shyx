@@ -74,6 +74,9 @@ vtkAnimatedStreamlineRepresentation::vtkAnimatedStreamlineRepresentation()
   this->Animate = true;
   this->OpacityScale = 0.8;
   this->TimeScale = 0.4;
+  this->TimeSource = TimeSourceRealTime;
+  this->FrameRate = 30.0;
+  this->RenderFrame = 0;
   this->IntegrationScale = 100.0;
   this->Trunc = 2.0;
   this->Pow = 1.0;
@@ -128,6 +131,39 @@ bool vtkAnimatedStreamlineRepresentation::AddToView(vtkView* view)
   return added;
 }
 
+void vtkAnimatedStreamlineRepresentation::SetTimeSource(int source)
+{
+  const int next =
+    (source == TimeSourceRenderFrames) ? TimeSourceRenderFrames : TimeSourceRealTime;
+  if (this->TimeSource == next)
+  {
+    return;
+  }
+  this->TimeSource = next;
+  if (next == TimeSourceRenderFrames)
+  {
+    // Start the sequence at frame 0 so repeated exports of the same range match frame by frame.
+    this->RenderFrame = 0;
+  }
+  this->Modified();
+}
+
+void vtkAnimatedStreamlineRepresentation::SetFrameCount(int count)
+{
+  const unsigned long next = (count > 0) ? static_cast<unsigned long>(count) : 0ul;
+  if (this->RenderFrame == next)
+  {
+    return;
+  }
+  this->RenderFrame = next;
+  this->Modified();
+}
+
+int vtkAnimatedStreamlineRepresentation::GetFrameCount()
+{
+  return static_cast<int>(this->RenderFrame);
+}
+
 int vtkAnimatedStreamlineRepresentation::ProcessViewRequest(
   vtkInformationRequestKey* request_type, vtkInformation* inInfo, vtkInformation* outInfo)
 {
@@ -138,6 +174,12 @@ int vtkAnimatedStreamlineRepresentation::ProcessViewRequest(
   }
   if (request_type == vtkPVView::REQUEST_RENDER() && this->Mapper)
   {
+    // One REQUEST_RENDER per rendered frame (StillRender / Save Animation frame): advance the
+    // frame clock here so the shader sees a fixed step per frame instead of wall-clock time.
+    if (this->TimeSource == TimeSourceRenderFrames && this->Animate)
+    {
+      ++this->RenderFrame;
+    }
     this->SyncAnimatedMapperSettings();
     this->Mapper->Update();
     vtkDataObject* input = this->Mapper->GetInputDataObject(0, 0);
@@ -282,8 +324,21 @@ void vtkAnimatedStreamlineRepresentation::OnUpdateShader(void* calldata)
     return;
   }
 
-  const double now = vtkTimerLog::GetUniversalTime();
-  const float t = this->Animate ? static_cast<float>(now - this->StartTime) : 0.0f;
+  float t = 0.0f;
+  if (this->Animate)
+  {
+    if (this->TimeSource == TimeSourceRenderFrames)
+    {
+      // Fixed 1/FrameRate step per rendered frame: continuous image sequences, independent of how
+      // long each frame took to render.
+      const double rate = (this->FrameRate > 1e-9) ? this->FrameRate : 1.0;
+      t = static_cast<float>(static_cast<double>(this->RenderFrame) / rate);
+    }
+    else
+    {
+      t = static_cast<float>(vtkTimerLog::GetUniversalTime() - this->StartTime);
+    }
+  }
 
   if (program->IsUniformUsed("time"))
   {
@@ -328,6 +383,9 @@ void vtkAnimatedStreamlineRepresentation::PrintSelf(ostream& os, vtkIndent inden
   os << indent << "Animate: " << this->Animate << "\n";
   os << indent << "OpacityScale: " << this->OpacityScale << "\n";
   os << indent << "TimeScale: " << this->TimeScale << "\n";
+  os << indent << "TimeSource: " << this->TimeSource << "\n";
+  os << indent << "FrameRate: " << this->FrameRate << "\n";
+  os << indent << "FrameCount: " << this->RenderFrame << "\n";
   os << indent << "IntegrationScale: " << this->IntegrationScale << "\n";
   os << indent << "Trunc: " << this->Trunc << "\n";
   os << indent << "Pow: " << this->Pow << "\n";

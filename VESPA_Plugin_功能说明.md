@@ -123,7 +123,7 @@
 | **Point Label**（`PointLabelRepresentation`） | 表面表示上叠加点数据文本标签。 |
 | **Hologram**（`HologramRepresentation`） | 三角线框 + 菲涅尔鬼面 + 模型坐标流动（跟着物体变换）。体网格拆成全部面（含内部）。 |
 
-视图工具：球选（Sphere Selection）、多边形选区（Polygon Selection：左键加点、右键撤销上一点、双击闭合；在标题栏按钮上右键可勾选 Select through，默认只选可见表面 cell，勾选后沿视线把挡住的 cell 也选上）、按属性扩张选区（Grow Selection With Similar）、近距断口选区（Proximity Gap Selection，按 ε 选不连通但邻近的接触带）为客户端 Qt，无独立 VTK 模块。复合数据（如 PDC 的 `Part_1`）在 3D 视图右键菜单中有 **Select Block**，会先清除当前选择再选中该 block 的全部 cell。有点或 cell 选择时右键还有 **Select Connected**（选中当前连通的点/线/面/体）、**Delete Selected Cells**（与快捷键 **Delete** 相同：新建 SHYX Delete Selected Cells 并 Apply）、有 cell 选择时还有 **Invert Selection**（反选）、**Select Similar → By Normal**（按法向一次 Grow 完，与标题栏 Grow 共用二面角阈值）和 **Fill Interior**（把被当前选区完全围住的未选面补进选择）。在 3D 视图里**按住 Ctrl**（约 250 ms）会在光标处弹出**快捷滤镜轮盘**：左键点扇区执行，暂时有 **Delete**（等同 Delete 键）与 **Extract Surface**（ParaView 内置 Extract Surface，代理名 `DataSetSurfaceFilter`，作用于当前活动对象）；松开 Ctrl、Esc、点中心孔或轮盘外部即取消，不可用的项灰显。**SHYX AI Assistant** 在 **View** 菜单中作为可勾选停靠窗口（OpenAI 兼容；**Run script** 执行代码框）。
+视图工具：球选（Sphere Selection）、多边形选区（Polygon Selection：左键加点、右键撤销上一点、双击闭合；在标题栏按钮上右键可勾选 Select through，默认只选可见表面 cell，勾选后沿视线把挡住的 cell 也选上）、按属性扩张选区（Grow Selection With Similar）、近距断口选区（Proximity Gap Selection，按 ε 选不连通但邻近的接触带）为客户端 Qt，无独立 VTK 模块。复合数据（如 PDC 的 `Part_1`）在 3D 视图右键菜单中有 **Select Block**，会先清除当前选择再选中该 block 的全部 cell。有点或 cell 选择时右键还有 **Select Connected**（选中当前连通的点/线/面/体）、**Delete Selected Cells**（与快捷键 **Delete** 相同：新建 SHYX Delete Selected Cells 并 Apply）、有 cell 选择时还有 **Invert Selection**（反选）、**Select Similar → By Normal**（按法向一次 Grow 完，与标题栏 Grow 共用二面角阈值）和 **Fill Interior**（把被当前选区完全围住的未选面补进选择）。在 3D 视图里**按住 ` 键（中文布局的 · 键）**约 200 ms 就会在光标处弹出**快捷滤镜轮盘**，不需要移动鼠标：左键点扇区执行，暂时有 **Delete**（等同 Delete 键）与 **Extract Surface**（ParaView 内置 Extract Surface，代理名 `DataSetSurfaceFilter`，作用于当前活动对象）；松开该键、Esc、点中心孔或轮盘外部即取消，不可用的项灰显。不占用 Ctrl，Ctrl+点击 / Ctrl+拖拽、Ctrl+快捷键都照常。**SHYX AI Assistant** 在 **View** 菜单中作为可勾选停靠窗口（OpenAI 兼容；**Run script** 执行代码框）。
 
 ---
 
@@ -764,7 +764,7 @@
 
 **功能**：针对类流线网格，在 GPU 上用自定义 shader uniform 做**逐帧动画**（透明度脉冲等），**Animation coordinate** 数组驱动纹理坐标与混合。
 
-**常用参数（节选）**：**Animate**、**Integration Scale**（Domain 建议 `100/(L_max×V_max)`，可 Scale/Reset）、**Time Scale**、**Opacity Scale**、**Trunc**、**Pow**、**Randomize** / **Randomize Scale**（种子点排成线/面时逐流线随机相位，消除层叠同步推进）、**Animation coordinate X**、可选 **Animation coordinate Y**（作为 mix 公式中的除数或均匀 1）。
+**常用参数（节选）**：**Animate**、**Time Source**（`0` Real time 墙钟；`1` Render frames 按渲染帧数驱动：每帧固定推进 `1/Frame rate` 秒，导出序列图片上下帧连续可复现，切到该模式时计数器归 0）、**Frame rate**、**Frame count**（渲染帧计数器，可设 0 重新起算）、**Integration Scale**（Domain 建议 `100/(L_max×V_max)`，可 Scale/Reset）、**Time Scale**、**Opacity Scale**、**Trunc**、**Pow**、**Randomize** / **Randomize Scale**（种子点排成线/面时逐流线随机相位，消除层叠同步推进）、**Animation coordinate X**、可选 **Animation coordinate Y**（作为 mix 公式中的除数或均匀 1）。
 
 ---
 

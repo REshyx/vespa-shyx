@@ -1,6 +1,6 @@
 # Animated Streamline Representation
 
-Display 下拉 **`Animated Streamline`**。不要构造 representation proxy。Python：`Representation = 'Animated Streamline'`，属性 **`AS_*`**（`disp.AS_Animate`、`AS_TimeScale`、`AS_IntegrationScale`、`AS_OpacityScale`、`AS_Trunc`、`AS_Pow`、`AS_Randomize`、`AS_RandomizeScale`、`AS_AnimationCoordinateArray`、`AS_AnimationCoordinateYArray`）。
+Display 下拉 **`Animated Streamline`**。不要构造 representation proxy。Python：`Representation = 'Animated Streamline'`，属性 **`AS_*`**（`disp.AS_Animate`、`AS_TimeSource`、`AS_FrameRate`、`AS_FrameCount`、`AS_TimeScale`、`AS_IntegrationScale`、`AS_OpacityScale`、`AS_Trunc`、`AS_Pow`、`AS_Randomize`、`AS_RandomizeScale`、`AS_AnimationCoordinateArray`、`AS_AnimationCoordinateYArray`）。
 
 ## 示意图
 
@@ -29,6 +29,17 @@ Display 下拉 **`Animated Streamline`**。不要构造 representation proxy。P
 
 以下是控制流线动画表现的主要参数：
 
+* **`TimeSource` (int, 枚举)**
+  * **含义**：着色器时间项 `time` 的来源（默认 `0` = Real time）。
+  * **`0` Real time (wall clock)**：`time = 墙钟秒数 - 创建时刻`。每渲染一帧，相位推进量等于**上一帧实际耗时**，所以渲染耗时抖动会直接变成脉冲速度抖动；同一帧渲染两次相位也不同。交互观看没问题，**导出序列图片时上下帧不连续**。
+  * **`1` Render frames (image sequence)**：`time = FrameCount / FrameRate`，计数器**每渲染一帧 +1**（`Animate` 关时不加）。每帧固定推进 `1/FrameRate` 秒对应的相位，与单帧渲染耗时无关，因此 **Save Animation / 逐帧 Save Screenshot 导出的序列是连续的**，而且可以复现。**切到该模式的瞬间计数器归 0**，所以每次导出的第 0 帧相位一致；导出前把 `FrameCount` 设 0 也能达到同样效果。
+  * **注意**：该模式跟着"渲染次数"走，所以交互时播放速度取决于实际帧率（机器越快脉冲越快）；导出时渲染次数 = 输出帧数，不受影响。
+* **`FrameRate` (double)**
+  * **含义**：Render frames 模式下把帧号换算成秒的帧率（默认 `30`，范围 1～240）。
+  * **效果**：设成序列将来**播放**用的帧率，脉冲速度就与 Real time 模式下相同；想整体放慢/加快直接用 `TimeScale`。
+* **`FrameCount` (int)**
+  * **含义**：Render frames 模式用的渲染帧计数器（默认 `0`）。
+  * **效果**：只想从确定的相位开始导出时把它设 0；也可以用 Python 直接指定某一帧，例如 `disp.AS_FrameCount = 120`。属性面板里显示的值只在属性更新时刷新，可能落后于实时计数器。
 * **`Animate` (bool)**
   * **含义**：动画总开关。
   * **效果**：设为 `true` 时启用动画渲染，设为 `false` 则保持静态展示。

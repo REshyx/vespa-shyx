@@ -29,6 +29,39 @@ public:
   vtkSetMacro(TimeScale, double);
   vtkGetMacro(TimeScale, double);
 
+  /**
+   * Where the shader time term (time * timeScale in mixValue) comes from.
+   *
+   * TimeSourceRealTime (0, default): seconds of wall-clock time since the representation was
+   * created. Every rendered frame advances by however long the previous frame took, so a rendered
+   * image sequence is not continuous - a slow frame moves the pulse further than a fast one, and
+   * the same frame rendered twice gives a different pulse phase.
+   *
+   * TimeSourceRenderFrames (1): a counter incremented once per rendered frame, divided by
+   * FrameRate to give seconds. Every frame advances the phase by exactly 1/FrameRate seconds, so
+   * image sequences exported through Save Animation / Save Screenshot are continuous and
+   * reproducible regardless of per-frame render cost. Switching to this mode resets the counter
+   * to 0 so every export starts at the same frame.
+   */
+  static constexpr int TimeSourceRealTime = 0;
+  static constexpr int TimeSourceRenderFrames = 1;
+  void SetTimeSource(int source);
+  vtkGetMacro(TimeSource, int);
+  void SetTimeSourceToRealTime() { this->SetTimeSource(TimeSourceRealTime); }
+  void SetTimeSourceToRenderFrames() { this->SetTimeSource(TimeSourceRenderFrames); }
+
+  /** Frames per second used to convert the render-frame counter into shader time (default 30). */
+  vtkSetClampMacro(FrameRate, double, 1e-3, 1e6);
+  vtkGetMacro(FrameRate, double);
+
+  /**
+   * Render-frame counter used by TimeSourceRenderFrames: it increments once per rendered frame
+   * (only while Animate is on) and is the frame number divided by FrameRate that reaches the
+   * shader. Set it to seek (e.g. 0 to restart the sequence at a known phase).
+   */
+  void SetFrameCount(int count);
+  int GetFrameCount();
+
   vtkSetMacro(IntegrationScale, double);
   vtkGetMacro(IntegrationScale, double);
 
@@ -78,6 +111,14 @@ protected:
   bool Animate;
   double OpacityScale;
   double TimeScale;
+
+  /** 0 = wall clock, 1 = render-frame counter (see SetTimeSource). */
+  int TimeSource = TimeSourceRealTime;
+  /** Frames per second: converts RenderFrame into shader time. */
+  double FrameRate = 30.0;
+  /** Increments once per rendered frame while TimeSourceRenderFrames + Animate. */
+  unsigned long RenderFrame = 0;
+
   double IntegrationScale;
   double Trunc;
   double Pow;

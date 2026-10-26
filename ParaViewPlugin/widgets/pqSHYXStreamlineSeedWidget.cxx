@@ -6,17 +6,22 @@
 #include "pqView.h"
 
 #include "vtkAlgorithm.h"
+#include "vtkActor.h"
 #include "vtkCallbackCommand.h"
 #include "vtkCamera.h"
 #include "vtkCommand.h"
+#include "vtkConeSource.h"
 #include "vtkDataSet.h"
 #include "vtkDataSetSurfaceFilter.h"
 #include "vtkGenericCell.h"
 #include "vtkInteractorObserver.h"
 #include "vtkLineRepresentation.h"
+#include "vtkLineSource.h"
 #include "vtkLineWidget2.h"
 #include "vtkMath.h"
-#include "vtkPlaneWidget.h"
+#include "vtkNew.h"
+#include "vtkPlaneSource.h"
+#include "vtkPolyDataMapper.h"
 #include "vtkPolyData.h"
 #include "vtkProperty.h"
 #include "vtkRenderWindowInteractor.h"
@@ -30,9 +35,11 @@
 #include "vtkSMRenderViewProxy.h"
 #include "vtkSMSourceProxy.h"
 #include "vtkSphereRepresentation.h"
+#include "vtkSphereSource.h"
 #include "vtkSphereWidget2.h"
 #include "vtkStaticCellLocator.h"
 #include "vtkStaticPointLocator.h"
+#include "vtkTransform.h"
 
 #include <QCheckBox>
 #include <QComboBox>
@@ -175,9 +182,17 @@ void StyleSphereRepresentation(vtkSphereRepresentation* rep)
   rep->SetRepresentationToSurface();
   rep->SetPhiResolution(24);
   rep->SetThetaResolution(32);
-  // No surface handle: the radius is edited in the panel (and right-drag still scales), so the
-  // handle would just add a second, conflicting way to change it.
+  // vtkSphereRepresentation draws three handle-related props and they are independent:
+  //   HandleVisibility -> the ball on the surface,
+  //   RadialLine       -> the radius line from the center to that ball,
+  //   HandleText       -> the "R = ..." label at the ball.
+  // RadialLine / HandleText default to ON, so switching off only HandleVisibility still leaves a
+  // radius line. Worse, ComputeInteractionState() picks the (now invisible) handle whenever any of
+  // the three is on, so that line's end stayed draggable. Turn all three off: the radius is edited
+  // in the panel (right-drag still scales).
   rep->HandleVisibilityOff();
+  rep->RadialLineOff();
+  rep->HandleTextOff();
   if (auto* p = rep->GetSphereProperty())
   {
     p->SetColor(0.2, 0.65, 1.0);
@@ -209,35 +224,61 @@ void SetSphereCenterKeepingRadius(vtkSphereRepresentation* rep, const double cen
   }
 }
 
-void StylePlaneWidget(vtkPlaneWidget* widget)
+void StyleRectangleActors(vtkActor* quad, vtkActor* centerHandle, vtkActor* cornerHandle,
+  vtkActor* normalCone, vtkActor* normalLine)
 {
-  if (!widget)
+  if (quad)
   {
-    return;
+    if (auto* p = quad->GetProperty())
+    {
+      p->SetColor(0.2, 0.65, 1.0);
+      p->SetOpacity(0.30);
+      p->LightingOff();
+      p->SetRepresentationToSurface();
+      p->EdgeVisibilityOn();
+      p->SetEdgeColor(0.2, 0.65, 1.0);
+      p->SetLineWidth(1.0);
+    }
   }
-  if (auto* p = widget->GetPlaneProperty())
+  // Center handle: the only thing that snaps, so make it visually distinct.
+  if (centerHandle)
   {
-    p->SetColor(0.2, 0.65, 1.0);
-    p->SetOpacity(0.35);
+    if (auto* p = centerHandle->GetProperty())
+    {
+      p->SetColor(1.0, 0.85, 0.15);
+      p->SetInterpolationToFlat();
+    }
   }
-  if (auto* p = widget->GetSelectedPlaneProperty())
+  // One corner handle drives Width / Height around the center.
+  if (cornerHandle)
   {
-    p->SetColor(1.0, 0.85, 0.15);
-    p->SetOpacity(0.45);
+    if (auto* p = cornerHandle->GetProperty())
+    {
+      p->SetColor(0.2, 0.65, 1.0);
+      p->SetInterpolationToFlat();
+    }
   }
-  if (auto* p = widget->GetHandleProperty())
+  // Normal handle: drag the cone to rotate the plane.
+  if (normalCone)
   {
-    p->SetColor(0.2, 0.65, 1.0);
+    if (auto* p = normalCone->GetProperty())
+    {
+      p->SetColor(0.95, 0.35, 0.25);
+      p->SetInterpolationToFlat();
+    }
   }
-  if (auto* p = widget->GetSelectedHandleProperty())
+  if (normalLine)
   {
-    p->SetColor(1.0, 0.85, 0.15);
+    if (auto* p = normalLine->GetProperty())
+    {
+      p->SetColor(0.95, 0.35, 0.25);
+      p->SetLineWidth(2.0);
+      p->LightingOff();
+    }
   }
-  widget->SetRepresentationToSurface();
 }
-}
+} // namespace
 
-//-----------------------------------------------------------------------------
 //-----------------------------------------------------------------------------
 pqSHYXStreamlineSeedWidget::pqSHYXStreamlineSeedWidget(
   vtkSMProxy* proxy, vtkSMPropertyGroup* group, QWidget* parent)
@@ -307,7 +348,8 @@ void pqSHYXStreamlineSeedWidget::buildUi()
   auto* tip = new QLabel(
     tr("Line: drag either endpoint; both endpoints can snap. "
        "Sphere: left-drag the ball to move it; set Radius in the panel (or right-drag to scale). "
-       "Rectangle: drag the corners / normal to resize and rotate. "
+       "Rectangle: drag the yellow center to move it (only the center snaps), the blue corner to "
+       "resize, and the red cone to rotate the plane. "
        "Snap casts a ray through the cursor onto the Input surface and takes the vertex nearest "
        "that front-most hit (switch to Nearest vertex (3D) to ignore the camera). "
        "Place in view drops the seed where the camera is looking (Line: 1/3 and 2/3 across the "
@@ -491,31 +533,80 @@ void pqSHYXStreamlineSeedWidget::buildUi()
     grid->addWidget(new QLabel(tr("Y"), this->RectangleGroup), 0, 2);
     grid->addWidget(new QLabel(tr("Z"), this->RectangleGroup), 0, 3);
 
-    grid->addWidget(new QLabel(tr("Origin"), this->RectangleGroup), 1, 0);
+    // Step 1: center (the only snapped point).
+    grid->addWidget(new QLabel(tr("Center"), this->RectangleGroup), 1, 0);
     for (int i = 0; i < 3; ++i)
     {
-      this->RectangleOrigin[i] = MakeDoubleSpin(this->RectangleGroup);
-      grid->addWidget(this->RectangleOrigin[i], 1, 1 + i);
+      this->RectangleCenter[i] = MakeDoubleSpin(this->RectangleGroup);
+      grid->addWidget(this->RectangleCenter[i], 1, 1 + i);
     }
-    this->RectangleSnap = new QCheckBox(tr("Snap origin"), this->RectangleGroup);
+    this->RectangleSnap = new QCheckBox(tr("Snap center"), this->RectangleGroup);
     this->RectangleSnap->setToolTip(
-      tr("On release, move the origin to the nearest input-surface vertex; Point 1 / Point 2 "
-         "translate with it."));
+      tr("On release, move only the rectangle center to the nearest input-surface vertex. "
+         "Width / Height / Normal stay as they are."));
     grid->addWidget(this->RectangleSnap, 1, 4);
 
-    grid->addWidget(new QLabel(tr("Point 1"), this->RectangleGroup), 2, 0);
+    // Step 2: normal (Place in view points it at the camera).
+    grid->addWidget(new QLabel(tr("Normal"), this->RectangleGroup), 2, 0);
     for (int i = 0; i < 3; ++i)
     {
-      this->RectangleP1[i] = MakeDoubleSpin(this->RectangleGroup);
-      grid->addWidget(this->RectangleP1[i], 2, 1 + i);
+      this->RectangleNormal[i] = MakeDoubleSpin(this->RectangleGroup);
+      grid->addWidget(this->RectangleNormal[i], 2, 1 + i);
     }
+    auto* faceCamera = new QPushButton(tr("Face camera"), this->RectangleGroup);
+    faceCamera->setToolTip(tr("Point the plane normal at the camera, so the quad faces the view."));
+    grid->addWidget(faceCamera, 2, 4);
+    QObject::connect(faceCamera, &QPushButton::clicked, this, [this]() {
+      // GetViewPlaneNormal() points from the scene toward the camera, which is the convention
+      // vtkImplicitPlaneRepresentation::SetNormalToCamera() uses. DirectionOfProjection would
+      // give the opposite sign, so the cone would point away from the viewer.
+      double normal[3] = { 0.0, 0.0, 1.0 };
+      if (vtkRenderer* ren = this->renderer())
+      {
+        if (vtkCamera* camera = ren->GetActiveCamera())
+        {
+          camera->GetViewPlaneNormal(normal);
+          if (vtkMath::Normalize(normal) <= 0.0)
+          {
+            normal[0] = 0.0;
+            normal[1] = 0.0;
+            normal[2] = 1.0;
+          }
+        }
+      }
+      this->UpdatingFromWidget = true;
+      for (int i = 0; i < 3; ++i)
+      {
+        if (this->RectangleNormal[i])
+        {
+          this->RectangleNormal[i]->setValue(normal[i]);
+        }
+      }
+      this->UpdatingFromWidget = false;
+      this->updateRectangleGeometry();
+      Q_EMIT this->changeAvailable();
+      Q_EMIT this->changeFinished();
+      this->setStatus(tr("Rectangle normal now faces the camera. Click Apply to refresh."));
+    });
 
-    grid->addWidget(new QLabel(tr("Point 2"), this->RectangleGroup), 3, 0);
-    for (int i = 0; i < 3; ++i)
-    {
-      this->RectangleP2[i] = MakeDoubleSpin(this->RectangleGroup);
-      grid->addWidget(this->RectangleP2[i], 3, 1 + i);
-    }
+    // Step 3: one corner handle (in the view) controls these two sizes.
+    auto* sizeRow = new QHBoxLayout();
+    sizeRow->setContentsMargins(0, 0, 0, 0);
+    sizeRow->setSpacing(4);
+    sizeRow->addWidget(new QLabel(tr("Width"), this->RectangleGroup));
+    this->RectangleWidth = MakeDoubleSpin(this->RectangleGroup);
+    this->RectangleWidth->setMinimum(0.0);
+    this->RectangleWidth->setToolTip(
+      tr("Full edge length along the first in-plane axis. Dragging the corner handle in the view "
+         "changes Width and Height symmetrically around the center."));
+    sizeRow->addWidget(this->RectangleWidth, 1);
+    sizeRow->addWidget(new QLabel(tr("Height"), this->RectangleGroup));
+    this->RectangleHeight = MakeDoubleSpin(this->RectangleGroup);
+    this->RectangleHeight->setMinimum(0.0);
+    this->RectangleHeight->setToolTip(
+      tr("Full edge length along the second in-plane axis."));
+    sizeRow->addWidget(this->RectangleHeight, 1);
+    grid->addLayout(sizeRow, 3, 0, 1, 5);
 
     auto* resRow = new QHBoxLayout();
     resRow->setContentsMargins(0, 0, 0, 0);
@@ -528,6 +619,11 @@ void pqSHYXStreamlineSeedWidget::buildUi()
     resRow->addWidget(this->RectangleResY);
     resRow->addStretch(1);
     grid->addLayout(resRow, 4, 0, 1, 5);
+
+    this->RectangleOrientLabel = new QLabel(this->RectangleGroup);
+    this->RectangleOrientLabel->setWordWrap(true);
+    this->RectangleOrientLabel->setStyleSheet(QStringLiteral("color: gray; font-size: 11px;"));
+    grid->addWidget(this->RectangleOrientLabel, 5, 0, 1, 5);
 
     grid->setColumnStretch(1, 1);
     grid->setColumnStretch(2, 1);
@@ -645,12 +741,13 @@ void pqSHYXStreamlineSeedWidget::linkProperties(vtkSMPropertyGroup* group)
   linkInt("SpherePhiResolution", this->SpherePhi);
   linkBool("SphereSnapCenter", this->SphereSnap);
 
-  linkVector("RectangleOrigin", this->RectangleOrigin);
-  linkVector("RectanglePoint1", this->RectangleP1);
-  linkVector("RectanglePoint2", this->RectangleP2);
+  linkVector("RectangleCenter", this->RectangleCenter);
+  linkVector("RectangleNormal", this->RectangleNormal);
+  linkDouble("RectangleWidth", this->RectangleWidth);
+  linkDouble("RectangleHeight", this->RectangleHeight);
   linkInt("RectangleResolutionX", this->RectangleResX);
   linkInt("RectangleResolutionY", this->RectangleResY);
-  linkBool("RectangleSnapOrigin", this->RectangleSnap);
+  linkBool("RectangleSnapCenter", this->RectangleSnap);
 }
 
 //-----------------------------------------------------------------------------
@@ -659,10 +756,9 @@ void pqSHYXStreamlineSeedWidget::connectSeedSignals()
   for (QDoubleSpinBox* spin :
     { this->LineP1[0], this->LineP1[1], this->LineP1[2], this->LineP2[0], this->LineP2[1],
       this->LineP2[2], this->SphereCenter[0], this->SphereCenter[1], this->SphereCenter[2],
-      this->SphereRadius, this->RectangleOrigin[0], this->RectangleOrigin[1],
-      this->RectangleOrigin[2], this->RectangleP1[0], this->RectangleP1[1],
-      this->RectangleP1[2], this->RectangleP2[0], this->RectangleP2[1],
-      this->RectangleP2[2] })
+      this->SphereRadius, this->RectangleCenter[0], this->RectangleCenter[1],
+      this->RectangleCenter[2], this->RectangleNormal[0], this->RectangleNormal[1],
+      this->RectangleNormal[2], this->RectangleWidth, this->RectangleHeight })
   {
     if (spin)
     {
@@ -990,46 +1086,51 @@ void pqSHYXStreamlineSeedWidget::onPlaceFromBounds()
   }
   else
   {
-    // Rectangle faces the camera: the origin is the center ray hit, the two edges follow the
-    // camera right / up vectors so the plane is parallel to the screen.
-    double right[3] = { 1.0, 0.0, 0.0 };
-    double up[3] = { 0.0, 1.0, 0.0 };
-    this->cameraRightUp(right, up);
+    // Step 1: center = ray hit at the viewport center. Step 2: normal = toward the camera
+    // (GetViewPlaneNormal, same sign convention as VTK's clip widget), so the quad and its
+    // front cone face the viewer. Step 3: Width / Height sized from the viewport.
+    double normal[3] = { 0.0, 0.0, 1.0 };
+    if (vtkRenderer* ren = this->renderer())
+    {
+      if (vtkCamera* camera = ren->GetActiveCamera())
+      {
+        camera->GetViewPlaneNormal(normal);
+        if (vtkMath::Normalize(normal) <= 0.0)
+        {
+          normal[0] = 0.0;
+          normal[1] = 0.0;
+          normal[2] = 1.0;
+        }
+      }
+    }
 
-    const double origin[3] = {
-      anchor[0] - halfSide * right[0] - halfSide * up[0],
-      anchor[1] - halfSide * right[1] - halfSide * up[1],
-      anchor[2] - halfSide * right[2] - halfSide * up[2]
-    };
-    const double p1[3] = {
-      origin[0] + 2.0 * halfSide * right[0],
-      origin[1] + 2.0 * halfSide * right[1],
-      origin[2] + 2.0 * halfSide * right[2]
-    };
-    const double p2[3] = {
-      origin[0] + 2.0 * halfSide * up[0],
-      origin[1] + 2.0 * halfSide * up[1],
-      origin[2] + 2.0 * halfSide * up[2]
-    };
     for (int i = 0; i < 3; ++i)
     {
-      if (this->RectangleOrigin[i])
+      if (this->RectangleCenter[i])
       {
-        this->RectangleOrigin[i]->setValue(origin[i]);
+        this->RectangleCenter[i]->setValue(anchor[i]);
       }
-      if (this->RectangleP1[i])
+      if (this->RectangleNormal[i])
       {
-        this->RectangleP1[i]->setValue(p1[i]);
+        this->RectangleNormal[i]->setValue(normal[i]);
       }
-      if (this->RectangleP2[i])
-      {
-        this->RectangleP2[i]->setValue(p2[i]);
-      }
+    }
+    if (this->RectangleWidth)
+    {
+      this->RectangleWidth->setValue(2.0 * halfSide);
+    }
+    if (this->RectangleHeight)
+    {
+      this->RectangleHeight->setValue(2.0 * halfSide);
     }
   }
   this->UpdatingFromWidget = false;
 
   this->syncWidgets();
+  // Same as a drag: park the rotation center on the fresh seed so orbiting stays on it. Place in
+  // view rewrites both line endpoints, so there is no single "moved" end: use the midpoint.
+  this->MovedLineEndPoint = -1;
+  this->updatePickCenterFromWidget();
   Q_EMIT this->changeAvailable();
   Q_EMIT this->changeFinished();
   const bool autoApply = this->AutoApply && this->AutoApply->isChecked();
@@ -1166,7 +1267,7 @@ void pqSHYXStreamlineSeedWidget::syncWidgets()
   }
   else
   {
-    if (!this->PlaneWidget)
+    if (!this->RectActor)
     {
       this->createRectangleWidget(iren);
     }
@@ -1190,10 +1291,6 @@ void pqSHYXStreamlineSeedWidget::destroyWidgets()
     {
       this->SphereWidget->RemoveObserver(this->WidgetObserver);
     }
-    if (this->PlaneWidget)
-    {
-      this->PlaneWidget->RemoveObserver(this->WidgetObserver);
-    }
   }
   if (this->LineWidget)
   {
@@ -1205,14 +1302,9 @@ void pqSHYXStreamlineSeedWidget::destroyWidgets()
     this->SphereWidget->Off();
     this->SphereWidget->SetInteractor(nullptr);
   }
-  if (this->PlaneWidget)
-  {
-    this->PlaneWidget->Off();
-    this->PlaneWidget->SetInteractor(nullptr);
-  }
   this->LineWidget = nullptr;
   this->SphereWidget = nullptr;
-  this->PlaneWidget = nullptr;
+  this->destroyRectangleWidget();
   this->Interactor = nullptr;
 }
 
@@ -1227,10 +1319,7 @@ void pqSHYXStreamlineSeedWidget::setWidgetsEnabled(bool on)
   {
     on ? this->SphereWidget->On() : this->SphereWidget->Off();
   }
-  if (this->PlaneWidget)
-  {
-    on ? this->PlaneWidget->On() : this->PlaneWidget->Off();
-  }
+  this->setRectangleEnabled(on);
 }
 
 //-----------------------------------------------------------------------------
@@ -1294,23 +1383,374 @@ void pqSHYXStreamlineSeedWidget::createRectangleWidget(vtkRenderWindowInteractor
 {
   this->destroyWidgets();
   this->Interactor = iren;
-  if (!this->WidgetObserver)
+
+  vtkRenderer* ren = this->renderer();
+  if (!ren)
   {
-    this->WidgetObserver = vtkSmartPointer<vtkCallbackCommand>::New();
-    this->WidgetObserver->SetClientData(this);
-    this->WidgetObserver->SetCallback(&pqSHYXStreamlineSeedWidget::ProcessWidgetEvents);
+    return;
   }
 
-  auto widget = vtkSmartPointer<vtkPlaneWidget>::New();
-  StylePlaneWidget(widget);
-  widget->SetInteractor(iren);
-  widget->SetPriority(1.0);
-  widget->AddObserver(vtkCommand::StartInteractionEvent, this->WidgetObserver, 1.0);
-  widget->AddObserver(vtkCommand::InteractionEvent, this->WidgetObserver, 1.0);
-  widget->AddObserver(vtkCommand::EndInteractionEvent, this->WidgetObserver, 1.0);
-  this->PlaneWidget = widget;
-  widget->On();
-  this->placeWidgetInInputBounds();
+  // Quad.
+  this->RectSource = vtkSmartPointer<vtkPlaneSource>::New();
+  this->RectSource->SetXResolution(1);
+  this->RectSource->SetYResolution(1);
+  this->RectMapper = vtkSmartPointer<vtkPolyDataMapper>::New();
+  this->RectMapper->SetInputConnection(this->RectSource->GetOutputPort());
+  this->RectActor = vtkSmartPointer<vtkActor>::New();
+  this->RectActor->SetMapper(this->RectMapper);
+  this->RectActor->PickableOff();
+
+  // Center handle: the only snapped point.
+  this->RectCenterSource = vtkSmartPointer<vtkSphereSource>::New();
+  this->RectCenterSource->SetThetaResolution(16);
+  this->RectCenterSource->SetPhiResolution(12);
+  this->RectCenterMapper = vtkSmartPointer<vtkPolyDataMapper>::New();
+  this->RectCenterMapper->SetInputConnection(this->RectCenterSource->GetOutputPort());
+  this->RectCenterActor = vtkSmartPointer<vtkActor>::New();
+  this->RectCenterActor->SetMapper(this->RectCenterMapper);
+  this->RectCenterActor->PickableOn();
+
+  // Single corner handle: drag it to change Width / Height around the center.
+  this->RectCornerSource = vtkSmartPointer<vtkSphereSource>::New();
+  this->RectCornerSource->SetThetaResolution(16);
+  this->RectCornerSource->SetPhiResolution(12);
+  this->RectCornerMapper = vtkSmartPointer<vtkPolyDataMapper>::New();
+  this->RectCornerMapper->SetInputConnection(this->RectCornerSource->GetOutputPort());
+  this->RectCornerActor = vtkSmartPointer<vtkActor>::New();
+  this->RectCornerActor->SetMapper(this->RectCornerMapper);
+  this->RectCornerActor->PickableOn();
+
+  // Normal handle: a stick through the center plus a cone at each end, both draggable. This is
+  // what vtkImplicitPlaneRepresentation does (cones at origin +/- 0.3 * diagonal along the
+  // normal), so the plane can be rotated no matter which side the camera is on.
+  this->RectNormalLineSource = vtkSmartPointer<vtkLineSource>::New();
+  this->RectNormalLineMapper = vtkSmartPointer<vtkPolyDataMapper>::New();
+  this->RectNormalLineMapper->SetInputConnection(this->RectNormalLineSource->GetOutputPort());
+  this->RectNormalLineActor = vtkSmartPointer<vtkActor>::New();
+  this->RectNormalLineActor->SetMapper(this->RectNormalLineMapper);
+  this->RectNormalLineActor->PickableOff();
+
+  this->RectNormalSource = vtkSmartPointer<vtkConeSource>::New();
+  this->RectNormalSource->SetResolution(16);
+  this->RectNormalMapper = vtkSmartPointer<vtkPolyDataMapper>::New();
+  this->RectNormalMapper->SetInputConnection(this->RectNormalSource->GetOutputPort());
+  this->RectNormalActor = vtkSmartPointer<vtkActor>::New();
+  this->RectNormalActor->SetMapper(this->RectNormalMapper);
+  this->RectNormalActor->PickableOff(); // picking is resolved in display space
+
+  this->RectNormalSource2 = vtkSmartPointer<vtkConeSource>::New();
+  this->RectNormalSource2->SetResolution(16);
+  this->RectNormalMapper2 = vtkSmartPointer<vtkPolyDataMapper>::New();
+  this->RectNormalMapper2->SetInputConnection(this->RectNormalSource2->GetOutputPort());
+  this->RectNormalActor2 = vtkSmartPointer<vtkActor>::New();
+  this->RectNormalActor2->SetMapper(this->RectNormalMapper2);
+  this->RectNormalActor2->PickableOff();
+
+  StyleRectangleActors(this->RectActor, this->RectCenterActor, this->RectCornerActor,
+    this->RectNormalActor, this->RectNormalLineActor);
+  if (auto* p = this->RectNormalActor2 ? this->RectNormalActor2->GetProperty() : nullptr)
+  {
+    p->SetColor(0.95, 0.35, 0.25);
+    p->SetInterpolationToFlat();
+  }
+
+  ren->AddActor(this->RectActor);
+  ren->AddActor(this->RectCenterActor);
+  ren->AddActor(this->RectCornerActor);
+  ren->AddActor(this->RectNormalLineActor);
+  ren->AddActor(this->RectNormalActor);
+  ren->AddActor(this->RectNormalActor2);
+
+  this->RectInteractorObserver = vtkSmartPointer<vtkCallbackCommand>::New();
+  this->RectInteractorObserver->SetClientData(this);
+  this->RectInteractorObserver->SetCallback(
+    &pqSHYXStreamlineSeedWidget::ProcessRectangleEvents);
+  // Priority above the interactor style so a handle drag does not also orbit the camera.
+  iren->AddObserver(vtkCommand::LeftButtonPressEvent, this->RectInteractorObserver, 1.0);
+  iren->AddObserver(vtkCommand::LeftButtonReleaseEvent, this->RectInteractorObserver, 1.0);
+  iren->AddObserver(vtkCommand::MouseMoveEvent, this->RectInteractorObserver, 1.0);
+
+  this->setRectangleEnabled(true);
+  this->updateRectangleGeometry();
+}
+
+//-----------------------------------------------------------------------------
+void pqSHYXStreamlineSeedWidget::destroyRectangleWidget()
+{
+  if (this->Interactor && this->RectInteractorObserver)
+  {
+    this->Interactor->RemoveObserver(this->RectInteractorObserver);
+  }
+  this->RectInteractorObserver = nullptr;
+
+  if (vtkRenderer* ren = this->renderer())
+  {
+    if (this->RectActor)
+    {
+      ren->RemoveActor(this->RectActor);
+    }
+    if (this->RectCenterActor)
+    {
+      ren->RemoveActor(this->RectCenterActor);
+    }
+    if (this->RectCornerActor)
+    {
+      ren->RemoveActor(this->RectCornerActor);
+    }
+    if (this->RectNormalActor)
+    {
+      ren->RemoveActor(this->RectNormalActor);
+    }
+    if (this->RectNormalActor2)
+    {
+      ren->RemoveActor(this->RectNormalActor2);
+    }
+    if (this->RectNormalLineActor)
+    {
+      ren->RemoveActor(this->RectNormalLineActor);
+    }
+  }
+
+  this->RectActor = nullptr;
+  this->RectMapper = nullptr;
+  this->RectSource = nullptr;
+  this->RectCenterActor = nullptr;
+  this->RectCenterMapper = nullptr;
+  this->RectCenterSource = nullptr;
+  this->RectCornerActor = nullptr;
+  this->RectCornerMapper = nullptr;
+  this->RectCornerSource = nullptr;
+  this->RectNormalActor = nullptr;
+  this->RectNormalMapper = nullptr;
+  this->RectNormalSource = nullptr;
+  this->RectNormalActor2 = nullptr;
+  this->RectNormalMapper2 = nullptr;
+  this->RectNormalSource2 = nullptr;
+  this->RectNormalLineActor = nullptr;
+  this->RectNormalLineMapper = nullptr;
+  this->RectNormalLineSource = nullptr;
+  this->RectEnabled = false;
+  this->RectDrag = RectDragNone;
+}
+
+//-----------------------------------------------------------------------------
+void pqSHYXStreamlineSeedWidget::setRectangleEnabled(bool on)
+{
+  this->RectEnabled = on;
+  if (vtkRenderer* ren = this->renderer())
+  {
+    const auto toggle = [on, ren](vtkSmartPointer<vtkActor>& actor) {
+      if (!actor)
+      {
+        return;
+      }
+      if (on)
+      {
+        if (!ren->HasViewProp(actor))
+        {
+          ren->AddActor(actor);
+        }
+      }
+      else if (ren->HasViewProp(actor))
+      {
+        ren->RemoveActor(actor);
+      }
+    };
+    toggle(this->RectActor);
+    toggle(this->RectCenterActor);
+    toggle(this->RectCornerActor);
+    toggle(this->RectNormalActor);
+    toggle(this->RectNormalActor2);
+    toggle(this->RectNormalLineActor);
+  }
+  if (!on)
+  {
+    this->RectDrag = RectDragNone;
+  }
+}
+
+//-----------------------------------------------------------------------------
+void pqSHYXStreamlineSeedWidget::readRectangleFromControls(
+  double center[3], double normal[3], double& width, double& height) const
+{
+  center[0] = center[1] = center[2] = 0.0;
+  normal[0] = 0.0;
+  normal[1] = 0.0;
+  normal[2] = 1.0;
+  width = 0.0;
+  height = 0.0;
+
+  vtkSMProxy* proxy = this->proxy();
+  auto readVec = [proxy](const QDoubleSpinBox* const spins[3], const char* name, double out[3]) {
+    if (spins[0] && spins[1] && spins[2])
+    {
+      out[0] = spins[0]->value();
+      out[1] = spins[1]->value();
+      out[2] = spins[2]->value();
+      return;
+    }
+    if (proxy)
+    {
+      if (auto* p = proxy->GetProperty(name))
+      {
+        vtkSMPropertyHelper(p).Get(out, 3);
+      }
+    }
+  };
+  readVec(this->RectangleCenter, "RectangleCenter", center);
+  readVec(this->RectangleNormal, "RectangleNormal", normal);
+  if (this->RectangleWidth)
+  {
+    width = this->RectangleWidth->value();
+  }
+  else if (proxy && proxy->GetProperty("RectangleWidth"))
+  {
+    width = vtkSMPropertyHelper(proxy, "RectangleWidth").GetAsDouble();
+  }
+  if (this->RectangleHeight)
+  {
+    height = this->RectangleHeight->value();
+  }
+  else if (proxy && proxy->GetProperty("RectangleHeight"))
+  {
+    height = vtkSMPropertyHelper(proxy, "RectangleHeight").GetAsDouble();
+  }
+}
+
+//-----------------------------------------------------------------------------
+void pqSHYXStreamlineSeedWidget::updateRectangleGeometry()
+{
+  if (!this->RectSource || !this->RectCenterSource || !this->RectCornerSource)
+  {
+    return;
+  }
+
+  double center[3];
+  double normal[3];
+  double width = 0.0;
+  double height = 0.0;
+  this->readRectangleFromControls(center, normal, width, height);
+
+  if (!std::isfinite(normal[0]) || !std::isfinite(normal[1]) || !std::isfinite(normal[2]) ||
+    vtkMath::Normalize(normal) < 1e-12)
+  {
+    normal[0] = 0.0;
+    normal[1] = 0.0;
+    normal[2] = 1.0;
+  }
+  std::copy(normal, normal + 3, this->RectNormal);
+
+  // Same basis the filter builds, so the editor and the seeds agree.
+  vtkMath::Perpendiculars(this->RectNormal, this->RectAxisU, this->RectAxisV, 0.0);
+  double cross[3];
+  vtkMath::Cross(this->RectAxisU, this->RectAxisV, cross);
+  if (vtkMath::Dot(cross, this->RectNormal) < 0.0)
+  {
+    this->RectAxisV[0] = -this->RectAxisV[0];
+    this->RectAxisV[1] = -this->RectAxisV[1];
+    this->RectAxisV[2] = -this->RectAxisV[2];
+  }
+
+  if (!(width > 0.0) || !std::isfinite(width))
+  {
+    width = 1.0;
+  }
+  if (!(height > 0.0) || !std::isfinite(height))
+  {
+    height = 1.0;
+  }
+
+  const double halfU[3] = { 0.5 * width * this->RectAxisU[0], 0.5 * width * this->RectAxisU[1],
+    0.5 * width * this->RectAxisU[2] };
+  const double halfV[3] = { 0.5 * height * this->RectAxisV[0],
+    0.5 * height * this->RectAxisV[1], 0.5 * height * this->RectAxisV[2] };
+
+  double origin[3];
+  double point1[3];
+  double point2[3];
+  for (int i = 0; i < 3; ++i)
+  {
+    origin[i] = center[i] - halfU[i] - halfV[i];
+    point1[i] = origin[i] + 2.0 * halfU[i];
+    point2[i] = origin[i] + 2.0 * halfV[i];
+  }
+  this->RectSource->SetOrigin(origin);
+  this->RectSource->SetPoint1(point1);
+  this->RectSource->SetPoint2(point2);
+  this->RectSource->Update();
+
+  // Handle sizes in screen pixels, converted at the center's depth so they stay grabbable.
+  const double handleRadius = std::max(1e-6, this->worldLengthForPixels(center, 6.0));
+  this->RectCenterSource->SetCenter(center);
+  this->RectCenterSource->SetRadius(handleRadius);
+  this->RectCenterSource->Update();
+
+  double corner[3] = { center[0] + halfU[0] + halfV[0], center[1] + halfU[1] + halfV[1],
+    center[2] + halfU[2] + halfV[2] };
+  this->RectCornerSource->SetCenter(corner);
+  this->RectCornerSource->SetRadius(handleRadius * 1.2);
+  this->RectCornerSource->Update();
+
+  // Normal handle: one stick through the center, with a draggable cone at each end (mirrors
+  // vtkImplicitPlaneRepresentation, which puts cones at origin +/- 0.3 * diagonal).
+  if (this->RectNormalSource && this->RectNormalSource2 && this->RectNormalLineSource)
+  {
+    const double stickPixels = 48.0;
+    double length = this->worldLengthForPixels(center, stickPixels);
+    if (!(length > 0.0) || !std::isfinite(length))
+    {
+      // No renderer yet: fall back to a fraction of the quad so the handle is still visible.
+      length = 0.5 * std::max({ width, height, 1e-6 });
+    }
+    this->RectNormalLength = length;
+
+    const double coneHeight = 0.30 * length;
+    const double coneRadius = 0.13 * length;
+
+    double tipPlus[3];
+    double tipMinus[3];
+    double centerPlus[3];
+    double centerMinus[3];
+    for (int i = 0; i < 3; ++i)
+    {
+      tipPlus[i] = center[i] + length * this->RectNormal[i];
+      tipMinus[i] = center[i] - length * this->RectNormal[i];
+      // Cone bodies sit inside the tips, both pointing along +normal like VTK's clip widget.
+      centerPlus[i] = tipPlus[i] - 0.5 * coneHeight * this->RectNormal[i];
+      centerMinus[i] = tipMinus[i] - 0.5 * coneHeight * this->RectNormal[i];
+    }
+
+    this->RectNormalLineSource->SetPoint1(tipMinus);
+    this->RectNormalLineSource->SetPoint2(tipPlus);
+    this->RectNormalLineSource->Update();
+
+    this->RectNormalSource->SetCenter(centerPlus);
+    this->RectNormalSource->SetDirection(this->RectNormal);
+    this->RectNormalSource->SetHeight(coneHeight);
+    this->RectNormalSource->SetRadius(coneRadius);
+    this->RectNormalSource->Update();
+
+    this->RectNormalSource2->SetCenter(centerMinus);
+    this->RectNormalSource2->SetDirection(this->RectNormal);
+    this->RectNormalSource2->SetHeight(coneHeight);
+    this->RectNormalSource2->SetRadius(coneRadius);
+    this->RectNormalSource2->Update();
+  }
+
+  if (this->RectangleOrientLabel)
+  {
+    this->RectangleOrientLabel->setText(
+      tr("Center %1, %2, %3; normal %4, %5, %6; %7 x %8. Drag the yellow center to move, the blue "
+         "corner to resize, the red cone to rotate the plane.")
+        .arg(center[0], 0, 'g', 6)
+        .arg(center[1], 0, 'g', 6)
+        .arg(center[2], 0, 'g', 6)
+        .arg(this->RectNormal[0], 0, 'g', 4)
+        .arg(this->RectNormal[1], 0, 'g', 4)
+        .arg(this->RectNormal[2], 0, 'g', 4)
+        .arg(width, 0, 'g', 6)
+        .arg(height, 0, 'g', 6));
+  }
 }
 
 //-----------------------------------------------------------------------------
@@ -1410,29 +1850,11 @@ bool pqSHYXStreamlineSeedWidget::syncWidgetFromProperties()
       }
     }
   }
-  else if (shape == 2 && this->PlaneWidget)
+  else if (shape == 2 && this->RectActor)
   {
-    double origin[3];
-    double p1[3];
-    double p2[3];
-    double curOrigin[3];
-    double curP1[3];
-    double curP2[3];
-    readVec(this->RectangleOrigin, "RectangleOrigin", origin);
-    readVec(this->RectangleP1, "RectanglePoint1", p1);
-    readVec(this->RectangleP2, "RectanglePoint2", p2);
-    this->PlaneWidget->GetOrigin(curOrigin);
-    this->PlaneWidget->GetPoint1(curP1);
-    this->PlaneWidget->GetPoint2(curP2);
-    if (!NearlySamePoint(curOrigin, origin) || !NearlySamePoint(curP1, p1) ||
-      !NearlySamePoint(curP2, p2))
-    {
-      this->PlaneWidget->SetOrigin(origin);
-      this->PlaneWidget->SetPoint1(p1);
-      this->PlaneWidget->SetPoint2(p2);
-      this->PlaneWidget->UpdatePlacement();
-      changed = true;
-    }
+    // The quad is derived geometry (center + normal + W/H), so rebuild it unconditionally: the
+    // plane source update is cheap and this keeps the editor in sync with the panel draft.
+    this->updateRectangleGeometry();
   }
 
   if (changed)
@@ -1477,10 +1899,8 @@ void pqSHYXStreamlineSeedWidget::placeWidgetInInputBounds()
       rep->PlaceWidget(bounds);
     }
   }
-  else if (shape == 2 && this->PlaneWidget)
-  {
-    this->PlaneWidget->PlaceWidget(bounds);
-  }
+  // The rectangle has no bounds-relative state: its handle sizes are computed per frame from
+  // worldLengthForPixels(), so there is nothing to place here.
 }
 
 //-----------------------------------------------------------------------------
@@ -1770,6 +2190,23 @@ void pqSHYXStreamlineSeedWidget::onWidgetEvent(unsigned long eid)
       {
         rep->GetPoint1WorldPosition(this->StartLineP1);
         rep->GetPoint2WorldPosition(this->StartLineP2);
+        // Remember which handle grabbed the event so the pick center can follow that endpoint:
+        // vtkLineRepresentation reports OnP1 / OnP2 for the end points and OnLine for the middle
+        // handle. The middle handle only translates, so it has no single end point.
+        switch (rep->GetInteractionState())
+        {
+          case vtkLineRepresentation::OnP1:
+          case vtkLineRepresentation::TranslatingP1:
+            this->MovedLineEndPoint = 0;
+            break;
+          case vtkLineRepresentation::OnP2:
+          case vtkLineRepresentation::TranslatingP2:
+            this->MovedLineEndPoint = 1;
+            break;
+          default:
+            this->MovedLineEndPoint = -1;
+            break;
+        }
       }
     }
     else if (shape == 1 && this->SphereWidget)
@@ -1779,10 +2216,7 @@ void pqSHYXStreamlineSeedWidget::onWidgetEvent(unsigned long eid)
         rep->GetCenter(this->StartSphereCenter);
       }
     }
-    else if (shape == 2 && this->PlaneWidget)
-    {
-      this->PlaneWidget->GetOrigin(this->StartRectangleOrigin);
-    }
+    // The rectangle is a hand-rolled editor (see ProcessRectangleEvents); it has no widget events.
   }
   else if (eid == vtkCommand::InteractionEvent)
   {
@@ -1792,6 +2226,440 @@ void pqSHYXStreamlineSeedWidget::onWidgetEvent(unsigned long eid)
   {
     this->Interacting = false;
     this->syncControlsFromWidget(true);
+    // Re-centre the camera's rotation point on what was just moved, so the next orbit/zoom stays
+    // around the seed instead of the old center of rotation.
+    this->updatePickCenterFromWidget();
+  }
+}
+
+//-----------------------------------------------------------------------------
+void pqSHYXStreamlineSeedWidget::ProcessRectangleEvents(
+  vtkObject*, unsigned long eid, void* clientdata, void*)
+{
+  auto* self = reinterpret_cast<pqSHYXStreamlineSeedWidget*>(clientdata);
+  if (self)
+  {
+    self->onRectangleInteractorEvent(eid);
+  }
+}
+
+//-----------------------------------------------------------------------------
+void pqSHYXStreamlineSeedWidget::onRectangleInteractorEvent(unsigned long eid)
+{
+  if (!this->WidgetsVisible || !this->RectEnabled || !this->Interactor || !this->RectCenterSource)
+  {
+    return;
+  }
+  if (this->currentShape() != 2)
+  {
+    return;
+  }
+
+  int pos[2];
+  this->Interactor->GetEventPosition(pos);
+
+  if (eid == vtkCommand::LeftButtonPressEvent)
+  {
+    if (this->beginRectangleDrag(pos[0], pos[1]))
+    {
+      // Consume the press so the trackball style does not also start a camera rotate.
+      if (this->RectInteractorObserver)
+      {
+        this->RectInteractorObserver->SetAbortFlag(1);
+      }
+    }
+  }
+  else if (eid == vtkCommand::MouseMoveEvent)
+  {
+    if (this->RectDrag != RectDragNone)
+    {
+      this->dragRectangle(pos[0], pos[1]);
+      if (this->RectInteractorObserver)
+      {
+        this->RectInteractorObserver->SetAbortFlag(1);
+      }
+    }
+  }
+  else if (eid == vtkCommand::LeftButtonReleaseEvent)
+  {
+    if (this->RectDrag != RectDragNone)
+    {
+      this->endRectangleDrag();
+      if (this->RectInteractorObserver)
+      {
+        this->RectInteractorObserver->SetAbortFlag(1);
+      }
+    }
+  }
+}
+
+//-----------------------------------------------------------------------------
+bool pqSHYXStreamlineSeedWidget::displayPointForWorld(
+  vtkRenderer* ren, const double world[3], double out[3]) const
+{
+  out[0] = out[1] = out[2] = 0.0;
+  if (!ren)
+  {
+    return false;
+  }
+  ren->SetWorldPoint(world[0], world[1], world[2], 1.0);
+  ren->WorldToDisplay();
+  const double* display = ren->GetDisplayPoint();
+  out[0] = display[0];
+  out[1] = display[1];
+  out[2] = display[2];
+  return std::isfinite(out[0]) && std::isfinite(out[1]) && std::isfinite(out[2]);
+}
+
+//-----------------------------------------------------------------------------
+pqSHYXStreamlineSeedWidget::RectangleDragMode pqSHYXStreamlineSeedWidget::pickRectangleHandle(
+  vtkRenderer* ren, int displayX, int displayY, double& depthOut)
+{
+  depthOut = 0.5;
+  if (!ren || !this->RectCenterSource || !this->RectCornerSource || !this->RectNormalSource)
+  {
+    return RectDragNone;
+  }
+
+  // Priority order matters: the normal cones line up with the center handle along the view axis
+  // when the camera looks along the normal, so a center click must win before a cone is
+  // considered. This is what keeps "drag the center" from turning into "rotate the plane".
+  struct Candidate
+  {
+    RectangleDragMode Mode;
+    double Center[3];
+  };
+  double centerPos[3];
+  double cornerPos[3];
+  double tipPlus[3];
+  double tipMinus[3];
+  this->RectCenterSource->GetCenter(centerPos);
+  this->RectCornerSource->GetCenter(cornerPos);
+  this->RectNormalSource->GetCenter(tipPlus);
+
+  if (this->RectNormalSource2)
+  {
+    this->RectNormalSource2->GetCenter(tipMinus);
+  }
+  else
+  {
+    std::copy(centerPos, centerPos + 3, tipMinus);
+  }
+  // Use the cone tips rather than the cone centers so the grab point matches the visible tip.
+  for (int i = 0; i < 3; ++i)
+  {
+    tipPlus[i] = centerPos[i] +
+      this->RectNormalLength * this->RectNormal[i];
+    tipMinus[i] = centerPos[i] -
+      this->RectNormalLength * this->RectNormal[i];
+  }
+
+  const Candidate candidates[] = {
+    { RectDragCenter, { centerPos[0], centerPos[1], centerPos[2] } },
+    { RectDragCorner, { cornerPos[0], cornerPos[1], cornerPos[2] } },
+    { RectDragNormal, { tipPlus[0], tipPlus[1], tipPlus[2] } },
+    { RectDragNormal, { tipMinus[0], tipMinus[1], tipMinus[2] } },
+  };
+
+  const double tolerance = static_cast<double>(std::max(4, this->RectHandleTolerance));
+  for (const Candidate& candidate : candidates)
+  {
+    double display[3];
+    if (!this->displayPointForWorld(ren, candidate.Center, display))
+    {
+      continue;
+    }
+    const double dx = display[0] - static_cast<double>(displayX);
+    const double dy = display[1] - static_cast<double>(displayY);
+    if (dx * dx + dy * dy <= tolerance * tolerance)
+    {
+      depthOut = display[2];
+      return candidate.Mode;
+    }
+  }
+  return RectDragNone;
+}
+
+//-----------------------------------------------------------------------------
+bool pqSHYXStreamlineSeedWidget::beginRectangleDrag(int displayX, int displayY)
+{
+  vtkRenderer* ren = this->renderer();
+  if (!ren)
+  {
+    return false;
+  }
+
+  double handleDepth = 0.5;
+  const RectangleDragMode mode = this->pickRectangleHandle(ren, displayX, displayY, handleDepth);
+  if (mode == RectDragNone)
+  {
+    // Nothing close: let the interactor style orbit/pan the camera as usual.
+    return false;
+  }
+
+  double center[3];
+  double normal[3];
+  double width = 0.0;
+  double height = 0.0;
+  this->readRectangleFromControls(center, normal, width, height);
+  std::copy(center, center + 3, this->RectDragCenterStart);
+  this->RectDragStartWidth = width;
+  this->RectDragStartHeight = height;
+  this->RectDragDepth = handleDepth;
+
+  this->RectDrag = mode;
+  if (mode == RectDragCenter)
+  {
+    double clickWorld[4];
+    vtkInteractorObserver::ComputeDisplayToWorld(
+      ren, displayX, displayY, this->RectDragDepth, clickWorld);
+    this->RectDragGrabOffset[0] = center[0] - clickWorld[0];
+    this->RectDragGrabOffset[1] = center[1] - clickWorld[1];
+    this->RectDragGrabOffset[2] = center[2] - clickWorld[2];
+  }
+  else if (mode == RectDragNormal)
+  {
+    this->RectDragLastDisplay[0] = static_cast<double>(displayX);
+    this->RectDragLastDisplay[1] = static_cast<double>(displayY);
+  }
+
+  this->Interacting = true;
+  return true;
+}
+
+//-----------------------------------------------------------------------------
+void pqSHYXStreamlineSeedWidget::dragRectangle(int displayX, int displayY)
+{
+  vtkRenderer* ren = this->renderer();
+  if (!ren || this->RectDrag == RectDragNone)
+  {
+    return;
+  }
+
+  double world[4];
+  vtkInteractorObserver::ComputeDisplayToWorld(ren, displayX, displayY, this->RectDragDepth, world);
+
+  double center[3];
+  double normal[3];
+  double width = this->RectDragStartWidth;
+  double height = this->RectDragStartHeight;
+  std::copy(this->RectDragCenterStart, this->RectDragCenterStart + 3, center);
+  std::copy(this->RectNormal, this->RectNormal + 3, normal);
+
+  if (this->RectDrag == RectDragCenter)
+  {
+    center[0] = world[0] + this->RectDragGrabOffset[0];
+    center[1] = world[1] + this->RectDragGrabOffset[1];
+    center[2] = world[2] + this->RectDragGrabOffset[2];
+  }
+  else if (this->RectDrag == RectDragNormal)
+  {
+    // Incremental rotation, same scheme as vtkImplicitPlaneRepresentation / vtkPlaneWidget:
+    //   axis  = viewPlaneNormal x mouseMotion        (perpendicular to both)
+    //   theta = 360 * |motion_pixels| / viewport_diagonal
+    // so a small mouse move yields a small angle and the arrow tracks the cursor. Mapping the
+    // absolute cursor position onto a direction (the previous version) is discontinuous at the
+    // center and made the plane flip on the slightest move.
+    vtkCamera* camera = ren->GetActiveCamera();
+    double vpn[3] = { 0.0, 0.0, 1.0 };
+    if (camera)
+    {
+      camera->GetViewPlaneNormal(vpn);
+    }
+
+    double prevWorld[4];
+    double currentWorld[4];
+    vtkInteractorObserver::ComputeDisplayToWorld(
+      ren, this->RectDragLastDisplay[0], this->RectDragLastDisplay[1], this->RectDragDepth,
+      prevWorld);
+    vtkInteractorObserver::ComputeDisplayToWorld(
+      ren, displayX, displayY, this->RectDragDepth, currentWorld);
+
+    const double motion[3] = { currentWorld[0] - prevWorld[0], currentWorld[1] - prevWorld[1],
+      currentWorld[2] - prevWorld[2] };
+    double axis[3];
+    vtkMath::Cross(vpn, motion, axis);
+    const int* size = ren->GetSize();
+    const double dx = displayX - this->RectDragLastDisplay[0];
+    const double dy = displayY - this->RectDragLastDisplay[1];
+
+    if (size && size[0] > 0 && size[1] > 0 && vtkMath::Normalize(axis) > 0.0)
+    {
+      const double l2 = dx * dx + dy * dy;
+      const double diag2 = static_cast<double>(size[0]) * size[0] +
+        static_cast<double>(size[1]) * size[1];
+      // A full viewport-diagonal drag sweeps this many degrees. VTK uses 360; a smaller value
+      // feels calmer on a trackpad where a few pixels of jitter are easy to produce.
+      constexpr double kDegreesPerDiagonal = 240.0;
+      const double theta = kDegreesPerDiagonal * std::sqrt(l2 / diag2);
+
+      vtkNew<vtkTransform> rotation;
+      rotation->Identity();
+      rotation->RotateWXYZ(theta, axis);
+      double newNormal[3];
+      rotation->TransformNormal(this->RectNormal, newNormal);
+      if (vtkMath::Normalize(newNormal) > 0.0)
+      {
+        std::copy(newNormal, newNormal + 3, normal);
+      }
+    }
+
+    this->RectDragLastDisplay[0] = static_cast<double>(displayX);
+    this->RectDragLastDisplay[1] = static_cast<double>(displayY);
+  }
+  else
+  {
+    // Corner drag: project the cursor offset from the center onto the two in-plane axes. The
+    // center stays fixed, so width / height grow or shrink symmetrically.
+    const double offset[3] = { world[0] - center[0], world[1] - center[1], world[2] - center[2] };
+    width = 2.0 * std::fabs(vtkMath::Dot(offset, this->RectAxisU));
+    height = 2.0 * std::fabs(vtkMath::Dot(offset, this->RectAxisV));
+    const double minSize = std::max(1e-9, this->worldLengthForPixels(center, 2.0));
+    width = std::max(width, minSize);
+    height = std::max(height, minSize);
+  }
+
+  this->UpdatingFromWidget = true;
+  SetVec3(this->RectangleCenter, center);
+  SetVec3(this->RectangleNormal, normal);
+  if (this->RectangleWidth)
+  {
+    this->RectangleWidth->setValue(width);
+  }
+  if (this->RectangleHeight)
+  {
+    this->RectangleHeight->setValue(height);
+  }
+  this->UpdatingFromWidget = false;
+
+  this->updateRectangleGeometry();
+  this->renderSeedView();
+}
+
+//-----------------------------------------------------------------------------
+void pqSHYXStreamlineSeedWidget::endRectangleDrag()
+{
+  const RectangleDragMode mode = this->RectDrag;
+  this->RectDrag = RectDragNone;
+  this->Interacting = false;
+
+  double center[3];
+  double normal[3];
+  double width = 0.0;
+  double height = 0.0;
+  this->readRectangleFromControls(center, normal, width, height);
+
+  bool snapped = false;
+  // Only the center snaps, and only when it actually moved (or was the handle being dragged).
+  const bool centerMoved = !NearlySamePoint(center, this->RectDragCenterStart);
+  if (this->RectangleSnap && this->RectangleSnap->isChecked() && mode == RectDragCenter &&
+    centerMoved)
+  {
+    double points[3] = { center[0], center[1], center[2] };
+    const int enabled = 1;
+    if (this->snapPoints(points, 1, &enabled))
+    {
+      center[0] = points[0];
+      center[1] = points[1];
+      center[2] = points[2];
+      snapped = true;
+    }
+  }
+
+  this->UpdatingFromWidget = true;
+  SetVec3(this->RectangleCenter, center);
+  this->UpdatingFromWidget = false;
+  this->updateRectangleGeometry();
+  this->updatePickCenterFromWidget();
+  this->renderSeedView();
+
+  const bool autoApply = this->AutoApply && this->AutoApply->isChecked();
+  const QString snapLabel = this->SnapMode == pqSHYXStreamlineSeedWidget::SnapScreenRay
+    ? tr("Center snapped to the surface under the cursor")
+    : tr("Center snapped to the nearest vertex in 3D");
+  if (snapped)
+  {
+    this->setStatus(autoApply ? tr("%1. Applying streamlines.").arg(snapLabel)
+                              : tr("%1. Click Apply to refresh.").arg(snapLabel));
+  }
+  else
+  {
+    this->setStatus(autoApply ? tr("Rectangle updated. Applying streamlines.")
+                              : tr("Rectangle updated. Click Apply to refresh."));
+  }
+
+  Q_EMIT this->changeAvailable();
+  Q_EMIT this->changeFinished();
+  this->applyOnRelease();
+}
+
+//-----------------------------------------------------------------------------
+void pqSHYXStreamlineSeedWidget::setPickCenter(const double p[3])
+{
+  pqView* view = this->view();
+  if (!view)
+  {
+    view = pqActiveObjects::instance().activeView();
+  }
+  auto* renderView = qobject_cast<pqRenderView*>(view);
+  if (!renderView || !std::isfinite(p[0]) || !std::isfinite(p[1]) || !std::isfinite(p[2]))
+  {
+    return;
+  }
+  double center[3] = { p[0], p[1], p[2] };
+  renderView->setCenterOfRotation(center);
+}
+
+//-----------------------------------------------------------------------------
+void pqSHYXStreamlineSeedWidget::updatePickCenterFromWidget()
+{
+  const int shape = this->currentShape();
+
+  if (shape == 0 && this->LineWidget)
+  {
+    auto* rep = this->LineWidget->GetLineRepresentation();
+    if (!rep)
+    {
+      return;
+    }
+    double p1[3];
+    double p2[3];
+    rep->GetPoint1WorldPosition(p1);
+    rep->GetPoint2WorldPosition(p2);
+
+    double target[3];
+    if (this->MovedLineEndPoint == 0)
+    {
+      std::copy(p1, p1 + 3, target);
+    }
+    else if (this->MovedLineEndPoint == 1)
+    {
+      std::copy(p2, p2 + 3, target);
+    }
+    else
+    {
+      // Whole-line drag (middle handle): the line has no single moved end point, so use its
+      // midpoint, which is where the middle handle sits.
+      target[0] = 0.5 * (p1[0] + p2[0]);
+      target[1] = 0.5 * (p1[1] + p2[1]);
+      target[2] = 0.5 * (p1[2] + p2[2]);
+    }
+    this->setPickCenter(target);
+  }
+  else if (shape == 1 && this->SphereWidget)
+  {
+    if (auto* rep = vtkSphereRepresentation::SafeDownCast(this->SphereWidget->GetRepresentation()))
+    {
+      double center[3];
+      rep->GetCenter(center);
+      this->setPickCenter(center);
+    }
+  }
+  else if (shape == 2 && this->RectCenterSource)
+  {
+    double center[3];
+    this->RectCenterSource->GetCenter(center);
+    this->setPickCenter(center);
   }
 }
 
@@ -1879,46 +2747,10 @@ void pqSHYXStreamlineSeedWidget::syncControlsFromWidget(bool release)
     }
     this->UpdatingFromWidget = false;
   }
-  else if (shape == 2 && this->PlaneWidget)
+  else if (shape == 2 && this->RectCenterSource)
   {
-    double origin[3];
-    double p1[3];
-    double p2[3];
-    this->PlaneWidget->GetOrigin(origin);
-    this->PlaneWidget->GetPoint1(p1);
-    this->PlaneWidget->GetPoint2(p2);
-
-    if (release && this->RectangleSnap && this->RectangleSnap->isChecked() &&
-      !SamePoint(origin, this->StartRectangleOrigin))
-    {
-      double points[3] = { origin[0], origin[1], origin[2] };
-      const int enabled = 1;
-      if (this->snapPoints(points, 1, &enabled))
-      {
-        const double delta[3] = {
-          points[0] - origin[0], points[1] - origin[1], points[2] - origin[2]
-        };
-        origin[0] = points[0];
-        origin[1] = points[1];
-        origin[2] = points[2];
-        p1[0] += delta[0];
-        p1[1] += delta[1];
-        p1[2] += delta[2];
-        p2[0] += delta[0];
-        p2[1] += delta[1];
-        p2[2] += delta[2];
-        this->PlaneWidget->SetOrigin(origin);
-        this->PlaneWidget->SetPoint1(p1);
-        this->PlaneWidget->SetPoint2(p2);
-        snapped = true;
-      }
-    }
-
-    this->UpdatingFromWidget = true;
-    SetVec3(this->RectangleOrigin, origin);
-    SetVec3(this->RectangleP1, p1);
-    SetVec3(this->RectangleP2, p2);
-    this->UpdatingFromWidget = false;
+    // The rectangle has no VTK widget: it reports through dragRectangle()/endRectangleDrag()
+    // instead of the widget Start/Interaction/End events, so nothing to sync here.
   }
 
   if (release)

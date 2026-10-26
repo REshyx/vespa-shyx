@@ -19,23 +19,60 @@
 
 #include "vtkSMSessionProxyManager.h"
 
+#if defined(Q_OS_WIN)
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#endif
+
+#include <QAbstractSpinBox>
 #include <QApplication>
 #include <QCursor>
 #include <QEvent>
 #include <QKeyEvent>
+#include <QLineEdit>
 #include <QList>
 #include <QMap>
 #include <QMouseEvent>
+#include <QPlainTextEdit>
+#include <QTextEdit>
 #include <QTimer>
 #include <QWidget>
 
 namespace
 {
-/// How long Ctrl has to stay down before the wheel shows. Keeps a plain
-/// Ctrl+click (add to selection) from flashing the ring.
-constexpr int kHoldDelayMs = 250;
+/// How long the key has to stay down before the wheel shows. Short enough to
+/// feel immediate, long enough that a quick tap never flashes the ring.
+constexpr int kHoldDelayMs = 200;
+
+/// Key / pointer sampling period. Qt key events are not reliable enough here:
+/// a focused VTK render window can consume them, which made the wheel depend on
+/// whether the user happened to move the mouse.
+constexpr int kPollIntervalMs = 30;
+
+/// VK_OEM_3 = the ` ~ / · key left of 1 (US layout; Chinese layout types ·).
+constexpr int kTriggerVirtualKey = 0xC0;
 
 const char* kExtractSurfaceProxy = "DataSetSurfaceFilter";
+
+//-----------------------------------------------------------------------------
+/// Physical trigger key press, by Qt key code.
+bool IsTriggerKey(int key)
+{
+  return key == Qt::Key_QuoteLeft || key == Qt::Key_Dead_Grave;
+}
+
+//-----------------------------------------------------------------------------
+/// True for "`", "~" and "·", so layouts that produce the middle dot still work.
+bool IsTriggerText(const QString& text)
+{
+  return text == QLatin1String("`") || text == QLatin1String("~") ||
+    text == QString(QChar(0x00B7));
+}
 
 //-----------------------------------------------------------------------------
 /// The port that owns an active point/cell selection, or nullptr.
@@ -72,32 +109,54 @@ bool HasFilterPrototype(pqOutputPort* port, const char* name)
 }
 
 //-----------------------------------------------------------------------------
-/// True when \a globalPosition is over the render widget of any RenderView.
-bool IsOverRenderView(const QPoint& globalPosition)
+/// RenderView whose 3D area contains \a globalPosition (nullptr otherwise).
+///
+/// Pure geometry on purpose: QApplication::widgetAt() is unreliable above the
+/// native VTK child window, which made the wheel come and go depending on what
+/// exactly was under the cursor. The window also has to be the active one, so
+/// the key pressed in another application does not arm the wheel.
+pqRenderView* RenderViewAt(const QPoint& globalPosition)
 {
-  QWidget* under = QApplication::widgetAt(globalPosition);
+  QWidget* activeWindow = QApplication::activeWindow();
+  if (!activeWindow)
+  {
+    return nullptr; // ParaView is not the foreground application
+  }
   pqApplicationCore* core = pqApplicationCore::instance();
   pqServerManagerModel* model = core ? core->getServerManagerModel() : nullptr;
-  if (!under || !model)
+  if (!model)
   {
-    return false;
+    return nullptr;
   }
   const QList<pqView*> views = model->findItems<pqView*>();
   for (pqView* view : views)
   {
-    if (!qobject_cast<pqRenderView*>(view) || !view->widget())
+    auto* renderView = qobject_cast<pqRenderView*>(view);
+    QWidget* widget = renderView ? renderView->widget() : nullptr;
+    if (!widget || !widget->isVisible() || widget->window() != activeWindow)
     {
       continue;
     }
-    for (QWidget* widget = under; widget; widget = widget->parentWidget())
+    if (widget->rect().contains(widget->mapFromGlobal(globalPosition)))
     {
-      if (widget == view->widget())
-      {
-        return true;
-      }
+      return renderView;
     }
   }
-  return false;
+  return nullptr;
+}
+
+//-----------------------------------------------------------------------------
+/// True when keyboard focus sits in a text input, where the key has to stay a
+/// character instead of a gesture.
+bool TextInputHasFocus()
+{
+  QWidget* focus = QApplication::focusWidget();
+  if (!focus)
+  {
+    return false;
+  }
+  return qobject_cast<QLineEdit*>(focus) || qobject_cast<QAbstractSpinBox*>(focus) ||
+    qobject_cast<QTextEdit*>(focus) || qobject_cast<QPlainTextEdit*>(focus);
 }
 
 //-----------------------------------------------------------------------------
@@ -164,7 +223,12 @@ void pqSHYXQuickFilterWheel::onStartup()
   this->ShowTimer->setSingleShot(true);
   this->ShowTimer->setInterval(kHoldDelayMs);
   QObject::connect(this->ShowTimer, &QTimer::timeout, this,
-    [this]() { this->showWheelAt(this->PendingPosition); });
+    [this]() { this->showWheelAt(QCursor::pos()); });
+
+  this->PollTimer = new QTimer(this);
+  this->PollTimer->setInterval(kPollIntervalMs);
+  QObject::connect(this->PollTimer, &QTimer::timeout, this, [this]() { this->updateState(); });
+  this->PollTimer->start();
 
   qApp->installEventFilter(this);
   this->Installed = true;
@@ -188,10 +252,76 @@ void pqSHYXQuickFilterWheel::onShutdown()
     delete this->Overlay;
     this->Overlay = nullptr;
   }
-  if (this->ShowTimer)
+  delete this->ShowTimer;
+  this->ShowTimer = nullptr;
+  delete this->PollTimer;
+  this->PollTimer = nullptr;
+}
+
+//-----------------------------------------------------------------------------
+bool pqSHYXQuickFilterWheel::triggerKeyDown() const
+{
+#if defined(Q_OS_WIN)
+  // Polled so a render window that eats key events cannot break the gesture.
+  return (::GetAsyncKeyState(kTriggerVirtualKey) & 0x8000) != 0;
+#else
+  return this->TriggerKeyHeld;
+#endif
+}
+
+//-----------------------------------------------------------------------------
+bool pqSHYXQuickFilterWheel::uiBusy() const
+{
+  return QApplication::mouseButtons() != Qt::NoButton || QApplication::activePopupWidget() ||
+    QApplication::activeModalWidget() || TextInputHasFocus() || this->SuppressedUntilKeyRelease;
+}
+
+//-----------------------------------------------------------------------------
+void pqSHYXQuickFilterWheel::updateState()
+{
+  if (!this->ShowTimer || !this->PollTimer)
   {
-    delete this->ShowTimer;
-    this->ShowTimer = nullptr;
+    return;
+  }
+  const bool down = this->triggerKeyDown();
+  if (!down)
+  {
+    // Key is up: whatever the user dismissed may open again on the next press.
+    if (this->ShowTimer->isActive())
+    {
+      this->ShowTimer->stop();
+    }
+    this->HoldArmed = false;
+    this->SuppressedUntilKeyRelease = false;
+    if (this->Overlay && this->Overlay->isVisible())
+    {
+      this->hideOverlay();
+    }
+    return;
+  }
+
+  // Key is held: the wheel already open stays put (the pointer may leave the
+  // ring while the user aims at a sector; mouse events handle the hover).
+  if (this->Overlay && this->Overlay->isVisible())
+  {
+    return;
+  }
+
+  const QPoint cursor = QCursor::pos();
+  if (this->uiBusy() || !RenderViewAt(cursor))
+  {
+    if (this->ShowTimer->isActive())
+    {
+      this->ShowTimer->stop();
+    }
+    this->HoldArmed = false;
+    return;
+  }
+
+  if (!this->HoldArmed)
+  {
+    this->HoldArmed = true;
+    this->ShowTimer->start();
   }
 }
 
@@ -211,14 +341,18 @@ bool pqSHYXQuickFilterWheel::eventFilter(QObject* watched, QEvent* event)
     case QEvent::KeyPress:
     {
       auto* keyEvent = static_cast<QKeyEvent*>(event);
-      if (keyEvent->key() == Qt::Key_Control)
+      const bool trigger =
+        IsTriggerKey(keyEvent->key()) || IsTriggerText(keyEvent->text());
+      if (trigger)
       {
+        this->TriggerKeyHeld = true;
         if (!keyEvent->isAutoRepeat())
         {
-          this->handleCtrlPressed();
+          this->updateState();
         }
-        // Never swallow Ctrl itself: Ctrl+click / Ctrl+X keep working.
-        return false;
+        // Swallow the key only once the wheel owns the gesture, so typing ` in
+        // an unrelated field still works.
+        return wheelVisible;
       }
       if (wheelVisible)
       {
@@ -236,9 +370,17 @@ bool pqSHYXQuickFilterWheel::eventFilter(QObject* watched, QEvent* event)
     case QEvent::KeyRelease:
     {
       auto* keyEvent = static_cast<QKeyEvent*>(event);
-      if (keyEvent->key() == Qt::Key_Control && !keyEvent->isAutoRepeat())
+      const bool trigger =
+        IsTriggerKey(keyEvent->key()) || IsTriggerText(keyEvent->text());
+      if (trigger)
       {
-        this->handleCtrlReleased();
+        // GetAsyncKeyState may already report the release; force the event state.
+        this->TriggerKeyHeld = false;
+        if (!keyEvent->isAutoRepeat())
+        {
+          this->updateState();
+        }
+        return wheelVisible;
       }
       return false;
     }
@@ -247,6 +389,17 @@ bool pqSHYXQuickFilterWheel::eventFilter(QObject* watched, QEvent* event)
     {
       if (!wheelVisible)
       {
+        // A tap that turns into a click or a drag is not a wheel gesture; do not
+        // pop the ring when the button comes back up with the key still held.
+        if (this->ShowTimer)
+        {
+          this->ShowTimer->stop();
+        }
+        this->HoldArmed = false;
+        if (this->triggerKeyDown())
+        {
+          this->SuppressedUntilKeyRelease = true;
+        }
         return false;
       }
       auto* mouseEvent = static_cast<QMouseEvent*>(event);
@@ -275,16 +428,22 @@ bool pqSHYXQuickFilterWheel::eventFilter(QObject* watched, QEvent* event)
 
     case QEvent::MouseMove:
     {
-      if (!wheelVisible)
+      if (wheelVisible)
       {
+        this->updateHover(static_cast<QMouseEvent*>(event)->globalPosition().toPoint());
         return false;
       }
-      this->updateHover(static_cast<QMouseEvent*>(event)->globalPosition().toPoint());
+      // Armed or not, the poll timer picks this up; nothing to do per move.
       return false;
     }
 
     case QEvent::ApplicationDeactivate:
     {
+      // Ignore the deactivation our own overlay may cause on some platforms.
+      if (this->Overlay && this->Overlay->isActiveWindow())
+      {
+        return false;
+      }
       this->dismissWheel();
       return false;
     }
@@ -296,53 +455,13 @@ bool pqSHYXQuickFilterWheel::eventFilter(QObject* watched, QEvent* event)
 }
 
 //-----------------------------------------------------------------------------
-void pqSHYXQuickFilterWheel::handleCtrlPressed()
-{
-  if (!this->ShowTimer || (this->Overlay && this->Overlay->isVisible()))
-  {
-    return;
-  }
-  if (QApplication::activePopupWidget() || QApplication::activeModalWidget())
-  {
-    return;
-  }
-  const Qt::KeyboardModifiers modifiers = QApplication::keyboardModifiers();
-  if ((modifiers & (Qt::ShiftModifier | Qt::AltModifier | Qt::MetaModifier)) != 0)
-  {
-    return;
-  }
-  const QPoint cursor = QCursor::pos();
-  if (!IsOverRenderView(cursor))
-  {
-    return;
-  }
-  this->PendingPosition = cursor;
-  this->ShowTimer->start();
-}
-
-//-----------------------------------------------------------------------------
-void pqSHYXQuickFilterWheel::handleCtrlReleased()
-{
-  if (this->ShowTimer)
-  {
-    this->ShowTimer->stop();
-  }
-  this->dismissWheel();
-}
-
-//-----------------------------------------------------------------------------
 void pqSHYXQuickFilterWheel::showWheelAt(const QPoint& globalPosition)
 {
-  if ((QApplication::keyboardModifiers() & Qt::ControlModifier) == 0)
-  {
-    return;
-  }
-  // Ctrl+drag in the scene is not a wheel gesture.
-  if (QApplication::mouseButtons() != Qt::NoButton)
-  {
-    return;
-  }
-  if (QApplication::activePopupWidget() || QApplication::activeModalWidget())
+  this->HoldArmed = false;
+
+  // Re-check right before showing: the pointer may have left the view, a button
+  // may have gone down, or the key may already be released.
+  if (!this->triggerKeyDown() || this->uiBusy() || !RenderViewAt(globalPosition))
   {
     return;
   }
@@ -371,18 +490,31 @@ void pqSHYXQuickFilterWheel::showWheelAt(const QPoint& globalPosition)
 }
 
 //-----------------------------------------------------------------------------
+void pqSHYXQuickFilterWheel::hideOverlay()
+{
+  if (this->Overlay)
+  {
+    this->Overlay->hide();
+    this->Overlay->setHovered(-1);
+  }
+}
+
+//-----------------------------------------------------------------------------
 void pqSHYXQuickFilterWheel::dismissWheel()
 {
   if (this->ShowTimer)
   {
     this->ShowTimer->stop();
   }
-  if (this->Overlay)
-  {
-    this->Overlay->hide();
-    this->Overlay->setHovered(-1);
-  }
+  this->HoldArmed = false;
+  const bool wasVisible = this->Overlay && this->Overlay->isVisible();
+  this->hideOverlay();
   this->Items.clear();
+  if (wasVisible)
+  {
+    // Do not reopen just because the key is still held.
+    this->SuppressedUntilKeyRelease = true;
+  }
 }
 
 //-----------------------------------------------------------------------------

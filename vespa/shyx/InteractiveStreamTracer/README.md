@@ -12,16 +12,25 @@
 | Seed Shape | 种子几何 | 交互 | 吸附 |
 | :--- | :--- | :--- | :--- |
 | **Line**（0） | `vtkLineSource`，`LineResolution + 1` 个点 | 左键拖两个端点；中间手柄整体平移 | **每个端点独立**：`LineSnapPoint1` / `LineSnapPoint2` |
-| **Sphere**（1） | `vtkSphereSource` 表面点 / `vtkPointSource` 球内点 | **左键拖球体**平移；**半径在面板 Radius 里改**（3D 上不显示 handle，也不再用拖 handle 改半径）；右键拖拽仍可快速缩放 | 球心：`SphereSnapCenter` |
-| **Rectangle**（2） | `vtkPlaneSource`，矩形平面 | `vtkPlaneWidget`：角点缩放、法向箭头旋转、平面平移 | 原点：`RectangleSnapOrigin`；Point 1 / Point 2 随原点平移，保持尺寸与朝向 |
+| **Sphere**（1） | `vtkSphereSource` 表面点 / `vtkPointSource` 球内点 | **左键拖球体**平移；**半径在面板 Radius 里改**；球体上没有 handle / 半径线 / `R=` 文字（三者都关掉，线上无任何可拖拽点）；右键拖拽仍可快速缩放 | 球心：`SphereSnapCenter` |
+| **Rectangle**（2） | `vtkPlaneSource`，矩形平面 | 自带编辑器：**黄球 = 中心**（拖动平移）、**蓝球 = 单个角点**（拖它对称改 Width/Height）、**两端红锥 = 法线**（前后两面各一个，都可拖动旋转）、面板 **Face camera** 让法线朝向相机 | **只吸附中心**：`RectangleSnapCenter`；宽高与法线不变 |
 
 > **Apply on release 默认关闭**：拖完/输入完只更新种子，流线要点 **Apply** 才刷新（勾选后松手自动 Apply）。
+>
 > **Place in view** 把当前种子放到**相机正在看的地方**，保证落在当前视图内（不再是包围盒中心，缩放/平移后可能跑到视野外）：
 > - **Line**：取视口宽度 **1/3** 和 **2/3** 处两个屏幕位置，各自打射线命中 Input 表面并吸到最近顶点；
-> - **Sphere / Rectangle**：取**视口中心**打射线，命中点作为球心 / 矩形原点；
+> - **Sphere / Rectangle**：取**视口中心**打射线，命中点作为球心 / 矩形中心；矩形同时把法线设为相机方向（正对屏幕）；
 > - 尺寸按视口比例（球半径 15% 短边、矩形半边长 20% 短边）换算成命中深度处的世界长度；
 > - 矩形两条边沿相机 right / up，所以初始就是正对屏幕的平面；
 > - 某条射线没打中表面时回退到数据集包围盒中心（状态栏会提示），不会没反应。
+>
+> **pick center 跟随**：每次移动完（松手时）会把 **pick center（渲染视图的旋转中心）** 移到刚动过的东西上，方便接着绕它旋转/缩放：
+> - **Sphere** → 球心；
+> - **Rectangle** → 矩形中心；
+> - **Line** → **刚拖动的那个端点**；拖中间手柄整体平移时用线段中点（整体平移没有单独的「动过的端点」）；
+> - **Place in view** 也会顺手重置中心（line 用中点）。
+>
+> 实现走 `pqRenderView::setCenterOfRotation()`，与 `SelectionPlaneClipper` 的 `alignPickCenterToVisiblePlane()` 同一套 API。
 
 ## 吸附规则（vessel / stent）
 
@@ -92,9 +101,11 @@ Interior 模式与 Surface 模式互斥，切换时另一组控件会灰显/隐�
 | **SphereRandomSeed** | 1 | Interior 采样随机种子（高级）；同种子同结果 |
 | **SphereThetaResolution / SpherePhiResolution** | 32 / 24 | Surface 模式网格：`Theta x (Phi-2) + 2` 个种子 |
 | **SphereSnapCenter** | on | 释放时球心吸附 |
-| **RectangleOrigin / Point1 / Point2** | `0 0 0` / `1 0 0` / `0 1 0` | 与 `vtkPlaneSource` 同义：原点 + 两条边 |
+| **RectangleCenter** | `0 0 0` | 矩形中心，**唯一吸附点** |
+| **RectangleNormal** | `0 0 1` | 平面法线；Place in view / Face camera 设为相机方向 |
+| **RectangleWidth / Height** | 2.0 / 2.0 | 以中心对称的**完整**边长 |
 | **RectangleResolutionX / Y** | 10 / 10 | 平面种子网格 |
-| **RectangleSnapOrigin** | on | 释放时原点吸附；Point 1/2 同步平移 |
+| **RectangleSnapCenter** | on | 释放时只把中心吸到表面顶点；宽高/法线不变 |
 | **IntegrationDirection** | BOTH | FORWARD / BACKWARD / BOTH |
 | **IntegratorType** | Runge-Kutta 4-5 | RK2 / RK4 / RK45 |
 | **IntegrationStepUnit** | Cell Length | Length / Cell Length |
@@ -127,7 +138,8 @@ Show(tracer, view, 'Seeds')             # port 1 seed geometry
 ```
 
 球/矩形同理：`SeedShape = 1` 用 `SphereCenter` / `SphereRadius` / `SphereSnapCenter`；
-`SeedShape = 2` 用 `RectangleOrigin` / `RectanglePoint1` / `RectanglePoint2` / `RectangleSnapOrigin`。
+`SeedShape = 2` 用 `RectangleCenter` / `RectangleNormal` / `RectangleWidth` / `RectangleHeight` /
+`RectangleSnapCenter`。
 
 ## 与分 patch / OpenFOAM 的关系
 参考现有分 patch 链路（用户原话里的「矩形（openfoam 分 patch）」是参考）：
@@ -141,7 +153,23 @@ Show(tracer, view, 'Seeds')             # port 1 seed geometry
 - 模块：`vespa/shyx/InteractiveStreamTracer/`，`vtk.module NAME=vtkSHYXInteractiveStreamTracer`，`GROUPS=Flow`。
 - 纯 VTK：`vtkStreamTracer` + `vtkLineSource` / `vtkSphereSource` / `vtkPointSource` / `vtkPlaneSource` + `vtkDataSetSurfaceFilter` + `vtkStaticPointLocator` / `vtkStaticCellLocator`。
 - 客户端 widget：`ParaViewPlugin/widgets/pqSHYXStreamlineSeedWidget.*`，注册为 `panel_widget="shyx_streamline_seed"`（`PropertyWidgets.cmake`）。3D widget 直接建在 RenderView 的 interactor 上，不新增 SM widget representation XML。
-- 球体交互：直接用 `vtkSphereWidget2` + `vtkSphereRepresentation`，**不显示 surface handle**（`HandleVisibilityOff()`）；左键拖球体平移，半径通过面板 **Radius** 修改（右键拖拽仍是 VTK 原生缩放）。
+- 球体交互：直接用 `vtkSphereWidget2` + `vtkSphereRepresentation`，**不显示任何 handle 相关装饰**：
+  - `HandleVisibilityOff()`（球面小球）、`RadialLineOff()`（球心到小球的半径线）、`HandleTextOff()`（`R = ...` 文字）。
+  - 三者互相独立，且 `RadialLine` / `HandleText` 默认是**开**的；只关 `HandleVisibility` 会留下半径线，而且 `ComputeInteractionState()` 的判据是「三者任一开」就去拾取 handle，所以那根线的末端还能拖。
+  - 左键拖球体平移，半径通过面板 **Radius** 修改（右键拖拽仍是 VTK 原生缩放）。
+- 矩形交互：**不用 `vtkPlaneWidget`**（它按对角固定的方式缩放、几何以角点 origin 定义、吸附也只能落在 origin 上），改成 widget 自己维护：
+  - 六个 actor：`vtkPlaneSource` 的 quad、中心黄球、单个角点蓝球、贯穿中心的法线杆、**两端各一个红锥**（对应 `vtkImplicitPlaneRepresentation` 的 `ConeActor` / `ConeActor2`，前后两面都能拖）；
+  - **只用屏幕空间选 handle**（不再用 `vtkCellPicker`）：把中心 / 角点 / 两个锥尖投到 display，取最近且落在 12 px 内的那个，优先级 **中心 → 角点 → 法线锥**。这样点中心永远是移动，绝不会误判成旋转（相机正对法线时锥和中心在同一条视线上，world 单位的 pick 容差做不到这点）；
+  - 拖中心 → 在中心深度平面上平移；拖角点 → 光标偏移在 `RectAxisU/V` 上投影出 `Width/Height`，**中心保持不动**（对称缩放）；
+  - 拖法线锥（任一端）→ **逐帧增量旋转**（与 `vtkImplicitPlaneRepresentation` / `vtkPlaneWidget` 同一套算法）：
+    - `axis = cross(viewPlaneNormal, 鼠标世界位移)`，`theta = 240° × |像素位移| / 视口对角线`；
+    - 每帧用 `vtkTransform::RotateWXYZ(theta, axis)` 把**当前**法线转一个小角度；
+    - 拖动深度固定在抓住锥那一刻的 handle 屏幕深度，所以位移向量始终落在一个屏幕平面上；
+    - 微小移动 → 微小角度，且不存在"绝对映射"在中心附近的奇点（旧实现对 1 px 抖动会翻转法线）；
+    - `kDegreesPerDiagonal = 240`（VTK 原版是 360）刻意调低一档，触控板上更稳；想更慢就改这个常量。
+  - **法线朝向**：初始 / `Face camera` / `Place in view` 都用 `camera->GetViewPlaneNormal()`，它指向相机（与 VTK `SetNormalToCamera()` 一致）。之前用 `GetDirectionOfProjection()` 会得到反号，锥朝背离观察者的一侧。
+  - 法线杆长按 48 px 换算到中心深度，锥高 30%、底半径 13%；
+  - 松手时**只吸附中心**；`Width/Height/Normal` 不变。
 - **半径保护**：`vtkSphereRepresentation::SetCenter()` 在 handle 可见时会把半径改成「handle 到新球心的距离」。这里 handle 已关闭，但移动球心统一走 `SetSphereCenterKeepingRadius()`，不依赖该细节。
 - **枚举下拉必须按 entry 文本链接**：`pqSMAdaptor::setEnumerationProperty` 只匹配 `EnumerationDomain` 的 entry 文本。用 `addPropertyLink(combo, "currentIndex", ...)` 写进去的是 `"0"/"1"/"2"`，匹配不到任何 entry，属性静默保持不变（表现就是「切了形状但 Apply 后仍是 Line 的种子」）。正确做法是把 item 文本直接用 domain 的 `GetEntryText()` 填，然后链接 `currentText` + `currentTextChanged`（`PopulateEnumCombo()` / `ComboEnumValue()`）。
 - 自定义 `panel_widget` 组内，成员属性上的 `PropertyWidgetDecorator` **不生效**（pqProxyWidget 整个组交给自定义 widget），Sphere 的 sampling/theta/phi 显示与灰显由 widget 自己处理。

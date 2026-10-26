@@ -129,15 +129,21 @@ public:
 
   ///@{
   /**
-   * Rectangle (plane) seed. Origin is one corner; Point1 and Point2 define the two
-   * edge directions and lengths (same convention as vtkPlaneSource).
+   * Rectangle (plane) seed, defined the same way the 3D editor drives it:
+   *   1. a center point (the only thing that snaps to the surface),
+   *   2. a normal (Screen camera on Place in view, so the quad faces the viewer),
+   *   3. Width / Height around that center.
+   * The two in-plane axes are derived from the normal, so Width / Height are the full edge
+   * lengths; the center stays put when they change.
    */
-  vtkSetVector3Macro(RectangleOrigin, double);
-  vtkGetVector3Macro(RectangleOrigin, double);
-  vtkSetVector3Macro(RectanglePoint1, double);
-  vtkGetVector3Macro(RectanglePoint1, double);
-  vtkSetVector3Macro(RectanglePoint2, double);
-  vtkGetVector3Macro(RectanglePoint2, double);
+  vtkSetVector3Macro(RectangleCenter, double);
+  vtkGetVector3Macro(RectangleCenter, double);
+  vtkSetVector3Macro(RectangleNormal, double);
+  vtkGetVector3Macro(RectangleNormal, double);
+  vtkSetClampMacro(RectangleWidth, double, 0.0, VTK_DOUBLE_MAX);
+  vtkGetMacro(RectangleWidth, double);
+  vtkSetClampMacro(RectangleHeight, double, 0.0, VTK_DOUBLE_MAX);
+  vtkGetMacro(RectangleHeight, double);
   vtkSetClampMacro(RectangleResolutionX, int, 1, 1000);
   vtkGetMacro(RectangleResolutionX, int);
   vtkSetClampMacro(RectangleResolutionY, int, 1, 1000);
@@ -146,12 +152,12 @@ public:
 
   ///@{
   /**
-   * Snap RectangleOrigin to the nearest input-surface vertex. Point1 / Point2 are translated
-   * by the same delta so the rectangle keeps its size and orientation.
+   * Snap RectangleCenter to the nearest input-surface vertex. Width, Height and Normal are
+   * unchanged: only the quad's position moves.
    */
-  vtkSetMacro(RectangleSnapOrigin, vtkTypeBool);
-  vtkGetMacro(RectangleSnapOrigin, vtkTypeBool);
-  vtkBooleanMacro(RectangleSnapOrigin, vtkTypeBool);
+  vtkSetMacro(RectangleSnapCenter, vtkTypeBool);
+  vtkGetMacro(RectangleSnapCenter, vtkTypeBool);
+  vtkBooleanMacro(RectangleSnapCenter, vtkTypeBool);
   ///@}
 
   ///@{
@@ -224,12 +230,13 @@ protected:
   int SphereRandomSeed = 1;
   vtkTypeBool SphereSnapCenter = 1;
 
-  double RectangleOrigin[3] = { 0.0, 0.0, 0.0 };
-  double RectanglePoint1[3] = { 1.0, 0.0, 0.0 };
-  double RectanglePoint2[3] = { 0.0, 1.0, 0.0 };
+  double RectangleCenter[3] = { 0.0, 0.0, 0.0 };
+  double RectangleNormal[3] = { 0.0, 0.0, 1.0 };
+  double RectangleWidth = 2.0;
+  double RectangleHeight = 2.0;
   int RectangleResolutionX = 10;
   int RectangleResolutionY = 10;
-  vtkTypeBool RectangleSnapOrigin = 1;
+  vtkTypeBool RectangleSnapCenter = 1;
 
   int IntegrationDirection = 2; // BOTH
   int IntegratorType = 2;       // RK45

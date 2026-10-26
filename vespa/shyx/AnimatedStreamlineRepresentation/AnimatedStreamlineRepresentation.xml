@@ -16,6 +16,65 @@
         <BooleanDomain name="bool" />
       </IntVectorProperty>
 
+      <IntVectorProperty name="TimeSource"
+                         command="SetTimeSource"
+                         default_values="0"
+                         label="Time source"
+                         number_of_elements="1">
+        <Documentation>
+          Where the shader time term (time * timeScale in mixValue) comes from.
+          Real time: wall-clock seconds since the representation was created. Each rendered frame
+          advances by however long that frame took, so a rendered image sequence is not continuous
+          (a slow frame jumps further than a fast one) and the same frame is not reproducible.
+          Render frames: shader time is frameCounter / Frame rate and the counter grows by one for
+          every rendered frame, so Save Animation or per-frame Save Screenshot sequences advance by
+          a fixed step per image. Switching to Render frames resets the counter to 0.
+        </Documentation>
+        <EnumerationDomain name="enum">
+          <Entry text="Real time (wall clock)" value="0" />
+          <Entry text="Render frames (image sequence)" value="1" />
+        </EnumerationDomain>
+      </IntVectorProperty>
+
+      <DoubleVectorProperty name="FrameRate"
+                            command="SetFrameRate"
+                            default_values="30"
+                            label="Frame rate (fps)"
+                            number_of_elements="1">
+        <Documentation>
+          Frames per second used in Render frames mode to convert the frame counter into shader
+          time (time = frame count / frame rate). Set it to the frame rate the exported sequence
+          will be played at so the pulse speed matches real-time playback.
+        </Documentation>
+        <DoubleRangeDomain name="range" min="1" max="240" />
+        <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="visibility"
+                                   property="AS_TimeSource"
+                                   value="1" />
+        </Hints>
+      </DoubleVectorProperty>
+
+      <IntVectorProperty name="FrameCount"
+                         command="SetFrameCount"
+                         default_values="0"
+                         label="Frame count"
+                         number_of_elements="1">
+        <Documentation>
+          Render-frame counter read by the shader in Render frames mode. It grows by one per
+          rendered frame (only while Animate is on); set it back to 0 (or any other frame) to seek
+          to a known phase. The panel value is only refreshed when the property is updated, so it
+          may lag behind the live counter.
+        </Documentation>
+        <IntRangeDomain name="range" min="0" max="2000000000" />
+        <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="visibility"
+                                   property="AS_TimeSource"
+                                   value="1" />
+        </Hints>
+      </IntVectorProperty>
+
       <DoubleVectorProperty name="IntegrationScale"
                             command="SetIntegrationScale"
                             default_values="100"
@@ -144,6 +203,9 @@
         <ExposedProperties>
           <PropertyGroup label="Animated Streamline">
             <Property name="Animate" exposed_name="AS_Animate" />
+            <Property name="TimeSource" exposed_name="AS_TimeSource" />
+            <Property name="FrameRate" exposed_name="AS_FrameRate" />
+            <Property name="FrameCount" exposed_name="AS_FrameCount" />
             <Property name="IntegrationScale" exposed_name="AS_IntegrationScale" />
             <Property name="TimeScale" exposed_name="AS_TimeScale" />
             <Property name="OpacityScale" exposed_name="AS_OpacityScale" />
@@ -179,6 +241,9 @@
         <ExposedProperties>
           <PropertyGroup label="Animated Streamline">
             <Property name="Animate" exposed_name="AS_Animate" />
+            <Property name="TimeSource" exposed_name="AS_TimeSource" />
+            <Property name="FrameRate" exposed_name="AS_FrameRate" />
+            <Property name="FrameCount" exposed_name="AS_FrameCount" />
             <Property name="IntegrationScale" exposed_name="AS_IntegrationScale" />
             <Property name="TimeScale" exposed_name="AS_TimeScale" />
             <Property name="OpacityScale" exposed_name="AS_OpacityScale" />
@@ -214,6 +279,9 @@
         <ExposedProperties>
           <PropertyGroup label="Animated Streamline">
             <Property name="Animate" exposed_name="AS_Animate" />
+            <Property name="TimeSource" exposed_name="AS_TimeSource" />
+            <Property name="FrameRate" exposed_name="AS_FrameRate" />
+            <Property name="FrameCount" exposed_name="AS_FrameCount" />
             <Property name="IntegrationScale" exposed_name="AS_IntegrationScale" />
             <Property name="TimeScale" exposed_name="AS_TimeScale" />
             <Property name="OpacityScale" exposed_name="AS_OpacityScale" />
@@ -249,6 +317,9 @@
         <ExposedProperties>
           <PropertyGroup label="Animated Streamline">
             <Property name="Animate" exposed_name="AS_Animate" />
+            <Property name="TimeSource" exposed_name="AS_TimeSource" />
+            <Property name="FrameRate" exposed_name="AS_FrameRate" />
+            <Property name="FrameCount" exposed_name="AS_FrameCount" />
             <Property name="IntegrationScale" exposed_name="AS_IntegrationScale" />
             <Property name="TimeScale" exposed_name="AS_TimeScale" />
             <Property name="OpacityScale" exposed_name="AS_OpacityScale" />

@@ -1891,15 +1891,17 @@ QString describeClientTool(const QString& query)
   const bool quickWheel = ql.contains(QLatin1String("quick filter")) ||
     ql.contains(QLatin1String("quickfilter")) || ql.contains(QLatin1String("quick-filter")) ||
     ql.contains(QLatin1String("radial")) || ql.contains(QLatin1String("pie menu")) ||
-    ql.contains(QLatin1String("pimenu")) || ql.contains(QLatin1String("ctrl wheel")) ||
-    ql.contains(QLatin1String("hold ctrl")) || ql.contains(QStringLiteral("轮盘"));
+    ql.contains(QLatin1String("pimenu")) || ql.contains(QLatin1String("backtick wheel")) ||
+    ql.contains(QLatin1String("grave key")) || ql.contains(QStringLiteral("轮盘"));
   if (quickWheel && !sphere && !grow && !proximityGap && !selectBlock)
   {
     return QStringLiteral(
-      "SHYX quick filter wheel (RenderView; hold Ctrl; client Qt, no SM proxy of its own)\n"
-      "Hold Ctrl over a 3D view for ~250 ms: a radial quick-filter menu opens under the cursor.\n"
+      "SHYX quick filter wheel (RenderView; hold ` / · ; client Qt, no SM proxy of its own)\n"
+      "Hold the backtick key (` on a US layout, · on a Chinese layout) over a 3D view for "
+      "~200 ms: a radial quick-filter menu opens under the cursor.\n"
+      "No mouse movement is needed; the key state is polled, so keyboard focus does not matter.\n"
       "  Left-click a sector: run that filter\n"
-      "  Center hole, click outside, Esc, or releasing Ctrl: dismiss without running anything\n"
+      "  Center hole, click outside, Esc, or releasing the key: dismiss without running anything\n"
       "  Disabled (dimmed) sectors only post the reason on the SHYX status chip\n"
       "Items:\n"
       "  Delete: same as the Delete key / selection context menu -> creates "
@@ -1908,8 +1910,10 @@ QString describeClientTool(const QString& query)
       "  Extract Surface: creates the built-in Extract Surface filter "
       "(proxy DataSetSurfaceFilter) on the active pipeline object (the selection's port when "
       "there is a selection) and Applies.\n"
-      "Only unmodified Ctrl is handled, and only while the cursor is over a RenderView; Ctrl+click "
-      "and Ctrl+key shortcuts still work. The wheel itself has no Python constructor.\n"
+      "Ctrl is not involved at all, so Ctrl+click / Ctrl+key shortcuts keep working. Only while "
+      "ParaView is the active window with the pointer over a RenderView, and not while a text "
+      "field has focus. The ` key is only swallowed once the wheel is open. "
+      "The wheel itself has no Python constructor.\n"
       "Filter parameters: describe_proxy('SHYXDeleteSelectedCellsFilter'), "
       "describe_proxy('DataSetSurfaceFilter').\n");
   }
@@ -2380,15 +2384,22 @@ const ShyxExtra kShyxExtra[] = {
     "Line: LinePoint1 / LinePoint2 snap independently when LineSnapPoint1 / "
     "LineSnapPoint2 are on; LineResolution is subdivisions (Resolution + 1 seeds). Sphere: "
     "SphereCenter snaps when SphereSnapCenter is on; in the 3D widget left-drag moves the ball, and "
-    "SphereRadius is set in the panel (no surface handle; right-drag still scales). "
+    "SphereRadius is set in the panel (no surface handle, no radius line and no R= label; "
+    "right-drag still scales). "
     "SphereSeedMode 0 Surface = vtkSphereSource vertices, so the seed count is "
     "SphereThetaResolution x (SpherePhiResolution - 2) + 2 (Theta = longitude slices, "
     "Phi = pole-to-pole rings; 32 x 24 gives 706) and there are no seeds inside the ball. "
     "SphereSeedMode 1 Interior (the default, SphereInteriorPointCount = 20) = vtkPointSource "
     "uniform inside the ball with exactly that many seeds, reproducible via SphereRandomSeed. "
-    "Rectangle: RectangleOrigin / RectanglePoint1 / RectanglePoint2 are the "
-    "vtkPlaneSource origin and two edges; RectangleOrigin snaps when RectangleSnapOrigin is on and "
-    "Point1 / Point2 translate with it. Port 0 streamlines, port 1 seed geometry. The panel widget "
+    "Rectangle: RectangleCenter / RectangleNormal / RectangleWidth / RectangleHeight define the "
+    "quad (center-symmetric, in-plane axes derived from the normal). Only RectangleCenter snaps "
+    "(RectangleSnapCenter); Place in view sets the center from the viewport-center ray and the "
+    "normal to the camera direction. In the view, drag the yellow center handle to move, the "
+    "single blue corner handle to resize Width/Height around the center, and either red normal "
+    "cone (one on each side of the plane) to rotate it; hand-picking is display-space with "
+    "center > corner > cone priority, so grabbing the center never rotates. "
+    "RectangleNormal points toward the camera by default (GetViewPlaneNormal). "
+    "Port 0 streamlines, port 1 seed geometry. The panel widget "
     "is client-side; Python snapping still works because the filter also snaps in RequestData. "
     "Rectangle port 1 can be added to SHYXSelectionAppendPatches (Add from pipeline) as a patch "
     "geometry; OpenFOAM polyMesh output remains SHYXPartitionedCollectionToOpenFOAM. "
@@ -2396,7 +2407,10 @@ const ShyxExtra kShyxExtra[] = {
     "dataset bounds: Line ray-picks the views 1/3 and 2/3 points, Sphere and Rectangle ray-pick "
     "the viewport center, and all snap to the nearest surface vertex. Sizes are viewport "
     "fractions converted to world units at that depth (sphere radius 15% of the short side, "
-    "rectangle half side 20%); a ray that misses falls back to the dataset bounds center." },
+    "rectangle half side 20%); a ray that misses falls back to the dataset bounds center. "
+    "After each drag ends the view center of rotation (pick center) follows the moved handle: "
+    "sphere center, rectangle geometric center, or the line endpoint that was dragged "
+    "(midpoint for a whole-line drag and for Place in view)." },
   { "SHYXSelectionAppendPatches",
     "Add from selection snapshots the 3D-view cell selection into the Patches table (geo_N); "
     "Copy Active Selection is not required. Add from Celldata dropdown lists Input CellData "
@@ -2645,11 +2659,13 @@ const ShyxExtra kShyxExtra[] = {
     "(newest first) and loads one with a click; shyx_remesh_pre_apply.pvsm is the state written "
     "before an adaptive remesh. Call describe_proxy('recovery')." },
   { "SHYXQuickFilterWheel",
-    "Not a filter and not a proxy. Hold Ctrl over a RenderView (~250 ms): a radial quick-filter "
-    "wheel opens under the cursor. Left-click a sector to run it; center hole, click outside, Esc, "
-    "or releasing Ctrl cancels. Dimmed items only report why. Items: Delete (same as the Delete key "
-    "→ SHYXDeleteSelectedCellsFilter on the port that owns the selection) and Extract Surface "
-    "(built-in DataSetSurfaceFilter on the active pipeline object). Ctrl+click still works. "
+    "Not a filter and not a proxy. Hold the backtick key (` on a US layout, · on a Chinese "
+    "layout) over a RenderView for ~200 ms: a radial quick-filter wheel opens under the cursor "
+    "without moving the mouse (the key state is polled). Left-click a sector to run it; center "
+    "hole, click outside, Esc, or releasing the key cancels. Dimmed items only report why. "
+    "Items: Delete (same as the Delete key → SHYXDeleteSelectedCellsFilter on the port that owns "
+    "the selection) and Extract Surface (built-in DataSetSurfaceFilter on the active pipeline "
+    "object). Ctrl is not involved, so Ctrl+click and Ctrl shortcuts are unaffected. "
     "Call describe_proxy('quick filter wheel')." },
   { "SHYXAIAssistant",
     "Deprecated. The assistant is View → SHYX AI Assistant, not a pipeline filter. Do not create this node." },
@@ -2702,8 +2718,8 @@ QString lookupShyxDocs(const QString& queryRaw)
       "with a cell selection also Invert Selection; Select Similar → By Normal "
       "(grow all similar-normal rings in one shot); Fill Interior "
       "(add unselected faces enclosed by the current selection).\n"
-      "   Also: hold Ctrl over the 3D view → quick filter wheel under the cursor "
-      "(Delete / Extract Surface); click a sector; release Ctrl, Esc, or the center hole cancels. "
+      "   Also: hold ` (the · key) over the 3D view → quick filter wheel under the cursor "
+      "(Delete / Extract Surface); click a sector; release the key, Esc, or the center hole cancels. "
       "describe_proxy('quick filter wheel').\n"
       "4) Widget representations (stent placement 3D widgets, not Display dropdown): "
       "SHYXImplicitCylinderWidgetRepresentation, SHYXEndpointStentWidgetRepresentation.\n"
@@ -3205,7 +3221,7 @@ QJsonArray pqSHYXAIAgentTools::schema(bool allowCaptureScreenshot)
     "For Invert Selection pass 'invert'. "
     "For the File → Recovery submenu (temp-folder .pvsm list) pass 'recovery'. "
     "For the RenderView Delete-key shortcut that creates and applies SHYX Delete Selected Cells, pass 'delete shortcut' or 'delete key'. "
-    "For the Ctrl quick-filter wheel (radial menu in the RenderView: Delete / Extract Surface), pass 'quick filter wheel'.",
+    "For the quick-filter wheel (radial menu in the RenderView, opened by holding ` / ·: Delete / Extract Surface), pass 'quick filter wheel'.",
     QJsonObject{ { QStringLiteral("name"), strArg("XML name, display type (Pulse Glyphs), sphere/polygon/grow/proximity gap, select block, select similar, fill interior, select connected, invert, recovery, delete shortcut, or quick filter wheel.") } },
     QJsonArray{ QStringLiteral("name") }));
   tools.append(fn("lookup_shyx_docs",

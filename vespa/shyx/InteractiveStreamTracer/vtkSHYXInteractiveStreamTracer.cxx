@@ -86,15 +86,15 @@ void vtkSHYXInteractiveStreamTracer::PrintSelf(ostream& os, vtkIndent indent)
   os << indent << "SphereThetaResolution: " << this->SphereThetaResolution << "\n";
   os << indent << "SpherePhiResolution: " << this->SpherePhiResolution << "\n";
   os << indent << "SphereSnapCenter: " << (this->SphereSnapCenter ? "On" : "Off") << "\n";
-  os << indent << "RectangleOrigin: (" << this->RectangleOrigin[0] << ", "
-     << this->RectangleOrigin[1] << ", " << this->RectangleOrigin[2] << ")\n";
-  os << indent << "RectanglePoint1: (" << this->RectanglePoint1[0] << ", "
-     << this->RectanglePoint1[1] << ", " << this->RectanglePoint1[2] << ")\n";
-  os << indent << "RectanglePoint2: (" << this->RectanglePoint2[0] << ", "
-     << this->RectanglePoint2[1] << ", " << this->RectanglePoint2[2] << ")\n";
+  os << indent << "RectangleCenter: (" << this->RectangleCenter[0] << ", "
+     << this->RectangleCenter[1] << ", " << this->RectangleCenter[2] << ")\n";
+  os << indent << "RectangleNormal: (" << this->RectangleNormal[0] << ", "
+     << this->RectangleNormal[1] << ", " << this->RectangleNormal[2] << ")\n";
+  os << indent << "RectangleWidth: " << this->RectangleWidth << "\n";
+  os << indent << "RectangleHeight: " << this->RectangleHeight << "\n";
   os << indent << "RectangleResolutionX: " << this->RectangleResolutionX << "\n";
   os << indent << "RectangleResolutionY: " << this->RectangleResolutionY << "\n";
-  os << indent << "RectangleSnapOrigin: " << (this->RectangleSnapOrigin ? "On" : "Off") << "\n";
+  os << indent << "RectangleSnapCenter: " << (this->RectangleSnapCenter ? "On" : "Off") << "\n";
   os << indent << "IntegrationDirection: " << this->IntegrationDirection << "\n";
   os << indent << "IntegratorType: " << this->IntegratorType << "\n";
   os << indent << "IntegrationStepUnit: " << this->IntegrationStepUnit << "\n";
@@ -298,54 +298,71 @@ int vtkSHYXInteractiveStreamTracer::RequestData(
     case vtkSHYXInteractiveStreamTracer::Rectangle:
     default:
     {
-      double origin[3] = {
-        this->RectangleOrigin[0], this->RectangleOrigin[1], this->RectangleOrigin[2]
-      };
-      double point1[3] = {
-        this->RectanglePoint1[0], this->RectanglePoint1[1], this->RectanglePoint1[2]
-      };
-      double point2[3] = {
-        this->RectanglePoint2[0], this->RectanglePoint2[1], this->RectanglePoint2[2]
+      double center[3] = {
+        this->RectangleCenter[0], this->RectangleCenter[1], this->RectangleCenter[2]
       };
 
-      if (this->RectangleSnapOrigin)
+      if (this->RectangleSnapCenter)
       {
-        double snapped[3] = { origin[0], origin[1], origin[2] };
         const int enabled = 1;
-        if (vtkSHYXInteractiveStreamTracer::SnapPointsToSurface(input, snapped, 1, &enabled))
-        {
-          const double delta[3] = {
-            snapped[0] - origin[0], snapped[1] - origin[1], snapped[2] - origin[2]
-          };
-          origin[0] = snapped[0];
-          origin[1] = snapped[1];
-          origin[2] = snapped[2];
-          point1[0] += delta[0];
-          point1[1] += delta[1];
-          point1[2] += delta[2];
-          point2[0] += delta[0];
-          point2[1] += delta[1];
-          point2[2] += delta[2];
-        }
+        vtkSHYXInteractiveStreamTracer::SnapPointsToSurface(input, center, 1, &enabled);
       }
 
-      // Degenerate rectangle (Point1/Point2 collinear with Origin): fall back to a plane in XY.
-      double e1[3] = { point1[0] - origin[0], point1[1] - origin[1], point1[2] - origin[2] };
-      double e2[3] = { point2[0] - origin[0], point2[1] - origin[1], point2[2] - origin[2] };
-      double n[3];
-      vtkMath::Cross(e1, e2, n);
-      if (vtkMath::Normalize(n) < 1e-12)
+      // Normal first, then the two in-plane axes: Width / Height are full edge lengths measured
+      // around the center, so resizing never moves the center.
+      double normal[3] = {
+        this->RectangleNormal[0], this->RectangleNormal[1], this->RectangleNormal[2]
+      };
+      double bounds[6];
+      input->GetBounds(bounds);
+      const double fallbackSize =
+        std::max({ bounds[1] - bounds[0], bounds[3] - bounds[2], bounds[5] - bounds[4], 1e-6 });
+      if (!std::isfinite(normal[0]) || !std::isfinite(normal[1]) ||
+        !std::isfinite(normal[2]) || vtkMath::Normalize(normal) < 1e-12)
       {
-        double b[6];
-        input->GetBounds(b);
-        const double size =
-          std::max({ b[1] - b[0], b[3] - b[2], b[5] - b[4], 1e-6 }) * 0.25;
-        point1[0] = origin[0] + size;
-        point1[1] = origin[1];
-        point1[2] = origin[2];
-        point2[0] = origin[0];
-        point2[1] = origin[1] + size;
-        point2[2] = origin[2];
+        normal[0] = 0.0;
+        normal[1] = 0.0;
+        normal[2] = 1.0;
+      }
+
+      double axisU[3];
+      double axisV[3];
+      vtkMath::Perpendiculars(normal, axisU, axisV, 0.0);
+      // Keep (axisU, axisV, normal) right-handed so the quad's front face points along the
+      // requested normal.
+      double cross[3];
+      vtkMath::Cross(axisU, axisV, cross);
+      if (vtkMath::Dot(cross, normal) < 0.0)
+      {
+        axisV[0] = -axisV[0];
+        axisV[1] = -axisV[1];
+        axisV[2] = -axisV[2];
+      }
+
+      double width = this->RectangleWidth;
+      double height = this->RectangleHeight;
+      if (!(width > 0.0) || !std::isfinite(width))
+      {
+        width = 0.5 * fallbackSize;
+      }
+      if (!(height > 0.0) || !std::isfinite(height))
+      {
+        height = 0.5 * fallbackSize;
+      }
+
+      const double halfU[3] = { 0.5 * width * axisU[0], 0.5 * width * axisU[1],
+        0.5 * width * axisU[2] };
+      const double halfV[3] = { 0.5 * height * axisV[0], 0.5 * height * axisV[1],
+        0.5 * height * axisV[2] };
+
+      double origin[3];
+      double point1[3];
+      double point2[3];
+      for (int i = 0; i < 3; ++i)
+      {
+        origin[i] = center[i] - halfU[i] - halfV[i];
+        point1[i] = origin[i] + 2.0 * halfU[i];
+        point2[i] = origin[i] + 2.0 * halfV[i];
       }
 
       vtkNew<vtkPlaneSource> plane;

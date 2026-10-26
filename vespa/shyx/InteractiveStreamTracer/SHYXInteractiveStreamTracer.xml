@@ -191,21 +191,42 @@
       </IntVectorProperty>
 
       <!-- Rectangle (plane) -->
-      <DoubleVectorProperty name="RectangleOrigin"
-                            command="SetRectangleOrigin"
-                            label="Origin"
+      <DoubleVectorProperty name="RectangleCenter"
+                            command="SetRectangleCenter"
+                            label="Center"
                             default_values="0 0 0"
-                            number_of_elements="3"/>
-      <DoubleVectorProperty name="RectanglePoint1"
-                            command="SetRectanglePoint1"
-                            label="Point 1 (edge)"
-                            default_values="1 0 0"
-                            number_of_elements="3"/>
-      <DoubleVectorProperty name="RectanglePoint2"
-                            command="SetRectanglePoint2"
-                            label="Point 2 (edge)"
-                            default_values="0 1 0"
-                            number_of_elements="3"/>
+                            number_of_elements="3">
+        <Documentation>
+          Center of the seed rectangle. This is the only point that snaps to the Input surface;
+          Width, Height and Normal are unaffected by the snap.
+        </Documentation>
+      </DoubleVectorProperty>
+      <DoubleVectorProperty name="RectangleNormal"
+                            command="SetRectangleNormal"
+                            label="Normal"
+                            default_values="0 0 1"
+                            number_of_elements="3">
+        <Documentation>
+          Plane normal. Place in view sets it to the camera view direction so the quad faces the
+          viewer. Width / Height are measured in the two in-plane axes derived from this normal.
+        </Documentation>
+      </DoubleVectorProperty>
+      <DoubleVectorProperty name="RectangleWidth"
+                            command="SetRectangleWidth"
+                            label="Width"
+                            default_values="2.0"
+                            number_of_elements="1">
+        <DoubleRangeDomain name="range" min="0"/>
+        <Documentation>Full edge length along the first in-plane axis (centered on Center).</Documentation>
+      </DoubleVectorProperty>
+      <DoubleVectorProperty name="RectangleHeight"
+                            command="SetRectangleHeight"
+                            label="Height"
+                            default_values="2.0"
+                            number_of_elements="1">
+        <DoubleRangeDomain name="range" min="0"/>
+        <Documentation>Full edge length along the second in-plane axis (centered on Center).</Documentation>
+      </DoubleVectorProperty>
       <IntVectorProperty name="RectangleResolutionX"
                          command="SetRectangleResolutionX"
                          label="Resolution X"
@@ -220,9 +241,9 @@
                          number_of_elements="1">
         <IntRangeDomain name="range" min="1" max="1000"/>
       </IntVectorProperty>
-      <IntVectorProperty name="RectangleSnapOrigin"
-                         command="SetRectangleSnapOrigin"
-                         label="Snap origin to surface vertex"
+      <IntVectorProperty name="RectangleSnapCenter"
+                         command="SetRectangleSnapCenter"
+                         label="Snap center to surface vertex"
                          default_values="1"
                          number_of_elements="1">
         <BooleanDomain name="bool"/>
@@ -353,12 +374,13 @@
         <Property function="SphereThetaResolution" name="SphereThetaResolution"/>
         <Property function="SpherePhiResolution" name="SpherePhiResolution"/>
         <Property function="SphereSnapCenter" name="SphereSnapCenter"/>
-        <Property function="RectangleOrigin" name="RectangleOrigin"/>
-        <Property function="RectanglePoint1" name="RectanglePoint1"/>
-        <Property function="RectanglePoint2" name="RectanglePoint2"/>
+        <Property function="RectangleCenter" name="RectangleCenter"/>
+        <Property function="RectangleNormal" name="RectangleNormal"/>
+        <Property function="RectangleWidth" name="RectangleWidth"/>
+        <Property function="RectangleHeight" name="RectangleHeight"/>
         <Property function="RectangleResolutionX" name="RectangleResolutionX"/>
         <Property function="RectangleResolutionY" name="RectangleResolutionY"/>
-        <Property function="RectangleSnapOrigin" name="RectangleSnapOrigin"/>
+        <Property function="RectangleSnapCenter" name="RectangleSnapCenter"/>
       </PropertyGroup>
 
       <PropertyGroup label="Stream Tracer">
