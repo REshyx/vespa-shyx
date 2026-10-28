@@ -21,6 +21,7 @@
 #include "vtkShaderProperty.h"
 #include "vtkTimerLog.h"
 
+#include <cmath>
 #include <cstring>
 
 namespace
@@ -76,6 +77,7 @@ vtkAnimatedStreamlineRepresentation::vtkAnimatedStreamlineRepresentation()
   this->TimeScale = 0.4;
   this->TimeSource = TimeSourceRealTime;
   this->FrameRate = 30.0;
+  this->LockToFrameRate = true;
   this->RenderFrame = 0;
   this->IntegrationScale = 100.0;
   this->Trunc = 2.0;
@@ -162,6 +164,18 @@ void vtkAnimatedStreamlineRepresentation::SetFrameCount(int count)
 int vtkAnimatedStreamlineRepresentation::GetFrameCount()
 {
   return static_cast<int>(this->RenderFrame);
+}
+
+double vtkAnimatedStreamlineRepresentation::GetFramesPerCycle() const
+{
+  // Per-frame phase advance is TimeScale / (FrameRate * animCoordy); fract() wraps at 1.0.
+  const double ts = std::abs(this->TimeScale);
+  if (ts < 1e-12)
+  {
+    return 0.0;
+  }
+  const double rate = (this->FrameRate > 1e-9) ? this->FrameRate : 1.0;
+  return rate / ts;
 }
 
 int vtkAnimatedStreamlineRepresentation::ProcessViewRequest(
@@ -385,7 +399,9 @@ void vtkAnimatedStreamlineRepresentation::PrintSelf(ostream& os, vtkIndent inden
   os << indent << "TimeScale: " << this->TimeScale << "\n";
   os << indent << "TimeSource: " << this->TimeSource << "\n";
   os << indent << "FrameRate: " << this->FrameRate << "\n";
+  os << indent << "LockToFrameRate: " << this->LockToFrameRate << "\n";
   os << indent << "FrameCount: " << this->RenderFrame << "\n";
+  os << indent << "FramesPerCycle: " << this->GetFramesPerCycle() << "\n";
   os << indent << "IntegrationScale: " << this->IntegrationScale << "\n";
   os << indent << "Trunc: " << this->Trunc << "\n";
   os << indent << "Pow: " << this->Pow << "\n";

@@ -1,0 +1,91 @@
+<ServerManagerConfiguration>
+  <ProxyGroup name="sources">
+    <SourceProxy name="SHYXCameraAdjust"
+                 class="vtkSHYXCameraAdjust"
+                 label="SHYX Camera Adjust">
+      <Documentation
+          short_help="Store named camera presets in this node (per pipeline branch) and apply one to the active 3D view."
+          long_help="Camera presets live in this source's own properties (CameraNames, CameraPositions, CameraFocalPoints, CameraViewUps, CameraLens), so a camera configuration is saved with this pipeline object and the ParaView state instead of a global view or script variable. The Cameras table is the normal editor: Add captures the active RenderView camera as a new row; Update overwrites the selected row from the current camera; Delete removes the selected rows; Apply sets Position / FocalPoint / ViewUp / ViewAngle / ParallelScale / ParallelProjection on the active RenderView camera and renders. Double-click a non-Name cell to apply that row. Rows are stored one per line; CameraLens is viewAngle,parallelScale,parallelProjection (0 perspective, 1 parallel). The source output is one vertex per preset at CameraPositions (point arrays CameraIndex / CameraName) and is shown with Point Gaussian, so the presets can be previewed in 3D; Point Label can label them with CameraName. The output alone never moves a camera."/>
+
+      <!-- Every newline list is one row per preset. CameraNames is the group-widget anchor:
+           it must NOT be panel_visibility=never or pqProxyWidget skips the PropertyGroup. -->
+      <StringVectorProperty name="CameraNames"
+                            label="Camera Names"
+                            command="SetCameraNames"
+                            number_of_elements="1"
+                            default_values=""
+                            animateable="0">
+        <Documentation>
+          Newline-separated preset names, in table order. Edited in the Cameras table.
+        </Documentation>
+      </StringVectorProperty>
+
+      <StringVectorProperty name="CameraPositions"
+                            label="Camera Positions"
+                            command="SetCameraPositions"
+                            number_of_elements="1"
+                            default_values=""
+                            animateable="0"
+                            panel_visibility="never">
+        <Documentation>
+          Newline-separated camera positions, one "x,y,z" per row (row-aligned with Camera Names).
+        </Documentation>
+      </StringVectorProperty>
+
+      <StringVectorProperty name="CameraFocalPoints"
+                            label="Camera Focal Points"
+                            command="SetCameraFocalPoints"
+                            number_of_elements="1"
+                            default_values=""
+                            animateable="0"
+                            panel_visibility="never">
+        <Documentation>
+          Newline-separated camera focal points, one "x,y,z" per row.
+        </Documentation>
+      </StringVectorProperty>
+
+      <StringVectorProperty name="CameraViewUps"
+                            label="Camera View Ups"
+                            command="SetCameraViewUps"
+                            number_of_elements="1"
+                            default_values=""
+                            animateable="0"
+                            panel_visibility="never">
+        <Documentation>
+          Newline-separated camera up vectors, one "x,y,z" per row.
+        </Documentation>
+      </StringVectorProperty>
+
+      <StringVectorProperty name="CameraLens"
+                            label="Camera Lens"
+                            command="SetCameraLens"
+                            number_of_elements="1"
+                            default_values=""
+                            animateable="0"
+                            panel_visibility="never">
+        <Documentation>
+          Newline-separated lens settings, one "viewAngle,parallelScale,parallelProjection" per
+          row. parallelProjection is 0 (perspective) or 1 (parallel).
+        </Documentation>
+      </StringVectorProperty>
+
+      <PropertyGroup label="Camera presets"
+                     panel_widget="shyx_camera_adjust"
+                     panel_visibility="default">
+        <Property function="Names" name="CameraNames"/>
+        <Property function="Positions" name="CameraPositions"/>
+        <Property function="FocalPoints" name="CameraFocalPoints"/>
+        <Property function="ViewUps" name="CameraViewUps"/>
+        <Property function="Lens" name="CameraLens"/>
+        <Hints>
+          <WidgetHeight number_of_rows="8"/>
+        </Hints>
+      </PropertyGroup>
+
+      <Hints>
+        <ShowInMenu category="SHYX"/>
+        <RepresentationType view="RenderView" type="Point Gaussian"/>
+      </Hints>
+    </SourceProxy>
+  </ProxyGroup>
+</ServerManagerConfiguration>

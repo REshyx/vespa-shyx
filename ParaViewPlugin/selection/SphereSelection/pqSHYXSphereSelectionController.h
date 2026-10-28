@@ -110,7 +110,8 @@ private:
   bool Enabled = false;
   bool Hovering = false;
   bool Dragging = false;
-  bool DeferSelectionUntilRelease = false;
+  // Default on: dragging the sphere only moves it, selection is applied on release.
+  bool DeferSelectionUntilRelease = true;
   bool PendingSelectionApply = false;
 };
 

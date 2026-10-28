@@ -55,12 +55,34 @@ public:
   vtkGetMacro(FrameRate, double);
 
   /**
+   * Render frames mode only. When on (default) the client-side animation loop paces the
+   * interactive preview at FrameRate rendered frames per second, so what you see is the speed the
+   * exported image sequence will play back at, no matter how fast the machine can render. Off: the
+   * loop re-renders as fast as the machine allows, so TimeSourceRenderFrames then plays back faster
+   * on a faster machine. Real time mode is unaffected (wall-clock driven). Read by
+   * pqAnimatedStreamlineAnimationManager; the shader itself is not affected.
+   */
+  vtkSetMacro(LockToFrameRate, bool);
+  vtkGetMacro(LockToFrameRate, bool);
+  vtkBooleanMacro(LockToFrameRate, bool);
+
+  /**
    * Render-frame counter used by TimeSourceRenderFrames: it increments once per rendered frame
    * (only while Animate is on) and is the frame number divided by FrameRate that reaches the
    * shader. Set it to seek (e.g. 0 to restart the sequence at a known phase).
    */
   void SetFrameCount(int count);
   int GetFrameCount();
+
+  /**
+   * Rendered frames per pulse cycle: FrameRate / |TimeScale| while the animation coordinate
+   * divisor is uniform (animCoordy = 1, i.e. no Animation coordinate Y array). The shader phase
+   * advances by TimeScale / (FrameRate * animCoordy) per rendered frame, so this is the number of
+   * frames after which fract() wraps once. Returns 0 when TimeScale is 0 (static pulse).
+   * Informational only: exposed as the read-only FramesPerCycle property; the client panel widget
+   * recomputes it live, so it also reflects an Animation coordinate Y array.
+   */
+  double GetFramesPerCycle() const;
 
   vtkSetMacro(IntegrationScale, double);
   vtkGetMacro(IntegrationScale, double);
@@ -116,6 +138,8 @@ protected:
   int TimeSource = TimeSourceRealTime;
   /** Frames per second: converts RenderFrame into shader time. */
   double FrameRate = 30.0;
+  /** Caps the interactive render loop at FrameRate (client side only, see SetLockToFrameRate). */
+  bool LockToFrameRate = true;
   /** Increments once per rendered frame while TimeSourceRenderFrames + Animate. */
   unsigned long RenderFrame = 0;
 

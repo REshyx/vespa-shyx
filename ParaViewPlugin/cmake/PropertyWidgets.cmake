@@ -45,6 +45,22 @@ vespa_plugin_property_widget(
     widgets/pqSHYXMultiSelectionInputWidget.cxx
     widgets/pqSHYXMultiSelectionInputWidget.h)
 
+# Read-only "pulse cycle = N frames" line for Animated Streamline (computed client-side).
+vespa_plugin_property_widget(
+  TYPE "shyx_animated_streamline_timing"
+  CLASS_NAME pqSHYXAnimatedStreamlineTimingWidget
+  FILES
+    widgets/pqSHYXAnimatedStreamlineTimingWidget.cxx
+    widgets/pqSHYXAnimatedStreamlineTimingWidget.h)
+
+# Named camera presets table for SHYX Camera Adjust (a source: presets belong to the pipeline node).
+vespa_plugin_group_widget(
+  TYPE "shyx_camera_adjust"
+  CLASS_NAME pqSHYXCameraAdjustWidget
+  FILES
+    widgets/pqSHYXCameraAdjustWidget.cxx
+    widgets/pqSHYXCameraAdjustWidget.h)
+
 vespa_plugin_group_widget(
   TYPE "array_curve_mapper_panel"
   CLASS_NAME pqArrayCurveMapperPanel

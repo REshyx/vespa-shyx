@@ -128,6 +128,7 @@ Vascular 顺序（[`VESPAVascularCategory.xml`](../ParaViewPlugin/smxml/VESPAVas
 
 | 界面标签 | 类 | 目录 | XML | 图标 | README | 后端 |
 |----------|----|------|-----|------|--------|------|
+| SHYX Camera Adjust | `vtkSHYXCameraAdjust` | CameraAdjust | SHYXCameraAdjust.xml（`sources`，非 `filters`） | （无） | [有](shyx/CameraAdjust/README.md) | VTK（source，无输入）；预设存在节点属性里，Cameras 表 Add / Update / Delete / Apply |
 | SHYX AI Assistant | `pqSHYXAIAssistantPanel` | AIAssistant | —（View dock，`ParaViewPlugin/AIAssistant/`） | — | [有](shyx/AIAssistant/README.md) | 客户端 Qt（OpenAI 兼容 HTTP）。无 SM XML / 无 VTK 模块；不要 `SHYXAIAssistant()` |
 
 ---

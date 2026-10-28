@@ -72,6 +72,7 @@ SHYX 是本仓库里 **一个作者命名空间**（[`vespa/shyx/`](.)），不�
 
 ## 工具
 
+* [**Camera Adjust**](./CameraAdjust/README.md) — **Sources → SHYX**（源节点，无输入）：命名相机预设存在节点自己的属性里，不占用全局视图相机；Cameras 表 **Add**（抓当前 RenderView）/ **Update** / **Delete** / **Apply**。输出每个预设一个点（Point Gaussian），点数组 `CameraIndex` / `CameraName`
 * [**AI Assistant**](./AIAssistant/README.md) — **View → SHYX AI Assistant** 可勾选停靠窗口；Send / Run script 跑 ParaView Python（需 ParaView 开启 Python）
 * **Proximity Gap Selection** — RenderView 标题栏：按 ε 选出不同连通域（含封闭壳体）的近距接触带。按钮为开关：打开后才计算；打开时在按钮上滚轮改 ε。默认 **Single nearest region**。可选 **Toward opposite center**（默认关）。结果可交给 [**Selection: Fill, Alpha Wrap, Union**](./SelectionFillAlphaReunion/README.md)。`ParaViewPlugin/selection/ProximityGapSelection/`
 * **Select Block** — 3D 视图右键复合 block（如 `Part_1`）先清当前选择再全选该块 cell；`ParaViewPlugin/selection/SelectBlock/`

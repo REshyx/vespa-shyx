@@ -1787,7 +1787,8 @@ QString describeClientTool(const QString& query)
       "  All visible pipeline representations in the view are queried (not only the active node)\n"
       "  Composite parent (multiblock / PDC): every intersecting leaf is selected\n"
       "  Selection modifiers: ParaView add/subtract/toggle (Shift/Ctrl as usual)\n"
-      "  Right-click the button: 'Apply selection on release only' (DeferSelectionUntilRelease)\n");
+      "  Right-click the button: 'Apply selection on release only' (DeferSelectionUntilRelease, "
+      "on by default)\n");
   }
   if (grow && !sphere && !selectBlock)
   {
@@ -2667,6 +2668,18 @@ const ShyxExtra kShyxExtra[] = {
     "the selection) and Extract Surface (built-in DataSetSurfaceFilter on the active pipeline "
     "object). Ctrl is not involved, so Ctrl+click and Ctrl shortcuts are unaffected. "
     "Call describe_proxy('quick filter wheel')." },
+  { "SHYXCameraAdjust",
+    "Source (Filters → SHYX), not a filter and not a Display representation: named camera presets "
+    "stored in this node, so a camera configuration belongs to the pipeline branch instead of the "
+    "global view / script variable. Properties are newline-separated rows: CameraNames, "
+    "CameraPositions (x,y,z), CameraFocalPoints, CameraViewUps, CameraLens "
+    "(viewAngle,parallelScale,parallelProjection 0/1). The Cameras table does Add (capture the "
+    "active RenderView), Update selected, Delete selected, and Apply to view (sets Position / "
+    "FocalPoint / ViewUp / ViewAngle / ParallelScale / ParallelProjection on the active RenderView "
+    "and renders); double-click a non-Name cell applies that row. Output is one vertex per preset "
+    "at CameraPositions with point arrays CameraIndex / CameraName (Point Gaussian), plus field "
+    "data CameraPositions / CameraFocalPoints / CameraViewUps / CameraLens. The output alone never "
+    "moves a camera. Call describe_proxy('camera adjust')." },
   { "SHYXAIAssistant",
     "Deprecated. The assistant is View → SHYX AI Assistant, not a pipeline filter. Do not create this node." },
 };
@@ -2701,7 +2714,9 @@ QString lookupShyxDocs(const QString& queryRaw)
     out += QStringLiteral(
       "SHYX is not only Filters → SHYX. Capability groups:\n"
       "1) Pipeline filters/sources: Filters → SHYX and Vascular toolbar. "
-      "Live XML names: list_filters with empty query.\n"
+      "Live XML names: list_filters with empty query. "
+      "SHYXCameraAdjust is a source that stores named camera presets in the node itself "
+      "(Cameras table: Add / Update / Delete / Apply; not a filter and not a Display type).\n"
       "2) Display representations (Display panel Representation dropdown; NOT pipeline nodes):\n"
       "   Pulse Glyphs, Animated Streamline, Point Label, Hologram. "
       "Python: GetDisplayProperties().Representation = 'Pulse Glyphs'.\n"
@@ -2734,7 +2749,7 @@ QString lookupShyxDocs(const QString& queryRaw)
       "describe_proxy('proximity gap'), describe_proxy('select block'), describe_proxy('select similar'), "
       "describe_proxy('fill interior'), describe_proxy('select connected'), "
       "describe_proxy('invert'), describe_proxy('recovery'), "
-      "describe_proxy('quick filter wheel').\n");
+      "describe_proxy('quick filter wheel'), describe_proxy('camera adjust').\n");
   }
 
   for (const ShyxExtra& e : kShyxExtra)
@@ -2811,7 +2826,7 @@ QString lookupShyxDocs(const QString& queryRaw)
     }
   }
   out += QStringLiteral("For property names/enums/defaults call describe_proxy with the XML/python name "
-                        "or display type (Pulse Glyphs, sphere, grow, select block, select similar, fill interior, select connected, invert, recovery).\n");
+                        "or display type (Pulse Glyphs, sphere, grow, select block, select similar, fill interior, select connected, invert, recovery, camera adjust).\n");
   if (!query.isEmpty())
   {
     const QString client = describeClientTool(query);

@@ -1,0 +1,10 @@
+NAME
+  vtkSHYXCameraAdjust
+DESCRIPTION
+  "Named camera presets stored in a source node (position / focal point / view up / lens)."
+GROUPS
+  Core
+DEPENDS
+  VTK::CommonCore
+  VTK::CommonDataModel
+  VTK::CommonExecutionModel

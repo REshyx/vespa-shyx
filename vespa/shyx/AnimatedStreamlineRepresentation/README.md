@@ -1,6 +1,6 @@
 # Animated Streamline Representation
 
-Display 下拉 **`Animated Streamline`**。不要构造 representation proxy。Python：`Representation = 'Animated Streamline'`，属性 **`AS_*`**（`disp.AS_Animate`、`AS_TimeSource`、`AS_FrameRate`、`AS_FrameCount`、`AS_TimeScale`、`AS_IntegrationScale`、`AS_OpacityScale`、`AS_Trunc`、`AS_Pow`、`AS_Randomize`、`AS_RandomizeScale`、`AS_AnimationCoordinateArray`、`AS_AnimationCoordinateYArray`）。
+Display 下拉 **`Animated Streamline`**。不要构造 representation proxy。Python：`Representation = 'Animated Streamline'`，属性 **`AS_*`**（`disp.AS_Animate`、`AS_TimeSource`、`AS_FrameRate`、`AS_LockToFrameRate`、`AS_FrameCount`、`AS_TimeScale`、`AS_IntegrationScale`、`AS_OpacityScale`、`AS_Trunc`、`AS_Pow`、`AS_Randomize`、`AS_RandomizeScale`、`AS_AnimationCoordinateArray`、`AS_AnimationCoordinateYArray`；`AS_FramesPerCycle` 是只读信息属性，见下文，Python 里直接算）。
 
 ## 示意图
 
@@ -33,13 +33,35 @@ Display 下拉 **`Animated Streamline`**。不要构造 representation proxy。P
   * **含义**：着色器时间项 `time` 的来源（默认 `0` = Real time）。
   * **`0` Real time (wall clock)**：`time = 墙钟秒数 - 创建时刻`。每渲染一帧，相位推进量等于**上一帧实际耗时**，所以渲染耗时抖动会直接变成脉冲速度抖动；同一帧渲染两次相位也不同。交互观看没问题，**导出序列图片时上下帧不连续**。
   * **`1` Render frames (image sequence)**：`time = FrameCount / FrameRate`，计数器**每渲染一帧 +1**（`Animate` 关时不加）。每帧固定推进 `1/FrameRate` 秒对应的相位，与单帧渲染耗时无关，因此 **Save Animation / 逐帧 Save Screenshot 导出的序列是连续的**，而且可以复现。**切到该模式的瞬间计数器归 0**，所以每次导出的第 0 帧相位一致；导出前把 `FrameCount` 设 0 也能达到同样效果。
-  * **注意**：该模式跟着"渲染次数"走，所以交互时播放速度取决于实际帧率（机器越快脉冲越快）；导出时渲染次数 = 输出帧数，不受影响。
+  * **注意**：该模式跟着"渲染次数"走，所以交互时播放速度取决于实际帧率（机器越快脉冲越快）——除非打开下面的 **`LockToFrameRate`**（默认开），它把交互刷新锁定到 `FrameRate`，于是预览速度 = 最终播放速度；导出时渲染次数 = 输出帧数，不受影响。
+  * **Python**：带 `EnumerationDomain`，`disp.AS_TimeSource = 1` 可以直接写（0/1 或枚举文本都行）；读回来是枚举文本（如 `'Render frames (image sequence)'`），不是整数。
 * **`FrameRate` (double)**
-  * **含义**：Render frames 模式下把帧号换算成秒的帧率（默认 `30`，范围 1～240）。
+  * **含义**：Render frames 模式下把帧号换算成秒的帧率（默认 `30`，范围 1～240）；该模式下 `LockToFrameRate` 打开时它同时是**交互预览的刷新上限**。
   * **效果**：设成序列将来**播放**用的帧率，脉冲速度就与 Real time 模式下相同；想整体放慢/加快直接用 `TimeScale`。
+* **`LockToFrameRate` (bool, 默认开，仅 Render frames 模式)**
+  * **含义**：把**交互预览**锁定到 `FrameRate` 帧每秒，而不是"机器能渲多快就渲多快"。
+  * **效果**：`TimeSource = Render frames` 时，脉冲每帧推进 `1/FrameRate` 秒，锁帧后预览的推进速度 = `FrameRate` 帧/秒，也就是**最终导出序列播放时的速度**——换台更快的机器不会让动画变快，方便按最终速度调 `TimeScale`、`IntegrationScale`。
+  * **附加收益**：刷新循环被节流到 `FrameRate`（默认 30 fps），不再满速空转，GPU/CPU 占用明显下降。
+  * **关掉**：恢复旧行为（`endRender` 后立刻再渲一帧，跑满机器帧率）。
+  * **Real time 模式不受影响**：墙钟驱动的速度本来就跟帧率无关，所以该模式不节流（刷新率越高越顺滑）。
+  * **不影响导出**：`Save Animation` / 逐帧 `Save Screenshot` 是每帧同步渲染，不经过这个定时器，导出帧数与相位不受影响。
+  * **实现**：客户端 `pqAnimatedStreamlineAnimationManager` 用单次 `QTimer` 调度下一帧，按"上一帧开始渲染到现在的耗时"补足剩余时间（`wait = 1000/FrameRate - elapsed`），所以实际节奏贴近 `FrameRate`，不会因为渲染耗时逐帧累积变慢；渲染比周期还慢时自动退化为能渲多快渲多快（此时预览比最终速度慢）。
+  * **Python**：`disp.AS_LockToFrameRate = 0/1`。
 * **`FrameCount` (int)**
   * **含义**：Render frames 模式用的渲染帧计数器（默认 `0`）。
   * **效果**：只想从确定的相位开始导出时把它设 0；也可以用 Python 直接指定某一帧，例如 `disp.AS_FrameCount = 120`。属性面板里显示的值只在属性更新时刷新，可能落后于实时计数器。
+* **`FramesPerCycle`（只读信息行）**
+  * **含义**：**一个脉冲周期有多少帧**，面板上直接显示成一行灰底信息（如 `Pulse cycle: 75 frames = 2.5 s at 30 fps (0.0133 per frame)`）。
+  * **换算**：相位每帧推进 `TimeScale / (FrameRate × animCoordy)`，`fract()` 走满 1.0 是一个周期，所以
+    `FramesPerCycle = FrameRate / TimeScale`（`animCoordy = 1` 时），一个周期时长 `1 / TimeScale` 秒。
+  * **会不会过时**：不会。这行字是**客户端**直接拿 `Frame rate` /`Time scale` 现算的，拖动滑块立刻跟着变，不依赖服务端属性回传。
+  * **锁帧提示**：Render frames 模式下还会多一行说明预览是否锁帧（`LockToFrameRate` 开 → "Preview locked to N fps"；关 → 提示会跑满机器帧率）。
+  * **例外**：`TimeScale = 0` 显示为无周期；选了 `Animation coordinate Y` 数组时每个点的除数不同、没有单一数字，这行会改成提示「per point」。序列导出帧数不是整数倍的周期时也会提示"不会无缝循环"。
+  * **无缝循环**：导出 `N` 帧要首尾相接，令 `TimeScale = FrameRate × k / N`（`k` 为整数）。例如 300 帧 / 30fps 用 `0.4`（4 个周期）。
+  * **Python 注意**：该属性是 `information_only`，`disp.AS_FramesPerCycle` **不能用**（simple 模块不给信息属性生成访问器）。脚本里直接算 `disp.AS_FrameRate / abs(disp.AS_TimeScale)`，或用 `disp.SMProxy.GetProperty("AS_FramesPerCycle").GetElement(0)` 读服务端值（只在取信息时刷新，可能滞后）。
+  * **XML 注意（两个坑都踩过）**：
+    1. `Int/DoubleVectorProperty` 只要 `number_of_elements > 0` 就**必须写 `default_values`**（不想给默认值写 `default_values="none"`）。漏了会在服务端报 `No default value is specified for property` → `Could not parse property` → 子代理 VTK 对象为 NULL → 之后 `AddRepresentation()` 收到 null 直接崩 ParaView（表现为「随便 load 一个文件就闪退」）。
+    2. `information_only="1"` 属性在没写 `panel_visibility` 时会被自动设成 `never`，**面板里完全不出现**。要显示只读信息行必须显式写 `panel_visibility="default"`。
 * **`Animate` (bool)**
   * **含义**：动画总开关。
   * **效果**：设为 `true` 时启用动画渲染，设为 `false` 则保持静态展示。

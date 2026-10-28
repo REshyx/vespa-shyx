@@ -30,6 +30,7 @@
 | 名称（界面标签） | 说明 |
 |------------------|------|
 | **CGAL Point Cloud Reader** | 读取 `.las`、`.off`、`.ply`、`.xyz` 点云。 |
+| **SHYX Camera Adjust** | 相机预设表（`vtkSHYXCameraAdjust`，`SHYXCameraAdjust.xml`）。预设保存在节点自己的属性里，不占用全局视图相机；见下文「SHYX Camera Adjust」。 |
 
 ### 滤镜（`filters`，按菜单分类）
 
@@ -132,6 +133,31 @@
 ### CGAL Point Cloud Reader
 
 **功能**：读取 CGAL 点云数据文件，支持格式 `.las`、`.off`、`.ply`、`.xyz`。
+
+### SHYX Camera Adjust
+
+**功能**：把相机配置存进 pipeline 节点，而不是全局视图或脚本变量。一个 `SHYX Camera Adjust`（Sources → SHYX，源节点，无输入）自带一张 **Cameras** 表，可以给同一条分支保存任意多个命名机位；工程保存 / Load State 时预设跟着节点走。
+
+| 面板操作 | 说明 |
+|----------|------|
+| **Add (current camera)** | 抓取当前活动 RenderView 的 Position / FocalPoint / ViewUp / ViewAngle / ParallelScale / ParallelProjection，追加一行（默认名 `Camera_N`）。 |
+| **Update selected** | 用当前相机覆盖选中的第一行，名字不变。 |
+| **Delete selected** | 删除选中的一行或多行（Ctrl / Shift 多选）。 |
+| **Apply to view** | 把选中行的机位设回活动 RenderView 并重绘。双击非 Name 单元格等同 Apply。 |
+
+Name 列可双击改名；Position / Focal Point / View Up / Angle / Scale 只读显示（精度足够核对，完整数值存在属性里）。属性本身是换行分隔的文本，便于脚本读写：
+
+| 属性 | 每行内容 |
+|------|----------|
+| `CameraNames` | 预设名 |
+| `CameraPositions` | `x,y,z`，相机位置 |
+| `CameraFocalPoints` | `x,y,z`，焦点 |
+| `CameraViewUps` | `x,y,z`，上方向 |
+| `CameraLens` | `viewAngle,parallelScale,parallelProjection`（0 透视 / 1 平行投影） |
+
+输出是每个预设一个顶点（位置 = `CameraPositions`），点数据 `CameraIndex` / `CameraName`，字段数据 `CameraPositions` / `CameraFocalPoints` / `CameraViewUps` / `CameraLens`；XML 默认用 **Point Gaussian** 显示，所以能在 3D 里看到机位点，也可以切 **Point Label** 用 `CameraName` 标名字。输出本身**不会**移动相机，只有 Apply 才会。
+
+Python：`c = SHYXCameraAdjust(CameraNames='Front\nSide')` 后写 `CameraPositions` 等属性；面板是常规编辑方式。AI 助手里用 `describe_proxy('camera adjust')` 查参数。
 
 ---
 
@@ -764,7 +790,7 @@
 
 **功能**：针对类流线网格，在 GPU 上用自定义 shader uniform 做**逐帧动画**（透明度脉冲等），**Animation coordinate** 数组驱动纹理坐标与混合。
 
-**常用参数（节选）**：**Animate**、**Time Source**（`0` Real time 墙钟；`1` Render frames 按渲染帧数驱动：每帧固定推进 `1/Frame rate` 秒，导出序列图片上下帧连续可复现，切到该模式时计数器归 0）、**Frame rate**、**Frame count**（渲染帧计数器，可设 0 重新起算）、**Integration Scale**（Domain 建议 `100/(L_max×V_max)`，可 Scale/Reset）、**Time Scale**、**Opacity Scale**、**Trunc**、**Pow**、**Randomize** / **Randomize Scale**（种子点排成线/面时逐流线随机相位，消除层叠同步推进）、**Animation coordinate X**、可选 **Animation coordinate Y**（作为 mix 公式中的除数或均匀 1）。
+**常用参数（节选）**：**Animate**、**Time Source**（`0` Real time 墙钟；`1` Render frames 按渲染帧数驱动：每帧固定推进 `1/Frame rate` 秒，导出序列图片上下帧连续可复现，切到该模式时计数器归 0）、**Frame rate**、**Lock to frame rate**（默认开，仅 Render frames 模式：把交互刷新锁到 `Frame rate` 帧/秒，预览速度 = 最终导出序列的播放速度，不再「机器越快跑得越快」，也顺带省 GPU；关掉则跑满机器帧率）、**Frame count**（渲染帧计数器，可设 0 重新起算）、**Frames per cycle**（只读信息行，客户端现算 `Frame rate / Time scale` = 一个脉冲周期多少帧；`Time scale=0` 无周期，选了 Y 数组时改为逐点提示；导出 N 帧要无缝循环取 `Time scale = Frame rate × k / N`）、**Integration Scale**（Domain 建议 `100/(L_max×V_max)`，可 Scale/Reset）、**Time Scale**、**Opacity Scale**、**Trunc**、**Pow**、**Randomize** / **Randomize Scale**（种子点排成线/面时逐流线随机相位，消除层叠同步推进）、**Animation coordinate X**、可选 **Animation coordinate Y**（作为 mix 公式中的除数或均匀 1）。
 
 ---
 

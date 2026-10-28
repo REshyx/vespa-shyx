@@ -55,6 +55,28 @@
         </Hints>
       </DoubleVectorProperty>
 
+      <IntVectorProperty name="LockToFrameRate"
+                         command="SetLockToFrameRate"
+                         default_values="1"
+                         label="Lock to frame rate"
+                         number_of_elements="1">
+        <Documentation>
+          Render frames mode only: pace the interactive preview at Frame rate rendered frames per
+          second instead of re-rendering as fast as the machine allows. On (default) the pulse you
+          see moves at the speed the exported image sequence plays back at, so a fast machine no
+          longer makes the animation run faster. Off: the loop renders as fast as possible, so the
+          preview is faster on a faster machine. Only affects interactive viewing; Save Animation
+          renders every frame regardless.
+        </Documentation>
+        <BooleanDomain name="bool" />
+        <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="visibility"
+                                   property="AS_TimeSource"
+                                   value="1" />
+        </Hints>
+      </IntVectorProperty>
+
       <IntVectorProperty name="FrameCount"
                          command="SetFrameCount"
                          default_values="0"
@@ -74,6 +96,26 @@
                                    value="1" />
         </Hints>
       </IntVectorProperty>
+
+      <DoubleVectorProperty name="FramesPerCycle"
+                            command="GetFramesPerCycle"
+                            information_only="1"
+                            default_values="0"
+                            label="Frames per cycle"
+                            number_of_elements="1"
+                            panel_visibility="default"
+                            panel_widget="shyx_animated_streamline_timing">
+        <Documentation>
+          Read-only, informational: how many rendered frames one pulse cycle takes.
+          Frames per cycle = Frame rate / Time scale (with a uniform animCoordy = 1), i.e. the
+          phase advances by Time scale / (Frame rate x animCoordy) per rendered frame. Time scale
+          = 0 has no cycle, and an Animation coordinate Y array makes the period per point, so the
+          panel then reports that instead of a single number. Render frames mode only; in Real
+          time mode the same product is shown in seconds.
+          To loop an exported sequence seamlessly over N frames, pick Time scale =
+          Frame rate x k / N for an integer k.
+        </Documentation>
+      </DoubleVectorProperty>
 
       <DoubleVectorProperty name="IntegrationScale"
                             command="SetIntegrationScale"
@@ -205,7 +247,9 @@
             <Property name="Animate" exposed_name="AS_Animate" />
             <Property name="TimeSource" exposed_name="AS_TimeSource" />
             <Property name="FrameRate" exposed_name="AS_FrameRate" />
+            <Property name="LockToFrameRate" exposed_name="AS_LockToFrameRate" />
             <Property name="FrameCount" exposed_name="AS_FrameCount" />
+            <Property name="FramesPerCycle" exposed_name="AS_FramesPerCycle" />
             <Property name="IntegrationScale" exposed_name="AS_IntegrationScale" />
             <Property name="TimeScale" exposed_name="AS_TimeScale" />
             <Property name="OpacityScale" exposed_name="AS_OpacityScale" />
@@ -243,7 +287,9 @@
             <Property name="Animate" exposed_name="AS_Animate" />
             <Property name="TimeSource" exposed_name="AS_TimeSource" />
             <Property name="FrameRate" exposed_name="AS_FrameRate" />
+            <Property name="LockToFrameRate" exposed_name="AS_LockToFrameRate" />
             <Property name="FrameCount" exposed_name="AS_FrameCount" />
+            <Property name="FramesPerCycle" exposed_name="AS_FramesPerCycle" />
             <Property name="IntegrationScale" exposed_name="AS_IntegrationScale" />
             <Property name="TimeScale" exposed_name="AS_TimeScale" />
             <Property name="OpacityScale" exposed_name="AS_OpacityScale" />
@@ -281,7 +327,9 @@
             <Property name="Animate" exposed_name="AS_Animate" />
             <Property name="TimeSource" exposed_name="AS_TimeSource" />
             <Property name="FrameRate" exposed_name="AS_FrameRate" />
+            <Property name="LockToFrameRate" exposed_name="AS_LockToFrameRate" />
             <Property name="FrameCount" exposed_name="AS_FrameCount" />
+            <Property name="FramesPerCycle" exposed_name="AS_FramesPerCycle" />
             <Property name="IntegrationScale" exposed_name="AS_IntegrationScale" />
             <Property name="TimeScale" exposed_name="AS_TimeScale" />
             <Property name="OpacityScale" exposed_name="AS_OpacityScale" />
@@ -319,7 +367,9 @@
             <Property name="Animate" exposed_name="AS_Animate" />
             <Property name="TimeSource" exposed_name="AS_TimeSource" />
             <Property name="FrameRate" exposed_name="AS_FrameRate" />
+            <Property name="LockToFrameRate" exposed_name="AS_LockToFrameRate" />
             <Property name="FrameCount" exposed_name="AS_FrameCount" />
+            <Property name="FramesPerCycle" exposed_name="AS_FramesPerCycle" />
             <Property name="IntegrationScale" exposed_name="AS_IntegrationScale" />
             <Property name="TimeScale" exposed_name="AS_TimeScale" />
             <Property name="OpacityScale" exposed_name="AS_OpacityScale" />

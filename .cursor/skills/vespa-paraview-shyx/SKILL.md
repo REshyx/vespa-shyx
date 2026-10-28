@@ -98,6 +98,8 @@ description: >-
 - **忘了 `vespa_plugin_xml()`**：算子 C++ 已进 DLL，但 UI 不出现。
 - **vtk.module 少写了依赖**：链接期或 `vtk_header_dep` 类错误。
 - **条件构建**：VMTK/CGAL 6 相关模块被根 CMake 排除后，与 XML 仍引用该 filter 会不一致——改 CMake 或改 XML/文档，避免“一半发布”。
+- **数值向量属性漏写 `default_values` → ParaView 整体闪退（必查）**：`vtkSIVectorPropertyTemplate::ReadXMLAttributes` 里，只要 `number_of_elements > 0` 且 XML 没给 `default_values`，就 `vtkErrorMacro("No default value is specified for property")` 并 `return false` → `vtkSIProxy: Could not parse property` → 该代理的**子代理 VTK 对象创建失败**（后续 `Wrapper function not found for class "(vtk object is NULL)"`）→ `vtkCompositeRepresentation::AddRepresentation(key, nullptr)` 空指针（Release 下 `assert(repr != nullptr)` 被裁掉）→ 崩在 `vtkRemotingViews` `0xc0000005`。表象是「打开 ParaView 后随便 load 一个文件就崩」，跟崩溃点毫无关系，极易误判。规则：所有 `IntVectorProperty` / `DoubleVectorProperty` 都要写 `default_values`；确实不想给默认值时写 `default_values="none"`（SI 层会提前 `return true`）。`si_class="vtkSIDataArraySelectionProperty"` 这类自定义 SI 属性走别的解析路径，不受影响。
+- **`information_only="1"` 属性默认不出现在面板**：`vtkSMProperty::ReadXMLAttributes` 在没有 `panel_visibility` 时执行 `SetPanelVisibility(GetInformationOnly() ? "never" : "default")`，`never` 会被 `pqProxyWidget::skip()` 直接丢掉。想显示只读信息行必须显式写 `panel_visibility="default"`（并配 `panel_widget` 自定义只读控件）。
 - **自定义 `panel_widget` 整组 backing 都 `never`**：`pqProxyWidget` 跳过这些属性，**根本不创建**组 widget。至少留一个可见锚点（§8.6.8）。
 - **AI Assistant 没补 describe_proxy**：新功能已经在菜单/Display/标题栏出现，但助手问「有什么 / 参数」时仍只有 filter。**§9 是加功能清单的一部分，不是事后文档。**
 
