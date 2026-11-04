@@ -1,8 +1,11 @@
 #include "pqSHYXStreamlineSeedWidget.h"
 
 #include "pqActiveObjects.h"
+#include "pqApplicationCore.h"
 #include "pqPVApplicationCore.h"
+#include "pqPipelineSource.h"
 #include "pqRenderView.h"
+#include "pqServerManagerModel.h"
 #include "pqView.h"
 
 #include "vtkAlgorithm.h"
@@ -13,6 +16,7 @@
 #include "vtkConeSource.h"
 #include "vtkDataSet.h"
 #include "vtkDataSetSurfaceFilter.h"
+#include "vtkEventQtSlotConnect.h"
 #include "vtkGenericCell.h"
 #include "vtkInteractorObserver.h"
 #include "vtkLineRepresentation.h"
@@ -140,6 +144,27 @@ QSpinBox* MakeIntSpin(QWidget* parent, int minimum, int maximum)
   spin->setRange(minimum, maximum);
   spin->setKeyboardTracking(false);
   return spin;
+}
+
+/** Pipeline node name of a proxy ("(none)" / unknown proxies fall back to the XML label). */
+QString ProxyDisplayName(vtkSMProxy* proxy)
+{
+  if (!proxy)
+  {
+    return QString();
+  }
+  if (auto* core = pqApplicationCore::instance())
+  {
+    if (auto* model = core->getServerManagerModel())
+    {
+      if (auto* source = model->findItem<pqPipelineSource*>(proxy))
+      {
+        return source->getSMName();
+      }
+    }
+  }
+  const char* label = proxy->GetXMLLabel();
+  return label ? QString::fromUtf8(label) : QString();
 }
 
 void SetVec3(QDoubleSpinBox* spins[3], const double v[3])
@@ -325,11 +350,29 @@ pqSHYXStreamlineSeedWidget::pqSHYXStreamlineSeedWidget(
     selectEnumByValue(this->SphereSampling, sampling);
   }
   this->updateShapeGroups();
-  this->setStatus(tr("Drag the seed handles. Snap flags are applied when you release the mouse."));
+  this->setStatus(tr("Snap target: %1. Drag the seed handles; snap flags apply on release.")
+                    .arg(this->snapTargetLabel()));
   QObject::connect(&pqActiveObjects::instance(), &pqActiveObjects::viewChanged, this,
     &pqSHYXStreamlineSeedWidget::onActiveViewChanged);
   QObject::connect(&pqActiveObjects::instance(), &pqActiveObjects::dataUpdated, this,
     [this]() { this->syncWidgets(); });
+
+  // The Snap target dropdown (SnapSurface input property) is rendered by pqInputSelectorWidget,
+  // outside this group widget. Watch it so the snap-surface cache and the status hint follow a
+  // change without waiting for the next drag.
+  if (proxy)
+  {
+    if (vtkSMProperty* snapProp = proxy->GetProperty("SnapSurface"))
+    {
+      this->SnapTargetConnect = vtkSmartPointer<vtkEventQtSlotConnect>::New();
+      // The dropdown writes unchecked values (pqPropertyWidget links), so the pending pick shows
+      // up as UncheckedPropertyModifiedEvent; Apply/invalidations also raise ModifiedEvent.
+      this->SnapTargetConnect->Connect(
+        snapProp, vtkCommand::UncheckedPropertyModifiedEvent, this, SLOT(onSnapTargetChanged()));
+      this->SnapTargetConnect->Connect(
+        snapProp, vtkCommand::ModifiedEvent, this, SLOT(onSnapTargetChanged()));
+    }
+  }
 }
 
 //-----------------------------------------------------------------------------
@@ -350,8 +393,9 @@ void pqSHYXStreamlineSeedWidget::buildUi()
        "Sphere: left-drag the ball to move it; set Radius in the panel (or right-drag to scale). "
        "Rectangle: drag the yellow center to move it (only the center snaps), the blue corner to "
        "resize, and the red cone to rotate the plane. "
-       "Snap casts a ray through the cursor onto the Input surface and takes the vertex nearest "
-       "that front-most hit (switch to Nearest vertex (3D) to ignore the camera). "
+       "Snap casts a ray through the cursor onto the snap surface and takes the vertex nearest "
+       "that front-most hit (switch to Nearest vertex (3D) to ignore the camera). The snap surface "
+       "is the node picked in Snap target above, or the Input when it says (none). "
        "Place in view drops the seed where the camera is looking (Line: 1/3 and 2/3 across the "
        "viewport, Sphere/Rectangle: viewport center). "
        "Seeds update live; streamlines refresh on Apply (or tick Apply on release)."),
@@ -375,7 +419,7 @@ void pqSHYXStreamlineSeedWidget::buildUi()
     tr("Move the seed to what the camera is looking at, so it always lands inside the view:\n"
        "Line takes the 1/3 and 2/3 positions across the viewport width;\n"
        "Sphere and Rectangle take the viewport center.\n"
-       "Each target is ray-picked on the Input surface and snapped to the nearest vertex. "
+       "Each target is ray-picked on the snap surface and snapped to the nearest vertex. "
        "Sizes are a fraction of the viewport, converted to world units at that depth."));
   topRow->addWidget(this->PlaceFromBounds);
   this->ShowInteractive = new QCheckBox(tr("Show 3D widget"), this);
@@ -400,10 +444,10 @@ void pqSHYXStreamlineSeedWidget::buildUi()
   this->SnapModeCombo->addItem(tr("Surface under cursor (screen ray)"));
   this->SnapModeCombo->addItem(tr("Nearest vertex (3D)"));
   this->SnapModeCombo->setToolTip(
-    tr("Screen ray: cast a ray through the cursor into the Input surface and snap to the vertex "
-       "nearest that front-most hit, so the result matches what you see. Nearest vertex (3D): "
-       "ignore the camera and take the closest vertex in space, which can land on the back side "
-       "of a vessel or on the far wall of a stent."));
+    tr("Screen ray: cast a ray through the cursor into the snap surface (the Snap target node, or "
+       "the Input when (none)) and snap to the vertex nearest that front-most hit, so the result "
+       "matches what you see. Nearest vertex (3D): ignore the camera and take the closest vertex "
+       "in space, which can land on the back side of a vessel or on the far wall of a stent."));
   snapRow->addWidget(this->SnapModeCombo, 1);
   vbox->addLayout(snapRow);
 
@@ -422,7 +466,7 @@ void pqSHYXStreamlineSeedWidget::buildUi()
       grid->addWidget(this->LineP1[i], 1, 1 + i);
     }
     this->LineSnap1 = new QCheckBox(tr("Snap"), this->LineGroup);
-    this->LineSnap1->setToolTip(tr("On release, move Point 1 to the nearest input-surface vertex."));
+    this->LineSnap1->setToolTip(tr("On release, move Point 1 to the nearest snap-surface vertex."));
     grid->addWidget(this->LineSnap1, 1, 4);
 
     grid->addWidget(new QLabel(tr("Point 2"), this->LineGroup), 2, 0);
@@ -432,7 +476,7 @@ void pqSHYXStreamlineSeedWidget::buildUi()
       grid->addWidget(this->LineP2[i], 2, 1 + i);
     }
     this->LineSnap2 = new QCheckBox(tr("Snap"), this->LineGroup);
-    this->LineSnap2->setToolTip(tr("On release, move Point 2 to the nearest input-surface vertex."));
+    this->LineSnap2->setToolTip(tr("On release, move Point 2 to the nearest snap-surface vertex."));
     grid->addWidget(this->LineSnap2, 2, 4);
 
     grid->addWidget(new QLabel(tr("Resolution"), this->LineGroup), 3, 0);
@@ -460,7 +504,7 @@ void pqSHYXStreamlineSeedWidget::buildUi()
     }
     this->SphereSnap = new QCheckBox(tr("Snap center"), this->SphereGroup);
     this->SphereSnap->setToolTip(
-      tr("On release, move the sphere center to the nearest input-surface vertex."));
+      tr("On release, move the sphere center to the nearest snap-surface vertex."));
     grid->addWidget(this->SphereSnap, 1, 4);
 
     auto* radiusRow = new QHBoxLayout();
@@ -542,7 +586,7 @@ void pqSHYXStreamlineSeedWidget::buildUi()
     }
     this->RectangleSnap = new QCheckBox(tr("Snap center"), this->RectangleGroup);
     this->RectangleSnap->setToolTip(
-      tr("On release, move only the rectangle center to the nearest input-surface vertex. "
+      tr("On release, move only the rectangle center to the nearest snap-surface vertex. "
          "Width / Height / Normal stay as they are."));
     grid->addWidget(this->RectangleSnap, 1, 4);
 
@@ -947,6 +991,24 @@ void pqSHYXStreamlineSeedWidget::onSeedPropertyEdited()
 }
 
 //-----------------------------------------------------------------------------
+void pqSHYXStreamlineSeedWidget::onSnapTargetChanged()
+{
+  // Drop the cached surface and locators: the next release re-resolves the newly picked node.
+  this->SnapSurface = nullptr;
+  this->SnapLocator = nullptr;
+  this->SnapCellLocator = nullptr;
+  this->SnapInput = nullptr;
+  this->SnapMTime = 0;
+  // Resolve the node here, outside a drag: if its data never reached the client yet this runs
+  // UpdatePipeline() once now instead of in the middle of a handle release.
+  this->ensureSnapper();
+  const bool autoApply = this->AutoApply && this->AutoApply->isChecked();
+  const QString message = tr("Snap target: %1.").arg(this->snapTargetLabel());
+  this->setStatus(autoApply ? tr("%1 Drag and release to snap.").arg(message)
+                            : tr("%1 Drag and release to snap, then click Apply.").arg(message));
+}
+
+//-----------------------------------------------------------------------------
 void pqSHYXStreamlineSeedWidget::onActiveViewChanged()
 {
   this->syncWidgets();
@@ -964,7 +1026,7 @@ void pqSHYXStreamlineSeedWidget::onPlaceFromBounds()
   vtkRenderer* ren = this->renderer();
   if (!ren || !this->ensureSnapper())
   {
-    this->setStatus(tr("No active 3D view with an Input surface; edit the seed values manually."));
+    this->setStatus(tr("No active 3D view with a snap surface; edit the seed values manually."));
     return;
   }
 
@@ -1226,6 +1288,77 @@ vtkDataSet* pqSHYXStreamlineSeedWidget::inputDataSet() const
   }
   const unsigned int port = input->GetOutputPortForConnection(0);
   return vtkDataSet::SafeDownCast(algorithm->GetOutputDataObject(static_cast<int>(port)));
+}
+
+//-----------------------------------------------------------------------------
+vtkSMProxy* pqSHYXStreamlineSeedWidget::snapTargetProxy() const
+{
+  vtkSMProxy* proxy = this->proxy();
+  auto* snapProp =
+    proxy ? vtkSMInputProperty::SafeDownCast(proxy->GetProperty("SnapSurface")) : nullptr;
+  if (!snapProp)
+  {
+    return nullptr;
+  }
+  // pqPropertyWidget writes its links to *unchecked* values, so the dropdown's current node lives
+  // there until the panel copies it into the checked property on Apply. Read the pending value
+  // first (GetUncheckedProxy falls back to the checked one when nothing is pending), so the 3D
+  // widget snaps to whatever the Snap target row currently shows.
+  return snapProp->GetUncheckedProxy(0);
+}
+
+//-----------------------------------------------------------------------------
+vtkDataSet* pqSHYXStreamlineSeedWidget::snapDataSet() const
+{
+  auto* proxy = this->proxy();
+  auto* snapProp =
+    proxy ? vtkSMInputProperty::SafeDownCast(proxy->GetProperty("SnapSurface")) : nullptr;
+  if (snapProp)
+  {
+    if (auto* source = vtkSMSourceProxy::SafeDownCast(snapProp->GetUncheckedProxy(0)))
+    {
+      const int port = static_cast<int>(snapProp->GetUncheckedOutputPortForConnection(0));
+      auto readOutput = [source, port]() -> vtkDataSet* {
+        auto* algorithm = vtkAlgorithm::SafeDownCast(source->GetClientSideObject());
+        return algorithm ? vtkDataSet::SafeDownCast(algorithm->GetOutputDataObject(port))
+                         : nullptr;
+      };
+      if (vtkDataSet* ds = readOutput())
+      {
+        if (ds->GetNumberOfPoints() > 0)
+        {
+          return ds;
+        }
+      }
+      // The picked node need not be shown in a view, so its client-side dataset can still be
+      // empty. UpdatePipeline() is a no-op when the source is already up to date.
+      source->UpdatePipeline();
+      if (vtkDataSet* ds = readOutput())
+      {
+        if (ds->GetNumberOfPoints() > 0)
+        {
+          return ds;
+        }
+      }
+    }
+  }
+  // "(none)", or the picked node has produced no points yet: use the Input (parent) surface, which
+  // is exactly the behaviour before the Snap target dropdown existed.
+  return this->inputDataSet();
+}
+
+//-----------------------------------------------------------------------------
+QString pqSHYXStreamlineSeedWidget::snapTargetLabel() const
+{
+  vtkSMProxy* target = this->snapTargetProxy();
+  if (!target)
+  {
+    vtkSMProxy* proxy = this->proxy();
+    auto* input = proxy ? vtkSMInputProperty::SafeDownCast(proxy->GetProperty("Input")) : nullptr;
+    target = input && input->GetNumberOfProxies() > 0 ? input->GetProxy(0) : nullptr;
+  }
+  const QString name = ProxyDisplayName(target);
+  return name.isEmpty() ? tr("Input") : name;
 }
 
 //-----------------------------------------------------------------------------
@@ -1920,7 +2053,9 @@ void pqSHYXStreamlineSeedWidget::renderSeedView()
 //-----------------------------------------------------------------------------
 bool pqSHYXStreamlineSeedWidget::ensureSnapper()
 {
-  vtkDataSet* input = this->inputDataSet();
+  // Snap surface = the node picked in Snap target, else the Input flow field. Whatever it is,
+  // every vertex of its surface is a candidate (volumes go through vtkDataSetSurfaceFilter).
+  vtkDataSet* input = this->snapDataSet();
   if (!input || input->GetNumberOfPoints() == 0)
   {
     return false;
@@ -2575,8 +2710,8 @@ void pqSHYXStreamlineSeedWidget::endRectangleDrag()
 
   const bool autoApply = this->AutoApply && this->AutoApply->isChecked();
   const QString snapLabel = this->SnapMode == pqSHYXStreamlineSeedWidget::SnapScreenRay
-    ? tr("Center snapped to the surface under the cursor")
-    : tr("Center snapped to the nearest vertex in 3D");
+    ? tr("Center snapped to the %1 surface under the cursor").arg(this->snapTargetLabel())
+    : tr("Center snapped to the nearest vertex of %1 in 3D").arg(this->snapTargetLabel());
   if (snapped)
   {
     this->setStatus(autoApply ? tr("%1. Applying streamlines.").arg(snapLabel)
@@ -2757,8 +2892,8 @@ void pqSHYXStreamlineSeedWidget::syncControlsFromWidget(bool release)
   {
     const bool autoApply = this->AutoApply && this->AutoApply->isChecked();
     const QString snapLabel = this->SnapMode == pqSHYXStreamlineSeedWidget::SnapScreenRay
-      ? tr("Snapped to the surface under the cursor")
-      : tr("Snapped to the nearest vertex in 3D");
+      ? tr("Snapped to the %1 surface under the cursor").arg(this->snapTargetLabel())
+      : tr("Snapped to the nearest vertex of %1 in 3D").arg(this->snapTargetLabel());
     if (snapped)
     {
       this->setStatus(autoApply ? tr("%1. Applying streamlines.").arg(snapLabel)

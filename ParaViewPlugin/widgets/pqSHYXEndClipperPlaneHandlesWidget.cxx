@@ -611,8 +611,8 @@ int pqSHYXEndClipperPlaneHandlesWidget::endpointCountFromClipViz(vtkPolyData* vi
     {
         return 0;
     }
-    // Prefer vertex cells (clip origins). Skeleton End Clipper appends skeleton
-    // points after the 2-per-endpoint clip handles; nPoints/2 would over-count.
+    // Prefer vertex cells (clip origins). A wrapper may append extra points after
+    // the 2-per-endpoint clip handles; nPoints/2 would over-count.
     if (vtkCellArray* verts = viz->GetVerts())
     {
         const vtkIdType nVerts = verts->GetNumberOfCells();

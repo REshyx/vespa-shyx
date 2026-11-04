@@ -2,19 +2,20 @@
  * @class   vtkSHYXInteractiveStreamTracer
  * @brief   StreamTracer with interactive line / sphere / rectangle (plane) seed shapes.
  *
- * One input port: the flow field (vtkDataSet) with a 3-component vector array. The seed
- * geometry is built from properties instead of a second pipeline input, so a 3D widget can
- * drive it directly:
+ * Input port 0: the flow field (vtkDataSet) with a 3-component vector array. The seed geometry
+ * is built from properties instead of a second pipeline input, so a 3D widget can drive it
+ * directly:
  *
  *  - SeedShape 0 Line:     LinePoint1 / LinePoint2, LineResolution samples.
  *  - SeedShape 1 Sphere:   SphereCenter / SphereRadius surface samples.
- *  - SeedShape 2 Rectangle: RectangleOrigin / RectanglePoint1 / RectanglePoint2 plane samples.
+ *  - SeedShape 2 Rectangle: RectangleCenter / RectangleNormal / RectangleWidth / RectangleHeight.
  *
- * Snap flags (LineSnapPoint1, LineSnapPoint2, SphereSnapCenter, RectangleSnapOrigin) move the
- * corresponding point to the nearest vertex of the input surface before tracing. The input may
- * be a volume or a surface; for volumes the outer surface is extracted with
- * vtkDataSetSurfaceFilter. A single input is used deliberately: vessel wall and stent surface
- * vertices are both valid snap targets when they live in the same dataset.
+ * Snap flags (LineSnapPoint1, LineSnapPoint2, SphereSnapCenter, RectangleSnapCenter) move the
+ * corresponding point to the nearest vertex of the snap surface before tracing. The snap surface
+ * is the surface of input port 1 when a dataset is connected there, otherwise the surface of the
+ * flow field on port 0. Either dataset may be a volume or a surface; for volumes the outer surface
+ * is extracted with vtkDataSetSurfaceFilter. This is how a seed can be snapped onto another
+ * pipeline node (vessel wall, stent, ...) without moving that node into the flow field.
  *
  * StreamTracer parameters are forwarded verbatim (see SHYXAutoStreamline for the same naming).
  *
@@ -195,15 +196,16 @@ public:
   ///@}
 
   /**
-   * Move points[i] to the nearest vertex of the input surface when enabled[i] is non-zero.
+   * Move points[i] to the nearest vertex of the given snap surface when enabled[i] is non-zero.
    * The surface is extracted once (polydata inputs are used directly). Returns true if any
-   * point moved. Used by the client widget on release and by RequestData for Python users.
+   * point moved. Pass input port 1 when a snap-target node is connected, otherwise the flow field.
+   * Used by the client widget on release and by RequestData for Python users.
    */
   static bool SnapPointsToSurface(
-    vtkDataSet* input, double* points, int count, const int* enabled);
+    vtkDataSet* snapInput, double* points, int count, const int* enabled);
 
   /** Convenience wrapper for a single point. */
-  static bool SnapPointToSurface(vtkDataSet* input, const double in[3], double out[3]);
+  static bool SnapPointToSurface(vtkDataSet* snapInput, const double in[3], double out[3]);
 
 protected:
   vtkSHYXInteractiveStreamTracer();

@@ -79,7 +79,6 @@
 | SHYX Enhanced Ruler | |
 | SHYX Skeleton Extraction | **Vascular** |
 | SHYX Vessel End Clipper | **Vascular** |
-| SHYX Skeleton End Clipper | **Vascular**（骨架提取 + 切端组合；原两个滤镜不变） |
 | SHYX Selection Plane Clipper | **Vascular** |
 | SHYX Surface to Volume Mesh | CGAL Mesh_3 |
 | SHYX TetGen / TetGen Mesh Optimize | **TetGen** 在 Vascular |
@@ -104,12 +103,12 @@
 | SHYX Vortex Criteria / FTLE / Clebsch Map | Clebsch 可选 MKL |
 | SHYX Vector Field Topology | 包装上游 VTK |
 | SHYX Auto Streamline / Bidirectional Streamline Merge | |
-| SHYX Interactive Stream Tracer | Line / Sphere / Rectangle（平面）可交互种子；释放时吸附表面顶点；球中键调半径 |
+| SHYX Interactive Stream Tracer | Line / Sphere / Rectangle（平面）可交互种子；释放时吸附表面顶点（Snap target 下拉可选其它节点的表面，默认父节点）；球中键调半径 |
 | SHYX Image Morphology | 纯 VTK；`vtkImageData` 形态学（胀/蚀/开闭/形态学梯度/顶帽/击中）；勿与 Gradient Magnitude、Median 混淆 |
 | SHYX Image AntiAlias | 需 `VESPA_USE_VMTK`；用 VMTK 自带 ITK 的 Whitaker 抗锯齿消体素台阶；输出 float level set，Contour 0 |
 | SHYX Image TEASAR Centerlines | 纯 VTK；从 `vtkImageData` 提中心线折线（TEASAR），不是 VMTK 表面中心线 |
 
-**Filters → Vascular**（工具条顺序）：Skeleton Extraction → Vessel End Clipper → Skeleton End Clipper → Selection Plane Clipper → Remesh With Endpoint → TetGen → DataSet To Partitioned Collection → Boundary Assignment。
+**Filters → Vascular**（工具条顺序）：Skeleton Extraction → Vessel End Clipper → Selection Plane Clipper → Remesh With Endpoint → TetGen → DataSet To Partitioned Collection → Boundary Assignment。
 
 上游 VESPA 只作保留、SHYX 一般为升级版，见 [`vespa/INVENTORY.md`](vespa/INVENTORY.md) 末节。
 
@@ -370,20 +369,6 @@ Python：`c = SHYXCameraAdjust(CameraNames='Front\nSide')` 后写 `CameraPositio
 | **Endpoints to Clip** | 选择 | — | 选择要裁剪的端点。需先 Apply 以发现端点。 |
 
 **输出**：端口 0 = 裁剪后的网格；端口 1 = 裁剪平面可视化（位置与法向；首次显示默认 **Point Label**）。
-
----
-
-### 16a. SHYX Skeleton End Clipper
-
-**功能**：把 **SHYX Skeleton Extraction** 与 **SHYX Vessel End Clipper** 串成一个节点（原来的两个滤镜不变）。输入只需闭合血管表面；内部先提取骨架，再按叶端点切端。
-
-| 输入/参数 | 类型 | 默认值 | 说明 |
-|-----------|------|--------|------|
-| **Input** | vtkPolyData | — | 水密血管表面（不再需要单独的 Centerline 输入）。 |
-| 骨架参数 | — | 与 Skeleton Extraction 相同 | Max Iterations 等。 |
-| 切端参数 | — | 与 Vessel End Clipper 相同 | Clip Offset、Endpoints to Clip、交互切平面等。 |
-
-**输出**：端口 0 = 切过的几何（同 End Clipper 端口 0）；端口 1 = 骨架折线 + clip 平面 label（vertex）与短延长方向线（首次显示默认 **Point Label**）。
 
 ---
 
@@ -761,7 +746,7 @@ Python：`c = SHYXCameraAdjust(CameraNames='Front\nSide')` 后写 `CameraPositio
 | **SHYX VMTK Centerlines / Opening Centerlines / Centerline Merge** | 需 `VESPA_USE_VMTK`。Opening Centerlines 端口 0 数组含义见 [`vespa/shyx/VmtkOpeningCenterlines/README.md`](vespa/shyx/VmtkOpeningCenterlines/README.md)。Centerline Merge：单端口；Merge 与 Reconstruct 可单独勾选；Append 多组中心线时默认按共用端点分组再各自 Extract/Merge（[`vespa/shyx/VmtkCenterlineMerge/README.md`](vespa/shyx/VmtkCenterlineMerge/README.md)） |
 | **SHYX Vascular / Endpoint Stent Placement** | 交互圆柱/端点支架 |
 | **SHYX Auto Streamline** | 自动布种流线 |
-| **SHYX Interactive Stream Tracer** | 交互 Line / Sphere / Rectangle 种子，释放吸附表面顶点；球中键调半径；端口 1 输出种子几何 |
+| **SHYX Interactive Stream Tracer** | 交互 Line / Sphere / Rectangle 种子，释放吸附表面顶点（Snap target 下拉可选其它节点，默认父节点 Input）；球中键调半径；端口 1 输出种子几何 |
 | **SHYX Image Morphology** | `vtkImageData` 点标量形态学。Binary Match 默认 **Threshold**（`>= 0.5` 为前景，结果 1/0），也可两值严格相等。结构元 Box/Cross/Ellipsoid，`KernelSize` 默认 3 3 3 |
 | **SHYX Image AntiAlias** | 需 `VESPA_USE_VMTK`。可选 **Resample Factor**（&gt;1 加密 / &lt;1 减粗 / 1 原网格）再跑 ITK `AntiAliasBinaryImageFilter`。输出 float level set（内正外负），抽表面 Contour 0 |
 | **SHYX Image TEASAR Centerlines** | 从 `vtkImageData` 提中心线折线（TEASAR）。点数组 `MaximumInscribedSphereRadius`。不是 VMTK 表面中心线 |
@@ -799,7 +784,7 @@ Python：`c = SHYXCameraAdjust(CameraNames='Front\nSide')` 后写 `CameraPositio
 - 多数网格滤镜要求输入为**三角化**的 `vtkPolyData`，建议先 **Tetrahedralize** + **Extract Surface**，必要时再用 **SHYX Alpha Wrapping** 得到水密 2-流形。
 - 布尔运算、重网格、细分等要求输入为**封闭、流形**网格时效果更稳定；可先用 **VESPA Mesh Checker** 检查或修复。
 - **SHYX Skeleton Extraction**、**SHYX Surface to Volume Mesh**、**SHYX TetGen** 的输入必须是**水密闭合**网格；若模型有洞，建议先用 **SHYX Hole Fill** 或 **SHYX Alpha Wrapping** 处理。
-- 血管建模流程示例（与 **Filters → Vascular** 工具条一致）：封闭表面 → **SHYX Skeleton Extraction** → **SHYX Vessel End Clipper**（或一步 **SHYX Skeleton End Clipper**）→ **SHYX Selection Plane Clipper** → **SHYX Remesh With Endpoint** → **SHYX TetGen**（或 Surface to Volume Mesh；hex 用 **Filters → SHYX SnappyHexMesh**）→ **SHYX DataSet To Partitioned Collection** → **SHYX Partitioned Collection Boundary Assignment**。
+- 血管建模流程示例（与 **Filters → Vascular** 工具条一致）：封闭表面 → **SHYX Skeleton Extraction** → **SHYX Vessel End Clipper** → **SHYX Selection Plane Clipper** → **SHYX Remesh With Endpoint** → **SHYX TetGen**（或 Surface to Volume Mesh；hex 用 **Filters → SHYX SnappyHexMesh**）→ **SHYX DataSet To Partitioned Collection** → **SHYX Partitioned Collection Boundary Assignment**。
 - 从点云重建时，一般顺序：点云 → **VESPA PCA Estimate Normals** → **VESPA Poisson** 或 **Advancing Front**；若点云较乱可考虑先 **SHYX Alpha Wrapping** 再后续处理。
 - **SHYX TetGen** 与 **SHYX Surface to Volume Mesh** 均可从表面生成体积网格：TetGen 基于 TetGen 库，参数更直观；后者基于 CGAL Mesh_3，可精细控制表面与体积质量。
 - **SHYX Bidirectional Streamline Merge** 适用于 **Stream Tracer** 等产生的双向折线，需正确设置 **SeedIds** 数组（单元或点数据）。

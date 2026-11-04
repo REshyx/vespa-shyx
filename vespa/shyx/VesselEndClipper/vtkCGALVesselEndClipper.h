@@ -117,10 +117,10 @@ public:
 
     /**
      * EndpointSelection MTime that represents genuine user edits only: bumps
-     * produced by the in-RequestData endpoint sync are excluded. Wrappers that
-     * nest this filter (e.g. vtkSHYXSkeletonEndClipper) must use this instead
-     * of GetEndpointSelection()->GetMTime(), otherwise the sync makes the
-     * wrapper look dirty and costs an extra pipeline pass.
+     * produced by the in-RequestData endpoint sync are excluded. Filters that
+     * nest this clipper must use this instead of
+     * GetEndpointSelection()->GetMTime(), otherwise the sync makes the
+     * nesting filter look dirty and costs an extra pipeline pass.
      */
     vtkMTimeType GetEndpointSelectionEditMTime();
 

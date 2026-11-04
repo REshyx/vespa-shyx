@@ -32,13 +32,13 @@ namespace
  * vessel/stent surface); anything else is passed through vtkDataSetSurfaceFilter so a volume
  * mesh snaps to its outer wall instead of interior nodes.
  */
-vtkPolyData* ExtractSnapSurface(vtkDataSet* input, vtkDataSetSurfaceFilter* surfaceFilter)
+vtkPolyData* ExtractSnapSurface(vtkDataSet* snapInput, vtkDataSetSurfaceFilter* surfaceFilter)
 {
-  if (!input)
+  if (!snapInput)
   {
     return nullptr;
   }
-  if (auto* pd = vtkPolyData::SafeDownCast(input))
+  if (auto* pd = vtkPolyData::SafeDownCast(snapInput))
   {
     if (pd->GetNumberOfPoints() > 0)
     {
@@ -50,9 +50,25 @@ vtkPolyData* ExtractSnapSurface(vtkDataSet* input, vtkDataSetSurfaceFilter* surf
   {
     return nullptr;
   }
-  surfaceFilter->SetInputData(input);
+  surfaceFilter->SetInputData(snapInput);
   surfaceFilter->Update();
   return surfaceFilter->GetOutput();
+}
+
+/**
+ * Datasets to use for vertex snapping: the optional second input when a node is connected there,
+ * otherwise the flow field. An empty second input (a node that has not produced data yet) falls
+ * back to the flow field instead of silently disabling snapping.
+ */
+vtkDataSet* SnapDataSet(vtkInformationVector** inputVector)
+{
+  vtkDataSet* flow = vtkDataSet::GetData(inputVector[0]);
+  vtkDataSet* target = inputVector[1] ? vtkDataSet::GetData(inputVector[1]) : nullptr;
+  if (target && target->GetNumberOfPoints() > 0)
+  {
+    return target;
+  }
+  return flow;
 }
 }
 
@@ -61,7 +77,8 @@ vtkStandardNewMacro(vtkSHYXInteractiveStreamTracer);
 //------------------------------------------------------------------------------
 vtkSHYXInteractiveStreamTracer::vtkSHYXInteractiveStreamTracer()
 {
-  this->SetNumberOfInputPorts(1);
+  // Port 0: flow field. Port 1: optional snap surface (defaults to the port 0 surface).
+  this->SetNumberOfInputPorts(2);
   this->SetNumberOfOutputPorts(2);
 }
 
@@ -115,6 +132,14 @@ int vtkSHYXInteractiveStreamTracer::FillInputPortInformation(int port, vtkInform
     info->Set(vtkAlgorithm::INPUT_REQUIRED_DATA_TYPE(), "vtkDataSet");
     return 1;
   }
+  if (port == 1)
+  {
+    // Optional snap target: when nothing is connected (or the node produces no points) the
+    // snapping falls back to the flow field's surface.
+    info->Set(vtkAlgorithm::INPUT_REQUIRED_DATA_TYPE(), "vtkDataSet");
+    info->Set(vtkAlgorithm::INPUT_IS_OPTIONAL(), 1);
+    return 1;
+  }
   return 0;
 }
 
@@ -131,9 +156,9 @@ int vtkSHYXInteractiveStreamTracer::FillOutputPortInformation(int port, vtkInfor
 
 //------------------------------------------------------------------------------
 bool vtkSHYXInteractiveStreamTracer::SnapPointsToSurface(
-  vtkDataSet* input, double* points, int count, const int* enabled)
+  vtkDataSet* snapInput, double* points, int count, const int* enabled)
 {
-  if (!input || !points || count <= 0)
+  if (!snapInput || !points || count <= 0)
   {
     return false;
   }
@@ -153,7 +178,7 @@ bool vtkSHYXInteractiveStreamTracer::SnapPointsToSurface(
   }
 
   vtkNew<vtkDataSetSurfaceFilter> surfaceFilter;
-  vtkPolyData* surface = ExtractSnapSurface(input, surfaceFilter);
+  vtkPolyData* surface = ExtractSnapSurface(snapInput, surfaceFilter);
   if (!surface || surface->GetNumberOfPoints() == 0)
   {
     return false;
@@ -191,11 +216,11 @@ bool vtkSHYXInteractiveStreamTracer::SnapPointsToSurface(
 
 //------------------------------------------------------------------------------
 bool vtkSHYXInteractiveStreamTracer::SnapPointToSurface(
-  vtkDataSet* input, const double in[3], double out[3])
+  vtkDataSet* snapInput, const double in[3], double out[3])
 {
   double p[3] = { in[0], in[1], in[2] };
   const int enabled = 1;
-  vtkSHYXInteractiveStreamTracer::SnapPointsToSurface(input, p, 1, &enabled);
+  vtkSHYXInteractiveStreamTracer::SnapPointsToSurface(snapInput, p, 1, &enabled);
   out[0] = p[0];
   out[1] = p[1];
   out[2] = p[2];
@@ -231,6 +256,9 @@ int vtkSHYXInteractiveStreamTracer::RequestData(
   // -------------------------------------------------------------------------
   // Build the seed geometry (with optional surface-vertex snapping)
   // -------------------------------------------------------------------------
+  // Snapping targets the optional port 1 node when one is connected; otherwise the flow field.
+  vtkDataSet* snapInput = SnapDataSet(inputVector);
+
   vtkSmartPointer<vtkPolyDataAlgorithm> seedSource;
 
   switch (this->SeedShape)
@@ -243,7 +271,7 @@ int vtkSHYXInteractiveStreamTracer::RequestData(
       const int enabled[2] = { this->LineSnapPoint1 ? 1 : 0, this->LineSnapPoint2 ? 1 : 0 };
       if (enabled[0] || enabled[1])
       {
-        vtkSHYXInteractiveStreamTracer::SnapPointsToSurface(input, pts, 2, enabled);
+        vtkSHYXInteractiveStreamTracer::SnapPointsToSurface(snapInput, pts, 2, enabled);
       }
 
       vtkNew<vtkLineSource> line;
@@ -261,7 +289,7 @@ int vtkSHYXInteractiveStreamTracer::RequestData(
       if (this->SphereSnapCenter)
       {
         const int enabled = 1;
-        vtkSHYXInteractiveStreamTracer::SnapPointsToSurface(input, center, 1, &enabled);
+        vtkSHYXInteractiveStreamTracer::SnapPointsToSurface(snapInput, center, 1, &enabled);
       }
 
       double radius = this->SphereRadius;
@@ -305,7 +333,7 @@ int vtkSHYXInteractiveStreamTracer::RequestData(
       if (this->RectangleSnapCenter)
       {
         const int enabled = 1;
-        vtkSHYXInteractiveStreamTracer::SnapPointsToSurface(input, center, 1, &enabled);
+        vtkSHYXInteractiveStreamTracer::SnapPointsToSurface(snapInput, center, 1, &enabled);
       }
 
       // Normal first, then the two in-plane axes: Width / Height are full edge lengths measured

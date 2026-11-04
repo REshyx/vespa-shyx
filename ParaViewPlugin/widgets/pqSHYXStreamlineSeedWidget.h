@@ -18,6 +18,7 @@ class vtkCallbackCommand;
 class vtkConeSource;
 class vtkDataSet;
 class vtkDataSetSurfaceFilter;
+class vtkEventQtSlotConnect;
 class vtkLineSource;
 class vtkLineWidget2;
 class vtkActor;
@@ -26,6 +27,7 @@ class vtkPolyData;
 class vtkPolyDataMapper;
 class vtkRenderer;
 class vtkRenderWindowInteractor;
+class vtkSMProxy;
 class vtkSphereSource;
 class vtkSphereWidget2;
 class vtkStaticCellLocator;
@@ -36,13 +38,15 @@ class vtkSMPropertyGroup;
  * Panel widget for SHYX Interactive Stream Tracer.
  *
  * Hosts one of three client-side VTK 3D widgets chosen by the SeedShape property:
- *  - Line: vtkLineWidget2; each endpoint can snap to the nearest input-surface vertex on release.
+ *  - Line: vtkLineWidget2; each endpoint can snap to the nearest snap-surface vertex on release.
  *  - Sphere: vtkSphereWidget2 with middle-button radius scaling; center snaps on release.
- *  - Rectangle: vtkPlaneWidget; origin snaps on release and Point1/Point2 translate with it.
+ *  - Rectangle: a hand-rolled plane editor; center snaps on release and Width / Height / Normal
+ *    stay put.
  *
- * The input is a single dataset. Snapping targets every vertex of its surface (a volume input is
- * converted with vtkDataSetSurfaceFilter), so vessel wall and stent vertices in the same dataset
- * are both valid. Release optionally Applies so the streamlines refresh immediately.
+ * The snap surface is the dataset connected to the optional SnapSurface input (the "Snap target"
+ * dropdown, any pipeline node), falling back to the Input flow field when the dropdown is
+ * "(none)". A volume dataset is reduced with vtkDataSetSurfaceFilter. Release optionally Applies so
+ * the streamlines refresh immediately.
  */
 class pqSHYXStreamlineSeedWidget : public pqPropertyWidget
 {
@@ -66,6 +70,8 @@ private Q_SLOTS:
   void onActiveViewChanged();
   void onPlaceFromBounds();
   void onSphereSamplingChanged();
+  /** SnapSurface (Snap target dropdown) changed: drop the cached surface/locators. */
+  void onSnapTargetChanged();
 
 private:
   Q_DISABLE_COPY(pqSHYXStreamlineSeedWidget)
@@ -97,7 +103,14 @@ private:
   void setStatus(const QString& text);
 
   vtkRenderWindowInteractor* interactor() const;
+  /** Flow field on input port 0 (bounds, fallback sizing). Not the snap surface. */
   vtkDataSet* inputDataSet() const;
+  /** Dataset connected to the optional SnapSurface property, or inputDataSet() when (none). */
+  vtkDataSet* snapDataSet() const;
+  /** Node picked in the SnapSurface dropdown (pending/unchecked value first), or nullptr. */
+  vtkSMProxy* snapTargetProxy() const;
+  /** Display name of the current snap target ("(none)" -> the Input node name). */
+  QString snapTargetLabel() const;
 
   bool ensureSnapper();
   bool snapPoints(double* points, int count, const int* enabled);
@@ -237,13 +250,15 @@ private:
   void readRectangleFromControls(double center[3], double normal[3], double& width,
     double& height) const;
 
-  // Snapping cache: rebuilt when the client-side input dataset changes.
+  // Snapping cache: rebuilt when the snap dataset (Input or the Snap target node) changes.
   vtkSmartPointer<vtkDataSetSurfaceFilter> SurfaceFilter;
   vtkSmartPointer<vtkPolyData> SnapSurface;
   vtkSmartPointer<vtkStaticPointLocator> SnapLocator;
   vtkSmartPointer<vtkStaticCellLocator> SnapCellLocator;
   vtkDataSet* SnapInput = nullptr;
   vtkMTimeType SnapMTime = 0;
+  /** Watches the SnapSurface property so a dropdown change drops the cache immediately. */
+  vtkSmartPointer<vtkEventQtSlotConnect> SnapTargetConnect;
 
   int SnapMode = SnapScreenRay;
 

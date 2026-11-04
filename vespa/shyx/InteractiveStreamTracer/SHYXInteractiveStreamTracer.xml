@@ -4,17 +4,19 @@
                  class="vtkSHYXInteractiveStreamTracer"
                  label="SHYX Interactive Stream Tracer">
       <Documentation
-        short_help="Interactive StreamTracer with line / sphere / rectangle seed shapes and surface-vertex snapping."
-        long_help="One flow-field input. SeedShape selects the seed geometry built inside the filter:
-        Line (two endpoints, N samples, each endpoint can snap to the nearest input-surface vertex),
-        Sphere (center + radius, center can snap), or Rectangle (plane; origin / point1 / point2,
-        origin can snap and the two edge points translate with it). Snapping targets every vertex of
-        the input surface; a volume input is converted with vtkDataSetSurfaceFilter, so vessel wall
-        and stent surface vertices in the same dataset are both candidates. The interactive 3D widget
-        writes these properties: line endpoints, sphere center/radius (middle-button drag scales the
-        radius), and rectangle origin/edges. Output port 0 is streamlines; port 1 is the seed geometry.
-        Rectangle port 1 can be added to SHYX Selection Append Patches (Add from pipeline) as a patch
-        geometry, or fed to the PDC / OpenFOAM patch path."/>
+        short_help="Interactive StreamTracer with line / sphere / rectangle seed shapes and surface-vertex snapping onto the Input or a picked node."
+        long_help="One flow-field input plus an optional snap-target input. SeedShape selects the seed
+        geometry built inside the filter:
+        Line (two endpoints, N samples, each endpoint can snap to the nearest snap-surface vertex),
+        Sphere (center + radius, center can snap), or Rectangle (plane; center / normal / size,
+        center can snap and the two edge points translate with it). Snapping targets every vertex of
+        the snap surface: the node picked in Snap target when one is connected, otherwise the Input
+        surface. A volume dataset is converted with vtkDataSetSurfaceFilter, so vessel wall and stent
+        surface vertices are both candidates when they live in the picked dataset. The interactive
+        3D widget writes these properties: line endpoints, sphere center/radius (middle-button drag
+        scales the radius), and rectangle origin/edges. Output port 0 is streamlines; port 1 is the
+        seed geometry. Rectangle port 1 can be added to SHYX Selection Append Patches (Add from
+        pipeline) as a patch geometry, or fed to the PDC / OpenFOAM patch path."/>
 
       <OutputPort index="0" name="Streamlines"/>
       <OutputPort index="1" name="Seeds"/>
@@ -32,8 +34,37 @@
                           optional="0"/>
         <Documentation>
           Flow field with a 3-component vector array. Its surface vertices are the snap targets
-          for the line endpoints, sphere center, and rectangle origin.
+          when no Snap target node is picked.
         </Documentation>
+      </InputProperty>
+
+      <!-- Optional second input: the dropdown in the Properties panel. Leave (none) to snap to
+           the Input surface; pick another pipeline node (vessel wall, stent, ...) to snap to its
+           surface instead, without moving that node into the flow field. command + port_index is
+           the ParaView optional-second-input pattern, and null_on_empty keeps an empty selection
+           from creating a dangling connection. -->
+      <InputProperty name="SnapSurface" command="SetInputConnection"
+                     port_index="1"
+                     label="Snap to surface of"
+                     panel_widget="input_selector"
+                     null_on_empty="1">
+        <ProxyGroupDomain name="groups">
+          <Group name="sources"/>
+          <Group name="filters"/>
+        </ProxyGroupDomain>
+        <DataTypeDomain name="input_type" composite_data_supported="0">
+          <DataType value="vtkDataSet"/>
+        </DataTypeDomain>
+        <Documentation>
+          Optional snap target. (none) = snap seeds to the Flow Field surface (the parent node).
+          Pick any other pipeline node to snap to a vertex of its surface instead; the Flow Field
+          still provides the vectors. A volume node is reduced to its outer surface with
+          vtkDataSetSurfaceFilter. The panel's screen-ray mode picks the front-most vertex of this
+          dataset only, so other visible objects cannot steal the snap.
+        </Documentation>
+        <Hints>
+          <Optional/>
+        </Hints>
       </InputProperty>
 
       <StringVectorProperty name="SelectInputVectors"
@@ -197,8 +228,9 @@
                             default_values="0 0 0"
                             number_of_elements="3">
         <Documentation>
-          Center of the seed rectangle. This is the only point that snaps to the Input surface;
-          Width, Height and Normal are unaffected by the snap.
+          Center of the seed rectangle. This is the only point that snaps to the snap surface
+          (Snap target node when one is picked, otherwise the Flow Field); Width, Height and
+          Normal are unaffected by the snap.
         </Documentation>
       </DoubleVectorProperty>
       <DoubleVectorProperty name="RectangleNormal"
@@ -355,6 +387,13 @@
       </IntVectorProperty>
 
       <!-- ================= Panel layout ================= -->
+      <!-- Snap target sits above the seed controls: pqInputSelectorWidget renders the dropdown
+           of pipeline nodes (first entry "(none)" = the Flow Field / parent). The custom seed
+           widget reads the same SM property to pick the surface for ray-pick snapping. -->
+      <PropertyGroup label="Snap target">
+        <Property name="SnapSurface"/>
+      </PropertyGroup>
+
       <!-- SeedShape is the visible anchor of the custom group widget. The other seed properties
            are never shown as raw rows; pqSHYXStreamlineSeedWidget creates typed controls and
            drives the 3D widgets from them. -->

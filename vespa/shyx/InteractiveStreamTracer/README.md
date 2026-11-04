@@ -2,9 +2,11 @@
 
 ## 目的
 
-一个滤镜同时封装 **可交互种子 + `vtkStreamTracer`**。不再需要先在管线里建 Line/Sphere/Plane Source 再接到 Stream Tracer：在属性面板切换 **Seed Shape**，用 3D widget 拖种子，释放时按需吸附到输入表面顶点，然后直接得到流线。
+一个滤镜同时封装 **可交互种子 + `vtkStreamTracer`**。不再需要先在管线里建 Line/Sphere/Plane Source 再接到 Stream Tracer：在属性面板切换 **Seed Shape**，用 3D widget 拖种子，释放时按需吸附到**吸附表面**的顶点，然后直接得到流线。
 
-- 输入：**一个**流场数据集（`vtkDataSet`，带 3 分量矢量）。- 端口 0：流线。
+- 输入：**一个**流场数据集（`vtkDataSet`，带 3 分量矢量）。
+- **可选输入 1**：吸附目标节点（`Snap target` 下拉，默认 `(none)` = 父节点 Input 的 surface）。
+- 端口 0：流线。
 - 端口 1：实际使用的种子几何（线 / 球面 / 平面）。
 
 ## 三种种子形状
@@ -34,19 +36,27 @@
 
 ## 吸附规则（vessel / stent）
 
-两种 **Snap to** 模式（面板顶部下拉，默认 **Surface under cursor (screen ray)**）：
+**吸附表面**由面板顶部 **Snap target** 下拉决定（`SnapSurface`，滤镜的**可选输入端口 1**）：
+
+| Snap target | 吸附表面 |
+| :--- | :--- |
+| **`(none)`**（默认） | **父节点 Input** 的表面（与旧行为一致） |
+| **任意管线节点**（vessel wall / stent / 另一个 filter 输出 …） | 该节点输出的表面：Input 仍只提供矢量场，吸附只针对选中的节点 |
+
+两种 **Snap to** 模式（下拉在 Snap target 下面，默认 **Surface under cursor (screen ray)**）：
 
 | 模式 | 行为 | 适用 |
 | :--- | :--- | :--- |
-| **Surface under cursor (screen ray)**（默认） | 从手柄当前屏幕位置向场景打一条射线，取 **Input 表面沿视线最前面的交点**，再吸附到距该交点最近的顶点 | 与视觉一致；血管袋状、支架双层、内外壁贴得很近时不会吸到背面 |
+| **Surface under cursor (screen ray)**（默认） | 从手柄当前屏幕位置向场景打一条射线，取 **吸附表面沿视线最前面的交点**，再吸附到距该交点最近的顶点 | 与视觉一致；血管袋状、支架双层、内外壁贴得很近时不会吸到背面 |
 | **Nearest vertex (3D)** | 忽略相机，取世界空间最近的顶点 | 纯几何定位、已知目标点在背面、或不需要视线语义时 |
 
-- **单输入网格**：所有吸附都针对 **Input 自己的表面顶点**；射线也只打 Input 的表面（不依赖 ParaView 的全局拾取，因此不会被别的对象挡住）。
-- Input 是 `vtkPolyData` 时直接用它（含 cells）；是体网格时先 `vtkDataSetSurfaceFilter` 抽外表面再建点/单元定位器。
-- 因此血管壁与支架如果已经在同一个数据集里，**两类顶点都是候选**：射线命中的那一层优先。
+- **单一目标表面**：所有吸附都针对 **当前吸附表面**（Snap target 节点，或 Input）的顶点；射线也只打这个表面（不依赖 ParaView 的全局拾取，因此不会被别的对象挡住）。
+- 吸附表面是 `vtkPolyData` 时直接用它（含 cells）；是体网格时先 `vtkDataSetSurfaceFilter` 抽外表面再建点/单元定位器。
+- 想同时保留血管壁 + 支架两类候选，可以在 Snap target 里选一个把两者合并好的节点（例如 `Append Datasets` / `Merge Blocks` 的输出）；否则选谁就只吸谁。
+- 选中的节点在客户端还没有数据时（例如从未显示过）会自动 `UpdatePipeline()`；仍然为空则回退到 Input 表面，不会静默失效。
 - 射线没打中（手柄被拖到轮廓外）时自动回退到 3D 最近顶点，不会静默失败。
 - 吸附一律写成 **顶点坐标**（不是任意表面点），所以滤镜 `RequestData` 里的 3D 最近顶点吸附是 **幂等** 的：Python / 批处理复跑不会把手动吸附的结果再挪走。
-- 纯 Python / 批处理只有 3D 最近顶点语义（滤镜侧没有光标信息）；射线模式是客户端 widget 的行为。
+- 纯 Python / 批处理只有 3D 最近顶点语义（滤镜侧没有光标信息）；射线模式是客户端 widget 的行为，但 **Snap target 是服务器端输入**，两者都生效。
 
 ## Sphere 的 Theta / Phi 是什么
 
@@ -89,6 +99,7 @@ Interior 模式与 Surface 模式互斥，切换时另一组控件会灰显/隐�
 
 | 参数 | 默认 | 说明 |
 | :--- | :--- | :--- |
+| **Snap target**（`SnapSurface`，可选输入端口 1） | `(none)` | 吸附表面所属节点。`(none)` = 吸附到 **Input（父节点）** 表面；选别的节点则只吸它的表面（体网格先抽外表面）。面板下拉由 `pqInputSelectorWidget` 渲染 |
 | **Seed Shape** | Line | 0 Line / 1 Sphere / 2 Rectangle |
 | **Vectors** | — | `SetInputArrayToProcess`，3 分量 |
 | **LinePoint1 / LinePoint2** | `-1 0 0` / `1 0 0` | 世界坐标 |
@@ -124,6 +135,8 @@ from paraview.simple import *
 
 tracer = SHYXInteractiveStreamTracer(Input=volume)
 tracer.SelectInputVectors = ['POINTS', 'U']
+# Snap surface: (none) = the Input (parent) surface, or any other pipeline node.
+# tracer.SnapSurface = stent          # e.g. a polydata node whose vertices should attract the seeds
 tracer.SeedShape = 0                    # 0 Line / 1 Sphere / 2 Rectangle
 tracer.LinePoint1 = [0.0, 0.0, 0.0]
 tracer.LinePoint2 = [10.0, 0.0, 0.0]
@@ -136,6 +149,10 @@ Show(tracer)                            # port 0 streamlines
 view = GetActiveViewOrCreate('RenderView')
 Show(tracer, view, 'Seeds')             # port 1 seed geometry
 ```
+
+`SnapSurface` 省略或设为 `None` 时吸附到 Input 自身表面（默认行为）。`SetInputConnection`
+端口 1 由 ParaView 自动接好；Python 里直接给 `SnapSurface=` 一个已存在的节点即可，
+`RequestData` 会用它做最近顶点吸附（`(none)` 时回退到 Input）。
 
 球/矩形同理：`SeedShape = 1` 用 `SphereCenter` / `SphereRadius` / `SphereSnapCenter`；
 `SeedShape = 2` 用 `RectangleCenter` / `RectangleNormal` / `RectangleWidth` / `RectangleHeight` /
@@ -153,6 +170,12 @@ Show(tracer, view, 'Seeds')             # port 1 seed geometry
 - 模块：`vespa/shyx/InteractiveStreamTracer/`，`vtk.module NAME=vtkSHYXInteractiveStreamTracer`，`GROUPS=Flow`。
 - 纯 VTK：`vtkStreamTracer` + `vtkLineSource` / `vtkSphereSource` / `vtkPointSource` / `vtkPlaneSource` + `vtkDataSetSurfaceFilter` + `vtkStaticPointLocator` / `vtkStaticCellLocator`。
 - 客户端 widget：`ParaViewPlugin/widgets/pqSHYXStreamlineSeedWidget.*`，注册为 `panel_widget="shyx_streamline_seed"`（`PropertyWidgets.cmake`）。3D widget 直接建在 RenderView 的 interactor 上，不新增 SM widget representation XML。
+- **吸附目标（可选端口 1）**：XML 里 `SnapSurface` 用
+  `InputProperty port_index="1" panel_widget="input_selector" null_on_empty="1"` + `<Hints><Optional/></Hints>`，
+  属性面板就出现一个管线节点下拉，第一项 `(none)`。`RequestData` 里优先用端口 1 的数据集
+  （点数为 0 时回退端口 0），客户端的 `snapDataSet()` 同样先读 `SnapSurface` 的客户端数据集
+  （空时 `UpdatePipeline()` 再读一次），两边共用同一套 `vtkDataSetSurfaceFilter`。
+  下拉变化时 widget 会丢掉缓存的 surface / locator，并刷新状态栏里的目标名。
 - 球体交互：直接用 `vtkSphereWidget2` + `vtkSphereRepresentation`，**不显示任何 handle 相关装饰**：
   - `HandleVisibilityOff()`（球面小球）、`RadialLineOff()`（球心到小球的半径线）、`HandleTextOff()`（`R = ...` 文字）。
   - 三者互相独立，且 `RadialLine` / `HandleText` 默认是**开**的；只关 `HandleVisibility` 会留下半径线，而且 `ComputeInteractionState()` 的判据是「三者任一开」就去拾取 handle，所以那根线的末端还能拖。

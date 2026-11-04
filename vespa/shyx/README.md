@@ -24,11 +24,10 @@ SHYX 是本仓库里 **一个作者命名空间**（[`vespa/shyx/`](.)），不�
 
 ## 血管与体积网格
 
-**Vascular 工具条**（`ParaViewPlugin/smxml/VESPAVascularCategory.xml`，顺序固定）：骨架 → 切端 → **骨架+切端组合** → 平面裁 → 端点重网格 → TetGen → PDC → 边界分配。下列其余项只在 **Filters → SHYX**。
+**Vascular 工具条**（`ParaViewPlugin/smxml/VESPAVascularCategory.xml`，顺序固定）：骨架 → 切端 → 平面裁 → 端点重网格 → TetGen → PDC → 边界分配。下列其余项只在 **Filters → SHYX**。
 
 * [**Skeleton Extraction**](./SkeletonExtraction/README.md) — **Vascular**
 * [**Vessel End Clipper**](./VesselEndClipper/README.md) — **Vascular**
-* [**Skeleton End Clipper**](./SkeletonEndClipper/README.md) — **Vascular**（骨架 + 切端一节点；原两个滤镜不变）
 * [**Selection Plane Clipper**](./SelectionPlaneClipper/README.md) — **Vascular**
 * [**TetGen**](./TetGen/README.md) — **Vascular**；同模块含 **TetGen Mesh Optimize**
 * [**DataSet To Partitioned Collection**](./DataSetToPartitionedCollection/README.md) — **Vascular**
@@ -51,7 +50,7 @@ SHYX 是本仓库里 **一个作者命名空间**（[`vespa/shyx/`](.)），不�
 * [**Clebsch Map Filter**](./ClebschMapFilter/README.md) — 可选 MKL
 * [**Vector Field Topology**](./VectorFieldTopology/README.md) — 包装 VTK `vtkVectorFieldTopology`
 * [**Auto Streamline**](./AutoStreamline/README.md)
-* [**Interactive Stream Tracer**](./InteractiveStreamTracer/README.md) — Line / Sphere / Rectangle（平面）种子；端点 / 球心 / 矩形原点释放时吸附表面顶点；球中键调半径
+* [**Interactive Stream Tracer**](./InteractiveStreamTracer/README.md) — Line / Sphere / Rectangle（平面）种子；端点 / 球心 / 矩形中心释放时吸附表面顶点（Snap target 可选其它节点，默认父节点）；球中键调半径
 * [**Bidirectional Streamline Merge**](./BidirectionalStreamlineMerge/README.md)
 
 ## 点云 / 采样 / 映射

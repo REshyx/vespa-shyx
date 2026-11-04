@@ -398,9 +398,7 @@
         <Documentation>
           When OFF, the filter only computes the ICC sizing preview (port 3 + histogram) and
           passes the input geometry through: no CGAL remesh, and no
-          %TEMP%/shyx_remesh_pre_apply.pvsm is written. File -> Recovery -> Safely Open switches
-          this off when it loads a state written before a remesh; turn it back ON and Apply to
-          remesh again.
+          %TEMP%/shyx_remesh_pre_apply.pvsm is written.
         </Documentation>
       </IntVectorProperty>
 

@@ -63,24 +63,23 @@ Kitware 原版 CGAL 滤镜，全部需 **`VESPA_USE_CGAL`**，只作保留（对
 
 ### 血管 / 体积网格（含 Vascular 工具条）
 
-Vascular 顺序（[`VESPAVascularCategory.xml`](../ParaViewPlugin/smxml/VESPAVascularCategory.xml)）：骨架 → 切端 → 骨架+切端组合 → 平面裁 → 端点重网格 → TetGen → PDC → 边界分配。
+Vascular 顺序（[`VESPAVascularCategory.xml`](../ParaViewPlugin/smxml/VESPAVascularCategory.xml)）：骨架 → 切端 → 平面裁 → 端点重网格 → TetGen → PDC → 边界分配。
 
 | 界面标签 | 类 | 目录 | XML | 图标 | README | 后端 | Vascular |
 |----------|----|------|-----|------|--------|------|----------|
 | SHYX Skeleton Extraction | `vtkCGALSkeletonExtraction` | SkeletonExtraction | SHYXSkeletonExtraction.xml | fluent | [有](shyx/SkeletonExtraction/README.md) | CGAL | 1 |
 | SHYX Vessel End Clipper | `vtkCGALVesselEndClipper` | VesselEndClipper | SHYXVesselEndClipper.xml | fluent | [有](shyx/VesselEndClipper/README.md) | CGAL | 2 |
-| SHYX Skeleton End Clipper | `vtkSHYXSkeletonEndClipper` | SkeletonEndClipper | SHYXSkeletonEndClipper.xml | fluent（复用 End Clipper） | [有](shyx/SkeletonEndClipper/README.md) | CGAL | 3 |
-| SHYX Selection Plane Clipper | `vtkSHYXSelectionPlaneClipper` | SelectionPlaneClipper | SHYXSelectionPlaneClipper.xml | fluent | [有](shyx/SelectionPlaneClipper/README.md) | VTK | 4 |
-| SHYX Remesh With Endpoint | （见上） | | | fluent | | CGAL ≥ 6 | 5 |
+| SHYX Selection Plane Clipper | `vtkSHYXSelectionPlaneClipper` | SelectionPlaneClipper | SHYXSelectionPlaneClipper.xml | fluent | [有](shyx/SelectionPlaneClipper/README.md) | VTK | 3 |
+| SHYX Remesh With Endpoint | （见上） | | | fluent | | CGAL ≥ 6 | 4 |
 | SHYX Surface to Volume Mesh | `vtkCGALSurfaceToVolumeMesh` | SurfaceToVolumeMesh | SHYXSurfaceToVolumeMesh.xml | 自有 | [有](shyx/SurfaceToVolumeMesh/README.md) | CGAL | |
-| SHYX TetGen | `vtkSHYXTetGen` | TetGen | SHYXTetGen.xml | fluent | [有](shyx/TetGen/README.md) | TetGen | 6 |
+| SHYX TetGen | `vtkSHYXTetGen` | TetGen | SHYXTetGen.xml | fluent | [有](shyx/TetGen/README.md) | TetGen | 5 |
 | SHYX TetGen Mesh Optimize | `vtkSHYXTetGenMeshOptimize` | 同上模块 | SHYXTetGenMeshOptimize.xml | 自有 | （同 TetGen README） | TetGen | |
 | SHYX SnappyHexMesh | `vtkSHYXSnappyHexMesh` | SnappyHexMesh | SHYXSnappyHexMesh.xml | 自有 | [有](shyx/SnappyHexMesh/README.md) | 可选 `VESPA_USE_SNAPPYHEXMESH` + `FOAM_SOURCE_DIR` | |
 | SHYX Extended Feature Edge Mesh | `vtkSHYXExtendedFeatureEdgeMesh` | ExtendedFeatureEdgeMesh | SHYXExtendedFeatureEdgeMesh.xml | 复用 Snappy | [有](shyx/ExtendedFeatureEdgeMesh/README.md) | 可选 `VESPA_USE_SNAPPYHEXMESH` + `FOAM_SOURCE_DIR` | |
 | SHYX OpenFOAM eMesh Reader | `vtkSHYXEMeshReader` | EMeshReader | SHYXEMeshReader.xml | 复用 Snappy | [有](shyx/EMeshReader/README.md) | VTK（ASCII FoamFile，无 OpenFOAM 运行时） | |
 | SHYX Tet Mesh Region Partition | `vtkSHYXTetMeshRegionPartition` | TetMeshRegionPartition | SHYXTetMeshRegionPartition.xml | 自有 | [有](shyx/TetMeshRegionPartition/README.md) | VTK | |
-| SHYX DataSet To Partitioned Collection | `vtkSHYXDataSetToPartitionedCollection` | DataSetToPartitionedCollection | SHYXDataSetToPartitionedCollection.xml | fluent | [有](shyx/DataSetToPartitionedCollection/README.md) | VTK | 7 |
-| SHYX Partitioned Collection Boundary Assignment | `vtkSHYXPartitionedCollectionBoundaryAssignment` | PartitionedCollectionBoundaryAssignment | SHYXPartitionedCollectionBoundaryAssignment.xml | fluent | [有](shyx/PartitionedCollectionBoundaryAssignment/README.md) | VTK | 8 |
+| SHYX DataSet To Partitioned Collection | `vtkSHYXDataSetToPartitionedCollection` | DataSetToPartitionedCollection | SHYXDataSetToPartitionedCollection.xml | fluent | [有](shyx/DataSetToPartitionedCollection/README.md) | VTK | 6 |
+| SHYX Partitioned Collection Boundary Assignment | `vtkSHYXPartitionedCollectionBoundaryAssignment` | PartitionedCollectionBoundaryAssignment | SHYXPartitionedCollectionBoundaryAssignment.xml | fluent | [有](shyx/PartitionedCollectionBoundaryAssignment/README.md) | VTK | 7 |
 | SHYX Partitioned Collection Boundary Fields | `vtkSHYXPartitionedCollectionBoundaryFields` | PartitionedCollectionBoundaryFields | SHYXPartitionedCollectionBoundaryFields.xml | 自有 | [有](shyx/PartitionedCollectionBoundaryFields/README.md) | VTK | |
 | SHYX Partitioned Collection WSL Simulation | `vtkSHYXPartitionedCollectionWslSimulation` | PartitionedCollectionWslSimulation | SHYXPartitionedCollectionWslSimulation.xml | 自有 | [有](shyx/PartitionedCollectionWslSimulation/README.md) | VTK | |
 | SHYX Partitioned Collection To OpenFOAM | `vtkSHYXPartitionedCollectionToOpenFOAM` | PartitionedCollectionToOpenFOAM | SHYXPartitionedCollectionToOpenFOAM.xml | 复用 Snappy | [有](shyx/PartitionedCollectionToOpenFOAM/README.md) | VTK | |
@@ -162,7 +161,7 @@ Vascular 顺序（[`VESPAVascularCategory.xml`](../ParaViewPlugin/smxml/VESPAVas
 | Quick filter wheel（3D 视图里按住 ` / · 键约 200ms 即在光标处弹出轮盘，不需要移动鼠标；左键点扇区执行；松开该键、Esc、中心孔或点轮盘外取消；不可用的项灰显；不占用 Ctrl，Ctrl+点击/拖拽照常） | `ParaViewPlugin/selection/QuickFilterWheel/` | （无独立图标） |
 | Invert Selection（选择右键，反选） | `ParaViewPlugin/selection/SelectSimilar/` + Grow controller | （无独立图标） |
 | Status notices（状态栏左侧 SHYX 提示） | `ParaViewPlugin/widgets/pqSHYXStatusNotifier.*` | （无） |
-| File → Recovery（temp 文件夹里的 `.pvsm` 下拉，一键载入；含 remesh 前的 `shyx_remesh_pre_apply.pvsm`；**Safely Open** 开关默认开，载入前把所有 representation 的 `Visibility` 写成 0、并把 `SHYXAdaptiveIsotropicRemesher.EnableRemesh` / `SHYXRemeshWithEndpoint.EnableWallRemesh+EnableCapRemesh` 写成 0 再载入（旧状态缺属性就补一条），随后还原原文件，避免恢复时重跑 CGAL） | `ParaViewPlugin/Recovery/` | （无） |
+| File → Recovery（temp 文件夹里的 `.pvsm` 下拉，一键载入；含 remesh 前的 `shyx_remesh_pre_apply.pvsm`——该文件写的是这次 Apply 之前的管线，正在跑 CGAL 的滤镜及其下游不在状态里，载入不会再触发 remesh） | `ParaViewPlugin/Recovery/` | （无） |
 | Vascular 菜单/工具条 | `ParaViewPlugin/VascularCategory/` + [`smxml/VESPAVascularCategory.xml`](../ParaViewPlugin/smxml/VESPAVascularCategory.xml) | （各滤镜 fluent 图标） |
 
 ---

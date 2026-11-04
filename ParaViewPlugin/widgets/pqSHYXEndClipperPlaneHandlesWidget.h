@@ -29,8 +29,8 @@ class vtkSMNewWidgetRepresentationProxy;
  * Visibility matches the port-1 representation eye icon in the active view (same idea as
  * pqSHYXOBBInteractiveBoxWidget).
  *
- * Endpoint count prefers vertex cells so SHYX Skeleton End Clipper can append skeleton
- * lines after the clip-plane handles without inflating the widget count.
+ * Endpoint count prefers vertex cells so a wrapper that appends extra points after the
+ * 2-per-endpoint clip handles does not inflate the widget count.
  */
 class pqSHYXEndClipperPlaneHandlesWidget : public pqPropertyGroupWidget
 {

@@ -1869,7 +1869,9 @@ QString describeClientTool(const QString& query)
       "Temp folder: %1\n"
       "Known entry: shyx_remesh_pre_apply.pvsm, written by SHYXAdaptiveIsotropicRemesher and "
       "SHYXRemeshWithEndpoint right before CGAL remesh. Shown as 'Before remesh - "
-      "shyx_remesh_pre_apply.pvsm'.\n"
+      "shyx_remesh_pre_apply.pvsm'. It contains the pipeline as it was before that Apply; the "
+      "filter being applied (and anything downstream of it) is left out, so loading it does not "
+      "rerun the remesh.\n"
       "Menu actions: click a file to load that state; Open Temp Folder...; Refresh.\n"
       "Loading skips the Load State Options dialog. If the state's data files moved, use "
       "File → Load State instead.\n")
@@ -2248,7 +2250,7 @@ const ShyxExtra kShyxExtra[] = {
     "(default 1; not re-clamped). "
     "Uniform target edge length: VESPA Isotropic Remesher." },
   { "SHYXRemeshWithEndpoint",
-    "Vascular step 5: optional endpoint cull then ICC remesh / cap. Filled caps are retagged on "
+    "Vascular step 4: optional endpoint cull then ICC remesh / cap. Filled caps are retagged on "
     "cell EndpointIndex (wall -1, patches 1..n by area). Wall ICC neighborhood same as "
     "SHYXAdaptiveIsotropicRemesher (mesh rings vs Euclidean ball). "
     "SizingFieldScale multiplies the final wall ICC field after clamp / expansion / ScaleToRange "
@@ -2311,31 +2313,26 @@ const ShyxExtra kShyxExtra[] = {
     "tree (sharper crotch). Reconstruct on -> surface; otherwise current lines. "
     "ResamplingStepLength is an absolute length; 0 or Reset = 1% of the input AABB "
     "longest side (BoundsDomain scaled_extent)." },
-  { "SHYXSkeletonEndClipper",
-    "Vascular step 3 (one-node combo of steps 1-2; standalone filters unchanged). "
-    "Single watertight surface input. Port0 clipped mesh, port1 skeleton lines plus "
-    "clip-plane labels and short direction lines (Point Label, VertexOnly on clip origins). "
-    "Same skeleton and clip parameters, including Endpoints to Clip and interactive planes." },
   { "SHYXSelectionPlaneClipper",
-    "Vascular step 4. Uses current selection / interactive plane. Faces (triangles, quads, "
+    "Vascular step 3. Uses current selection / interactive plane. Faces (triangles, quads, "
     "polygons) give an area-weighted centroid and average normal. Lines and points fit a PCA "
     "plane when not collinear; otherwise incident surface or point normals (a single line gets "
     "a perpendicular last-resort plane). Fill Holes closes the clip opening; WheelCap fans "
     "triangles from the clip-plane origin (wheel-shaped cap) instead of ear-clip triangulation. "
     "InvertResult keeps the small fragment near the selection instead of discarding it." },
   { "SHYXTetGen",
-    "Vascular step 6. Closed triangle surface -> tetrahedra. InteriorPointMode: "
+    "Vascular step 5. Closed triangle surface -> tetrahedra. InteriorPointMode: "
     "0 Quality (Steiner, default), 1 Prescribed pipeline points (surface vertices plus "
     "optional InteriorPoints dropdown; -YS0O0, no Steiner). InteriorPoints is a pipeline "
     "node picker (same input_selector as Snappy Feature edges), not computed inside TetGen; "
     "leave (none) for surface-only. Typical pick: SHYXSkeletonExtraction. Mode 1 options: "
     "ConstrainInteriorEdges, InteriorSurfaceClearance." },
   { "SHYXDataSetToPartitionedCollection",
-    "Vascular step 7. Convert dataset to PDC; then Boundary Assignment. Partitioned block names "
+    "Vascular step 6. Convert dataset to PDC; then Boundary Assignment. Partitioned block names "
     "table has a leading eye per row that toggles that block in the active view (same "
     "BlockSelectors / BlockVisibilities as Hide Block). Side and node rows stay linked." },
   { "SHYXPartitionedCollectionBoundaryAssignment",
-    "Vascular step 8. Call inspect_pipeline with the PDC name first. After area sort, side/node ENTITY_IDs are "
+    "Vascular step 7. Call inspect_pipeline with the PDC name first. After area sort, side/node ENTITY_IDs are "
     "rewritten so rank follows numbering (largest -> smallest existing IDs). Enable Repart when inlets were "
     "already merged into one side set: it splits same-name patches by connected regions into original_n "
     "(side and node) before classify / options / optional Merge inlets. Port0 collection, "
@@ -2376,12 +2373,14 @@ const ShyxExtra kShyxExtra[] = {
     "Needs an active 3D selection of cells (or Selection Cell Array Name)." },
   { "SHYXInteractiveStreamTracer",
     "One filter, three interactive seed shapes: SeedShape 0 Line / 1 Sphere / 2 Rectangle (plane). "
-    "Input is the flow field; every vertex of its surface is a snap target (a volume input is "
-    "converted with vtkDataSetSurfaceFilter, so vessel and stent vertices in the same dataset are "
-    "both candidates). Snap mode is a client-side widget choice: Screen ray (default) casts a ray "
-    "through the cursor, takes the front-most Input surface hit, then its nearest vertex; Nearest "
+    "Input (port 0) is the flow field. The snap surface is the dataset connected to the optional "
+    "SnapSurface input (port 1, the panel's Snap target dropdown: any pipeline node, (none) = the "
+    "Input itself); every vertex of that surface is a snap target (a volume is converted with "
+    "vtkDataSetSurfaceFilter). So seeds can snap onto a separate vessel/stent node without merging "
+    "it into the flow field. Snap mode is a client-side widget choice: Screen ray (default) casts a "
+    "ray through the cursor, takes the front-most snap-surface hit, then its nearest vertex; Nearest "
     "vertex (3D) ignores the camera. Both write vertex positions, so the filter's own nearest-vertex "
-    "snap in RequestData is idempotent (Python/batch only has the 3D mode). "
+    "snap in RequestData is idempotent (Python/batch only has the 3D mode, but honors SnapSurface). "
     "Line: LinePoint1 / LinePoint2 snap independently when LineSnapPoint1 / "
     "LineSnapPoint2 are on; LineResolution is subdivisions (Resolution + 1 seeds). Sphere: "
     "SphereCenter snaps when SphereSnapCenter is on; in the 3D widget left-drag moves the ball, and "
@@ -2658,7 +2657,7 @@ const ShyxExtra kShyxExtra[] = {
   { "SHYXRecovery",
     "Not a filter and not a proxy. File → Recovery lists *.pvsm files in the OS temp folder "
     "(newest first) and loads one with a click; shyx_remesh_pre_apply.pvsm is the state written "
-    "before an adaptive remesh. Call describe_proxy('recovery')." },
+    "before an adaptive remesh, without the remesh filter being applied. Call describe_proxy('recovery')." },
   { "SHYXQuickFilterWheel",
     "Not a filter and not a proxy. Hold the backtick key (` on a US layout, · on a Chinese "
     "layout) over a RenderView for ~200 ms: a radial quick-filter wheel opens under the cursor "
@@ -2705,7 +2704,7 @@ QString lookupShyxDocs(const QString& queryRaw)
   {
     out += QStringLiteral(
       "Vascular menu order: SHYXSkeletonExtraction -> SHYXVesselEndClipper -> "
-      "SHYXSkeletonEndClipper -> SHYXSelectionPlaneClipper -> SHYXRemeshWithEndpoint -> "
+      "SHYXSelectionPlaneClipper -> SHYXRemeshWithEndpoint -> "
       "SHYXTetGen -> SHYXDataSetToPartitionedCollection -> "
       "SHYXPartitionedCollectionBoundaryAssignment\n");
   }

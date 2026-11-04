@@ -1,7 +1,6 @@
 #ifndef pqSHYXRecoveryAutoStart_h
 #define pqSHYXRecoveryAutoStart_h
 
-#include <QByteArray>
 #include <QObject>
 #include <QPointer>
 #include <QString>
@@ -14,13 +13,9 @@ class QMenu;
  * %TEMP%/shyx_remesh_pre_apply.pvsm from the adaptive remesher, can be reloaded
  * with one click instead of going through File -> Load State.
  *
- * The submenu also has a checkable "Safely Open" trigger, on by default. While
- * it is on, loading a state patches the .pvsm before it is loaded (and restores
- * the file right after): every representation's Visibility becomes 0, and the
- * SHYX remesh filters get Enable remesh / wall / cap remesh switched off. That
- * way neither the view nor the properties panel can pull data through a CGAL
- * remesh while the state is being rebuilt. Existing representations are hidden
- * as well.
+ * The remesh recovery file contains the pipeline as it was before that Apply:
+ * the filter that was about to run CGAL is not in the state, so loading the
+ * recovery file cannot restart the remesh.
  *
  * Client-side only: no Server Manager proxy, no VTK module.
  */
@@ -44,12 +39,8 @@ private:
   Q_DISABLE_COPY(pqSHYXRecoveryAutoStart)
 
   void loadStateFile(const QString& path);
-  void hideAllRepresentations();
-  static bool patchStateForSafeOpen(const QByteArray& stateXml, QByteArray* patchedXml,
-    int* hiddenRepresentations, int* disabledRemeshFilters);
 
   QPointer<QMenu> RecoveryMenu;
-  bool SafelyOpen = true;
 };
 
 #endif
