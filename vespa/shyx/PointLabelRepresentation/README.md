@@ -7,7 +7,7 @@ Python：`GetDisplayProperties().Representation = 'Point Label'`，属性用 **e
 | 属性 | 默认 | 说明 |
 |------|------|------|
 | `PL_ShowPointLabels` | 1 | 显示点标签 |
-| `PL_OccludeLabels` | **0** | 0 = overlay（不遮挡）；XML 默认关 |
+| `PL_OccludeLabels` | **0** | 0 = 在 renderer overlay 阶段绘制并关闭深度测试（始终置顶，不遮挡）；XML 默认关 |
 | `PL_ShowEdges` | 0 | |
 | `PL_VertexOnly` | 1 | |
 | `PL_PointLabelArray` | 空 | 空则用当前 active scalars |

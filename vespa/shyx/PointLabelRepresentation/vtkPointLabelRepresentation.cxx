@@ -46,9 +46,22 @@ bool IsExplicitNoneArray(const char* s)
 }
 
 /**
- * Fast-mapper labels have to live in the main 3D renderer. Overlay (used by the
- * old vtkActor2D path) does not clear depth, so 3D glyphs vanish there.
- * OccludeLabels=off therefore disables GL_DEPTH_TEST for this actor only.
+ * Fast-mapper labels have to live in the main 3D renderer (the non-composited
+ * overlay renderer does not clear depth, and its props are not composited in
+ * remote/tiled sessions).
+ *
+ * Occlusion handling cannot be done by toggling GL_DEPTH_TEST alone: the label
+ * actor is translucent (it blends over the surface), so it is drawn by the
+ * translucent pass, and ParaView enables depth peeling by default. The peeling
+ * pass turns GL_DEPTH_TEST *off* and performs the occlusion test inside the
+ * fragment shader (fragments whose gl_FragDepth lies behind opaque geometry are
+ * discarded), so disabling GL_DEPTH_TEST there has no effect at all.
+ *
+ * Always-on-top labels therefore skip the translucent pass and are drawn in the
+ * renderer's overlay phase instead (`RenderOverlay`), which runs after all
+ * opaque and translucent geometry. Depth testing is disabled for that draw, so
+ * the labels stay on top. When occlusion is requested the actor renders in the
+ * normal translucent pass (peeling depth-tests it against the scene).
  */
 class vtkPointLabelGLActor : public vtkOpenGLActor
 {
@@ -61,28 +74,57 @@ public:
   }
   vtkTypeMacro(vtkPointLabelGLActor, vtkOpenGLActor);
 
-  vtkSetMacro(DisableDepthTest, int);
-  vtkGetMacro(DisableDepthTest, int);
+  vtkSetMacro(AlwaysOnTop, int);
+  vtkGetMacro(AlwaysOnTop, int);
 
   void Render(vtkRenderer* ren, vtkMapper* mapper) override
   {
-    vtkOpenGLRenderWindow* win =
-      vtkOpenGLRenderWindow::SafeDownCast(ren ? ren->GetRenderWindow() : nullptr);
-    vtkOpenGLState* state = win ? win->GetState() : nullptr;
-    if (state && this->DisableDepthTest != 0)
+    if (this->AlwaysOnTop != 0)
     {
-      vtkOpenGLState::ScopedglEnableDisable depthTest(state, GL_DEPTH_TEST);
-      state->vtkglDisable(GL_DEPTH_TEST);
-      this->Superclass::Render(ren, mapper);
+      // Always-on-top: drawn later from RenderOverlay() so that the
+      // depth-peeling pass cannot discard the labels.
       return;
     }
     this->Superclass::Render(ren, mapper);
   }
 
+  int RenderOverlay(vtkViewport* viewport) override
+  {
+    if (this->AlwaysOnTop == 0 || this->GetVisibility() == 0)
+    {
+      return 0;
+    }
+    vtkRenderer* ren = vtkRenderer::SafeDownCast(viewport);
+    vtkMapper* mapper = this->GetMapper();
+    if (!ren || !mapper)
+    {
+      return 0;
+    }
+
+    vtkOpenGLRenderWindow* win =
+      vtkOpenGLRenderWindow::SafeDownCast(ren->GetRenderWindow());
+    vtkOpenGLState* state = win ? win->GetState() : nullptr;
+    if (state)
+    {
+      vtkOpenGLState::ScopedglEnableDisable depthTest(state, GL_DEPTH_TEST);
+      state->vtkglDisable(GL_DEPTH_TEST);
+      // Do not let the overlay draw pollute the depth buffer used afterwards
+      // by 2D annotations.
+      vtkOpenGLState::ScopedglDepthMask depthMask(state);
+      state->vtkglDepthMask(GL_FALSE);
+      this->Superclass::Render(ren, mapper);
+    }
+    else
+    {
+      this->Superclass::Render(ren, mapper);
+    }
+    return 1;
+  }
+
 protected:
   vtkPointLabelGLActor() = default;
   ~vtkPointLabelGLActor() override = default;
-  int DisableDepthTest = 1;
+  int AlwaysOnTop = 1;
 
 private:
   vtkPointLabelGLActor(const vtkPointLabelGLActor&) = delete;
@@ -591,8 +633,9 @@ void vtkPointLabelRepresentation::ApplyOcclusionMode()
 {
   if (auto* a = vtkPointLabelGLActor::SafeDownCast(this->LabelActor))
   {
-    // 0 = always on top (no depth test); 1 = hidden by nearer geometry.
-    a->SetDisableDepthTest(this->OccludeLabels ? 0 : 1);
+    // 1 = always on top (draw in the renderer overlay phase, no depth test);
+    // 0 = hidden by nearer geometry (normal translucent pass, depth-peeled).
+    a->SetAlwaysOnTop(this->OccludeLabels ? 0 : 1);
   }
   this->ApplyDepthOffset();
 }
@@ -600,10 +643,11 @@ void vtkPointLabelRepresentation::ApplyOcclusionMode()
 //------------------------------------------------------------------------------
 void vtkPointLabelRepresentation::PlaceLabelActor()
 {
-  // vtkFastLabeledDataMapper is a 3D geometry-shader mapper. The overlay
-  // renderer is for vtkActor2D and does not clear depth, so 3D labels there
-  // never show. Always put the actor in the main renderer; OccludeLabels
-  // toggles depth testing instead of moving renderers.
+  // vtkFastLabeledDataMapper is a 3D geometry-shader mapper. The non-composited
+  // overlay renderer is for vtkActor2D and does not clear depth, so 3D labels
+  // there never show. Always put the actor in the main renderer; OccludeLabels
+  // selects between the translucent pass (occluded) and the renderer overlay
+  // phase (always on top) instead of moving renderers.
   if (this->OverlayRenderer)
   {
     this->OverlayRenderer->RemoveActor(this->LabelActor);

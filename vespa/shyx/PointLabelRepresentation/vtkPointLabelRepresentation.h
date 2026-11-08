@@ -25,8 +25,10 @@ class vtkTextProperty;
  * Optional VertexOnly restricts labels to points used by vertex cells (not line-only points).
  *
  * Labels are drawn with vtkFastLabeledDataMapper (one shader/atlas draw, not a vtkTextMapper per
- * point) in the main renderer. When OccludeLabels is on, labels depth-test against geometry.
- * When off (default), depth testing is disabled for the label actor so numbers stay on top.
+ * point) in the main renderer. When OccludeLabels is on, labels are rendered in the translucent
+ * pass and depth-tested against the scene (including depth peeling), so geometry in front hides
+ * them. When off (default), the labels are drawn in the renderer's overlay phase with depth
+ * testing disabled, so they always stay on top.
  */
 class VTKPOINTLABELREPRESENTATION_EXPORT vtkPointLabelRepresentation
   : public vtkGeometryRepresentationWithFaces
