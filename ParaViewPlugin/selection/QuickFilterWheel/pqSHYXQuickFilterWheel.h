@@ -20,10 +20,16 @@ class pqSHYXQuickFilterWheelOverlay;
  *   - Hold ` for ~200 ms → ring appears under the cursor. No mouse movement is
  *     needed, and no modifier is involved, so Ctrl+click / Ctrl+key shortcuts
  *     keep their usual meaning.
- *   - Move onto a sector; left-click it to run that filter.
- *   - Left-click the center hole, press Esc, click outside, or release the key
- *     to dismiss without running anything.
- *   - Disabled items stay visible but dimmed; clicking one only reports why.
+ *   - Move onto a sector; releasing the key runs it. Left-clicking a sector
+ *     works too. Releasing over the center hole or outside the ring cancels.
+ *   - The "+" sector opens a checkable list of the filters that can go on the
+ *     wheel, in two sections: SHYX and ParaView / VESPA built-in, restricted to
+ *     those with an Input in this build. Nothing is checked by default (the
+ *     wheel then only shows "+"); the checked set is stored in QSettings and
+ *     survives sessions.
+ *   - Esc, a click outside the ring, or releasing the key over the center hole
+ *     dismisses without running anything.
+ *   - Disabled items stay visible but dimmed; committing one only reports why.
  *
  * The key state is polled (GetAsyncKeyState on Windows) rather than inferred
  * from key events, because a focused VTK render window can swallow them; that
@@ -52,11 +58,18 @@ private:
   {
     QString label;
     bool enabled = true;
+    /// The "+" sector: opens the checklist instead of running a filter.
+    bool isConfig = false;
     QString unavailableDetail;
     std::function<void()> run;
   };
 
+  /// Checked filters + the trailing "+" sector.
   QVector<Item> buildItems() const;
+  /// The checklist opened by the "+" sector; persists the result in QSettings.
+  void openConfigDialog();
+  /// Release commit: run the sector under the cursor (or cancel when outside).
+  void commitWheelAtCursor();
 
   /// Sample key / pointer / mouse state and arm or disarm the hold timer.
   void updateState();

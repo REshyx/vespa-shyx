@@ -158,10 +158,10 @@ Vascular 顺序（[`VESPAVascularCategory.xml`](../ParaViewPlugin/smxml/VESPAVas
 | Fill Interior（选择右键，填充被选区围住的未选面） | `ParaViewPlugin/selection/SelectSimilar/` + Grow controller | （无独立图标） |
 | Select Connected（选择右键，选中当前连通点/线/面/体） | `ParaViewPlugin/selection/SelectSimilar/` + Grow controller | （无独立图标） |
 | Delete Selected Cells 快捷键（RenderView 里按 Delete 键：新建 SHYX Delete 并 Apply） | `ParaViewPlugin/selection/DeleteSelectionShortcut/` | （无独立图标） |
-| Quick filter wheel（3D 视图里按住 ` / · 键约 200ms 即在光标处弹出轮盘，不需要移动鼠标；左键点扇区执行；松开该键、Esc、中心孔或点轮盘外取消；不可用的项灰显；不占用 Ctrl，Ctrl+点击/拖拽照常） | `ParaViewPlugin/selection/QuickFilterWheel/` | （无独立图标） |
+| Quick filter wheel（3D 视图里按住 ` / · 键约 200ms 即在光标处弹出轮盘；**鼠标移到扇区上松开该键即执行**，也可左键点击；在中心孔/环外松开、Esc 或点环外取消；扇区内容全部由 **+** 扇区的勾选列表决定，默认全不勾（刚装好只有 **+**）；列表分 SHYX 与 ParaView / VESPA built-in 两节，列出任意带 `Input` 的滤镜（含 SHYX Delete Selected Cells、Extract Surface、Contour、Clip 等）；选择存 `QSettings`（`SHYX/QuickFilterWheel/items`）；不可用的项灰显；不占用 Ctrl，Ctrl+点击/拖拽照常） | `ParaViewPlugin/selection/QuickFilterWheel/`（`pqSHYXQuickFilterWheelConfigDialog.*` 是勾选对话框） | （无独立图标） |
 | Invert Selection（选择右键，反选） | `ParaViewPlugin/selection/SelectSimilar/` + Grow controller | （无独立图标） |
 | Status notices（状态栏左侧 SHYX 提示） | `ParaViewPlugin/widgets/pqSHYXStatusNotifier.*` | （无） |
-| File → Recovery（temp 文件夹里的 `.pvsm` 下拉，一键载入；含 remesh 前的 `shyx_remesh_pre_apply.pvsm`——该文件写的是这次 Apply 之前的管线，正在跑 CGAL 的滤镜及其下游不在状态里，载入不会再触发 remesh） | `ParaViewPlugin/Recovery/` | （无） |
+| File → Recovery（temp 文件夹里的 `.pvsm` 下拉，一键载入；`shyx_checkpoint.pvsm` 自动维护——源进入 `MODIFIED`（每轮 Apply 的第一个待提交改动）、GUI 创建 source/filter/reader、Apply 成功（源变为 `UNMODIFIED`）、载入状态后覆盖写入（原子替换，单文件；存的是已 apply 的 checked 值；每次写成功在状态栏 **SHYX Information** 弹一条提示）；菜单顶部可取消 **Auto-save checkpoint**。另有 `shyx_remesh_pre_apply.pvsm`——写的是这次 Apply 之前的管线，正在跑 CGAL 的滤镜及其下游不在状态里，载入不会再触发 remesh） | `ParaViewPlugin/Recovery/` | （无） |
 | Vascular 菜单/工具条 | `ParaViewPlugin/VascularCategory/` + [`smxml/VESPAVascularCategory.xml`](../ParaViewPlugin/smxml/VESPAVascularCategory.xml) | （各滤镜 fluent 图标） |
 
 ---

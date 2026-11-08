@@ -134,6 +134,8 @@ list(APPEND vespa_plugin_qt_auto_sources
   ${quick_filter_wheel_sources}
   selection/QuickFilterWheel/pqSHYXQuickFilterWheel.cxx
   selection/QuickFilterWheel/pqSHYXQuickFilterWheel.h
+  selection/QuickFilterWheel/pqSHYXQuickFilterWheelConfigDialog.cxx
+  selection/QuickFilterWheel/pqSHYXQuickFilterWheelConfigDialog.h
   selection/QuickFilterWheel/pqSHYXQuickFilterWheelOverlay.cxx
   selection/QuickFilterWheel/pqSHYXQuickFilterWheelOverlay.h)
 
@@ -148,6 +150,18 @@ list(APPEND vespa_plugin_qt_auto_sources
   ${recovery_autostart_sources}
   Recovery/pqSHYXRecoveryAutoStart.cxx
   Recovery/pqSHYXRecoveryAutoStart.h)
+
+paraview_plugin_add_auto_start(
+  CLASS_NAME "pqSHYXCheckpointAutoStart"
+  STARTUP onStartup
+  SHUTDOWN onShutdown
+  INTERFACES checkpoint_autostart_interfaces
+  SOURCES checkpoint_autostart_sources)
+list(APPEND vespa_plugin_qt_auto_interfaces ${checkpoint_autostart_interfaces})
+list(APPEND vespa_plugin_qt_auto_sources
+  ${checkpoint_autostart_sources}
+  Recovery/pqSHYXCheckpointAutoStart.cxx
+  Recovery/pqSHYXCheckpointAutoStart.h)
 
 paraview_plugin_add_auto_start(
   CLASS_NAME "pqSHYXVascularCategoryAutoStart"

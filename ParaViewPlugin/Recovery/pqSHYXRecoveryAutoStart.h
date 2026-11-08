@@ -10,6 +10,7 @@ class QMenu;
 /**
  * Adds File -> Recovery, a submenu listing *.pvsm files in the OS temp folder
  * (newest first). Recovery states written before destructive operations, such as
+ * %TEMP%/shyx_checkpoint.pvsm (kept up to date by pqSHYXCheckpointAutoStart) or
  * %TEMP%/shyx_remesh_pre_apply.pvsm from the adaptive remesher, can be reloaded
  * with one click instead of going through File -> Load State.
  *

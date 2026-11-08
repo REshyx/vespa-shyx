@@ -1856,7 +1856,7 @@ QString describeClientTool(const QString& query)
     ql.contains(QLatin1String("delete key")) || ql.contains(QLatin1String("del key")) ||
     ql.contains(QLatin1String("delete-key"));
   const bool recovery = ql.contains(QLatin1String("recovery")) ||
-    ql.contains(QLatin1String("shyxrecovery")) ||
+    ql.contains(QLatin1String("shyxrecovery")) || ql.contains(QLatin1String("checkpoint")) ||
     ql.contains(QLatin1String("pre-apply")) || ql.contains(QLatin1String("pre apply")) ||
     ql.contains(QLatin1String("remesh state"));
   if (recovery)
@@ -1867,14 +1867,25 @@ QString describeClientTool(const QString& query)
       "File → Recovery lists *.pvsm files in the OS temp folder (%TEMP% on Windows, $TMPDIR or "
       "/tmp otherwise), newest first.\n"
       "Temp folder: %1\n"
-      "Known entry: shyx_remesh_pre_apply.pvsm, written by SHYXAdaptiveIsotropicRemesher and "
+      "Known entries: shyx_checkpoint.pvsm is kept up to date automatically and shown as "
+      "'Latest checkpoint - shyx_checkpoint.pvsm'. It is rewritten when a pipeline source becomes "
+      "MODIFIED (the first pending change of an Apply cycle, so it holds the last successfully "
+      "applied parameter values), when the GUI creates a source/filter/reader, shortly after an "
+      "Apply finishes, and shortly after a state is loaded. Only one checkpoint is kept; each "
+      "write replaces it atomically, and each successful write posts a short 'checkpoint saved' "
+      "notice on the SHYX status chip (left of the status bar). Uncheck 'Auto-save checkpoint' "
+      "at the top of the Recovery menu to stop the updates.\n"
+      "shyx_remesh_pre_apply.pvsm is written by SHYXAdaptiveIsotropicRemesher and "
       "SHYXRemeshWithEndpoint right before CGAL remesh. Shown as 'Before remesh - "
       "shyx_remesh_pre_apply.pvsm'. It contains the pipeline as it was before that Apply; the "
       "filter being applied (and anything downstream of it) is left out, so loading it does not "
       "rerun the remesh.\n"
-      "Menu actions: click a file to load that state; Open Temp Folder...; Refresh.\n"
-      "Loading skips the Load State Options dialog. If the state's data files moved, use "
-      "File → Load State instead.\n")
+      "Menu actions: click a file to load that state; Auto-save checkpoint toggle; Open Temp "
+      "Folder...; Refresh.\n"
+      "Loading re-executes the visible pipeline. A checkpoint stores the last applied values, not "
+      "the parameters that were still waiting for Apply, but an expensive filter can still take "
+      "long on the current data. Loading skips the Load State Options dialog. If the state's data "
+      "files moved, use File → Load State instead.\n")
       .arg(QDir::tempPath());
   }
   if (deleteShortcut && !sphere && !grow)
@@ -1903,16 +1914,23 @@ QString describeClientTool(const QString& query)
       "Hold the backtick key (` on a US layout, · on a Chinese layout) over a 3D view for "
       "~200 ms: a radial quick-filter menu opens under the cursor.\n"
       "No mouse movement is needed; the key state is polled, so keyboard focus does not matter.\n"
-      "  Left-click a sector: run that filter\n"
-      "  Center hole, click outside, Esc, or releasing the key: dismiss without running anything\n"
+      "  Move over a sector and release the key: run that filter (no click needed)\n"
+      "  Left-click a sector: also runs it, for people used to the old gesture\n"
+      "  Center hole, releasing the key over the hole or outside the ring, Esc, or a click "
+      "outside: dismiss without running anything\n"
       "  Disabled (dimmed) sectors only post the reason on the SHYX status chip\n"
-      "Items:\n"
-      "  Delete: same as the Delete key / selection context menu -> creates "
-      "SHYXDeleteSelectedCellsFilter on the port that owns the selection and Applies. "
-      "Needs an active point/cell selection.\n"
-      "  Extract Surface: creates the built-in Extract Surface filter "
-      "(proxy DataSetSurfaceFilter) on the active pipeline object (the selection's port when "
-      "there is a selection) and Applies.\n"
+      "Every sector except \"+\" is a filter the user checked in the checklist; each one is created "
+      "on the active pipeline object (or on the port that owns the selection when there is one) as "
+      "Input and Applies. Nothing is checked by default, so a fresh configuration shows only \"+\".\n"
+      "To put the Delete-key behaviour on the wheel, check SHYX Delete Selected Cells "
+      "(SHYXDeleteSelectedCellsFilter, which copies the active selection). To get the built-in "
+      "surface extraction, check Extract Surface (DataSetSurfaceFilter). Both are ordinary rows of "
+      "the checklist now; there are no dedicated wheel actions.\n"
+      "Configuration: left-click the \"+\" sector to open a checklist with two sections, SHYX and "
+      "ParaView / VESPA built-in, listing every filter in this build that takes an Input "
+      "(search box, All/None). Checked "
+      "ids are stored in QSettings group SHYX/QuickFilterWheel, key items; the wheel always "
+      "keeps the \"+\" sector, even when nothing is checked.\n"
       "Ctrl is not involved at all, so Ctrl+click / Ctrl+key shortcuts keep working. Only while "
       "ParaView is the active window with the pointer over a RenderView, and not while a text "
       "field has focus. The ` key is only swallowed once the wheel is open. "
@@ -2656,16 +2674,26 @@ const ShyxExtra kShyxExtra[] = {
     "After use, call inspect_selection." },
   { "SHYXRecovery",
     "Not a filter and not a proxy. File → Recovery lists *.pvsm files in the OS temp folder "
-    "(newest first) and loads one with a click; shyx_remesh_pre_apply.pvsm is the state written "
-    "before an adaptive remesh, without the remesh filter being applied. Call describe_proxy('recovery')." },
+    "(newest first) and loads one with a click; shyx_checkpoint.pvsm is kept up to date "
+    "automatically (before an Apply cycle's pending change is applied, after a source/filter/"
+    "reader is created, after an Apply finishes, and after a state load) and "
+    "shyx_remesh_pre_apply.pvsm is the state "
+    "written before an adaptive remesh, without the remesh filter being applied. "
+    "Call describe_proxy('recovery')." },
   { "SHYXQuickFilterWheel",
     "Not a filter and not a proxy. Hold the backtick key (` on a US layout, · on a Chinese "
     "layout) over a RenderView for ~200 ms: a radial quick-filter wheel opens under the cursor "
-    "without moving the mouse (the key state is polled). Left-click a sector to run it; center "
-    "hole, click outside, Esc, or releasing the key cancels. Dimmed items only report why. "
-    "Items: Delete (same as the Delete key → SHYXDeleteSelectedCellsFilter on the port that owns "
-    "the selection) and Extract Surface (built-in DataSetSurfaceFilter on the active pipeline "
-    "object). Ctrl is not involved, so Ctrl+click and Ctrl shortcuts are unaffected. "
+    "without moving the mouse (the key state is polled). Move over a sector and release the key "
+    "to run it; left-clicking also works. Releasing over the center hole or outside the ring, "
+    "Esc, or a click outside cancels. Dimmed items only report why. "
+    "The trailing \"+\" sector opens a checkable list of the filters that can go on the wheel: all "
+    "SHYX filters and the ParaView / VESPA built-in filters (Contour, Clip, Extract Surface, ...) "
+    "that take an Input in this build, in two sections. Each checked filter is created on the "
+    "active object (or the selection's port) as Input and Applied; SHYX Delete Selected Cells "
+    "behaves like the Delete key because it copies the active selection. Nothing is checked by "
+    "default, so a fresh wheel shows only \"+\". Checked ids persist in QSettings group "
+    "SHYX/QuickFilterWheel (key items). "
+    "Ctrl is not involved, so Ctrl+click and Ctrl shortcuts are unaffected. "
     "Call describe_proxy('quick filter wheel')." },
   { "SHYXCameraAdjust",
     "Source (Filters → SHYX), not a filter and not a Display representation: named camera presets "
@@ -2733,12 +2761,17 @@ QString lookupShyxDocs(const QString& queryRaw)
       "(grow all similar-normal rings in one shot); Fill Interior "
       "(add unselected faces enclosed by the current selection).\n"
       "   Also: hold ` (the · key) over the 3D view → quick filter wheel under the cursor "
-      "(Delete / Extract Surface); click a sector; release the key, Esc, or the center hole cancels. "
+      "(empty until filters are checked via its \"+\" sector); move over a sector and release the "
+      "key to run it; releasing over the center hole or outside the ring, or Esc, cancels. "
+      "The trailing \"+\" sector opens a checklist of every SHYX "
+      "and ParaView / VESPA built-in filter that takes an Input, and the checked set persists. "
       "describe_proxy('quick filter wheel').\n"
       "4) Widget representations (stent placement 3D widgets, not Display dropdown): "
       "SHYXImplicitCylinderWidgetRepresentation, SHYXEndpointStentWidgetRepresentation.\n"
       "5) File → Recovery (client Qt; not a pipeline filter): submenu listing *.pvsm in the OS "
-      "temp folder, e.g. shyx_remesh_pre_apply.pvsm written before a remesh. "
+      "temp folder, e.g. shyx_checkpoint.pvsm (rewritten automatically before an Apply cycle's "
+      "pending change runs, after a source/filter/reader is created, after an Apply finishes, and "
+      "after a state load) or shyx_remesh_pre_apply.pvsm written before a remesh. "
       "describe_proxy('recovery').\n"
       "6) View → SHYX AI Assistant: this dock, not a pipeline filter.\n"
       "Pass a name/topic (remesh, clip, representation, selection, sphere, glyph, ...) to filter notes.\n"
@@ -3233,10 +3266,11 @@ QJsonArray pqSHYXAIAgentTools::schema(bool allowCaptureScreenshot)
     "For Fill Interior pass 'fill interior'. "
     "For Select Connected (connected points/lines/faces/volumes) pass 'select connected'. "
     "For Invert Selection pass 'invert'. "
-    "For the File → Recovery submenu (temp-folder .pvsm list) pass 'recovery'. "
+    "For the File → Recovery submenu (temp-folder .pvsm list, including the automatic "
+    "shyx_checkpoint.pvsm and the pre-remesh state) pass 'recovery' or 'checkpoint'. "
     "For the RenderView Delete-key shortcut that creates and applies SHYX Delete Selected Cells, pass 'delete shortcut' or 'delete key'. "
-    "For the quick-filter wheel (radial menu in the RenderView, opened by holding ` / ·: Delete / Extract Surface), pass 'quick filter wheel'.",
-    QJsonObject{ { QStringLiteral("name"), strArg("XML name, display type (Pulse Glyphs), sphere/polygon/grow/proximity gap, select block, select similar, fill interior, select connected, invert, recovery, delete shortcut, or quick filter wheel.") } },
+    "For the quick-filter wheel (radial menu in the RenderView, opened by holding ` / ·; its trailing \"+\" sector opens a checklist of every SHYX and ParaView / VESPA built-in filter with an Input, and the checked set persists), pass 'quick filter wheel'.",
+    QJsonObject{ { QStringLiteral("name"), strArg("XML name, display type (Pulse Glyphs), sphere/polygon/grow/proximity gap, select block, select similar, fill interior, select connected, invert, recovery/checkpoint, delete shortcut, or quick filter wheel.") } },
     QJsonArray{ QStringLiteral("name") }));
   tools.append(fn("lookup_shyx_docs",
     "SHYX/VESPA usage notes: capability catalog (filters + Display representations + "

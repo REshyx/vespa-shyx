@@ -75,10 +75,21 @@ int pqSHYXQuickFilterWheelOverlay::widgetSize()
 
 //-----------------------------------------------------------------------------
 void pqSHYXQuickFilterWheelOverlay::setItems(const QStringList& labels,
-  const QVector<bool>& enabled)
+  const QVector<bool>& enabled, int specialIndex)
 {
   this->Labels = labels;
   this->Enabled = enabled;
+  this->SpecialIndex = (specialIndex >= 0 && specialIndex < labels.size()) ? specialIndex : -1;
+
+  // Spin the ring so the special sector lands at 6 o'clock (bottom): mid angle
+  // of sector i is StartAngle - (i + 0.5) * span, so solve it to -90 degrees.
+  this->StartAngle = 90.0;
+  if (this->SpecialIndex >= 0)
+  {
+    const qreal span = 360.0 / labels.size();
+    this->StartAngle = -90.0 + (this->SpecialIndex + 0.5) * span;
+  }
+
   this->Hovered = -1;
   this->update();
 }
@@ -110,10 +121,11 @@ int pqSHYXQuickFilterWheelOverlay::sectorAt(const QPoint& globalPosition) const
     return -1;
   }
 
-  // Clockwise offset from 12 o'clock.
+  // Clockwise offset from where sector 0 starts (12 o'clock, or spun so the "+"
+  // sector sits at the bottom).
   const qreal angle = qRadiansToDegrees(std::atan2(-delta.y(), delta.x()));
   const qreal span = 360.0 / count;
-  const qreal offset = std::fmod(90.0 - angle + 720.0, 360.0);
+  const qreal offset = std::fmod(this->StartAngle - angle + 720.0, 360.0);
   const int index = static_cast<int>(offset / span);
   return qBound(0, index, count - 1);
 }
@@ -172,14 +184,21 @@ void pqSHYXQuickFilterWheelOverlay::paintEvent(QPaintEvent*)
 
   for (int i = 0; i < count; ++i)
   {
+    const bool special = (i == this->SpecialIndex);
     const bool enabled = i < this->Enabled.size() ? this->Enabled.at(i) : true;
     const bool hovered = (i == this->Hovered);
-    const qreal firstEdge = 90.0 - i * span - kGapDegrees * 0.5;
-    const qreal secondEdge = 90.0 - (i + 1) * span + kGapDegrees * 0.5;
+    const qreal firstEdge = this->StartAngle - i * span - kGapDegrees * 0.5;
+    const qreal secondEdge = this->StartAngle - (i + 1) * span + kGapDegrees * 0.5;
 
     QColor fill(30, 33, 38, 232);
     QColor text(238, 240, 244);
-    if (!enabled)
+    if (special)
+    {
+      // The "+" slot stays available even when every action is disabled.
+      fill = hovered ? QColor(44, 130, 196, 248) : QColor(27, 63, 92, 238);
+      text = QColor(214, 236, 255);
+    }
+    else if (!enabled)
     {
       fill = hovered ? QColor(62, 55, 42, 235) : QColor(34, 34, 36, 220);
       text = hovered ? QColor(214, 192, 148) : QColor(136, 138, 143);
@@ -193,9 +212,22 @@ void pqSHYXQuickFilterWheelOverlay::paintEvent(QPaintEvent*)
     painter.setBrush(fill);
     painter.drawPath(SectorPath(center, firstEdge, secondEdge));
 
-    const qreal midAngle = 90.0 - (i + 0.5) * span;
+    const qreal midAngle = this->StartAngle - (i + 0.5) * span;
     const qreal radius = (kInnerRadius + kOuterRadius) / 2.0;
     const QPointF anchor = PolarPoint(center, midAngle, radius);
+
+    QFont font = painter.font();
+    font.setBold(hovered || special);
+    if (special)
+    {
+      // Upright plus sign: a tangential "+" is ambiguous at a glance.
+      font.setPointSizeF(16.0);
+      painter.setFont(font);
+      painter.setPen(text);
+      painter.drawText(QRectF(anchor.x() - 24.0, anchor.y() - 16.0, 48.0, 32.0), Qt::AlignCenter,
+        this->Labels.at(i));
+      continue;
+    }
 
     // Tangential label, flipped so it never reads upside down.
     qreal rotation = -(midAngle + 90.0);
@@ -208,8 +240,6 @@ void pqSHYXQuickFilterWheelOverlay::paintEvent(QPaintEvent*)
       rotation -= 180.0;
     }
 
-    QFont font = painter.font();
-    font.setBold(hovered);
     font.setPointSizeF(10.0);
     const QFontMetricsF metrics(font);
     const qreal arcLength = qDegreesToRadians(span - kGapDegrees) * radius;

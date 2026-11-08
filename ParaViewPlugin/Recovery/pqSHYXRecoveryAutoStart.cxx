@@ -1,5 +1,6 @@
 #include "pqSHYXRecoveryAutoStart.h"
 
+#include "pqSHYXCheckpointAutoStart.h"
 #include "pqSHYXStatusNotifier.h"
 
 #include "pqApplicationCore.h"
@@ -134,7 +135,8 @@ void pqSHYXRecoveryAutoStart::installMenu()
   auto* recovery = new QMenu(tr("&Recovery"), fileMenu);
   recovery->setObjectName(QString::fromLatin1(kRecoveryMenuObjectName));
   recovery->setToolTip(
-    tr("Reload a .pvsm saved in the temp folder, e.g. the state written before a remesh."));
+    tr("Reload a .pvsm saved in the temp folder, e.g. the automatic checkpoint or the "
+       "state written before a remesh."));
 
   // Keep it next to Load/Save State: after Save State, before whatever follows.
   QAction* anchor = fileMenu->findChild<QAction*>(QStringLiteral("actionFileSaveServerState"));
@@ -180,6 +182,17 @@ void pqSHYXRecoveryAutoStart::refreshMenu()
   }
   menu->clear();
 
+  QAction* autoSave = menu->addAction(tr("Auto-save checkpoint"));
+  autoSave->setCheckable(true);
+  autoSave->setChecked(pqSHYXCheckpointAutoStart::autoSaveEnabled());
+  autoSave->setToolTip(tr("Keep %1 up to date after pipeline changes and state loads.")
+                         .arg(pqSHYXCheckpointAutoStart::checkpointFileName()));
+  QObject::connect(
+    autoSave, &QAction::toggled, this, [](bool enabled) {
+      pqSHYXCheckpointAutoStart::setAutoSaveEnabled(enabled);
+    });
+  menu->addSeparator();
+
   const QDir tempDir(QDir::tempPath());
   QFileInfoList files = tempDir.entryInfoList(QStringList() << QStringLiteral("*.pvsm"),
     QDir::Files | QDir::Readable, QDir::NoSort);
@@ -203,7 +216,11 @@ void pqSHYXRecoveryAutoStart::refreshMenu()
     for (const QFileInfo& info : files)
     {
       QString label = info.fileName();
-      if (info.fileName() == QLatin1String(kRemeshRecoveryFileName))
+      if (info.fileName() == pqSHYXCheckpointAutoStart::checkpointFileName())
+      {
+        label = tr("Latest checkpoint - %1").arg(info.fileName());
+      }
+      else if (info.fileName() == QLatin1String(kRemeshRecoveryFileName))
       {
         label = tr("Before remesh - %1").arg(info.fileName());
       }

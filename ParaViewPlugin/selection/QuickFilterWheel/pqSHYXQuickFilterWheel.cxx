@@ -1,5 +1,6 @@
 #include "pqSHYXQuickFilterWheel.h"
 
+#include "pqSHYXQuickFilterWheelConfigDialog.h"
 #include "pqSHYXQuickFilterWheelOverlay.h"
 
 #include "pqActiveObjects.h"
@@ -12,12 +13,15 @@
 #include "pqSelectionManager.h"
 #include "pqServer.h"
 #include "pqServerManagerModel.h"
-#include "pqSHYXDeleteSelectionShortcut.h"
 #include "pqSHYXStatusNotifier.h"
 #include "pqUndoStack.h"
 #include "pqView.h"
 
+#include "vtkPVProxyDefinitionIterator.h"
+#include "vtkPVXMLElement.h"
+#include "vtkSMProxyDefinitionManager.h"
 #include "vtkSMSessionProxyManager.h"
+#include "vtkSmartPointer.h"
 
 #if defined(Q_OS_WIN)
 #ifndef WIN32_LEAN_AND_MEAN
@@ -32,6 +36,7 @@
 #include <QAbstractSpinBox>
 #include <QApplication>
 #include <QCursor>
+#include <QDialog>
 #include <QEvent>
 #include <QKeyEvent>
 #include <QLineEdit>
@@ -39,9 +44,15 @@
 #include <QMap>
 #include <QMouseEvent>
 #include <QPlainTextEdit>
+#include <QSettings>
+#include <QSet>
 #include <QTextEdit>
 #include <QTimer>
+#include <QVector>
 #include <QWidget>
+
+#include <algorithm>
+#include <cstring>
 
 namespace
 {
@@ -57,7 +68,140 @@ constexpr int kPollIntervalMs = 30;
 /// VK_OEM_3 = the ` ~ / · key left of 1 (US layout; Chinese layout types ·).
 constexpr int kTriggerVirtualKey = 0xC0;
 
-const char* kExtractSurfaceProxy = "DataSetSurfaceFilter";
+/// Where the checked action ids are stored.
+constexpr char kSettingsGroup[] = "SHYX/QuickFilterWheel";
+constexpr char kSettingsItemsKey[] = "items";
+
+/// One row of the "+" checklist; also the action a checked row runs.
+struct CatalogAction
+{
+  QString id;
+  QString label; // full label, used by the dialog
+  QString group; // checklist section header
+  QString proxyName;
+};
+
+/// Checklist group titles.
+QString ShyxGroupTitle()
+{
+  return QObject::tr("SHYX");
+}
+
+QString ParaViewGroupTitle()
+{
+  return QObject::tr("ParaView / VESPA built-in");
+}
+
+//-----------------------------------------------------------------------------
+/// Wheel sectors are narrow; drop the common "SHYX " prefix.
+QString ShortLabel(const QString& label)
+{
+  return label.startsWith(QLatin1String("SHYX ")) ? label.mid(5) : label;
+}
+
+//-----------------------------------------------------------------------------
+/// Checked filter ids; empty by default, so a fresh install shows only "+".
+QStringList LoadActionIds()
+{
+  QSettings settings;
+  settings.beginGroup(QLatin1String(kSettingsGroup));
+  return settings.value(QLatin1String(kSettingsItemsKey)).toStringList();
+}
+
+//-----------------------------------------------------------------------------
+void SaveActionIds(const QStringList& ids)
+{
+  QSettings settings;
+  settings.beginGroup(QLatin1String(kSettingsGroup));
+  settings.setValue(QLatin1String(kSettingsItemsKey), ids);
+}
+
+//-----------------------------------------------------------------------------
+/// True when the proxy definition declares an InputProperty named "Input", i.e.
+/// the filter can be created on the active object with a single connection.
+bool DefinitionTakesInput(vtkPVXMLElement* definition)
+{
+  if (!definition)
+  {
+    return false;
+  }
+  for (unsigned int i = 0; i < definition->GetNumberOfNestedElements(); ++i)
+  {
+    vtkPVXMLElement* child = definition->GetNestedElement(i);
+    const char* childName = child ? child->GetName() : nullptr;
+    if (childName && strcmp(childName, "InputProperty") == 0)
+    {
+      const char* propertyName = child->GetAttribute("name");
+      if (propertyName && strcmp(propertyName, "Input") == 0)
+      {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+//-----------------------------------------------------------------------------
+/// Every filter that can go on the wheel: SHYX first, then the ParaView / VESPA
+/// built-ins, each list sorted by label. Filters come from the active session's
+/// definitions, so modules that were not compiled never show up.
+QVector<CatalogAction> BuildCatalog()
+{
+  const QString shyxGroup = ShyxGroupTitle();
+  const QString builtinGroup = ParaViewGroupTitle();
+
+  QVector<CatalogAction> catalog;
+  pqServer* server = pqActiveObjects::instance().activeServer();
+  vtkSMSessionProxyManager* pxm = server ? server->proxyManager() : nullptr;
+  vtkSMProxyDefinitionManager* definitions = pxm ? pxm->GetProxyDefinitionManager() : nullptr;
+  if (!definitions)
+  {
+    return catalog;
+  }
+
+  // Walk the registered definitions instead of instantiating prototypes, which
+  // would create every filter just to fill the checklist.
+  vtkSmartPointer<vtkPVProxyDefinitionIterator> iter;
+  iter.TakeReference(definitions->NewIterator());
+  iter->AddTraversalGroupName("filters");
+  QVector<CatalogAction> shyxFilters;
+  QVector<CatalogAction> builtinFilters;
+  for (iter->InitTraversal(); !iter->IsDoneWithTraversal(); iter->GoToNextItem())
+  {
+    const char* name = iter->GetProxyName();
+    if (!name || !*name)
+    {
+      continue;
+    }
+    vtkPVXMLElement* definition = iter->GetProxyDefinition();
+    if (!DefinitionTakesInput(definition))
+    {
+      continue;
+    }
+    const bool shyx = strncmp(name, "SHYX", 4) == 0;
+    const char* xmlLabel = definition->GetAttribute("label");
+    const QString label =
+      (xmlLabel && *xmlLabel) ? QString::fromUtf8(xmlLabel) : QString::fromUtf8(name);
+    CatalogAction action{ QStringLiteral("filter:") + QString::fromUtf8(name), label,
+      shyx ? shyxGroup : builtinGroup, QString::fromUtf8(name) };
+    (shyx ? shyxFilters : builtinFilters).push_back(action);
+  }
+
+  const auto byLabel = [](const CatalogAction& a, const CatalogAction& b) {
+    return a.label.compare(b.label, Qt::CaseInsensitive) < 0;
+  };
+  std::sort(shyxFilters.begin(), shyxFilters.end(), byLabel);
+  std::sort(builtinFilters.begin(), builtinFilters.end(), byLabel);
+  for (const CatalogAction& action : shyxFilters)
+  {
+    catalog.push_back(action);
+  }
+  for (const CatalogAction& action : builtinFilters)
+  {
+    catalog.push_back(action);
+  }
+  return catalog;
+}
 
 //-----------------------------------------------------------------------------
 /// Physical trigger key press, by Qt key code.
@@ -160,43 +304,46 @@ bool TextInputHasFocus()
 }
 
 //-----------------------------------------------------------------------------
-/// Extract Surface (ParaView proxy DataSetSurfaceFilter) on the active port.
-void ApplyExtractSurface()
+/// Create a checked filter on the active port and apply it.
+void ApplyWheelFilter(const CatalogAction& action)
 {
   pqPVApplicationCore* core = pqPVApplicationCore::instance();
   pqOutputPort* port = ActivePort();
   if (!core || !port || !port->getSource() || !port->getServer())
   {
     pqSHYXStatusNotifier::warning(
-      QObject::tr("SHYX Quick filters: Extract Surface needs an active pipeline object."));
+      QObject::tr("SHYX Quick filters: %1 needs an active pipeline object.").arg(action.label));
     return;
   }
-  if (!HasFilterPrototype(port, kExtractSurfaceProxy))
+
+  const QByteArray proxyName = action.proxyName.toUtf8();
+  if (proxyName.isEmpty() || !HasFilterPrototype(port, proxyName.constData()))
   {
-    pqSHYXStatusNotifier::error(QObject::tr(
-      "SHYX Quick filters: Extract Surface is not available in this ParaView build."));
+    pqSHYXStatusNotifier::error(
+      QObject::tr("SHYX Quick filters: %1 is not available in this ParaView build.")
+        .arg(action.label));
     return;
   }
 
   QMap<QString, QList<pqOutputPort*>> namedInputs;
   namedInputs[QStringLiteral("Input")] = QList<pqOutputPort*>() << port;
 
-  BEGIN_UNDO_SET(QObject::tr("SHYX Quick filters: Extract Surface"));
+  BEGIN_UNDO_SET(QObject::tr("SHYX Quick filters: %1").arg(action.label));
   pqPipelineSource* filter = core->getObjectBuilder()->createFilter(
-    QStringLiteral("filters"), QString::fromLatin1(kExtractSurfaceProxy), namedInputs, port->getServer());
+    QStringLiteral("filters"), action.proxyName, namedInputs, port->getServer());
   if (!filter)
   {
     END_UNDO_SET();
     pqSHYXStatusNotifier::error(
-      QObject::tr("SHYX Quick filters: could not create Extract Surface."));
+      QObject::tr("SHYX Quick filters: could not create %1.").arg(action.label));
     return;
   }
   core->applyPipeline();
   END_UNDO_SET();
 
   const QString name = filter->getSMName();
-  pqSHYXStatusNotifier::info(QObject::tr("SHYX Quick filters: applied Extract Surface (%1).")
-                               .arg(name.isEmpty() ? QString::fromLatin1(kExtractSurfaceProxy) : name));
+  pqSHYXStatusNotifier::info(QObject::tr("SHYX Quick filters: applied %1 (%2).")
+                               .arg(action.label, name.isEmpty() ? action.proxyName : name));
 }
 }
 
@@ -286,17 +433,19 @@ void pqSHYXQuickFilterWheel::updateState()
   const bool down = this->triggerKeyDown();
   if (!down)
   {
-    // Key is up: whatever the user dismissed may open again on the next press.
+    // Key is up. A wheel that is still open is released over a sector: running
+    // it here keeps the gesture working when this poll sees the release before
+    // the Qt key event does.
     if (this->ShowTimer->isActive())
     {
       this->ShowTimer->stop();
     }
     this->HoldArmed = false;
-    this->SuppressedUntilKeyRelease = false;
     if (this->Overlay && this->Overlay->isVisible())
     {
-      this->hideOverlay();
+      this->commitWheelAtCursor();
     }
+    this->SuppressedUntilKeyRelease = false;
     return;
   }
 
@@ -378,7 +527,15 @@ bool pqSHYXQuickFilterWheel::eventFilter(QObject* watched, QEvent* event)
         this->TriggerKeyHeld = false;
         if (!keyEvent->isAutoRepeat())
         {
-          this->updateState();
+          // Releasing the key over a sector runs it; anywhere else cancels.
+          if (this->Overlay && this->Overlay->isVisible())
+          {
+            this->commitWheelAtCursor();
+          }
+          else
+          {
+            this->updateState();
+          }
         }
         return wheelVisible;
       }
@@ -474,8 +631,13 @@ void pqSHYXQuickFilterWheel::showWheelAt(const QPoint& globalPosition)
 
   QStringList labels;
   QVector<bool> enabled;
+  int specialIndex = -1;
   for (const Item& item : this->Items)
   {
+    if (item.isConfig)
+    {
+      specialIndex = labels.size();
+    }
     labels << item.label;
     enabled << item.enabled;
   }
@@ -484,8 +646,11 @@ void pqSHYXQuickFilterWheel::showWheelAt(const QPoint& globalPosition)
   {
     this->Overlay = new pqSHYXQuickFilterWheelOverlay(nullptr);
   }
-  this->Overlay->setItems(labels, enabled);
+  this->Overlay->setItems(labels, enabled, specialIndex);
   this->Overlay->showAtGlobal(globalPosition);
+  // Highlight what sits under the cursor already: releasing without moving the
+  // mouse must run exactly the sector that is lit up.
+  this->updateHover(globalPosition);
   this->SwallowNextRelease = false;
 }
 
@@ -518,6 +683,20 @@ void pqSHYXQuickFilterWheel::dismissWheel()
 }
 
 //-----------------------------------------------------------------------------
+void pqSHYXQuickFilterWheel::commitWheelAtCursor()
+{
+  if (!this->Overlay || !this->Overlay->isVisible())
+  {
+    return;
+  }
+  // Read the pointer directly: the last mouse-move event may predate the
+  // release, and the ring is drawn around the cursor anyway.
+  const int index = this->Overlay->sectorAt(QCursor::pos());
+  // -1 (center hole / outside the ring) dismisses without running anything.
+  this->activate(index);
+}
+
+//-----------------------------------------------------------------------------
 void pqSHYXQuickFilterWheel::activate(int index)
 {
   const QVector<Item> items = this->Items;
@@ -528,6 +707,12 @@ void pqSHYXQuickFilterWheel::activate(int index)
     return; // center hole: cancel
   }
   const Item item = items.at(index);
+  if (item.isConfig)
+  {
+    // Let the ring disappear before the modal checklist opens.
+    QTimer::singleShot(0, this, [this]() { this->openConfigDialog(); });
+    return;
+  }
   if (!item.enabled)
   {
     pqSHYXStatusNotifier::warning(item.unavailableDetail);
@@ -544,6 +729,34 @@ void pqSHYXQuickFilterWheel::activate(int index)
 }
 
 //-----------------------------------------------------------------------------
+void pqSHYXQuickFilterWheel::openConfigDialog()
+{
+  const QVector<CatalogAction> catalog = BuildCatalog();
+  QStringList ids;
+  QStringList labels;
+  QStringList groups;
+  for (const CatalogAction& action : catalog)
+  {
+    ids.append(action.id);
+    labels.append(action.label);
+    groups.append(action.group);
+  }
+
+  QSet<QString> checked;
+  for (const QString& id : LoadActionIds())
+  {
+    checked.insert(id);
+  }
+
+  pqSHYXQuickFilterWheelConfigDialog dialog(
+    ids, labels, groups, checked, QApplication::activeWindow());
+  if (dialog.exec() == QDialog::Accepted)
+  {
+    SaveActionIds(dialog.checkedIds());
+  }
+}
+
+//-----------------------------------------------------------------------------
 void pqSHYXQuickFilterWheel::updateHover(const QPoint& globalPosition)
 {
   if (this->Overlay && this->Overlay->isVisible())
@@ -557,32 +770,40 @@ QVector<pqSHYXQuickFilterWheel::Item> pqSHYXQuickFilterWheel::buildItems() const
 {
   QVector<Item> items;
 
+  const QVector<CatalogAction> catalog = BuildCatalog();
+  const QStringList selected = LoadActionIds();
+  for (const CatalogAction& action : catalog)
   {
-    Item item;
-    item.label = tr("Delete");
-    item.enabled = SelectionPort() != nullptr;
-    item.unavailableDetail = tr(
-      "SHYX Quick filters: Delete needs an active point or cell selection in the 3D view.");
-    item.run = []() { pqSHYXDeleteSelectionShortcut::deleteActiveSelection(); };
-    items.push_back(item);
-  }
+    if (!selected.contains(action.id))
+    {
+      continue;
+    }
 
-  {
+    // Runs on the active object, or on the selection's port when there is one.
     Item item;
-    item.label = tr("Extract Surface");
+    item.label = ShortLabel(action.label);
     pqOutputPort* port = ActivePort();
-    item.enabled = HasFilterPrototype(port, kExtractSurfaceProxy);
+    item.enabled = HasFilterPrototype(port, action.proxyName.toUtf8().constData());
     if (!port)
     {
       item.unavailableDetail =
-        tr("SHYX Quick filters: Extract Surface needs an active pipeline object.");
+        tr("SHYX Quick filters: %1 needs an active pipeline object.").arg(action.label);
     }
     else if (!item.enabled)
     {
-      item.unavailableDetail =
-        tr("SHYX Quick filters: Extract Surface is not available in this ParaView build.");
+      item.unavailableDetail = tr("SHYX Quick filters: %1 is not available in this ParaView build.")
+                                 .arg(action.label);
     }
-    item.run = []() { ApplyExtractSurface(); };
+    item.run = [action]() { ApplyWheelFilter(action); };
+    items.push_back(item);
+  }
+
+  // Always last: the "+" sector that reopens the checklist.
+  {
+    Item item;
+    item.label = QStringLiteral("+");
+    item.isConfig = true;
+    item.enabled = true;
     items.push_back(item);
   }
 

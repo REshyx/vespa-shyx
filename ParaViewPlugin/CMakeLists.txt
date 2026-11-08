@@ -82,6 +82,18 @@ target_link_libraries(VESPAPlugin
   PRIVATE
     VTK::FiltersCore
     VTK::FiltersParallel)
+
+# A ParaView instance that already loaded the plugin keeps VESPAPlugin.dll
+# mapped, so the linker fails with "LNK1104: cannot open file ...VESPAPlugin.dll"
+# even though every source compiled. Windows still lets a mapped image be
+# renamed, so move a locked output out of the way right before the link step.
+# The running instance keeps the renamed copy until it is restarted.
+add_custom_command(TARGET VESPAPlugin PRE_LINK
+  COMMAND "${CMAKE_COMMAND}"
+    "-DOUTPUT_FILE=$<TARGET_FILE:VESPAPlugin>"
+    -P "${CMAKE_SOURCE_DIR}/CMake/ReleaseLockedOutput.cmake"
+  COMMENT "VESPAPlugin: moving a locked VESPAPlugin.dll out of the way (if any)")
+
 if (VESPA_BUILT_WITH_CGAL)
   target_link_libraries(VESPAPlugin
     PRIVATE

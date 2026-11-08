@@ -14,9 +14,14 @@
  * so the 3D view keeps receiving every mouse event; the controller only asks
  * sectorAt() for the sector under the cursor. Nothing here handles events.
  *
- * Layout: sector 0 starts at 12 o'clock and the sectors run clockwise, so two
- * items end up as the right half (0) and the left half (1). Labels are drawn
- * tangentially, which keeps them inside the ring for any item count.
+ * Layout: sector 0 starts at 12 o'clock and the sectors run clockwise. When one
+ * sector is marked as special (the "+" configure slot) the whole ring is spun
+ * so that it sits at 6 o'clock (the bottom), keeping it out of the "first item"
+ * position; the rest keep their clockwise order from 12 o'clock. Labels are
+ * drawn tangentially, which keeps them inside the ring for any item count.
+ *
+ * The special sector gets a distinct accent fill and its label is drawn upright
+ * and larger.
  *
  * The center hole is the cancel target and shows "esc".
  */
@@ -30,7 +35,8 @@ public:
   ~pqSHYXQuickFilterWheelOverlay() override;
 
   /// Labels and per-item enabled flags. The item count defines the sector count.
-  void setItems(const QStringList& labels, const QVector<bool>& enabled);
+  /// \a specialIndex (or -1) marks the "+" configure sector.
+  void setItems(const QStringList& labels, const QVector<bool>& enabled, int specialIndex = -1);
 
   /// -1 = no sector highlighted.
   void setHovered(int index);
@@ -58,6 +64,11 @@ private:
 
   QStringList Labels;
   QVector<bool> Enabled;
+  int SpecialIndex = -1;
+  /// Polar angle (degrees, counter-clockwise from 3 o'clock) where sector 0
+  /// starts. With a special sector it is spun so that sector sits at the
+  /// bottom (6 o'clock); otherwise it starts at 12 o'clock.
+  qreal StartAngle = 90.0;
   int Hovered = -1;
   QPoint Center;
 };
