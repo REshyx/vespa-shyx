@@ -231,8 +231,10 @@
           [L / R^d, L * R^d] of those anchors (d = hop distance), so the mesh transitions from the
           opening edge length toward the interior ICC field. R &lt;= 1 only rewrites the boundary
           vertices. The anchor is the geometric edge length and is not multiplied by
-          **Sizing field scale**. With **Protect constraints** OFF, **Boundary size scale**
-          multiplies that edge length. With Anchor OFF, the same scale instead multiplies the
+          **Sizing field scale**. With **Protect constraints** OFF, **Opening boundary scales**
+          lists each opening (a point on that boundary loop) and multiplies that opening's mean
+          border-edge length by its own scale. Until those scales differ, **Boundary size scale**
+          is still the shared factor. With Anchor OFF, **Boundary size scale** multiplies the
           curvature target on opening vertices only. With both Anchor and Protect ON the opening
           stays frozen at its input edge length. Cap remesh is unchanged. Default OFF.
         </Documentation>
@@ -252,17 +254,49 @@
           Scale to range do not overwrite those vertices, and **Sizing field scale** does not
           apply to them. Interior vertices still transition away from the scaled boundary.
           **Anchor** ON and **Protect constraints** OFF: multiplies the input opening edge length
-          instead (not compounded across iterations).
+          instead (not compounded across iterations), but only while every opening still shares
+          this one factor. Once **Opening boundary scales** differ, each matched opening uses its
+          own factor and this number is only the fallback for an opening the list does not match.
           **&gt; 1** coarsens; **&lt; 1** refines. Not re-clamped to Min/Max.
-          Hidden when Anchor and Protect are both ON.
+          Shown only when Anchor is OFF (the per-opening list replaces it while Anchor is ON and
+          Protect is OFF). Ignored when Anchor and Protect are both ON.
         </Documentation>
         <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="visibility"
+                                   property="AnchorBoundarySize"
+                                   value="0"/>
+        </Hints>
+      </DoubleVectorProperty>
+
+      <DoubleVectorProperty command="SetOpeningBoundaryScale"
+                            name="OpeningBoundaryScales"
+                            label="Opening boundary scales"
+                            number_of_elements="0"
+                            number_of_elements_per_command="4"
+                            repeat_command="1"
+                            set_number_command="SetNumberOfOpeningBoundaryScales"
+                            use_index="1"
+                            animateable="0">
+        <Documentation>
+          Per-opening anchor scales, packed as (centroid x, y, z, scale). The panel fills this
+          when **Anchor boundary size** is ON and **Protect constraints** is OFF: one row per
+          open boundary, **Point** is a vertex on that loop, **Scale** multiplies the whole
+          loop's mean border-edge length. Empty leaves every opening on **Boundary size scale**.
+          Scales that are all equal still take that shared path. Differing scales match each
+          loop to the nearest stored centroid. Not compounded across remesh iterations.
+        </Documentation>
+      </DoubleVectorProperty>
+      <PropertyGroup label="Opening boundary scales"
+                     panel_widget="shyx_remesh_opening_scales">
+        <Property name="OpeningBoundaryScales"/>
+        <Hints>
           <PropertyWidgetDecorator type="CompositeDecorator">
-            <Expression type="or">
+            <Expression type="and">
               <PropertyWidgetDecorator type="GenericDecorator"
                                        mode="visibility"
                                        property="AnchorBoundarySize"
-                                       value="0"/>
+                                       value="1"/>
               <PropertyWidgetDecorator type="GenericDecorator"
                                        mode="visibility"
                                        property="RemeshProtectConstraints"
@@ -270,7 +304,7 @@
             </Expression>
           </PropertyWidgetDecorator>
         </Hints>
-      </DoubleVectorProperty>
+      </PropertyGroup>
 
       <IntVectorProperty command="SetScaleToRange"
                          name="ScaleToRange"

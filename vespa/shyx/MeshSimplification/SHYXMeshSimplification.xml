@@ -1,0 +1,318 @@
+<?xml version="1.0" ?>
+<ServerManagerConfiguration>
+  <ProxyGroup name="filters">
+    <SourceProxy class="vtkSHYXMeshSimplification"
+                 label="SHYX Mesh Simplification"
+                 name="SHYXMeshSimplification">
+      <Documentation short_help="SHYX Mesh Simplification: CGAL edge collapse with a selectable algorithm.">
+        One CGAL edge_collapse pass on a triangle vtkPolyData. Algorithm selects cost and
+        placement. Stop criterion, boundary edges, and sharp edges apply to every algorithm.
+        Vertices incident to a constrained edge are not moved; if both endpoints are, that
+        collapse is refused. Constrained edges themselves are not collapsed.
+
+        Not SHYX Adaptive Isotropic Remesher. SHYX Edge Collapse and SHYX Subset Coarsen
+        remain separate filters. Input must be a pure triangle mesh; use Triangulate upstream
+        for mixed cells.
+      </Documentation>
+
+      <InputProperty name="Input"
+                     command="SetInputConnection">
+        <ProxyGroupDomain name="groups">
+          <Group name="sources"/>
+          <Group name="filters"/>
+        </ProxyGroupDomain>
+        <DataTypeDomain name="input_type">
+          <DataType value="vtkPolyData"/>
+        </DataTypeDomain>
+      </InputProperty>
+
+      <IntVectorProperty command="SetStopCriterion"
+                         name="StopCriterion"
+                         label="Stop criterion"
+                         number_of_elements="1"
+                         default_values="0"
+                         animateable="0">
+        <EnumerationDomain name="enum">
+          <Entry text="Edge count ratio" value="0"/>
+          <Entry text="Edge count" value="1"/>
+          <Entry text="Edge length" value="2"/>
+        </EnumerationDomain>
+        <Documentation>
+          How far to collapse. Edge count ratio: stop when remaining undirected edges / initial
+          edges falls below Edge Count Ratio. Edge count: stop when the undirected edge count
+          falls below Edge Count. Edge length: stop when the next edge to collapse is strictly
+          longer than Edge Length (with edge-length cost this keeps only shorter edges; with
+          other costs a long low-cost edge can stop the sequence while shorter edges remain).
+        </Documentation>
+      </IntVectorProperty>
+
+      <DoubleVectorProperty command="SetEdgeCountRatio"
+                            name="EdgeCountRatio"
+                            label="Edge count ratio"
+                            number_of_elements="1"
+                            default_values="0.5">
+        <DoubleRangeDomain name="range" min="0.0001" max="1"/>
+        <Documentation>
+          Stop when (current undirected edges) / (initial undirected edges) is strictly below
+          this value. Default 0.5. Constraints or the link condition may stop earlier.
+        </Documentation>
+        <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="visibility"
+                                   property="StopCriterion"
+                                   value="0"/>
+        </Hints>
+      </DoubleVectorProperty>
+
+      <IntVectorProperty command="SetEdgeCount"
+                         name="EdgeCount"
+                         label="Edge count"
+                         number_of_elements="1"
+                         default_values="1000"
+                         animateable="0">
+        <IntRangeDomain name="range" min="0" max="2000000000"/>
+        <Documentation>
+          Stop when the undirected edge count falls strictly below this value. 0 collapses until
+          nothing else is legal. Constraints or the link condition may stop earlier.
+        </Documentation>
+        <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="visibility"
+                                   property="StopCriterion"
+                                   value="1"/>
+        </Hints>
+      </IntVectorProperty>
+
+      <DoubleVectorProperty command="SetEdgeLength"
+                            name="EdgeLength"
+                            label="Edge length"
+                            number_of_elements="1"
+                            default_values="1">
+        <DoubleRangeDomain name="range" min="0" max="1e12"/>
+        <Documentation>
+          Absolute length in the mesh coordinate units. The sequence stops when the next edge
+          is strictly longer than this. Must be &gt; 0 when this stop is selected.
+        </Documentation>
+        <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="visibility"
+                                   property="StopCriterion"
+                                   value="2"/>
+        </Hints>
+      </DoubleVectorProperty>
+
+      <IntVectorProperty command="SetPreserveBoundary"
+                         name="PreserveBoundary"
+                         label="Preserve boundary"
+                         number_of_elements="1"
+                         default_values="1"
+                         animateable="0">
+        <BooleanDomain name="bool"/>
+        <Documentation>
+          When ON (default), every border edge is constrained and is not collapsed. A vertex on
+          a constrained edge is not moved. Turn OFF to allow deleting border vertices.
+        </Documentation>
+      </IntVectorProperty>
+
+      <IntVectorProperty command="SetDetectFeatureEdges"
+                         name="DetectFeatureEdges"
+                         label="Detect feature edges"
+                         number_of_elements="1"
+                         default_values="0"
+                         animateable="0">
+        <BooleanDomain name="bool"/>
+        <Documentation>
+          When ON, CGAL detect_sharp_edges (Protection angle) marks sharp edges as constrained
+          so they are not collapsed.
+        </Documentation>
+      </IntVectorProperty>
+
+      <DoubleVectorProperty command="SetProtectAngle"
+                            name="ProtectAngle"
+                            label="Protection angle"
+                            number_of_elements="1"
+                            default_values="70"
+                            animateable="0">
+        <DoubleRangeDomain name="range" min="0" max="180"/>
+        <Documentation>
+          Dihedral angle in degrees for detect_sharp_edges. Adjacent faces whose normals differ
+          by more than this angle mark the shared edge as a feature. Used only when Detect
+          feature edges is ON.
+        </Documentation>
+        <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="enabled_state"
+                                   property="DetectFeatureEdges"
+                                   value="1"/>
+        </Hints>
+      </DoubleVectorProperty>
+
+      <IntVectorProperty command="SetPreventNormalFlip"
+                         name="PreventNormalFlip"
+                         label="Prevent normal flip"
+                         number_of_elements="1"
+                         default_values="1"
+                         animateable="0">
+        <BooleanDomain name="bool"/>
+        <Documentation>
+          CGAL Bounded_normal_change_placement. When ON (default), refuse a collapse that would
+          reverse a neighboring triangle's orientation.
+        </Documentation>
+      </IntVectorProperty>
+
+      <DoubleVectorProperty command="SetVolumeWeight"
+                            name="VolumeWeight"
+                            label="Volume weight"
+                            number_of_elements="1"
+                            default_values="0.5">
+        <DoubleRangeDomain name="range" min="0" max="1e6"/>
+        <Documentation>
+          Lindstrom-Turk volume weight. CGAL default 0.5.
+        </Documentation>
+        <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="visibility"
+                                   property="Algorithm"
+                                   value="0"/>
+        </Hints>
+      </DoubleVectorProperty>
+
+      <DoubleVectorProperty command="SetBoundaryWeight"
+                            name="BoundaryWeight"
+                            label="Boundary weight"
+                            number_of_elements="1"
+                            default_values="0.5">
+        <DoubleRangeDomain name="range" min="0" max="1e6"/>
+        <Documentation>
+          Lindstrom-Turk boundary weight. CGAL default 0.5.
+        </Documentation>
+        <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="visibility"
+                                   property="Algorithm"
+                                   value="0"/>
+        </Hints>
+      </DoubleVectorProperty>
+
+      <DoubleVectorProperty command="SetShapeWeight"
+                            name="ShapeWeight"
+                            label="Shape weight"
+                            number_of_elements="1"
+                            default_values="0">
+        <DoubleRangeDomain name="range" min="0" max="1e6"/>
+        <Documentation>
+          Lindstrom-Turk shape weight. CGAL default 0.
+        </Documentation>
+        <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="visibility"
+                                   property="Algorithm"
+                                   value="0"/>
+        </Hints>
+      </DoubleVectorProperty>
+
+      <DoubleVectorProperty command="SetDiscontinuityMultiplier"
+                            name="DiscontinuityMultiplier"
+                            label="Discontinuity multiplier"
+                            number_of_elements="1"
+                            default_values="100">
+        <DoubleRangeDomain name="range" min="0" max="1e6"/>
+        <Documentation>
+          Garland-Heckbert discontinuity multiplier (boundary / feature quadric weight).
+          CGAL default 100. Shared by the three quadric algorithms.
+        </Documentation>
+        <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="visibility"
+                                   property="Algorithm"
+                                   values="1 2 3"/>
+        </Hints>
+      </DoubleVectorProperty>
+
+      <IntVectorProperty command="SetEndpointRanking"
+                         name="EndpointRanking"
+                         label="Ranking"
+                         number_of_elements="1"
+                         default_values="0"
+                         animateable="0">
+        <EnumerationDomain name="enum">
+          <Entry text="Plane QEM" value="0"/>
+          <Entry text="Min angle" value="1"/>
+        </EnumerationDomain>
+        <Documentation>
+          How the surviving original endpoint is ranked. Plane QEM: Garland-Heckbert plane
+          quadrics at the two endpoints. Min angle: keep the endpoint that leaves the larger
+          minimum interior angle. Placement is always an original vertex.
+        </Documentation>
+        <Hints>
+          <PropertyWidgetDecorator type="GenericDecorator"
+                                   mode="visibility"
+                                   property="Algorithm"
+                                   value="5"/>
+        </Hints>
+      </IntVectorProperty>
+
+      <IntVectorProperty command="SetAlgorithm"
+                         name="Algorithm"
+                         label="Algorithm"
+                         number_of_elements="1"
+                         default_values="0"
+                         animateable="0">
+        <EnumerationDomain name="enum">
+          <Entry text="Lindstrom-Turk" value="0"/>
+          <Entry text="Garland-Heckbert plane (QEM)" value="1"/>
+          <Entry text="Garland-Heckbert triangle (QEM)" value="2"/>
+          <Entry text="Garland-Heckbert probabilistic triangle (QEM)" value="3"/>
+          <Entry text="Edge length + midpoint" value="4"/>
+          <Entry text="Endpoint subset" value="5"/>
+        </EnumerationDomain>
+        <Documentation>
+          CGAL edge_collapse cost and placement. Lindstrom-Turk, the three quadric policies, and
+          edge length + midpoint may move surviving vertices. Endpoint subset keeps an original
+          endpoint and does not insert or relocate vertices.
+        </Documentation>
+      </IntVectorProperty>
+
+      <PropertyGroup label="Stop">
+        <Property name="StopCriterion"/>
+        <Property name="EdgeCountRatio"/>
+        <Property name="EdgeCount"/>
+        <Property name="EdgeLength"/>
+      </PropertyGroup>
+      <PropertyGroup label="Constraints">
+        <Property name="PreserveBoundary"/>
+        <Property name="DetectFeatureEdges"/>
+        <Property name="ProtectAngle"/>
+        <Property name="PreventNormalFlip"/>
+      </PropertyGroup>
+      <PropertyGroup label="Lindstrom-Turk">
+        <Property name="VolumeWeight"/>
+        <Property name="BoundaryWeight"/>
+        <Property name="ShapeWeight"/>
+      </PropertyGroup>
+      <PropertyGroup label="Quadric error">
+        <Property name="DiscontinuityMultiplier"/>
+      </PropertyGroup>
+      <PropertyGroup label="Endpoint subset">
+        <Property name="EndpointRanking"/>
+      </PropertyGroup>
+
+      <IntVectorProperty name="UseUpdateAttributes"
+                         command="SetUpdateAttributes"
+                         label="Interpolate attributes"
+                         number_of_elements="1"
+                         default_values="1"
+                         panel_visibility="advanced">
+        <BooleanDomain name="bool"/>
+        <Documentation>
+          If ON, point/cell data are probed from the input onto the simplified mesh.
+        </Documentation>
+      </IntVectorProperty>
+
+      <Hints>
+        <ShowInMenu category="SHYX" icon=":/VESPA/SHYX_Mesh_Simplification.png"/>
+      </Hints>
+
+    </SourceProxy>
+  </ProxyGroup>
+</ServerManagerConfiguration>

@@ -67,14 +67,18 @@ namespace pmp_sf = CGAL::Polygon_mesh_processing;
  * set to the mean length of its border edges, and every other vertex is clamped into
  * \f$[L/R^{d}, L R^{d}]\f$ of those anchors (\f$R\f$ = neighbor_max_ratio, \f$d\f$ = hop distance).
  * \f$R \le 1\f$ only rewrites the border vertices. The anchor is the geometric edge length, not
- * multiplied by size_field_scale. When @a boundary_size_scale is not 1:
+ * multiplied by size_field_scale. When @a boundary_size_scale is not 1, or @a opening_scales
+ * gives openings different factors:
  * - with @a anchor_boundary_size, each opening loop's anchor is that loop's mean border-edge
- *   length times the factor. The absolute target is taken from the input mesh and reused on later
+ *   length times its factor. One shared factor uses @a boundary_size_scale (or the single value
+ *   in @a opening_scales). Differing factors match each loop to the nearest @a opening_scales
+ *   centroid. The absolute target is taken from the input mesh and reused on later
  *   `recompute_curvature` passes, so the factor is not compounded.
- * - without it, each border vertex keeps its clamped ICC (curvature) target times the factor.
- *   That value is not also multiplied by size_field_scale, and Expansion ratio / Scale to range
- *   do not overwrite it. Interior vertices still transition away from those border targets.
- *   \f$> 1\f$ coarsens, \f$< 1\f$ refines. \f$1\f$ leaves the border on the same pipeline as the wall.
+ * - without it, each border vertex keeps its clamped ICC (curvature) target times
+ *   @a boundary_size_scale. That value is not also multiplied by size_field_scale, and Expansion
+ *   ratio / Scale to range do not overwrite it. Interior vertices still transition away from those
+ *   border targets. \f$> 1\f$ coarsens, \f$< 1\f$ refines. \f$1\f$ leaves the border on the same
+ *   pipeline as the wall. @a opening_scales is ignored on this path.
  *
  * Optional uncapped preview: when @a uncapped_sizes_out is non-null, the constructor's first ICC
  * pass also writes per-vertex **unclamped** target lengths (NaN where the ICC formula is undefined)
@@ -110,12 +114,21 @@ public:
   using halfedge_descriptor = CGAL_Surface::Halfedge_index;
   using face_descriptor     = CGAL_Surface::Face_index;
 
+  /** One opening's scale, keyed by the centroid of that boundary loop. */
+  struct OpeningScaleSample
+  {
+    FT cx = 0;
+    FT cy = 0;
+    FT cz = 0;
+    FT scale = 1;
+  };
+
   template <typename FaceRange>
   FeatureAwareAdaptiveSizingField(FT tol, std::pair<FT, FT> bounds, const FaceRange& face_range,
     CGAL_Surface& mesh, FT neighbor_max_ratio = FT(0), bool scale_to_range = false,
     std::vector<FT>* uncapped_sizes_out = nullptr, FT icc_ball_radius = FT(-1),
     int icc_neighborhood_rings = 0, FT size_field_scale = FT(1), bool anchor_boundary_size = false,
-    FT boundary_size_scale = FT(1))
+    FT boundary_size_scale = FT(1), const std::vector<OpeningScaleSample>* opening_scales = nullptr)
     : tol_g_(tol)
     , short_g_(bounds.first)
     , long_g_(bounds.second)
@@ -128,6 +141,10 @@ public:
     , anchor_boundary_size_(anchor_boundary_size)
     , boundary_size_scale_(boundary_size_scale > FT(0) ? boundary_size_scale : FT(1))
   {
+    if (opening_scales && !opening_scales->empty())
+    {
+      this->opening_scales_ = *opening_scales;
+    }
     map_g_ =
       mesh.template add_property_map<vertex_descriptor, FT>("v:vespa_size_global", FT(0)).first;
 
@@ -572,9 +589,11 @@ private:
   };
 
   /**
-   * Set each opening loop to (mean border-edge length * boundary_size_scale_). The absolute
-   * target is captured on the first call (input mesh) and reused later so remesh iterations
-   * do not compound the factor. Loops are matched by centroid.
+   * Set each opening loop to (mean border-edge length * that opening's scale). One shared
+   * factor uses active_boundary_scale_. Differing factors match each loop to the nearest
+   * opening_scales_ centroid. The absolute target is captured on the first call (input mesh)
+   * and reused later so remesh iterations do not compound the factor. Later passes match
+   * loops to those captured targets by centroid.
    */
   bool assign_scaled_border_loop_targets_(CGAL_Surface& mesh)
   {
@@ -637,16 +656,94 @@ private:
     }
 
     const bool capture = border_loop_targets_.empty();
+    std::vector<FT> loopScale(loops.size(), this->active_boundary_scale_);
+    if (capture && this->match_opening_scales_ && !this->opening_scales_.empty())
+    {
+      FT minSep2 = std::numeric_limits<FT>::infinity();
+      if (loops.size() >= 2)
+      {
+        for (std::size_t i = 0; i < loops.size(); ++i)
+        {
+          for (std::size_t j = i + 1; j < loops.size(); ++j)
+          {
+            const FT dx = loops[i].cx - loops[j].cx;
+            const FT dy = loops[i].cy - loops[j].cy;
+            const FT dz = loops[i].cz - loops[j].cz;
+            const FT d2 = dx * dx + dy * dy + dz * dz;
+            if (d2 < minSep2)
+            {
+              minSep2 = d2;
+            }
+          }
+        }
+      }
+      struct Cand
+      {
+        FT d2;
+        std::size_t loop;
+        std::size_t key;
+      };
+      std::vector<Cand> cands;
+      cands.reserve(loops.size() * this->opening_scales_.size());
+      for (std::size_t li = 0; li < loops.size(); ++li)
+      {
+        for (std::size_t ki = 0; ki < this->opening_scales_.size(); ++ki)
+        {
+          const FT dx = loops[li].cx - this->opening_scales_[ki].cx;
+          const FT dy = loops[li].cy - this->opening_scales_[ki].cy;
+          const FT dz = loops[li].cz - this->opening_scales_[ki].cz;
+          cands.push_back(Cand{ dx * dx + dy * dy + dz * dz, li, ki });
+        }
+      }
+      std::sort(cands.begin(), cands.end(),
+        [](const Cand& a, const Cand& b) { return a.d2 < b.d2; });
+      std::vector<char> usedLoop(loops.size(), 0);
+      std::vector<char> usedKey(this->opening_scales_.size(), 0);
+      for (const Cand& c : cands)
+      {
+        if (usedLoop[c.loop] || usedKey[c.key])
+        {
+          continue;
+        }
+        FT maxD2 = loops[c.loop].lenSum * loops[c.loop].lenSum;
+        if (minSep2 < std::numeric_limits<FT>::infinity() && minSep2 > FT(1.0e-18))
+        {
+          const FT sepCap = FT(0.2401) * minSep2;
+          if (sepCap < maxD2)
+          {
+            maxD2 = sepCap;
+          }
+        }
+        if (c.d2 > maxD2)
+        {
+          continue;
+        }
+        usedLoop[c.loop] = 1;
+        usedKey[c.key] = 1;
+        FT sc = this->opening_scales_[c.key].scale;
+        if (!(sc > FT(0)))
+        {
+          sc = FT(1);
+        }
+        loopScale[c.loop] = sc;
+      }
+    }
     if (capture)
     {
       border_loop_targets_.reserve(loops.size());
     }
-    for (const Loop& loop : loops)
+    for (std::size_t li = 0; li < loops.size(); ++li)
     {
+      const Loop& loop = loops[li];
       FT target = 0;
       if (capture)
       {
-        target = (loop.lenSum / static_cast<FT>(loop.nEdges)) * boundary_size_scale_;
+        FT scale = loopScale[li];
+        if (!(scale > FT(0)))
+        {
+          scale = FT(1);
+        }
+        target = (loop.lenSum / static_cast<FT>(loop.nEdges)) * scale;
         border_loop_targets_.push_back(BorderLoopTarget{ loop.cx, loop.cy, loop.cz, target });
       }
       else
@@ -712,7 +809,32 @@ private:
     }
 
     bool anyBorder = false;
-    const bool useScale = boundary_size_scale_ > FT(0) && boundary_size_scale_ != FT(1);
+    this->match_opening_scales_ = false;
+    this->active_boundary_scale_ = this->boundary_size_scale_;
+    if (!this->opening_scales_.empty())
+    {
+      const FT uniform = this->opening_scales_.front().scale;
+      bool varied = false;
+      for (const OpeningScaleSample& sample : this->opening_scales_)
+      {
+        const FT delta = sample.scale > uniform ? sample.scale - uniform : uniform - sample.scale;
+        if (delta > FT(1.0e-12))
+        {
+          varied = true;
+          break;
+        }
+      }
+      if (varied)
+      {
+        this->match_opening_scales_ = true;
+      }
+      else if (uniform > FT(0))
+      {
+        this->active_boundary_scale_ = uniform;
+      }
+    }
+    const bool useScale = this->match_opening_scales_ ||
+      (this->active_boundary_scale_ > FT(0) && this->active_boundary_scale_ != FT(1));
     if (useScale)
     {
       anyBorder = assign_scaled_border_loop_targets_(mesh);
@@ -870,6 +992,11 @@ private:
   FT       size_field_scale_ = FT(1);
   bool     anchor_boundary_size_ = false;
   FT       boundary_size_scale_ = FT(1);
+  std::vector<OpeningScaleSample> opening_scales_;
+  /** True when opening_scales_ are not all the same factor, so each loop is matched by centroid. */
+  bool     match_opening_scales_ = false;
+  /** Factor used when every opening shares one scale (boundary_size_scale_ or that shared factor). */
+  FT       active_boundary_scale_ = FT(1);
   std::vector<BorderLoopTarget> border_loop_targets_;
   /** 1 = border vertex already set to curvature * boundary_size_scale_; later passes must not overwrite. */
   std::vector<char> fixed_border_;

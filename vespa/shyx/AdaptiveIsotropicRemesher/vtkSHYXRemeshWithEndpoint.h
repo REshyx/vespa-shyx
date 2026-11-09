@@ -115,9 +115,10 @@ public:
      * Expansion ratio clamps the wall field to change by at most that factor per hop away from
      * the boundary. Border ICC values are not expansion seeds. The anchor is geometric edge
      * length (not SizingFieldScale). Expansion ratio &lt;= 1 only rewrites the boundary vertices.
-     * With Protect constraints OFF, BoundarySizeScale multiplies that anchor so the opening can
-     * be coarsened or refined. With Anchor OFF, BoundarySizeScale instead multiplies the
-     * curvature (ICC) target on opening vertices only. Default OFF. Cap remesh is unaffected.
+     * With Protect constraints OFF, each opening can take its own Boundary scale (see
+     * OpeningBoundaryScales). Openings that share one factor, or an empty per-opening list, use
+     * BoundarySizeScale. With Anchor OFF, BoundarySizeScale instead multiplies the curvature
+     * (ICC) target on opening vertices only. Default OFF. Cap remesh is unaffected.
      */
     vtkGetMacro(AnchorBoundarySize, bool);
     vtkSetMacro(AnchorBoundarySize, bool);
@@ -128,10 +129,44 @@ public:
      * **&gt; 1** coarsens the boundary; **&lt; 1** refines it.
      * Anchor OFF: each opening vertex's clamped ICC (curvature) target times this factor, not
      * also times SizingFieldScale. Anchor ON and Protect OFF: input opening edge length times
-     * this factor (not compounded across iterations). Ignored when Anchor and Protect are both ON.
+     * this factor when every opening uses the same scale (not compounded across iterations).
+     * Ignored when Anchor and Protect are both ON. Per-opening factors, when they differ, replace
+     * this number for the loops they match.
      */
     vtkGetMacro(BoundarySizeScale, double);
     vtkSetClampMacro(BoundarySizeScale, double, 1.0e-6, 1.0e6);
+
+#ifndef __VTK_WRAP__
+    /**
+     * One open boundary on the extracted wall. Centroid is the mean of that loop's vertices
+     * (the key OpeningBoundaryScales matches). SamplePoint is one vertex on the loop, nearest
+     * the centroid, so a panel can point at the opening.
+     */
+    struct OpeningLoop
+    {
+        double Centroid[3] = { 0.0, 0.0, 0.0 };
+        double SamplePoint[3] = { 0.0, 0.0, 0.0 };
+        double MeanEdgeLength = 0.0;
+        int PointCount = 0;
+    };
+    /**
+     * Boundary loops of the wall patch this filter remeshes (endpoint cull + largest region),
+     * sorted by centroid. Does not remesh. Returns false when that patch cannot be built.
+     * Not wrapped: the panel calls it on the client.
+     */
+    bool CollectOpeningLoops(vtkPolyData* input, std::vector<OpeningLoop>& loops) const;
+#endif
+
+    /**
+     * Per-opening anchor scales, packed as (centroid x, y, z, scale). Empty keeps
+     * BoundarySizeScale for every opening. A loop is matched to the nearest centroid within
+     * its own perimeter (and half the gap to the next opening). Unmatched openings keep
+     * BoundarySizeScale. Ignored unless Anchor boundary size is ON and Protect constraints
+     * is OFF.
+     */
+    void SetNumberOfOpeningBoundaryScales(int n);
+    void SetOpeningBoundaryScale(int index, double x, double y, double z, double scale);
+    int GetNumberOfOpeningBoundaryScales() const;
     vtkGetMacro(ScaleToRange, bool);
     vtkSetMacro(ScaleToRange, bool);
     vtkBooleanMacro(ScaleToRange, bool);
@@ -279,6 +314,8 @@ protected:
     double AdaptiveSizingNeighborMaxRatio = 1.6;
     bool AnchorBoundarySize = false;
     double BoundarySizeScale = 1.0;
+    /** Packed (cx, cy, cz, scale) per opening. Empty = every opening uses BoundarySizeScale. */
+    std::vector<double> OpeningBoundaryScales;
     bool ScaleToRange = false;
     double SizingFieldScale = 1.0;
     bool RemeshRecomputeCurvatureEachIteration = true;

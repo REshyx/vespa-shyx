@@ -2250,6 +2250,13 @@ const ShyxExtra kShyxExtra[] = {
     "Three algorithms (MCF / Angle&Area / Fair). VESPA Shape Smoothing is MCF only. "
     "DetectFeatureEdges is OFF by default (no detect_sharp_edges / feature-mask constraints; "
     "port 1 empty)." },
+  { "SHYXMeshSimplification",
+    "Unified CGAL edge_collapse. Algorithm 0 Lindstrom-Turk (relocates), 1 plane QEM, "
+    "2 triangle QEM, 3 probabilistic triangle QEM, 4 edge length + midpoint, "
+    "5 endpoint subset (original vertices only; EndpointRanking 0 plane QEM, 1 min angle). "
+    "StopCriterion 0 edge-count ratio, 1 remaining edge count, 2 edge-length threshold. "
+    "PreserveBoundary and DetectFeatureEdges apply to every algorithm. Not isotropic remesh "
+    "(SHYXAdaptiveIsotropicRemesher). SHYXEdgeCollapse and SHYXSubsetCoarsen remain separate filters." },
   { "SHYXSubsetCoarsen",
     "Triangle coarsen that never inserts Steiner points and never moves survivors: CGAL "
     "edge_collapse onto an original endpoint. CostStrategy 0 Plane QEM (default, geometric "
@@ -2259,10 +2266,13 @@ const ShyxExtra kShyxExtra[] = {
     "border edges. DetectFeatureEdges + ProtectAngle lock sharp edges. May stop above "
     "EdgeCountRatio if the link condition or constraints block further collapses." },
   { "SHYXAdaptiveIsotropicRemesher",
-    "Curvature-adaptive remesh (CGAL>=6). Ports: remeshed, sharp features, mask patch, sizing preview. "
+    "Curvature-adaptive remesh (CGAL>=6). Port 0 is the remeshed vtkPolyData. Port 1 is a "
+    "vtkMultiBlockDataSet named Diagnostics with blocks 0 Sharp features (lines; empty when "
+    "DetectFeatureEdges is OFF), 1 Mask patch (input faces passing the feature mask), 2 Sizing "
+    "ICC preview (mesh before the last remesh iteration). "
     "IccNeighborhoodMode: 0 mesh rings (IccNeighborhoodRings, default 1 = incident faces) or "
     "1 Euclidean ball (IccBallRadius). Mutually exclusive. "
-    "DetectFeatureEdges is OFF by default (no detect_sharp_edges / feature-mask constraints; port 1 empty). "
+    "DetectFeatureEdges is OFF by default (no detect_sharp_edges / feature-mask constraints). "
     "Properties panel ICC size histogram is a live pre-remesh preview (same widget as SHYXRemeshWithEndpoint). "
     "SizingFieldScale multiplies the final ICC field after clamp / expansion / ScaleToRange "
     "(default 1; not re-clamped). "
@@ -2278,12 +2288,17 @@ const ShyxExtra kShyxExtra[] = {
     "by relaxation or projection). Collapse and Relax constraints are ignored while it is ON. "
     "AnchorBoundarySize ON writes opening vertex targets to the mean border-edge length and "
     "uses Expansion ratio as the per-hop band from that length into the ICC field. "
-    "BoundarySizeScale (default 1) is an independent opening multiplier. "
-    "Anchor OFF: opening vertices use clamped ICC curvature times this factor, not also "
+    "BoundarySizeScale (default 1) is the shared opening multiplier. "
+    "Anchor ON and Protect OFF: Opening boundary scales lists each open boundary "
+    "(Point = one vertex on that loop) with its own Scale. Empty, or every Scale equal, "
+    "still uses that one factor (BoundarySizeScale, or the shared Scale). Differing Scales "
+    "match each loop by centroid and are not compounded across iterations. "
+    "The list is hidden when Anchor is OFF or Protect is ON; BoundarySizeScale is shown "
+    "only when Anchor is OFF. "
+    "Anchor OFF: opening vertices use clamped ICC curvature times BoundarySizeScale, not also "
     "SizingFieldScale; expansion and scale-to-range do not overwrite them. "
-    "Anchor ON and Protect OFF: input opening edge length times this factor "
-    "(not compounded across iterations). "
-    "Hidden when Anchor and Protect are both ON. >1 coarsens, <1 refines. "
+    "Anchor ON and Protect ON: the opening stays frozen at its input edge length. "
+    ">1 coarsens, <1 refines. "
     "Expansion ratio <= 1 only rewrites the boundary vertices." },
   { "SHYXSkeletonExtraction",
     "Vascular step 1. Input must be watertight triangle mesh. Optional AppendCapEndpoints: "
@@ -2354,7 +2369,13 @@ const ShyxExtra kShyxExtra[] = {
     "rewritten so rank follows numbering (largest -> smallest existing IDs). Enable Repart when inlets were "
     "already merged into one side set: it splits same-name patches by connected regions into original_n "
     "(side and node) before classify / options / optional Merge inlets. Port0 collection, "
-    "port1 assignment debug. Export writes Exodus + options + Nodeset + current .pvsm beside the "
+    "port1 assignment debug. Flow Boundary Mode is auto-picked from the top-level source basename "
+    "(case-insensitive; only when that path changes): plaque or pv → Single inlet (PV); aorta or hv → "
+    "Single outlet (HV). plaque/aorta win over hv/pv; both of a pair leaves the mode unchanged. "
+    "Chinese characters in the upstream file stem are filled into the export names as toneless "
+    "pinyin (pinyin-data, first reading, ü→v); other non-ASCII stem characters become '_'. "
+    "A non-ASCII export directory is still refused. "
+    "Export writes Exodus + options + Nodeset + current .pvsm beside the "
     "chosen .exo. Pack into .zip writes those four files inside one .zip instead of loose files." },
   { "SHYXPartitionedCollectionBoundaryFields", "Adds boundary field arrays on an assigned PDC." },
   { "SHYXPartitionedCollectionToOpenFOAM",

@@ -25,23 +25,27 @@
 
 其中 `-inlet_*` / `-num_outlet` 由本 filter 填入；其余路径等保持模板默认，可导出后手工改。
 
-面板可改四个导出文件名。默认从顶层 reader 的 `FileName`/`FileNames` 解析病例号，并去掉尾部 `_plaque` / `_aorta`：
+面板可改四个导出文件名。默认从顶层 reader 的 `FileName`/`FileNames` 解析病例号，去掉尾部 `_plaque` / `_aorta`，再把汉字转成无声调拼音（[pinyin-data](https://github.com/mozillazg/pinyin-data) 0.16.0，每字取第一个读音，`ü` 写成 `v`）。没有读音的非 ASCII 字符变成 `_`。ASCII 原样保留：
 
 | 源文件示例 | 模式 | Exodus | Options（无后缀） | Nodeset（无后缀） | State |
 |-----------|------|--------|-------------------|-------------------|-------|
 | `K2-1_plaque.stl` | Single inlet (PV) | `PV_K2-1.exo` | `options_PV_K2-1` | `Nodeset_PV_K2-1` | `PV_K2-1.pvsm` |
 | `K2-1_aorta.stl` | Single outlet (HV) | `HV_K2-1.exo` | `options_HV_K2-1` | `Nodeset_HV_K2-1` | `HV_K2-1.pvsm` |
+| `张三_plaque.stl` | Single inlet (PV) | `PV_zhangsan.exo` | `options_PV_zhangsan` | `Nodeset_PV_zhangsan` | `PV_zhangsan.pvsm` |
 
 找不到上游文件时回退为 `PV_0.exo` / `HV_0.exo`、`options_PV_0` / `options_HV_0`、`Nodeset_PV_0` / `Nodeset_HV_0`、`PV_0.pvsm` / `HV_0.pvsm`。
 
 **Flow Boundary Mode 自动选择**（按上游文件 basename，大小写不敏感；仅在上游路径变化时重设，之后可手动改）：
-- 文件名含 `plaque` → **Single inlet**（PV）
-- 文件名含 `aorta` → **Single outlet**（HV）
-- 同时含两者或都不含 → 不改动
+- 文件名含 `plaque` 或 `pv` → **Single inlet**（PV）
+- 文件名含 `aorta` 或 `hv` → **Single outlet**（HV）
+- `plaque` / `aorta` 优先于 `pv` / `hv`
+- 同一对同时出现（`plaque`+`aorta`，或 `hv`+`pv`），或都不含 → 不改动
 
 按钮 **Export port 0 (.exo) + options + Nodeset + .pvsm**：选目录后按上述名称写出四份文件（options / Nodeset 不加扩展名；`.pvsm` 为当前 ParaView 管线/视图状态）。勾选 **Pack into .zip** 后改为另存一个 `.zip`：四份文件打进包内（包内文件名仍是上面四栏），目录里不另留散文件。
 
-> **导出路径必须是纯 ASCII（不能含中文等字符）**。Exodus 走的是 IOSS 的窄字符路径，中文路径会让写入器在底层失败并可能导致 ParaView 闪退；因此插件在写文件前会先检查 `.exo` 的完整路径，含非 ASCII 字符时只弹 warning 并中止导出（其余文件不会被写出）。请换到纯英文目录、或把中文文件名改成英文后重试。
+> **导出目录必须是纯 ASCII（不能含中文等字符）**。文件名里的汉字会在面板上转成拼音；文件夹仍是用户选的路径。Exodus 走的是 IOSS 的窄字符路径，中文目录会让写入器在底层失败并可能导致 ParaView 闪退；因此插件在写文件前会先检查 `.exo` 的完整路径，含非 ASCII 字符时只弹 warning 并中止导出（其余文件不会被写出）。请换到纯英文目录后重试。
+
+拼音表由 `ParaViewPlugin/widgets/generate_hanzi_pinyin.py` 从 `pinyin.txt` 生成，编进 `VESPAPlugin.dll`。
 
 已有 Exodus 网格、只要 options 时，可用同目录 `generate_options_from_exo.py`（**pvpython** + 本仓库 `VESPAPlugin.dll`）：按文件名选 HV/PV，默认参数并打开 **Repart**，在每个 `.exo` 旁写出 `options_<stem>`。
 

@@ -9,6 +9,7 @@
 #include <vtkCellData.h>
 #include <vtkDataArray.h>
 #include <vtkDataObject.h>
+#include <vtkDataSet.h>
 #include <vtkDoubleArray.h>
 #include <vtkFieldData.h>
 #include <vtkGeometryFilter.h>
@@ -18,8 +19,11 @@
 #include <vtkNew.h>
 #include <vtkObjectFactory.h>
 #include <vtkPointData.h>
+#include <vtkCellType.h>
+#include <vtkPoints.h>
 #include <vtkPolyData.h>
 #include <vtkPolyDataConnectivityFilter.h>
+#include <vtkSmartPointer.h>
 #include <vtkThreshold.h>
 #include <vtkTriangleFilter.h>
 
@@ -34,12 +38,16 @@
 #include <cmath>
 #include <cstdio>
 #include <cstring>
+#include <functional>
 #include <exception>
+#include <stdexcept>
+#include <string>
 #include <limits>
 #include <memory>
 #include <optional>
 #include <queue>
 #include <set>
+#include <unordered_map>
 #include <unordered_set>
 #include <utility>
 #include <vector>
@@ -514,6 +522,284 @@ void ExportSizingLengthMismatchDebug(const CGAL_Surface& sm, vtkPolyData* surfac
     pd->AddArray(relDelta);
 }
 
+struct EdgeKey
+{
+    vtkIdType Lo;
+    vtkIdType Hi;
+    bool operator==(const EdgeKey& other) const { return this->Lo == other.Lo && this->Hi == other.Hi; }
+};
+
+struct EdgeKeyHash
+{
+    std::size_t operator()(const EdgeKey& key) const
+    {
+        return std::hash<vtkIdType>{}(key.Lo) ^ (std::hash<vtkIdType>{}(key.Hi) << 1);
+    }
+};
+
+struct EdgeInfo
+{
+    int Count = 0;
+    vtkIdType From = 0;
+    vtkIdType To = 0;
+};
+
+/**
+ * Same wall patch RequestData remeshes: optional EndpointIndex &lt; 0 cull, triangulate,
+ * optional largest connected region with unused points dropped and no point merging.
+ * Deep-copied so the caller does not depend on the local filter outputs.
+ */
+vtkSmartPointer<vtkPolyData> ExtractWallPatch(vtkPolyData* input, const char* epName,
+    bool enableEndpointCull, bool allScalars, bool largestOnly)
+{
+    if (!input)
+    {
+        return nullptr;
+    }
+    const bool epNameEmpty = (epName == nullptr || epName[0] == '\0' ||
+        std::strcmp(epName, "(None)") == 0 || std::strcmp(epName, "None") == 0);
+    const bool useFullInputAsWall = (!enableEndpointCull || epNameEmpty);
+
+    vtkNew<vtkThreshold> threshold;
+    vtkNew<vtkGeometryFilter> geometry;
+    vtkNew<vtkTriangleFilter> triangle;
+    vtkPolyData* patchIn = nullptr;
+
+    if (!useFullInputAsWall)
+    {
+        int scalarAssoc = vtkDataObject::FIELD_ASSOCIATION_NONE;
+        if (ResolveThresholdArray(input, epName, scalarAssoc))
+        {
+            threshold->SetInputData(input);
+            threshold->SetInputArrayToProcess(0, 0, 0, scalarAssoc, epName);
+            threshold->SetThresholdFunction(vtkThreshold::THRESHOLD_BETWEEN);
+            threshold->SetLowerThreshold(-1.0e200);
+            threshold->SetUpperThreshold(-1.0e-9);
+            threshold->SetSelectedComponent(0);
+            threshold->SetComponentModeToUseSelected();
+            threshold->SetAllScalars(allScalars ? 1 : 0);
+            threshold->Update();
+            vtkDataSet* const thOut = vtkDataSet::SafeDownCast(threshold->GetOutputDataObject(0));
+            if (thOut && thOut->GetNumberOfCells() > 0)
+            {
+                geometry->SetInputConnection(threshold->GetOutputPort());
+                triangle->SetInputConnection(geometry->GetOutputPort());
+                triangle->Update();
+                patchIn = vtkPolyData::SafeDownCast(triangle->GetOutputDataObject(0));
+            }
+        }
+    }
+
+    if (!patchIn)
+    {
+        triangle->SetInputData(input);
+        triangle->Update();
+        patchIn = vtkPolyData::SafeDownCast(triangle->GetOutputDataObject(0));
+    }
+
+    vtkNew<vtkPolyDataConnectivityFilter> largestRegionFilter;
+    vtkNew<vtkCleanPolyData> largestRegionCleanUnused;
+    if (largestOnly && patchIn && patchIn->GetNumberOfCells() > 0)
+    {
+        largestRegionFilter->SetInputData(patchIn);
+        largestRegionFilter->SetExtractionModeToLargestRegion();
+        largestRegionFilter->Update();
+        largestRegionCleanUnused->SetInputConnection(largestRegionFilter->GetOutputPort());
+        largestRegionCleanUnused->PointMergingOff();
+        largestRegionCleanUnused->SetTolerance(0.0);
+        largestRegionCleanUnused->SetToleranceIsAbsolute(true);
+        largestRegionCleanUnused->ConvertPolysToLinesOff();
+        largestRegionCleanUnused->ConvertLinesToPointsOff();
+        largestRegionCleanUnused->ConvertStripsToPolysOff();
+        largestRegionCleanUnused->Update();
+        patchIn = vtkPolyData::SafeDownCast(largestRegionCleanUnused->GetOutput());
+    }
+    if (!patchIn || patchIn->GetNumberOfCells() == 0)
+    {
+        return nullptr;
+    }
+    vtkNew<vtkPolyData> copy;
+    copy->DeepCopy(patchIn);
+    return copy;
+}
+
+void CollectBoundaryLoops(
+    vtkPolyData* patch, std::vector<vtkSHYXRemeshWithEndpoint::OpeningLoop>& loops)
+{
+    loops.clear();
+    if (!patch || !patch->GetPoints() || patch->GetNumberOfCells() < 1)
+    {
+        return;
+    }
+    patch->BuildCells();
+    vtkPoints* points = patch->GetPoints();
+    std::unordered_map<EdgeKey, EdgeInfo, EdgeKeyHash> edges;
+    const vtkIdType nCells = patch->GetNumberOfCells();
+    for (vtkIdType cid = 0; cid < nCells; ++cid)
+    {
+        const int cellType = patch->GetCellType(cid);
+        if (cellType != VTK_TRIANGLE && cellType != VTK_QUAD && cellType != VTK_POLYGON)
+        {
+            continue;
+        }
+        vtkIdType npts = 0;
+        const vtkIdType* pts = nullptr;
+        if (!patch->GetCellPoints(cid, npts, pts) || !pts || npts < 3)
+        {
+            continue;
+        }
+        for (vtkIdType i = 0; i < npts; ++i)
+        {
+            const vtkIdType a = pts[i];
+            const vtkIdType b = pts[(i + 1) % npts];
+            if (a == b)
+            {
+                continue;
+            }
+            EdgeKey key;
+            key.Lo = a < b ? a : b;
+            key.Hi = a < b ? b : a;
+            EdgeInfo& info = edges[key];
+            if (info.Count == 0)
+            {
+                info.From = a;
+                info.To = b;
+            }
+            ++info.Count;
+        }
+    }
+
+    std::unordered_map<vtkIdType, vtkIdType> next;
+    std::unordered_set<vtkIdType> ambiguous;
+    for (const auto& item : edges)
+    {
+        if (item.second.Count != 1)
+        {
+            continue;
+        }
+        const vtkIdType from = item.second.To;
+        const vtkIdType to = item.second.From;
+        const auto existing = next.find(from);
+        if (existing != next.end())
+        {
+            ambiguous.insert(from);
+            continue;
+        }
+        next.emplace(from, to);
+    }
+
+    std::unordered_set<vtkIdType> visited;
+    const vtkIdType nPts = points->GetNumberOfPoints();
+    for (const auto& startEdge : next)
+    {
+        const vtkIdType start = startEdge.first;
+        if (visited.find(start) != visited.end() || ambiguous.find(start) != ambiguous.end())
+        {
+            continue;
+        }
+        std::vector<vtkIdType> ring;
+        vtkIdType cur = start;
+        bool closed = false;
+        bool bad = false;
+        for (vtkIdType guard = 0; guard < nPts + 2 && static_cast<vtkIdType>(ring.size()) < nPts; ++guard)
+        {
+            if (!visited.insert(cur).second)
+            {
+                break;
+            }
+            if (ambiguous.find(cur) != ambiguous.end())
+            {
+                bad = true;
+                break;
+            }
+            ring.push_back(cur);
+            const auto step = next.find(cur);
+            if (step == next.end())
+            {
+                break;
+            }
+            cur = step->second;
+            if (cur == start)
+            {
+                closed = true;
+                break;
+            }
+        }
+        if (!closed || bad || ring.size() < 3)
+        {
+            continue;
+        }
+
+        vtkSHYXRemeshWithEndpoint::OpeningLoop loop;
+        double lenSum = 0.0;
+        int nEdges = 0;
+        for (std::size_t i = 0; i < ring.size(); ++i)
+        {
+            double pa[3];
+            double pb[3];
+            points->GetPoint(ring[i], pa);
+            points->GetPoint(ring[(i + 1) % ring.size()], pb);
+            loop.Centroid[0] += pa[0];
+            loop.Centroid[1] += pa[1];
+            loop.Centroid[2] += pa[2];
+            const double dx = pb[0] - pa[0];
+            const double dy = pb[1] - pa[1];
+            const double dz = pb[2] - pa[2];
+            const double len = std::sqrt(dx * dx + dy * dy + dz * dz);
+            if (len > 0.0)
+            {
+                lenSum += len;
+                ++nEdges;
+            }
+        }
+        if (nEdges <= 0)
+        {
+            continue;
+        }
+        const double n = static_cast<double>(ring.size());
+        loop.Centroid[0] /= n;
+        loop.Centroid[1] /= n;
+        loop.Centroid[2] /= n;
+        loop.MeanEdgeLength = lenSum / static_cast<double>(nEdges);
+        loop.PointCount = static_cast<int>(ring.size());
+        double bestD = std::numeric_limits<double>::infinity();
+        loop.SamplePoint[0] = loop.Centroid[0];
+        loop.SamplePoint[1] = loop.Centroid[1];
+        loop.SamplePoint[2] = loop.Centroid[2];
+        for (vtkIdType id : ring)
+        {
+            double p[3];
+            points->GetPoint(id, p);
+            const double dx = p[0] - loop.Centroid[0];
+            const double dy = p[1] - loop.Centroid[1];
+            const double dz = p[2] - loop.Centroid[2];
+            const double d2 = dx * dx + dy * dy + dz * dz;
+            if (d2 < bestD)
+            {
+                bestD = d2;
+                loop.SamplePoint[0] = p[0];
+                loop.SamplePoint[1] = p[1];
+                loop.SamplePoint[2] = p[2];
+            }
+        }
+        loops.push_back(loop);
+    }
+
+    std::sort(loops.begin(), loops.end(),
+        [](const vtkSHYXRemeshWithEndpoint::OpeningLoop& a,
+            const vtkSHYXRemeshWithEndpoint::OpeningLoop& b) {
+            if (a.Centroid[0] != b.Centroid[0])
+            {
+                return a.Centroid[0] < b.Centroid[0];
+            }
+            if (a.Centroid[1] != b.Centroid[1])
+            {
+                return a.Centroid[1] < b.Centroid[1];
+            }
+            return a.Centroid[2] < b.Centroid[2];
+        });
+}
+
 } // namespace
 
 //------------------------------------------------------------------------------
@@ -651,6 +937,8 @@ void vtkSHYXRemeshWithEndpoint::PrintSelf(ostream& os, vtkIndent indent)
     os << indent << "AnchorBoundarySize: " << (this->AnchorBoundarySize ? "on" : "off")
        << std::endl;
     os << indent << "BoundarySizeScale: " << this->BoundarySizeScale << std::endl;
+    os << indent << "OpeningBoundaryScales: " << this->GetNumberOfOpeningBoundaryScales()
+       << std::endl;
     os << indent << "ScaleToRange: " << (this->ScaleToRange ? "on" : "off") << std::endl;
     os << indent << "SizingFieldScale: " << this->SizingFieldScale << std::endl;
     os << indent << "RemeshRecomputeCurvatureEachIteration: "
@@ -681,6 +969,76 @@ void vtkSHYXRemeshWithEndpoint::PrintSelf(ostream& os, vtkIndent indent)
 }
 
 //------------------------------------------------------------------------------
+void vtkSHYXRemeshWithEndpoint::SetNumberOfOpeningBoundaryScales(int n)
+{
+    if (n < 0)
+    {
+        n = 0;
+    }
+    const std::size_t want = static_cast<std::size_t>(n) * 4;
+    if (this->OpeningBoundaryScales.size() == want)
+    {
+        return;
+    }
+    this->OpeningBoundaryScales.resize(want, 0.0);
+    this->Modified();
+}
+
+void vtkSHYXRemeshWithEndpoint::SetOpeningBoundaryScale(
+    int index, double x, double y, double z, double scale)
+{
+    if (index < 0 || !std::isfinite(x) || !std::isfinite(y) || !std::isfinite(z) ||
+        !std::isfinite(scale))
+    {
+        return;
+    }
+    if (!(scale > 0.0))
+    {
+        scale = 1.0;
+    }
+    if (scale < 1.0e-6)
+    {
+        scale = 1.0e-6;
+    }
+    else if (scale > 1.0e6)
+    {
+        scale = 1.0e6;
+    }
+    if (index >= this->GetNumberOfOpeningBoundaryScales())
+    {
+        this->SetNumberOfOpeningBoundaryScales(index + 1);
+    }
+    double* slot = &this->OpeningBoundaryScales[static_cast<std::size_t>(index) * 4];
+    if (slot[0] == x && slot[1] == y && slot[2] == z && slot[3] == scale)
+    {
+        return;
+    }
+    slot[0] = x;
+    slot[1] = y;
+    slot[2] = z;
+    slot[3] = scale;
+    this->Modified();
+}
+
+int vtkSHYXRemeshWithEndpoint::GetNumberOfOpeningBoundaryScales() const
+{
+    return static_cast<int>(this->OpeningBoundaryScales.size() / 4);
+}
+
+bool vtkSHYXRemeshWithEndpoint::CollectOpeningLoops(
+    vtkPolyData* input, std::vector<OpeningLoop>& loops) const
+{
+    loops.clear();
+    vtkSmartPointer<vtkPolyData> patch = ExtractWallPatch(input, this->EndpointIndexArrayName,
+        this->EnableEndpointCull, this->EndpointIndexAllScalars, this->LargestConnectedRegionOnly);
+    if (!patch)
+    {
+        return false;
+    }
+    CollectBoundaryLoops(patch, loops);
+    return true;
+}
+
 int vtkSHYXRemeshWithEndpoint::FillInputPortInformation(int port, vtkInformation* info)
 {
     if (port == 0)
@@ -733,72 +1091,11 @@ int vtkSHYXRemeshWithEndpoint::RequestData(
     }
 
     const char* epName = this->GetEndpointIndexArrayName();
-    const bool epNameEmpty = (epName == nullptr || epName[0] == '\0' ||
-        std::strcmp(epName, "(None)") == 0 || std::strcmp(epName, "None") == 0);
     // Cull only when explicitly enabled; do not infer from array name alone (ArrayListDomain
     // often replaces "(None)" with the first cell array such as STLSolidLabeling).
-    const bool useFullInputAsWall = (!this->EnableEndpointCull || epNameEmpty);
-
-    vtkNew<vtkThreshold> threshold;
-    vtkNew<vtkGeometryFilter> geometry;
-    vtkNew<vtkTriangleFilter> triangle;
-    vtkPolyData* patchIn = nullptr;
-
-    if (!useFullInputAsWall)
-    {
-        int scalarAssoc = vtkDataObject::FIELD_ASSOCIATION_NONE;
-        // Missing array → same as cull off (full wall), no warning.
-        if (ResolveThresholdArray(input, epName, scalarAssoc))
-        {
-            threshold->SetInputData(input);
-            threshold->SetInputArrayToProcess(0, 0, 0, scalarAssoc, epName);
-            threshold->SetThresholdFunction(vtkThreshold::THRESHOLD_BETWEEN);
-            threshold->SetLowerThreshold(-1.0e200);
-            threshold->SetUpperThreshold(-1.0e-9);
-            threshold->SetSelectedComponent(0);
-            threshold->SetComponentModeToUseSelected();
-            threshold->SetAllScalars(this->EndpointIndexAllScalars ? 1 : 0);
-            threshold->Update();
-            vtkDataSet* const thOut = vtkDataSet::SafeDownCast(threshold->GetOutputDataObject(0));
-            if (thOut && thOut->GetNumberOfCells() > 0)
-            {
-                geometry->SetInputConnection(threshold->GetOutputPort());
-                triangle->SetInputConnection(geometry->GetOutputPort());
-                triangle->Update();
-                patchIn = vtkPolyData::SafeDownCast(triangle->GetOutputDataObject(0));
-            }
-            // Empty threshold (e.g. no negative tags) → fall back to full surface, no warning.
-        }
-    }
-
-    if (!patchIn)
-    {
-        // EnableEndpointCull off, missing array, or empty threshold → full input as wall.
-        triangle->SetInputData(input);
-        triangle->Update();
-        patchIn = vtkPolyData::SafeDownCast(triangle->GetOutputDataObject(0));
-    }
-
-    vtkNew<vtkPolyDataConnectivityFilter> largestRegionFilter;
-    vtkNew<vtkCleanPolyData> largestRegionCleanUnused;
-    if (this->LargestConnectedRegionOnly && patchIn && patchIn->GetNumberOfCells() > 0)
-    {
-        largestRegionFilter->SetInputData(patchIn);
-        largestRegionFilter->SetExtractionModeToLargestRegion();
-        largestRegionFilter->Update();
-        // vtkPolyDataConnectivityFilter keeps the full input point list; drop vertices not
-        // referenced by any output cell (vtkCleanPolyData). Point merging is OFF so no coincident
-        // points are collapsed—only unused points are removed.
-        largestRegionCleanUnused->SetInputConnection(largestRegionFilter->GetOutputPort());
-        largestRegionCleanUnused->PointMergingOff();
-        largestRegionCleanUnused->SetTolerance(0.0);
-        largestRegionCleanUnused->SetToleranceIsAbsolute(true);
-        largestRegionCleanUnused->ConvertPolysToLinesOff();
-        largestRegionCleanUnused->ConvertLinesToPointsOff();
-        largestRegionCleanUnused->ConvertStripsToPolysOff();
-        largestRegionCleanUnused->Update();
-        patchIn = vtkPolyData::SafeDownCast(largestRegionCleanUnused->GetOutput());
-    }
+    vtkSmartPointer<vtkPolyData> patchHolder = ExtractWallPatch(input, epName,
+        this->EnableEndpointCull, this->EndpointIndexAllScalars, this->LargestConnectedRegionOnly);
+    vtkPolyData* patchIn = patchHolder;
     if (!patchIn || patchIn->GetNumberOfCells() == 0)
     {
         vtkWarningMacro("Geometry/triangle extraction yielded no surface; passing input through.");
@@ -835,20 +1132,23 @@ int vtkSHYXRemeshWithEndpoint::RequestData(
 
     std::unique_ptr<vtkCGALHelper::Vespa_surface> cgalMesh =
         std::make_unique<vtkCGALHelper::Vespa_surface>();
-    if (!vtkCGALHelper::toCGAL(patchIn, cgalMesh.get()))
-    {
-        vtkErrorMacro(
-            "Could not convert extracted patch to CGAL surface (check manifold / triangles).");
-        return 0;
-    }
-
+    // One Apply: toCGAL through toVTK. `step` names the phase that threw.
+    std::string step = "Convert patch to CGAL";
     try
     {
+        const CgalThrowOnError cgalErrors;
+        if (!vtkCGALHelper::toCGAL(patchIn, cgalMesh.get()))
+        {
+            throw std::runtime_error(
+                "conversion returned false (check triangles and manifold)");
+        }
+
         auto reportProgress = [this](double frac, const char* text) {
             this->SetProgressText(text);
             this->UpdateProgress(frac);
         };
 
+        step = "Build ICC sizing field";
         reportProgress(0.10, "Computing ICC sizing field");
         PrepareIccVertexNormalsForAdaptiveSizing(cgalMesh->surface, nullptr);
 
@@ -859,13 +1159,25 @@ int vtkSHYXRemeshWithEndpoint::RequestData(
         std::optional<SizingTy> sizingStorage;
         // Anchor + Protect freezes the opening at its input edge length, so the scale is unused.
         // Otherwise the scale applies: curvature*scale when Anchor is off, edge-length*scale when on.
-        const double boundaryScale =
-          (this->AnchorBoundarySize && this->RemeshProtectConstraints) ? 1.0 : this->BoundarySizeScale;
+        // A non-empty per-opening list replaces the shared factor when the factors differ.
+        const bool freezeOpening = this->AnchorBoundarySize && this->RemeshProtectConstraints;
+        const double boundaryScale = freezeOpening ? 1.0 : this->BoundarySizeScale;
+        std::vector<SizingTy::OpeningScaleSample> openingScales;
+        if (this->AnchorBoundarySize && !freezeOpening)
+        {
+            const int nScales = this->GetNumberOfOpeningBoundaryScales();
+            openingScales.reserve(static_cast<std::size_t>(nScales));
+            for (int i = 0; i < nScales; ++i)
+            {
+                const double* slot = &this->OpeningBoundaryScales[static_cast<std::size_t>(i) * 4];
+                openingScales.push_back(SizingTy::OpeningScaleSample{ slot[0], slot[1], slot[2], slot[3] });
+            }
+        }
         sizingStorage.emplace(this->AdaptiveTolerance, std::make_pair(minLen, maxLen),
             cgalMesh->surface.faces(), cgalMesh->surface,
             static_cast<double>(this->AdaptiveSizingNeighborMaxRatio), this->ScaleToRange,
             &uncappedSizes, iccRadius, iccRings, this->SizingFieldScale, this->AnchorBoundarySize,
-            boundaryScale);
+            boundaryScale, openingScales.empty() ? nullptr : &openingScales);
         this->FillUncappedSizeHistogram(uncappedSizes);
 
         if (this->CheckAbort())
@@ -952,9 +1264,13 @@ int vtkSHYXRemeshWithEndpoint::RequestData(
 
                 if (this->RemeshRecomputeCurvatureEachIteration && iter > 0)
                 {
+                    step = "Wall curvature " + std::to_string(iter + 1) + "/" +
+                        std::to_string(remeshIterations);
                     collectGarbageIfNeeded();
                     sizing.recompute_curvature(cgalMesh->surface);
                 }
+                step = "Wall remesh " + std::to_string(iter + 1) + "/" +
+                    std::to_string(remeshIterations);
                 collectGarbageIfNeeded();
                 pinOpeningBoundary();
                 pmp::isotropic_remeshing(
@@ -1017,6 +1333,7 @@ int vtkSHYXRemeshWithEndpoint::RequestData(
 
                         std::vector<CGAL_Surface::Face_index> hf;
                         std::vector<CGAL_Surface::Vertex_index> hv;
+                        step = "Fill hole " + std::to_string(hi + 1) + "/" + std::to_string(nHoles);
                         pmp::triangulate_refine_and_fair_hole(
                             cgalMesh->surface, holeStarters[hi],
                             std::back_inserter(hf),
@@ -1100,6 +1417,8 @@ int vtkSHYXRemeshWithEndpoint::RequestData(
                                     static_cast<double>((std::max)(1u, capIters)));
                             reportProgress(frac, msg);
 
+                            step = "Cap remesh " + std::to_string(pass + 1) + "/" +
+                                std::to_string(capIters);
                             collectGarbageIfNeededCap();
                             if (pass == 0)
                             {
@@ -1110,7 +1429,11 @@ int vtkSHYXRemeshWithEndpoint::RequestData(
                             {
                                 if (this->CapRefineSizingField)
                                 {
+                                    step = "Cap sizing " + std::to_string(pass + 1) + "/" +
+                                        std::to_string(capIters);
                                     capSizing.recompute(cgalMesh->surface);
+                                    step = "Cap remesh " + std::to_string(pass + 1) + "/" +
+                                        std::to_string(capIters);
                                 }
                                 auto currentCapFaces = capSizing.collectCapFaces(cgalMesh->surface);
                                 pmp::isotropic_remeshing(
@@ -1124,6 +1447,7 @@ int vtkSHYXRemeshWithEndpoint::RequestData(
                             }
                         }
 
+                        step = "Tag cap regions";
                         reportProgress(0.95, "Tagging cap regions");
 
                         // Tag each disconnected cap patch with ids 1..n (multiple holes),
@@ -1261,105 +1585,120 @@ int vtkSHYXRemeshWithEndpoint::RequestData(
                 }
             }
         }
+        step = "Write remeshed surface";
+        this->SetProgressText("Writing output");
+        this->UpdateProgress(0.97);
+
+        if (!vtkCGALHelper::toVTK(cgalMesh.get(), output))
+        {
+            throw std::runtime_error("toVTK returned false");
+        }
+        step = "Transfer input attributes";
+        this->interpolateAttributes(patchIn, output);
+
+        step = "Write EndpointIndex";
+
+        // Always write cell/point "EndpointIndex" for downstream vascular filters.
+        // Do not reuse EndpointIndexArrayName here: that picker is for INPUT cull only, and
+        // ArrayListDomain often substitutes the first cell array (e.g. STLSolidLabeling) when
+        // EnableEndpointCull is OFF — so the output would never contain an array named EndpointIndex.
+        // interpolateAttributes only copies arrays that already exist on patchIn; a raw wall has none.
+        {
+            const char* const epOutName = "EndpointIndex";
+            const auto capFaceTagOpt =
+                cgalMesh->surface.property_map<CGAL_Surface::Face_index, int>("f:vespa_cap_idx");
+            const auto capIntPtOpt = cgalMesh->surface.property_map<CGAL_Surface::Vertex_index, bool>(
+                "v:vespa_cap_is_interior");
+
+            vtkIntArray* cellArr = EnsureNamedIntArray(
+                output->GetCellData(), epOutName, output->GetNumberOfCells(), -1);
+            vtkIdType nTaggedCells = 0;
+            if (cellArr && capFaceTagOpt.has_value())
+            {
+                vtkIdType cid = 0;
+                const vtkIdType nCells = cellArr->GetNumberOfTuples();
+                for (CGAL_Surface::Face_index f : cgalMesh->surface.faces())
+                {
+                    if (cid >= nCells)
+                    {
+                        break;
+                    }
+                    const int capTag = get(*capFaceTagOpt, f);
+                    if (capTag > 0)
+                    {
+                        cellArr->SetValue(cid, capTag);
+                        ++nTaggedCells;
+                    }
+                    ++cid;
+                }
+            }
+            if (capFaceTagOpt.has_value() && nTaggedCells == 0)
+            {
+                vtkWarningMacro("Cap remesh produced no EndpointIndex-tagged fill faces; "
+                    "filled patches may be missing from the output array.");
+            }
+
+            // Point data: interior cap only; seam stays -1 / interpolated wall value so wall
+            // triangles that share the loop are not pulled into cap partitions.
+            vtkIntArray* ptArr = EnsureNamedIntArray(
+                output->GetPointData(), epOutName, output->GetNumberOfPoints(), -1);
+            if (ptArr && capFaceTagOpt.has_value() && capIntPtOpt.has_value())
+            {
+                vtkIdType pid = 0;
+                const vtkIdType nPts = ptArr->GetNumberOfTuples();
+                for (CGAL_Surface::Vertex_index v : cgalMesh->surface.vertices())
+                {
+                    if (pid >= nPts)
+                    {
+                        break;
+                    }
+                    if (get(*capIntPtOpt, v))
+                    {
+                        int capTag = 0;
+                        for (CGAL_Surface::Halfedge_index h :
+                            CGAL::halfedges_around_target(v, cgalMesh->surface))
+                        {
+                            const CGAL_Surface::Face_index f = cgalMesh->surface.face(h);
+                            if (f == CGAL_Surface::null_face())
+                            {
+                                continue;
+                            }
+                            const int tid = get(*capFaceTagOpt, f);
+                            if (tid > 0)
+                            {
+                                capTag = tid;
+                                break;
+                            }
+                        }
+                        if (capTag > 0)
+                        {
+                            ptArr->SetValue(pid, capTag);
+                        }
+                    }
+                    ++pid;
+                }
+            }
+        }
+
+        // Target size vs realized incident edge lengths on remeshed vertices (point data).
+        step = "Export sizing debug";
+        ExportSizingLengthMismatchDebug(cgalMesh->surface, output);
+
+        this->SetProgressText("Done");
+        this->UpdateProgress(1.0);
     }
-    catch (std::exception& e)
+    catch (const std::exception& e)
     {
-        vtkErrorMacro("CGAL Exception: " << e.what());
+        vtkErrorMacro("" << step.c_str() << ": " << e.what());
+        output->Initialize();
+        return 0;
+    }
+    catch (...)
+    {
+        vtkErrorMacro("" << step.c_str() << ": unknown C++ exception");
+        output->Initialize();
         return 0;
     }
 
-    this->SetProgressText("Writing output");
-    this->UpdateProgress(0.97);
-
-    vtkCGALHelper::toVTK(cgalMesh.get(), output);
-    this->interpolateAttributes(patchIn, output);
-
-    // Always write cell/point "EndpointIndex" for downstream vascular filters.
-    // Do not reuse EndpointIndexArrayName here: that picker is for INPUT cull only, and
-    // ArrayListDomain often substitutes the first cell array (e.g. STLSolidLabeling) when
-    // EnableEndpointCull is OFF — so the output would never contain an array named EndpointIndex.
-    // interpolateAttributes only copies arrays that already exist on patchIn; a raw wall has none.
-    {
-        const char* const epOutName = "EndpointIndex";
-        const auto capFaceTagOpt =
-            cgalMesh->surface.property_map<CGAL_Surface::Face_index, int>("f:vespa_cap_idx");
-        const auto capIntPtOpt = cgalMesh->surface.property_map<CGAL_Surface::Vertex_index, bool>(
-            "v:vespa_cap_is_interior");
-
-        vtkIntArray* cellArr = EnsureNamedIntArray(
-            output->GetCellData(), epOutName, output->GetNumberOfCells(), -1);
-        vtkIdType nTaggedCells = 0;
-        if (cellArr && capFaceTagOpt.has_value())
-        {
-            vtkIdType cid = 0;
-            const vtkIdType nCells = cellArr->GetNumberOfTuples();
-            for (CGAL_Surface::Face_index f : cgalMesh->surface.faces())
-            {
-                if (cid >= nCells)
-                {
-                    break;
-                }
-                const int capTag = get(*capFaceTagOpt, f);
-                if (capTag > 0)
-                {
-                    cellArr->SetValue(cid, capTag);
-                    ++nTaggedCells;
-                }
-                ++cid;
-            }
-        }
-        if (capFaceTagOpt.has_value() && nTaggedCells == 0)
-        {
-            vtkWarningMacro("Cap remesh produced no EndpointIndex-tagged fill faces; "
-                "filled patches may be missing from the output array.");
-        }
-
-        // Point data: interior cap only; seam stays -1 / interpolated wall value so wall
-        // triangles that share the loop are not pulled into cap partitions.
-        vtkIntArray* ptArr = EnsureNamedIntArray(
-            output->GetPointData(), epOutName, output->GetNumberOfPoints(), -1);
-        if (ptArr && capFaceTagOpt.has_value() && capIntPtOpt.has_value())
-        {
-            vtkIdType pid = 0;
-            const vtkIdType nPts = ptArr->GetNumberOfTuples();
-            for (CGAL_Surface::Vertex_index v : cgalMesh->surface.vertices())
-            {
-                if (pid >= nPts)
-                {
-                    break;
-                }
-                if (get(*capIntPtOpt, v))
-                {
-                    int capTag = 0;
-                    for (CGAL_Surface::Halfedge_index h :
-                        CGAL::halfedges_around_target(v, cgalMesh->surface))
-                    {
-                        const CGAL_Surface::Face_index f = cgalMesh->surface.face(h);
-                        if (f == CGAL_Surface::null_face())
-                        {
-                            continue;
-                        }
-                        const int tid = get(*capFaceTagOpt, f);
-                        if (tid > 0)
-                        {
-                            capTag = tid;
-                            break;
-                        }
-                    }
-                    if (capTag > 0)
-                    {
-                        ptArr->SetValue(pid, capTag);
-                    }
-                }
-                ++pid;
-            }
-        }
-    }
-
-    // Target size vs realized incident edge lengths on remeshed vertices (point data).
-    ExportSizingLengthMismatchDebug(cgalMesh->surface, output);
-
-    this->SetProgressText("Done");
-    this->UpdateProgress(1.0);
     return 1;
 }

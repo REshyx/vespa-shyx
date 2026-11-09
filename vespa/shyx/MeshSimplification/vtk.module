@@ -1,0 +1,13 @@
+NAME
+  vtkSHYXMeshSimplification
+DESCRIPTION
+  "SHYX: CGAL edge-collapse mesh simplification with a selectable cost and placement."
+GROUPS
+  Meshing
+DEPENDS
+  vtkCGALAlgorithm
+  VTK::FiltersCore
+PRIVATE_DEPENDS
+  VTK::CommonCore
+  VTK::CommonDataModel
+  VTK::CommonExecutionModel

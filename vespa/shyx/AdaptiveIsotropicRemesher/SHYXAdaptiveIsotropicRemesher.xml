@@ -17,31 +17,30 @@
 
         Detect feature edges (master toggle): when OFF (default), CGAL detect_sharp_edges and
         feature-mask region/boundary contributions are skipped; only selection / scalar-range
-        patch boundaries constrain remeshing, and output port 1 is empty.
+        patch boundaries constrain remeshing.
         When ON, those sources are added to the constraint maps for remesh.
 
         Outputs:
-          0  Remeshed surface (no **VespaIccNonMaskVertexNormal** on this port; use port 3 preview for ICC normals).
-          1  Sharp/feature edges as **lines** only (no vertex cells). Empty when Detect feature edges is OFF.
-          2  Input geometry, faces passing the feature mask threshold.
-          3  Sizing / ICC preview on the mesh **before the last remesh iteration**
+          0  Remeshed surface (vtkPolyData; no **VespaIccNonMaskVertexNormal**).
+          1  Diagnostics (vtkMultiBlockDataSet), three named blocks:
+             0 Sharp features — lines. Empty when Detect feature edges is OFF.
+             1 Mask patch — input faces that pass the feature mask. Empty when the mask is off.
+             2 Sizing ICC preview — mesh **before the last remesh iteration**
              (same as input topology when NumberOfIterations is 1). By default Recompute curvature each
              iteration is ON — maps match a refresh immediately before that last iteration. Turn it OFF only
              to trade accuracy for speed. `v:vespa_icc_normal` stays internal. Feature-mask dual ICC normals
-             on port 3: iterations==1 use the input mask; iterations>1 probe mask fields onto the preview
+             on the sizing block: iterations==1 use the input mask; iterations>1 probe mask fields onto the preview
              (same mask-driven ICC prep as the remesh pass; requires **Transfer input arrays to output** / UpdateAttributes ON).
              Capped VespaAdaptiveSizeGlobal from `v:vespa_size_global`; principal curvatures and
              uncapped size from a second ICC pass on the preview geometry. **VespaIccNonMaskVertexNormal**
-             (port 3 only) matches non-mask ICC vertex normals (`v:vespa_icc_n_nonmask`), or global blend when absent.
-             Default coloring on port 3: **VespaAdaptiveSizeGlobal**.
+             (sizing block only) matches non-mask ICC vertex normals (`v:vespa_icc_n_nonmask`), or global blend when absent.
+             Default coloring on the sizing block: **VespaAdaptiveSizeGlobal**.
 
         Requires CGAL 6.0+.
       </Documentation>
 
-      <OutputPort name="Remeshed surface"           index="0" id="port0"/>
-      <OutputPort name="Sharp features"             index="1" id="port1"/>
-      <OutputPort name="Mask patch (input)"         index="2" id="port2"/>
-      <OutputPort name="Sizing ICC preview (pre-final pass)" index="3" id="port3"/>
+      <OutputPort name="Remeshed surface" index="0" id="port0"/>
+      <OutputPort name="Diagnostics" index="1" id="port1"/>
 
       <!-- =================================================================
                                        INPUTS
@@ -396,7 +395,7 @@
                          panel_visibility="default">
         <BooleanDomain name="bool"/>
         <Documentation>
-          When OFF, the filter only computes the ICC sizing preview (port 3 + histogram) and
+          When OFF, the filter only computes the ICC sizing preview (diagnostics sizing block + histogram) and
           passes the input geometry through: no CGAL remesh, and no
           %TEMP%/shyx_remesh_pre_apply.pvsm is written.
         </Documentation>
@@ -466,7 +465,7 @@
           selection input is connected). When ON, CGAL detect_sharp_edges (with Protection
           angle / Sharp side filter) and feature-mask region / boundary contributions are added
           to edge_is_constrained_map for isotropic_remeshing. vtkSelection behavior is independent
-          of this toggle. Output port 1 is empty when OFF.
+          of this toggle.
         </Documentation>
       </IntVectorProperty>
 
@@ -503,7 +502,7 @@
         <Documentation>
           Optional filter on interior sharp edges after CGAL detect_sharp_edges, using signed
           dihedral angle (approximate_dihedral_angle). Excludes concave (signed &lt; 0) or convex
-          (signed &gt; 0) from remesh constraints and from port 1. Boundary edges are
+          (signed &gt; 0) from remesh constraints and from the Sharp features block. Boundary edges are
           unchanged. If convex/concave looks swapped, flip mesh orientation or pick the other
           entry.
         </Documentation>
@@ -523,8 +522,8 @@
                          animateable="0">
         <BooleanDomain name="bool"/>
         <Documentation>
-          When ON: threshold input faces to port 2; port 1 sharp features are computed only on
-          that patch; on the full surface, sharp edges are intersected with the mask for CGAL
+          When ON: threshold input faces into the Mask patch block and use that patch for sharp-edge
+          constraints; on the full surface, sharp edges are intersected with the mask for CGAL
           remesh. Choose a point- or cell-centered array, a threshold (tuple
           magnitude &gt; threshold), and the optional All Scalars flag for point arrays.
           Has no effect when Detect feature edges is OFF.
@@ -751,7 +750,7 @@
                          default_values="1">
         <BooleanDomain name="bool"/>
         <Documentation>
-          If ON, point/cell data are interpolated onto port 0 (and probed onto port 3 ICC preview when
+          If ON, point/cell data are interpolated onto port 0 (and probed onto the sizing block when
           Remesh iterations &gt; 1 with Feature mask enabled, so mask-driven ICC on the preview matches the
           evolving geometry).
         </Documentation>
@@ -764,6 +763,7 @@
       <Hints>
         <ShowInMenu category="SHYX" icon=":/VESPA/SHYX_Adaptive_Isotropic_Remesher.png"/>
         <RepresentationType view="RenderView" type="Surface With Edges" port="0"/>
+        <RepresentationType view="RenderView" type="Surface" port="1"/>
       </Hints>
 
     </SourceProxy>

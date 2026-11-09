@@ -29,11 +29,15 @@ class vtkSMStringVectorProperty;
  *
  * Export name defaults from top-level reader FileName / FileNames, e.g.
  * K2-1_plaque.stl → PV_K2-1.exo / options_PV_K2-1 / Nodeset_PV_K2-1 / PV_K2-1.pvsm
+ * Hanzi in that stem become toneless pinyin (张三_plaque.stl → PV_zhangsan.exo) before
+ * the four name boxes are filled. Other non-ASCII characters in the stem become '_'.
  * (options and Nodeset have no file extension). Falls back to PV_0 / HV_0.
+ * A non-ASCII directory is still refused at export time.
  *
  * FlowBoundaryMode is auto-picked from the upstream file basename (case-insensitive):
- * plaque → Single inlet (PV); aorta → Single outlet (HV). Re-applied only when the
- * upstream path changes, so manual mode edits are kept until the source file changes.
+ * plaque or pv → Single inlet (PV); aorta or hv → Single outlet (HV). Anatomical tags
+ * win over hv/pv. Re-applied only when the upstream path changes, so manual mode edits
+ * are kept until the source file changes.
  */
 class pqSHYXBoundaryAssignmentInfoWidget : public pqPropertyWidget
 {

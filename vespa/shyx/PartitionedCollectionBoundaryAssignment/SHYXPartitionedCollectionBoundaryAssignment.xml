@@ -36,7 +36,9 @@
           inlets (always computed before any inlet merge). Enable Repart first when the input
           already merged inlets into one side set (disconnected islands under one name).
           The property panel auto-selects this from the top-level source filename when possible:
-          basename contains "plaque" → Single inlet; contains "aorta" → Single outlet
+          basename contains "plaque" or "pv" → Single inlet; contains "aorta" or "hv" →
+          Single outlet. plaque/aorta win when both an anatomical tag and hv/pv are present.
+          Both of a pair (plaque+aorta, or hv+pv) leaves the mode unchanged
           (re-applied only when that upstream file path changes).
         </Documentation>
       </IntVectorProperty>

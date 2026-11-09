@@ -6,9 +6,11 @@
 #include <vtkAlgorithm.h>
 #include <vtkBoundingBox.h>
 #include <vtkCellData.h>
+#include <vtkCompositeDataSet.h>
 #include <vtkDataArray.h>
 #include <vtkDataObject.h>
 #include <vtkDataSet.h>
+#include <vtkMultiBlockDataSet.h>
 #include <vtkDoubleArray.h>
 #include <vtkExtractSelection.h>
 #include <vtkIdTypeArray.h>
@@ -57,6 +59,16 @@ double VespaUncappedAdaptiveEdgeLengthFromTol(double tol, double kmin, double km
   }
   return std::sqrt(vsq);
 }
+
+void SetDiagnosticsBlock(
+  vtkMultiBlockDataSet* mb, unsigned int index, vtkDataObject* block, const char* name)
+{
+  mb->SetBlock(index, block);
+  if (vtkInformation* meta = mb->GetMetaData(index))
+  {
+    meta->Set(vtkCompositeDataSet::NAME(), name);
+  }
+}
 } // namespace
 
 #include <algorithm>
@@ -65,6 +77,8 @@ double VespaUncappedAdaptiveEdgeLengthFromTol(double tol, double kmin, double km
 #include <limits>
 #include <cstdint>
 #include <exception>
+#include <stdexcept>
+#include <string>
 #include <map>
 #include <memory>
 #include <optional>
@@ -88,7 +102,7 @@ using namespace vespa_shyx_air_remesh_internals;
 vtkSHYXAdaptiveIsotropicRemesher::vtkSHYXAdaptiveIsotropicRemesher()
 {
   this->SetNumberOfInputPorts(2);
-  this->SetNumberOfOutputPorts(4);
+  this->SetNumberOfOutputPorts(2);
   this->SetInputArrayToProcess(0, 0, 0, vtkDataObject::FIELD_ASSOCIATION_NONE, nullptr);
 }
 
@@ -293,9 +307,14 @@ int vtkSHYXAdaptiveIsotropicRemesher::FillInputPortInformation(int port, vtkInfo
 //------------------------------------------------------------------------------
 int vtkSHYXAdaptiveIsotropicRemesher::FillOutputPortInformation(int port, vtkInformation* info)
 {
-  if (port == 0 || port == 1 || port == 2 || port == 3)
+  if (port == 0)
   {
     info->Set(vtkDataObject::DATA_TYPE_NAME(), "vtkPolyData");
+    return 1;
+  }
+  if (port == 1)
+  {
+    info->Set(vtkDataObject::DATA_TYPE_NAME(), "vtkMultiBlockDataSet");
     return 1;
   }
   return 0;
@@ -305,17 +324,21 @@ int vtkSHYXAdaptiveIsotropicRemesher::FillOutputPortInformation(int port, vtkInf
 int vtkSHYXAdaptiveIsotropicRemesher::RequestData(
   vtkInformation*, vtkInformationVector** inputVector, vtkInformationVector* outputVector)
 {
-  vtkPolyData* input          = vtkPolyData::GetData(inputVector[0]);
-  vtkPolyData* output          = vtkPolyData::GetData(outputVector, 0);
-  vtkPolyData* outputFeatures  = vtkPolyData::GetData(outputVector, 1);
-  vtkPolyData* outputMaskPatch = vtkPolyData::GetData(outputVector, 2);
-  vtkPolyData* outputSizingDiag = vtkPolyData::GetData(outputVector, 3);
+  vtkPolyData* input = vtkPolyData::GetData(inputVector[0]);
+  vtkPolyData* output = vtkPolyData::GetData(outputVector, 0);
+  vtkMultiBlockDataSet* diagnostics = vtkMultiBlockDataSet::GetData(outputVector, 1);
+  // Mask faces also feed CGAL constraints. Sizing preview is filled before the last remesh pass.
+  // Both are published with the sharp-feature lines as named blocks on port 1.
+  vtkNew<vtkPolyData> maskPatch;
+  vtkNew<vtkPolyData> sizingPreview;
+  vtkNew<vtkPolyData> featureLines;
 
-  if (!input || !output || !outputFeatures || !outputMaskPatch || !outputSizingDiag)
+  if (!input || !output || !diagnostics)
   {
     vtkErrorMacro("Missing input or output.");
     return 0;
   }
+  diagnostics->Initialize();
 
   if (this->EnableRemesh)
   {
@@ -375,18 +398,12 @@ int vtkSHYXAdaptiveIsotropicRemesher::RequestData(
     if (!inputFeatureMaskOk)
     {
       vtkWarningMacro("Feature mask is enabled but the chosen array could not be evaluated on the "
-                      "input. Output port 2 is empty; CGAL constraints and port 1 use unmasked "
-                      "sharp-edge detection.");
-      outputMaskPatch->Initialize();
+                      "input. Sharp-edge constraints use unmasked detection.");
     }
     else
     {
-      ExtractMaskedFacesPolyData(input, inputFeatureMask, outputMaskPatch);
+      ExtractMaskedFacesPolyData(input, inputFeatureMask, maskPatch);
     }
-  }
-  else
-  {
-    outputMaskPatch->Initialize();
   }
 
   std::set<vtkIdType> selected;
@@ -422,44 +439,53 @@ int vtkSHYXAdaptiveIsotropicRemesher::RequestData(
     }
   }
 
-  std::unique_ptr<vtkCGALHelper::Vespa_surface> cgalMesh =
-    std::make_unique<vtkCGALHelper::Vespa_surface>();
-  std::vector<Graph_Faces> vtkCellToCgalFace;
-  vtkCGALHelper::toCGAL(input, cgalMesh.get(), &vtkCellToCgalFace);
-
-  std::vector<vtkIdType> inputFaceSlotToVtkCell;
-  if (this->FeatureMaskEnabled && inputFeatureMaskOk)
-  {
-    BuildCgalFaceSlotToInputVtkCellId(cgalMesh->surface, vtkCellToCgalFace, inputFaceSlotToVtkCell);
-  }
-
-  std::vector<Graph_Faces> remeshFaces;
-  remeshFaces.reserve(selected.size());
-  if (!selected.empty())
-  {
-    for (const vtkIdType cid : selected)
-    {
-      if (cid < 0 || cid >= static_cast<vtkIdType>(vtkCellToCgalFace.size()))
-      {
-        continue;
-      }
-      const auto fd = vtkCellToCgalFace[static_cast<size_t>(cid)];
-      if (cgalMesh->surface.is_valid(fd))
-      {
-        remeshFaces.push_back(fd);
-      }
-    }
-  }
-
-  const bool patchRemesh = !remeshFaces.empty();
-  if (!selected.empty() && !patchRemesh)
-  {
-    vtkWarningMacro(
-      "Remesh region did not resolve to any remeshable faces on the input; remeshing globally.");
-  }
-
+  // One Apply: toCGAL through toVTK. `step` names the phase that threw.
+  std::string step = "Convert input to CGAL";
   try
   {
+    const CgalThrowOnError cgalErrors;
+
+    std::unique_ptr<vtkCGALHelper::Vespa_surface> cgalMesh =
+      std::make_unique<vtkCGALHelper::Vespa_surface>();
+    std::vector<Graph_Faces> vtkCellToCgalFace;
+    if (!vtkCGALHelper::toCGAL(input, cgalMesh.get(), &vtkCellToCgalFace))
+    {
+      throw std::runtime_error("conversion returned false (check triangles and manifold)");
+    }
+
+    step = "Map remesh region";
+    std::vector<vtkIdType> inputFaceSlotToVtkCell;
+    if (this->FeatureMaskEnabled && inputFeatureMaskOk)
+    {
+      BuildCgalFaceSlotToInputVtkCellId(cgalMesh->surface, vtkCellToCgalFace, inputFaceSlotToVtkCell);
+    }
+
+    std::vector<Graph_Faces> remeshFaces;
+    remeshFaces.reserve(selected.size());
+    if (!selected.empty())
+    {
+      for (const vtkIdType cid : selected)
+      {
+        if (cid < 0 || cid >= static_cast<vtkIdType>(vtkCellToCgalFace.size()))
+        {
+          continue;
+        }
+        const auto fd = vtkCellToCgalFace[static_cast<size_t>(cid)];
+        if (cgalMesh->surface.is_valid(fd))
+        {
+          remeshFaces.push_back(fd);
+        }
+      }
+    }
+
+    const bool patchRemesh = !remeshFaces.empty();
+    if (!selected.empty() && !patchRemesh)
+    {
+      vtkWarningMacro(
+        "Remesh region did not resolve to any remeshable faces on the input; remeshing globally.");
+    }
+
+    step = "Detect sharp features";
     auto featureEdges = get(CGAL::edge_is_feature, cgalMesh->surface);
     if (this->EnableRemesh && this->DetectFeatureEdges)
     {
@@ -472,10 +498,10 @@ int vtkSHYXAdaptiveIsotropicRemesher::RequestData(
       }
 
       if (this->FeatureMaskEnabled && inputFeatureMaskOk &&
-        outputMaskPatch->GetNumberOfCells() > 0)
+        maskPatch->GetNumberOfCells() > 0)
       {
         vtkCGALHelper::Vespa_surface cgalForPort1Patch;
-        if (vtkCGALHelper::toCGAL(outputMaskPatch, &cgalForPort1Patch, nullptr))
+        if (vtkCGALHelper::toCGAL(maskPatch, &cgalForPort1Patch, nullptr))
         {
           auto patchFeat = get(CGAL::edge_is_feature, cgalForPort1Patch.surface);
           DetectSharpEdgesWithFilter(cgalForPort1Patch.surface, this->ProtectAngle,
@@ -491,6 +517,7 @@ int vtkSHYXAdaptiveIsotropicRemesher::RequestData(
       AddSelectionBoundaryUsingVtkTopology(this, input, cgalMesh->surface, featureEdges, selected);
     }
 
+    step = "Build ICC sizing field";
     {
       std::vector<char> iccFaceMask;
       const std::vector<char>* iccMaskPtr = nullptr;
@@ -544,17 +571,20 @@ int vtkSHYXAdaptiveIsotropicRemesher::RequestData(
     this->FillUncappedSizeHistogram(uncappedSizes);
     SizingTy& sizing = *sizingStorage;
 
-    // Port 3: geometry is the CGAL mesh immediately before the last remesh sub-step —
+    // Sizing block: CGAL mesh immediately before the last remesh sub-step —
     // the input converted to VTK when NumberOfIterations==1; after NumberOfIterations-1
     // single-iteration CGAL passes otherwise. ICC preview mask: iterations==1 uses the input VTK
-    // cell mask; iterations>1 probes input attributes onto port 3 then evaluates the same Feature
-    // mask rule on the preview (requires UpdateAttributes).
+    // cell mask; iterations>1 probes input attributes onto the preview then evaluates the same
+    // Feature mask rule (requires UpdateAttributes).
     const auto fillSizingIccPreviewPort = [&]() {
       CGAL_Surface& smDiag = cgalMesh->surface;
       vtkNew<vtkPolyData> snap;
-      vtkCGALHelper::toVTK(cgalMesh.get(), snap);
-      outputSizingDiag->DeepCopy(snap);
-      const vtkIdType nPtsDiag = outputSizingDiag->GetNumberOfPoints();
+      if (!vtkCGALHelper::toVTK(cgalMesh.get(), snap))
+      {
+        throw std::runtime_error("sizing preview toVTK returned false");
+      }
+      sizingPreview->DeepCopy(snap);
+      const vtkIdType nPtsDiag = sizingPreview->GetNumberOfPoints();
 
       {
         std::vector<char> iccFaceMaskPv;
@@ -577,13 +607,13 @@ int vtkSHYXAdaptiveIsotropicRemesher::RequestData(
             {
               vtkWarningMacro(
                 "Feature mask ICC preview with Remesh iterations > 1 requires UpdateAttributes ON "
-                "(ParaView: transfer input arrays to output) so mask fields are probed onto port 3.");
+                "(ParaView: transfer input arrays to output) so mask fields are probed onto the sizing preview.");
             }
             else
             {
-              this->interpolateAttributes(input, outputSizingDiag);
+              this->interpolateAttributes(input, sizingPreview);
               std::vector<char> evaluatedPreviewMask;
-              if (ComputeFeatureFaceMask(outputSizingDiag, this->FeatureMaskArrayName,
+              if (ComputeFeatureFaceMask(sizingPreview, this->FeatureMaskArrayName,
                     this->FeatureMaskThreshold, this->FeatureMaskAllScalars, evaluatedPreviewMask))
               {
                 std::vector<vtkIdType> faceIdxPv;
@@ -678,12 +708,12 @@ int vtkSHYXAdaptiveIsotropicRemesher::RequestData(
         }
       }
 
-      vtkPointData* pddiag = outputSizingDiag->GetPointData();
+      vtkPointData* pddiag = sizingPreview->GetPointData();
       pddiag->AddArray(szGlobalDiag);
       pddiag->AddArray(szGlobUncDiag);
       pddiag->AddArray(iccPMinDiag);
       pddiag->AddArray(iccPMaxDiag);
-      AddVespaIccNonMaskNormalsAsPointArray(smDiag, outputSizingDiag, this);
+      AddVespaIccNonMaskNormalsAsPointArray(smDiag, sizingPreview, this);
       pddiag->SetActiveScalars("VespaAdaptiveSizeGlobal");
     };
 
@@ -712,11 +742,14 @@ int vtkSHYXAdaptiveIsotropicRemesher::RequestData(
 
     if (!this->EnableRemesh)
     {
+      step = "ICC sizing preview";
       fillSizingIccPreviewPort();
     }
     else if (remeshIterations <= 1u)
     {
+      step = "ICC sizing preview";
       fillSizingIccPreviewPort();
+      step = "Isotropic remesh 1/1";
       doRemeshSingleIteration();
     }
     else
@@ -726,93 +759,131 @@ int vtkSHYXAdaptiveIsotropicRemesher::RequestData(
       {
         if (this->RemeshRecomputeCurvatureEachIteration && pass > 0)
         {
+          step = "Recompute curvature " + std::to_string(pass + 1) + "/" +
+            std::to_string(remeshIterations);
           if (cgalMesh->surface.has_garbage())
           {
             cgalMesh->surface.collect_garbage();
           }
           sizing.recompute_curvature(cgalMesh->surface);
         }
+        step = "Isotropic remesh " + std::to_string(pass + 1) + "/" +
+          std::to_string(remeshIterations);
         doRemeshSingleIteration();
       }
       if (this->RemeshRecomputeCurvatureEachIteration)
       {
+        step = "Recompute curvature " + std::to_string(remeshIterations) + "/" +
+          std::to_string(remeshIterations);
         if (cgalMesh->surface.has_garbage())
         {
           cgalMesh->surface.collect_garbage();
         }
         sizing.recompute_curvature(cgalMesh->surface);
       }
+      step = "ICC sizing preview";
       fillSizingIccPreviewPort();
+      step = "Isotropic remesh " + std::to_string(remeshIterations) + "/" +
+        std::to_string(remeshIterations);
       doRemeshSingleIteration();
     }
-  }
-  catch (std::exception& e)
-  {
-    vtkErrorMacro("CGAL Exception: " << e.what());
-    return 0;
-  }
 
-  vtkCGALHelper::toVTK(cgalMesh.get(), output);
-  this->interpolateAttributes(input, output);
+    step = "Write remeshed surface";
+    if (!vtkCGALHelper::toVTK(cgalMesh.get(), output))
+    {
+      throw std::runtime_error("toVTK returned false");
+    }
+    step = "Transfer input attributes";
+    this->interpolateAttributes(input, output);
 
-  if (this->EnableRemesh && this->DetectFeatureEdges)
-  {
-    bool linesFromInputMaskPatch = false;
-    if (this->FeatureMaskEnabled && inputFeatureMaskOk && outputMaskPatch->GetNumberOfCells() > 0)
+    step = "Extract sharp feature lines";
+    if (this->EnableRemesh && this->DetectFeatureEdges)
     {
       try
       {
-        vtkCGALHelper::Vespa_surface cgalPort2;
-        if (vtkCGALHelper::toCGAL(outputMaskPatch, &cgalPort2, nullptr))
+        bool linesFromInputMaskPatch = false;
+        if (this->FeatureMaskEnabled && inputFeatureMaskOk && maskPatch->GetNumberOfCells() > 0)
         {
-          auto featPort2 = get(CGAL::edge_is_feature, cgalPort2.surface);
-          DetectSharpEdgesWithFilter(
-            cgalPort2.surface, this->ProtectAngle, this->SharpFeatureSideFilter, featPort2);
-          FillFeaturePolyDataSharpLinesOnly(cgalPort2.surface, featPort2, outputFeatures);
-          linesFromInputMaskPatch = true;
+          try
+          {
+            vtkCGALHelper::Vespa_surface cgalMaskPatch;
+            if (vtkCGALHelper::toCGAL(maskPatch, &cgalMaskPatch, nullptr))
+            {
+              auto featMask = get(CGAL::edge_is_feature, cgalMaskPatch.surface);
+              DetectSharpEdgesWithFilter(cgalMaskPatch.surface, this->ProtectAngle,
+                this->SharpFeatureSideFilter, featMask);
+              FillFeaturePolyDataSharpLinesOnly(cgalMaskPatch.surface, featMask, featureLines);
+              linesFromInputMaskPatch = true;
+            }
+            else
+            {
+              throw std::runtime_error("could not build a CGAL surface from the input mask patch");
+            }
+          }
+          catch (const std::exception& e)
+          {
+            vtkWarningMacro("Extract sharp feature lines (input mask): " << e.what()
+              << " Falling back to the full remeshed surface.");
+          }
         }
-        else
+
+        if (!linesFromInputMaskPatch)
         {
-          vtkWarningMacro("Could not build a CGAL surface from the input mask patch (port 2); "
-                          "port 1 lines will use the full remeshed surface.");
+          CGAL_Surface& sm = cgalMesh->surface;
+          auto featOutMap = get(CGAL::edge_is_feature, sm);
+          DetectSharpEdgesWithFilter(
+            sm, this->ProtectAngle, this->SharpFeatureSideFilter, featOutMap);
+          if (this->FeatureMaskEnabled)
+          {
+            std::vector<char> outMask;
+            const bool outOk = ComputeFeatureFaceMask(output, this->FeatureMaskArrayName,
+              this->FeatureMaskThreshold, this->FeatureMaskAllScalars, outMask);
+            if (!outOk)
+            {
+              vtkWarningMacro("Feature mask is enabled but the array could not be evaluated on the "
+                              "remeshed surface (e.g. missing data after interpolation); sharp-feature "
+                              "lines use unmasked edges on the full output.");
+            }
+            else
+            {
+              std::vector<vtkIdType> faceIdxToVtk;
+              BuildCgalFaceIndexToVtkCell(sm, faceIdxToVtk);
+              ApplyFeatureRegionMaskToSharpEdges(sm, featOutMap, outMask, faceIdxToVtk);
+            }
+          }
+          FillFeaturePolyDataSharpLinesOnly(sm, featOutMap, featureLines);
         }
       }
       catch (const std::exception& e)
       {
-        vtkWarningMacro("Sharp feature lines on input mask patch failed: "
-          << e.what() << " Falling back to full remeshed surface for lines.");
+        vtkWarningMacro("Extract sharp feature lines: " << e.what()
+          << " The Sharp features block is empty; the remeshed surface is unchanged.");
+        featureLines->Initialize();
       }
     }
 
-    if (!linesFromInputMaskPatch)
-    {
-      CGAL_Surface& sm = cgalMesh->surface;
-      auto featOutMap = get(CGAL::edge_is_feature, sm);
-      DetectSharpEdgesWithFilter(sm, this->ProtectAngle, this->SharpFeatureSideFilter, featOutMap);
-      if (this->FeatureMaskEnabled)
-      {
-        std::vector<char> outMask;
-        const bool outOk = ComputeFeatureFaceMask(output, this->FeatureMaskArrayName,
-          this->FeatureMaskThreshold, this->FeatureMaskAllScalars, outMask);
-        if (!outOk)
-        {
-          vtkWarningMacro("Feature mask is enabled but the array could not be evaluated on the "
-                          "remeshed surface (e.g. missing data after interpolation); port 1 lines "
-                          "use unmasked sharp features on the full output.");
-        }
-        else
-        {
-          std::vector<vtkIdType> faceIdxToVtk;
-          BuildCgalFaceIndexToVtkCell(sm, faceIdxToVtk);
-          ApplyFeatureRegionMaskToSharpEdges(sm, featOutMap, outMask, faceIdxToVtk);
-        }
-      }
-      FillFeaturePolyDataSharpLinesOnly(sm, featOutMap, outputFeatures);
-    }
+    step = "Write diagnostics";
+    diagnostics->SetNumberOfBlocks(3);
+    SetDiagnosticsBlock(diagnostics, vtkSHYXAdaptiveIsotropicRemesher::SharpFeaturesBlock,
+      featureLines, "Sharp features");
+    SetDiagnosticsBlock(diagnostics, vtkSHYXAdaptiveIsotropicRemesher::MaskPatchBlock, maskPatch,
+      "Mask patch");
+    SetDiagnosticsBlock(diagnostics, vtkSHYXAdaptiveIsotropicRemesher::SizingPreviewBlock,
+      sizingPreview, "Sizing ICC preview");
   }
-  else
+  catch (const std::exception& e)
   {
-    outputFeatures->Initialize();
+    vtkErrorMacro("" << step.c_str() << ": " << e.what());
+    output->Initialize();
+    diagnostics->Initialize();
+    return 0;
+  }
+  catch (...)
+  {
+    vtkErrorMacro("" << step.c_str() << ": unknown C++ exception");
+    output->Initialize();
+    diagnostics->Initialize();
+    return 0;
   }
 
   return 1;

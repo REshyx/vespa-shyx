@@ -148,7 +148,9 @@ vespa_plugin_group_widget(
   CLASS_NAME pqSHYXBoundaryAssignmentInfoWidget
   FILES
     widgets/pqSHYXBoundaryAssignmentInfoWidget.cxx
-    widgets/pqSHYXBoundaryAssignmentInfoWidget.h)
+    widgets/pqSHYXBoundaryAssignmentInfoWidget.h
+    widgets/shyxHanziPinyin.cxx
+    widgets/shyxHanziPinyin.h)
 
 vespa_plugin_group_widget(
   TYPE "shyx_remesh_uncapped_histogram"
@@ -156,6 +158,13 @@ vespa_plugin_group_widget(
   FILES
     widgets/pqSHYXRemeshUncappedHistogramPanel.cxx
     widgets/pqSHYXRemeshUncappedHistogramPanel.h)
+
+vespa_plugin_group_widget(
+  TYPE "shyx_remesh_opening_scales"
+  CLASS_NAME pqSHYXRemeshOpeningScaleTable
+  FILES
+    widgets/pqSHYXRemeshOpeningScaleTable.cxx
+    widgets/pqSHYXRemeshOpeningScaleTable.h)
 
 if (VESPA_USE_VMTK)
   vespa_plugin_group_widget(

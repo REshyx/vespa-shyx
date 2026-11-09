@@ -24,22 +24,23 @@
  *
  * Output port 0: remeshed vtkPolyData (no **VespaIccNonMaskVertexNormal** export; interpolated point/cell
  * arrays only when UpdateAttributes is enabled).
- * Output port 1: **Lines** only (sharp feature edges). Uses the **input** mask region (port 2) when
- * the feature mask is valid and non-empty; otherwise the full remeshed surface (with optional mask
- * filtering on the output). No vertex cells. Empty when Detect feature edges is OFF.
- * Output port 2: input geometry, faces passing the feature mask threshold (for remesh constraints).
- * Output port 3: **Sizing / ICC preview immediately before the final remesh sub-step** —
- * NumberOfIterations==1: same topology as the CGAL input (converted to VTK); NumberOfIterations>1:
- * the mesh after NumberOfIterations-1 single-iteration CGAL passes. `RemeshRecomputeCurvatureEachIteration`
- * matches the main path when enabled (default): curvature and `v:vespa_size_global` are refreshed immediately
- * before this snapshot (and thus before the last iteration), as in the CGAL loop. With NumberOfIterations>1
- * and Feature mask, port 3 probes mask arrays from the input onto the preview mesh (`UpdateAttributes` ON)
- * and builds dual ICC normals for the preview (exported there) when evaluation succeeds.
- * (`v:vespa_icc_normal` is not exported.) Arrays: VespaAdaptiveSizeGlobal from `v:vespa_size_global`
- * (after optional neighbor ratio limiting; AdaptiveSizingNeighborMaxRatio),
- * VespaIccPrincipalCurvatureMin/Max and uncapped sizing from a second ICC pass after preview `PrepareIcc`.
- * **VespaIccNonMaskVertexNormal** (3-tuple point vectors) on port 3 only: matches `v:vespa_icc_n_nonmask`, or
- * the area blend `v:vespa_icc_normal` when the dual bundle is absent. Active scalars default to **VespaAdaptiveSizeGlobal**.
+ * Output port 1: vtkMultiBlockDataSet with three named blocks (see DiagnosticsBlock). The pieces are
+ * different meshes, so they are blocks rather than partitions of one dataset.
+ * Block 0 Sharp features: **lines** only. Uses the input mask patch when the feature mask is valid
+ * and non-empty; otherwise the full remeshed surface (with optional mask filtering). Empty when
+ * Detect feature edges is OFF.
+ * Block 1 Mask patch: input faces that pass the feature mask. Empty when the mask is off or fails.
+ * Block 2 Sizing ICC preview: mesh **immediately before the final remesh sub-step**.
+ * NumberOfIterations==1: same topology as the CGAL input; NumberOfIterations>1: the mesh after
+ * NumberOfIterations-1 single-iteration passes. `RemeshRecomputeCurvatureEachIteration` (default ON)
+ * refreshes curvature and `v:vespa_size_global` immediately before this snapshot and the last
+ * iteration. With NumberOfIterations>1 and Feature mask, the preview probes mask arrays from the
+ * input (`UpdateAttributes` ON) and builds dual ICC normals when evaluation succeeds.
+ * (`v:vespa_icc_normal` is not exported.) Arrays on the sizing block: VespaAdaptiveSizeGlobal from
+ * `v:vespa_size_global` (after optional neighbor ratio limiting), VespaIccPrincipalCurvatureMin/Max
+ * and uncapped sizing from a second ICC pass. **VespaIccNonMaskVertexNormal** matches
+ * `v:vespa_icc_n_nonmask`, or the area blend `v:vespa_icc_normal` when the dual bundle is absent.
+ * Active scalars on that block default to **VespaAdaptiveSizeGlobal**.
  *
  * Requires CGAL 6.0 or newer.
  */
@@ -62,6 +63,17 @@ public:
   static vtkSHYXAdaptiveIsotropicRemesher* New();
   vtkTypeMacro(vtkSHYXAdaptiveIsotropicRemesher, vtkCGALPolyDataAlgorithm);
   void PrintSelf(ostream& os, vtkIndent indent) override;
+
+  /**
+   * Block index and NAME() on output port 1 (vtkMultiBlockDataSet).
+   * Sharp features = old output port 1, Mask patch = old port 2, Sizing preview = old port 3.
+   */
+  enum DiagnosticsBlock : int
+  {
+    SharpFeaturesBlock = 0,
+    MaskPatchBlock = 1,
+    SizingPreviewBlock = 2
+  };
 
   /** vtkSelection input (port 1), same pattern as SHYX Delete Selected Cells. */
   void SetSourceConnection(vtkAlgorithmOutput* algOutput);
@@ -342,7 +354,7 @@ public:
 
   //@{
   /**
-   * When true, feature extraction on port 2 and constraints use FeatureMaskArrayName:
+   * When true, remesh constraints use FeatureMaskArrayName:
    * tuple magnitude must be strictly greater than FeatureMaskThreshold. The array may live on
    * points or cells (same name resolves to cell data if a valid per-cell array exists, otherwise
    * point data). For point-centered arrays, FeatureMaskAllScalars controls whether every corner
@@ -379,8 +391,8 @@ public:
 
   //@{
   /**
-   * When ON (default), run CGAL isotropic remesh. When OFF, skip remesh and feature-edge outputs
-   * but still compute the first ICC sizing pass (port 3 preview + uncapped histogram). Exposed in
+   * When ON (default), run CGAL isotropic remesh. When OFF, skip remesh
+   * but still compute the first ICC sizing pass (diagnostics sizing block + uncapped histogram). Exposed in
    * ParaView as "Enable remesh"; the Properties histogram panel drives its own preview copy with
    * this off.
    */

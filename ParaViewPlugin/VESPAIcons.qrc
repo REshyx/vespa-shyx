@@ -18,6 +18,7 @@
     <file alias="SHYX_Disconnected_Region_Fuse.png">../icon/SHYX_Disconnected_Region_Fuse.png</file>
     <file alias="SHYX_Edge_Collapse.png">../icon/SHYX_Edge_Collapse.png</file>
     <file alias="SHYX_Subset_Coarsen.png">../icon/SHYX_Edge_Collapse.png</file>
+    <file alias="SHYX_Mesh_Simplification.png">../icon/SHYX_Edge_Collapse.png</file>
     <file alias="SHYX_Endpoint_Stent_Placement.png">../icon/SHYX_Endpoint_Stent_Placement.png</file>
     <file alias="SHYX_Enhanced_Ruler.png">../icon/SHYX_Enhanced_Ruler.png</file>
     <file alias="SHYX_Extract_Selected_Cells.png">../icon/SHYX_Extract_Selected_Cells.png</file>

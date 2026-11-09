@@ -20,6 +20,7 @@
 
 #include <CGAL/Kernel/global_functions.h>
 #include <CGAL/Kernel_traits.h>
+#include <CGAL/assertions_behaviour.h>
 #include <CGAL/Origin.h>
 #include <CGAL/Polygon_mesh_processing/compute_normal.h>
 #include <CGAL/Polygon_mesh_processing/detect_features.h>
@@ -47,6 +48,20 @@
 namespace vespa_shyx_air_remesh_internals
 {
 namespace pmp_int = CGAL::Polygon_mesh_processing;
+
+// Force CGAL assertion failures to throw for this scope, then restore the previous
+// process-wide behaviour. Release builds compile those checks out.
+struct CgalThrowOnError
+{
+  CGAL::Failure_behaviour Previous;
+  CgalThrowOnError()
+    : Previous(CGAL::set_error_behaviour(CGAL::THROW_EXCEPTION))
+  {
+  }
+  ~CgalThrowOnError() { CGAL::set_error_behaviour(this->Previous); }
+  CgalThrowOnError(const CgalThrowOnError&) = delete;
+  CgalThrowOnError& operator=(const CgalThrowOnError&) = delete;
+};
 
 inline double TupleMagnitude(vtkDataArray* arr, vtkIdType tupleIdx)
 {

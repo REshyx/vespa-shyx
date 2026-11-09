@@ -1,5 +1,7 @@
 #include "pqSHYXBoundaryAssignmentInfoWidget.h"
 
+#include "shyxHanziPinyin.h"
+
 #include "pqApplicationCore.h"
 #include "pqCoreUtilities.h"
 #include "pqDataRepresentation.h"
@@ -656,7 +658,29 @@ QString pqSHYXBoundaryAssignmentInfoWidget::caseIdFromFilePath(const QString& fi
   {
     stem.chop(6);
   }
-  return stem.trimmed();
+  stem = stem.trimmed();
+  // Hanzi → toneless pinyin so the suggested export names are ASCII.
+  // Code points with no reading become '_'. ASCII bytes are kept.
+  QString ascii;
+  ascii.reserve(stem.size());
+  const auto codepoints = stem.toUcs4();
+  for (const char32_t cp : codepoints)
+  {
+    if (cp < 0x80)
+    {
+      ascii.append(QLatin1Char(static_cast<char>(cp)));
+      continue;
+    }
+    if (const char* py = shyxHanziPinyin(cp))
+    {
+      ascii.append(QLatin1String(py));
+    }
+    else
+    {
+      ascii.append(QLatin1Char('_'));
+    }
+  }
+  return ascii.trimmed();
 }
 
 int pqSHYXBoundaryAssignmentInfoWidget::inferFlowModeFromFileName(const QString& filePath)
@@ -674,6 +698,20 @@ int pqSHYXBoundaryAssignmentInfoWidget::inferFlowModeFromFileName(const QString&
     return 0; // Single inlet → PV
   }
   if (aorta && !plaque)
+  {
+    return 1; // Single outlet → HV
+  }
+  if (plaque || aorta)
+  {
+    return -1; // both anatomical tags
+  }
+  const bool hv = name.contains(QStringLiteral("hv"));
+  const bool pv = name.contains(QStringLiteral("pv"));
+  if (pv && !hv)
+  {
+    return 0; // Single inlet → PV
+  }
+  if (hv && !pv)
   {
     return 1; // Single outlet → HV
   }
@@ -719,7 +757,8 @@ pqSHYXBoundaryAssignmentInfoWidget::pqSHYXBoundaryAssignmentInfoWidget(
   this->PvsmNameEdit->setPlaceholderText(QStringLiteral("PV_K2-1.pvsm / HV_K2-1.pvsm"));
   this->ExoNameEdit->setToolTip(tr(
     "Exodus output basename. Default PV_<case>.exo or HV_<case>.exo from the top-level "
-    "source (e.g. K2-1_plaque.stl → PV_K2-1.exo). Falls back to PV_0.exo / HV_0.exo."));
+    "source (e.g. K2-1_plaque.stl → PV_K2-1.exo, 张三_plaque.stl → PV_zhangsan.exo). "
+    "Hanzi in the file stem are written as toneless pinyin. Falls back to PV_0.exo / HV_0.exo."));
   this->OptNameEdit->setToolTip(tr(
     "Options file basename (no extension). Default options_PV_<case> / options_HV_<case>."));
   this->BcNameEdit->setToolTip(tr(

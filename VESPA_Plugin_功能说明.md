@@ -685,7 +685,7 @@ Python：`c = SHYXCameraAdjust(CameraNames='Front\nSide')` 后写 `CameraPositio
 
 **功能**：CGAL 6 `isotropic_remeshing` + 仓库自定义 **FeatureAwareAdaptiveSizingField**（ICC；**不是** CGAL 自带 `Adaptive_sizing_field`）。边长限制在 **[Min, Max]**；可选 Selection / 标量范围只重网格一部分。输入须为三角 **`vtkPolyData`**。
 
-**输出**：端口 0 remeshed；1 sharp features；2 mask patch；3 ICC sizing preview。
+**输出**：端口 0 为 remeshed `vtkPolyData`。端口 1 为 `vtkMultiBlockDataSet`，三个具名 block：Sharp features、Mask patch、Sizing ICC preview（对应旧端口 1/2/3）。
 
 面板标签与 `vespa/shyx/AdaptiveIsotropicRemesher/SHYXAdaptiveIsotropicRemesher.xml` 一致：
 
@@ -702,7 +702,7 @@ Python：`c = SHYXCameraAdjust(CameraNames='Front\nSide')` 后写 `CameraPositio
 | **ICC size histogram** | （面板 widget） | — | — | Apply 前的 ICC 目标边长直方图（Min/Max clamp 后）；与 Remesh With Endpoint 同一控件，改 Tolerance / neighborhood / Min / Max 会实时刷新。 |
 | **Remesh iterations** | `NumberOfIterations` | int | 3 | CGAL `isotropic_remeshing` 迭代次数。 |
 | **Relaxation steps** | `NumberOfRelaxationSteps` | int | 3 | 每轮切向松弛步数。 |
-| **Detect feature edges** | `DetectFeatureEdges` | bool | false | 默认关。打开后才跑 CGAL `detect_sharp_edges` / Feature mask 约束；关时端口 1 为空。 |
+| **Detect feature edges** | `DetectFeatureEdges` | bool | false | 默认关。打开后才跑 CGAL `detect_sharp_edges` / Feature mask 约束。 |
 | **Protection angle** | `ProtectAngle` | double | **70** | 特征边二面角阈值（度）；依赖 **Detect feature edges**。 |
 | **Interpolate attributes** | `UseUpdateAttributes` | bool | true | 是否将点/单元数据插值到新网格。 |
 
@@ -725,7 +725,7 @@ Python：`c = SHYXCameraAdjust(CameraNames='Front\nSide')` 后写 `CameraPositio
 | **SHYX Shape Smoothing** | MCF / Angle&Area / Fair 三算法 |
 | **SHYX Edge Collapse** | CGAL 边塌缩（存活点会移动） |
 | **SHYX Subset Coarsen** | 子集粗化：折叠到原端点，不加新点、存活点坐标不变；Cost Strategy：QEM / 最小角 |
-| **SHYX Remesh With Endpoint** | Vascular 第 4 步；CGAL ≥ 6；与 Adaptive Remesher 同模块 |
+| **SHYX Remesh With Endpoint** | Vascular 第 4 步；CGAL ≥ 6；与 Adaptive Remesher 同模块。**Anchor boundary size** 且 Protect 关时列出每个开口的边界点和各自的 Scale，不再共用一个 Boundary size scale |
 | **SHYX Convex Hull** | 纯 VTK 凸包 |
 | **SHYX Resample Lines** | LineMerge / Fuse / Sample 三步独立开关（默认都开）；LineMerge 二叉树两两合并，把落在已有线上（容差 1e-4×包围盒最长边）的点并上去；Fuse 容差 1e-6×最长边；Sample Distance 默认 0.01×最长边；度≠2 为特征点；短于间距的分支只留两端；结束后写点数组 Degree |
 | **SHYX Selection Extrude** | 选区连通块挤出（共享帽顶点） |

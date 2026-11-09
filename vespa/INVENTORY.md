@@ -45,6 +45,7 @@ Kitware 原版 CGAL 滤镜，全部需 **`VESPA_USE_CGAL`**，只作保留（对
 | SHYX Shape Smoothing | `vtkSHYXShapeSmoothing` | ShapeSmoothing | SHYXShapeSmoothing.xml | 自有 | [有](shyx/ShapeSmoothing/README.md) | CGAL |
 | SHYX Edge Collapse (CGAL) | `vtkSHYXEdgeCollapse` | EdgeCollapse | SHYXEdgeCollapse.xml | 自有 | [有](shyx/EdgeCollapse/README.md) | CGAL |
 | SHYX Subset Coarsen | `vtkSHYXSubsetCoarsen` | SubsetCoarsen | SHYXSubsetCoarsen.xml | 自有（复用 Edge Collapse 图） | [有](shyx/SubsetCoarsen/README.md) | CGAL |
+| SHYX Mesh Simplification | `vtkSHYXMeshSimplification` | MeshSimplification | SHYXMeshSimplification.xml | 自有（复用 Edge Collapse 图） | [有](shyx/MeshSimplification/README.md) | CGAL |
 | SHYX Adaptive Isotropic Remesher | `vtkSHYXAdaptiveIsotropicRemesher` | AdaptiveIsotropicRemesher | SHYXAdaptiveIsotropicRemesher.xml | 自有 | [有](shyx/AdaptiveIsotropicRemesher/README.md) | CGAL ≥ 6 |
 | SHYX Remesh With Endpoint | `vtkSHYXRemeshWithEndpoint` | 同上模块 | SHYXRemeshWithEndpoint.xml | fluent | （同 Remesher README） | CGAL ≥ 6 |
 | SHYX Convex Hull | `vtkSHYXConvexHullFilter` | ConvexHullFilter | SHYXConvexHullFilter.xml | 自有 | [有](shyx/ConvexHullFilter/README.md) | VTK |

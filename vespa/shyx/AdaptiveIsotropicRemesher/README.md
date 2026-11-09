@@ -30,14 +30,16 @@
 | **`IccNeighborhoodRings`** | `int` | `1` | **网格 hop 层数**（仅 Mesh rings）。`1` = 一环邻面（旧默认）。每多 1 层加上与上一层共边的面。 |
 | **`IccBallRadius`** | `double` | `-1` | **ICC `ball_radius`（模型长度）**，仅 Euclidean ball 模式。`< 0`：一环邻面；`0`：平均边长 × 1e-6；`> 0`：欧氏球。不是 Expansion ratio。 |
 | **`ProtectAngle`** | `double` | `70.0` | **特征边保护角度（度）**。相邻面法线夹角大于此阈值时保护该边。 |
-| **`EnableRemesh`** | `bool` | `true` | 面板标签 **Enable remesh**。关掉后 `RequestData` 只算一次 ICC sizing（端口 3 + 直方图）并原样输出输入网格：不跑 CGAL、不写恢复文件。 |
+| **`EnableRemesh`** | `bool` | `true` | 面板标签 **Enable remesh**。关掉后 `RequestData` 只算一次 ICC sizing（诊断块里的 sizing preview + 直方图）并原样输出输入网格：不跑 CGAL、不写恢复文件。 |
 | **`NumberOfIterations`** | `int` | `3` | CGAL 各向同性重网格循环次数。必须 `>= 1`。面板标签 **Remesh iterations**。 |
 | **`NumberOfRelaxationSteps`** | `int` | `3` | 每轮切向松弛步数（CGAL 文档默认常为 1；本滤镜默认 3）。面板标签 **Relaxation steps**。 |
-| **`DetectFeatureEdges`** | `bool` | `false` | **检测特征边**。默认关：不做 `detect_sharp_edges` / Feature mask 约束，端口 1 为空。打开后才按 `ProtectAngle` 保护尖锐边。 |
+| **`DetectFeatureEdges`** | `bool` | `false` | **检测特征边**。默认关：不做 `detect_sharp_edges` / Feature mask 约束。打开后才按 `ProtectAngle` 保护尖锐边。 |
 
-**输出端口**：0 remeshed `vtkPolyData`；1 特征线；2 mask patch；3 sizing/ICC preview。可选 Selection（port 1）或标量范围只重网格一部分；空选区 = 整张表面。
+**输出端口**：0 remeshed `vtkPolyData`。1 是 `vtkMultiBlockDataSet`（Diagnostics），三个具名 block：0 Sharp features（旧端口 1）、1 Mask patch（旧端口 2）、2 Sizing ICC preview（旧端口 3，最后一轮 remesh 之前的网格）。Detect feature edges 关时特征线 block 为空；Feature mask 关时 mask block 为空。可选 Selection（输入 port 1）或标量范围只重网格一部分；空选区 = 整张表面。
 
 面板其余项（ICC neighborhood / Mesh rings / ICC ball radius、Expansion ratio、Scale to range、**Sizing field scale**、ICC size histogram、Detect feature edges、Feature mask、Remesh constraints 等）见同目录 `SHYXAdaptiveIsotropicRemesher.xml`。**`SizingFieldScale`**（默认 1）对 clamp / expansion / Scale to range 之后的 ICC 场做整体缩放，不再夹回 Min/Max；`SHYXRemeshWithEndpoint` 同样有这项（只作用于 wall ICC，cap 仍跟墙边长）。注意 **`SHYXRemeshWithEndpoint` 的 sizing 默认与上式不同**：**Adaptive tolerance = 0.02**、**Mesh rings = 2**（`SHYXAdaptiveIsotropicRemesher` 仍为 0.01 / 1），见 `SHYXRemeshWithEndpoint.xml` / `vtkSHYXRemeshWithEndpoint.h`。
+
+**Remesh With Endpoint 的开口尺度**：勾选 **Anchor boundary size** 且 **Protect constraints** 关闭时，**Opening boundary scales** 列出每个开口。**Point** 是该开口边界上的一个顶点，**Scale** 乘这一整圈的平均边界边长（大于 1 变粗，小于 1 变细），不再强制所有开口共用一个倍数。列表为空、或每一行 Scale 相同，仍走原来的统一倍数（**Boundary size scale**）。Anchor 关闭时只显示 **Boundary size scale**，乘的是开口顶点的曲率目标。Anchor 和 Protect 都开时开口冻在输入边长上，两个控件都隐藏。
 
 **卡死恢复：** `RequestData` 进入 CGAL remesh 之前会覆盖 `%TEMP%/shyx_remesh_pre_apply.pvsm`（非 Windows 为 `$TMPDIR` 或 `/tmp`）。写入的是**这次 Apply 之前**的管线：正在跑 CGAL 的当前滤镜（以及它的下游）不会写进 `.pvsm`，所以载入恢复文件不会再触发这次 remesh。ParaView **File → Recovery** 可直接下拉列出 temp 文件夹里的 `.pvsm` 并一键载入（`Before remesh - shyx_remesh_pre_apply.pvsm`）；也可用 File → Load State 手动找回 Apply 前的管线。`Enable remesh` 关（或 Remesh With Endpoint 的 wall/cap remesh 都关）时只算 ICC sizing 预览，不写该文件、不跑 CGAL。
 
