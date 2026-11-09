@@ -273,16 +273,17 @@
                             name="OpeningBoundaryScales"
                             label="Opening boundary scales"
                             number_of_elements="0"
-                            number_of_elements_per_command="4"
+                            number_of_elements_per_command="5"
                             repeat_command="1"
                             set_number_command="SetNumberOfOpeningBoundaryScales"
                             use_index="1"
                             animateable="0">
         <Documentation>
-          Per-opening anchor scales, packed as (centroid x, y, z, scale). The panel fills this
-          when **Anchor boundary size** is ON and **Protect constraints** is OFF: one row per
-          open boundary, **Point** is a vertex on that loop, **Scale** multiplies the whole
-          loop's mean border-edge length. Empty leaves every opening on **Boundary size scale**.
+          Per-opening anchor scales, packed as (EndpointIndex, centroid x, y, z, scale). The panel
+          fills this when **Anchor boundary size** is ON and **Protect constraints** is OFF:
+          one row per positive **EndpointIndex** (the cap id), not per boundary ring and not a
+          row number. **Scale** multiplies the whole
+          opening's mean border-edge length. Empty leaves every opening on **Boundary size scale**.
           Scales that are all equal still take that shared path. Differing scales match each
           loop to the nearest stored centroid. Not compounded across remesh iterations.
         </Documentation>

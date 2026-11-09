@@ -128,10 +128,10 @@ pqSHYXRemeshOpeningScaleTable::pqSHYXRemeshOpeningScaleTable(
   this->Status->setText(tr("Each row is one opening."));
   layout->addWidget(this->Status);
 
-  this->Table = new QTableWidget(0, 5, this);
+  this->Table = new QTableWidget(0, 4, this);
   this->Table->setObjectName("SHYXRemeshOpeningScaleTable");
   this->Table->setHorizontalHeaderLabels(
-    { tr("Opening"), tr("Point"), tr("Points"), tr("Mean edge"), tr("Scale") });
+    { tr("EndpointIndex"), tr("Points"), tr("Mean edge"), tr("Scale") });
   this->Table->verticalHeader()->setVisible(false);
   this->Table->setEditTriggers(QAbstractItemView::NoEditTriggers);
   this->Table->setSelectionBehavior(QAbstractItemView::SelectRows);
@@ -139,7 +139,7 @@ pqSHYXRemeshOpeningScaleTable::pqSHYXRemeshOpeningScaleTable(
   this->Table->setMinimumHeight(120);
   this->Table->setMaximumHeight(280);
   this->Table->horizontalHeader()->setStretchLastSection(false);
-  this->Table->horizontalHeader()->setSectionResizeMode(1, QHeaderView::Stretch);
+  this->Table->horizontalHeader()->setSectionResizeMode(2, QHeaderView::Stretch);
   layout->addWidget(this->Table);
 
   this->Debounce = new QTimer(this);
@@ -231,25 +231,20 @@ std::vector<pqSHYXRemeshOpeningScaleTable::SavedScale> pqSHYXRemeshOpeningScaleT
   {
     count = dvp->GetNumberOfElements();
   }
-  count = (count / 4) * 4;
-  saved.reserve(count / 4);
-  for (unsigned int i = 0; i < count; i += 4)
+  constexpr unsigned int stride = 5;
+  count = (count / stride) * stride;
+  saved.reserve(count / stride);
+  for (unsigned int i = 0; i < count; i += stride)
   {
     SavedScale item;
-    if (useUnchecked)
-    {
-      item.X = dvp->GetUncheckedElement(i);
-      item.Y = dvp->GetUncheckedElement(i + 1);
-      item.Z = dvp->GetUncheckedElement(i + 2);
-      item.Scale = dvp->GetUncheckedElement(i + 3);
-    }
-    else
-    {
-      item.X = dvp->GetElement(i);
-      item.Y = dvp->GetElement(i + 1);
-      item.Z = dvp->GetElement(i + 2);
-      item.Scale = dvp->GetElement(i + 3);
-    }
+    const auto at = [&](unsigned int offset) {
+      return useUnchecked ? dvp->GetUncheckedElement(i + offset) : dvp->GetElement(i + offset);
+    };
+    item.EndpointId = static_cast<int>(std::lround(at(0)));
+    item.X = at(1);
+    item.Y = at(2);
+    item.Z = at(3);
+    item.Scale = at(4);
     saved.push_back(item);
   }
   return saved;
@@ -267,6 +262,28 @@ void pqSHYXRemeshOpeningScaleTable::fillRows(
   if (saved.empty() || this->Rows.empty())
   {
     return;
+  }
+
+  std::vector<char> usedKey(saved.size(), 0);
+  for (Row& row : this->Rows)
+  {
+    if (row.EndpointId <= 0)
+    {
+      continue;
+    }
+    for (std::size_t key = 0; key < saved.size(); ++key)
+    {
+      if (usedKey[key] || saved[key].EndpointId != row.EndpointId)
+      {
+        continue;
+      }
+      usedKey[key] = 1;
+      if (saved[key].Scale > 0.0)
+      {
+        row.Scale = saved[key].Scale;
+      }
+      break;
+    }
   }
 
   double minSep2 = std::numeric_limits<double>::infinity();
@@ -302,10 +319,9 @@ void pqSHYXRemeshOpeningScaleTable::fillRows(
   std::sort(cands.begin(), cands.end(),
     [](const Cand& a, const Cand& b) { return a.D2 < b.D2; });
   std::vector<char> usedRow(this->Rows.size(), 0);
-  std::vector<char> usedKey(saved.size(), 0);
   for (const Cand& cand : cands)
   {
-    if (usedRow[cand.Row] || usedKey[cand.Key])
+    if (usedRow[cand.Row] || usedKey[cand.Key] || this->Rows[cand.Row].EndpointId > 0)
     {
       continue;
     }
@@ -338,22 +354,16 @@ void pqSHYXRemeshOpeningScaleTable::rebuildTable()
   for (int row = 0; row < static_cast<int>(this->Rows.size()); ++row)
   {
     const Row& item = this->Rows[static_cast<std::size_t>(row)];
-    auto* opening = new QTableWidgetItem(QString::number(row + 1));
-    auto* point = new QTableWidgetItem(tr("%1, %2, %3")
-                                         .arg(item.Sample[0], 0, 'g', 6)
-                                         .arg(item.Sample[1], 0, 'g', 6)
-                                         .arg(item.Sample[2], 0, 'g', 6));
+    auto* opening = new QTableWidgetItem(
+      item.EndpointId > 0 ? QString::number(item.EndpointId) : QStringLiteral("—"));
+    opening->setToolTip(item.EndpointId > 0
+        ? tr("Cell EndpointIndex of this opening.")
+        : tr("This boundary has no EndpointIndex."));
     auto* count = new QTableWidgetItem(QString::number(item.PointCount));
     auto* mean = new QTableWidgetItem(QString::number(item.MeanEdge, 'g', 5));
-    point->setToolTip(tr("Boundary vertex nearest the opening center (%1, %2, %3). "
-                         "Scale applies to every vertex on this opening.")
-                        .arg(item.Centroid[0], 0, 'g', 6)
-                        .arg(item.Centroid[1], 0, 'g', 6)
-                        .arg(item.Centroid[2], 0, 'g', 6));
     this->Table->setItem(row, 0, opening);
-    this->Table->setItem(row, 1, point);
-    this->Table->setItem(row, 2, count);
-    this->Table->setItem(row, 3, mean);
+    this->Table->setItem(row, 1, count);
+    this->Table->setItem(row, 2, mean);
 
     auto* scale = new QDoubleSpinBox(this->Table);
     scale->setRange(1.0e-6, 1.0e6);
@@ -362,11 +372,10 @@ void pqSHYXRemeshOpeningScaleTable::rebuildTable()
     scale->setValue(item.Scale);
     QObject::connect(scale, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this,
       &pqSHYXRemeshOpeningScaleTable::onScaleEdited);
-    this->Table->setCellWidget(row, 4, scale);
+    this->Table->setCellWidget(row, 3, scale);
   }
   this->Table->resizeColumnToContents(0);
-  this->Table->resizeColumnToContents(2);
-  this->Table->resizeColumnToContents(3);
+  this->Table->resizeColumnToContents(1);
   this->Updating = false;
 }
 
@@ -426,24 +435,29 @@ void pqSHYXRemeshOpeningScaleTable::refresh()
     row.Centroid[0] = loop.Centroid[0];
     row.Centroid[1] = loop.Centroid[1];
     row.Centroid[2] = loop.Centroid[2];
-    row.Sample[0] = loop.SamplePoint[0];
-    row.Sample[1] = loop.SamplePoint[1];
-    row.Sample[2] = loop.SamplePoint[2];
     row.MeanEdge = loop.MeanEdgeLength;
     row.PointCount = loop.PointCount;
+    row.EndpointId = loop.EndpointId;
     discovered.push_back(row);
   }
   this->fillRows(discovered, this->readSaved());
   this->rebuildTable();
+  const bool byEndpoint =
+    std::any_of(this->Rows.begin(), this->Rows.end(), [](const Row& row) { return row.EndpointId > 0; });
   if (this->Rows.empty())
   {
-    this->Status->setText(tr("No open boundary on the extracted wall."));
+    this->Status->setText(tr("No EndpointIndex > 0 and no open boundary on the extracted wall."));
+  }
+  else if (byEndpoint)
+  {
+    this->Status->setText(tr("%1 openings, one row per EndpointIndex. "
+                             "Scale multiplies the whole opening. >1 coarsens, <1 refines.")
+                            .arg(static_cast<int>(this->Rows.size())));
   }
   else
   {
-    this->Status->setText(tr("One row per opening. Point is a boundary vertex of that opening. "
-                             "Scale multiplies the whole opening's mean edge length. "
-                             ">1 coarsens, <1 refines."));
+    this->Status->setText(tr("Input has no EndpointIndex > 0. Rows are open boundary loops, "
+                             "and the first column is not an endpoint id."));
   }
 }
 
@@ -464,16 +478,17 @@ void pqSHYXRemeshOpeningScaleTable::writeRows(bool pushChecked)
     return;
   }
   std::vector<double> packed;
-  packed.reserve(this->Rows.size() * 4);
+  packed.reserve(this->Rows.size() * 5);
   for (int row = 0; row < static_cast<int>(this->Rows.size()); ++row)
   {
     const Row& item = this->Rows[static_cast<std::size_t>(row)];
     double scale = item.Scale;
-    if (auto* spin = qobject_cast<QDoubleSpinBox*>(this->Table->cellWidget(row, 4)))
+    if (auto* spin = qobject_cast<QDoubleSpinBox*>(this->Table->cellWidget(row, 3)))
     {
       scale = spin->value();
       this->Rows[static_cast<std::size_t>(row)].Scale = scale;
     }
+    packed.push_back(static_cast<double>(item.EndpointId));
     packed.push_back(item.Centroid[0]);
     packed.push_back(item.Centroid[1]);
     packed.push_back(item.Centroid[2]);

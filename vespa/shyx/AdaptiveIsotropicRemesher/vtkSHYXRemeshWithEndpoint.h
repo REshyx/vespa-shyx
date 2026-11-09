@@ -144,28 +144,32 @@ public:
      */
     struct OpeningLoop
     {
+        /** Cell EndpointIndex of this opening. 0 = a bare boundary loop, not an endpoint id. */
+        int EndpointId = 0;
         double Centroid[3] = { 0.0, 0.0, 0.0 };
         double SamplePoint[3] = { 0.0, 0.0, 0.0 };
         double MeanEdgeLength = 0.0;
         int PointCount = 0;
     };
     /**
-     * Boundary loops of the wall patch this filter remeshes (endpoint cull + largest region),
-     * sorted by centroid. Does not remesh. Returns false when that patch cannot be built.
+     * One entry per positive EndpointIndex on the input (the clipper cap id). Sorted by that
+     * id. When the input has no such ids, falls back to open boundary loops of the extracted
+     * wall (EndpointId stays 0). Does not remesh. Returns false when no surface can be read.
      * Not wrapped: the panel calls it on the client.
      */
     bool CollectOpeningLoops(vtkPolyData* input, std::vector<OpeningLoop>& loops) const;
 #endif
 
     /**
-     * Per-opening anchor scales, packed as (centroid x, y, z, scale). Empty keeps
+     * Per-opening anchor scales, packed as (EndpointIndex, centroid x, y, z, scale). Empty keeps
      * BoundarySizeScale for every opening. A loop is matched to the nearest centroid within
      * its own perimeter (and half the gap to the next opening). Unmatched openings keep
      * BoundarySizeScale. Ignored unless Anchor boundary size is ON and Protect constraints
      * is OFF.
      */
     void SetNumberOfOpeningBoundaryScales(int n);
-    void SetOpeningBoundaryScale(int index, double x, double y, double z, double scale);
+    void SetOpeningBoundaryScale(
+        int index, double endpointId, double x, double y, double z, double scale);
     int GetNumberOfOpeningBoundaryScales() const;
     vtkGetMacro(ScaleToRange, bool);
     vtkSetMacro(ScaleToRange, bool);
@@ -314,7 +318,7 @@ protected:
     double AdaptiveSizingNeighborMaxRatio = 1.6;
     bool AnchorBoundarySize = false;
     double BoundarySizeScale = 1.0;
-    /** Packed (cx, cy, cz, scale) per opening. Empty = every opening uses BoundarySizeScale. */
+    /** Packed (EndpointIndex, cx, cy, cz, scale) per opening. Empty = BoundarySizeScale for all. */
     std::vector<double> OpeningBoundaryScales;
     bool ScaleToRange = false;
     double SizingFieldScale = 1.0;

@@ -725,7 +725,7 @@ Python：`c = SHYXCameraAdjust(CameraNames='Front\nSide')` 后写 `CameraPositio
 | **SHYX Shape Smoothing** | MCF / Angle&Area / Fair 三算法 |
 | **SHYX Edge Collapse** | CGAL 边塌缩（存活点会移动） |
 | **SHYX Subset Coarsen** | 子集粗化：折叠到原端点，不加新点、存活点坐标不变；Cost Strategy：QEM / 最小角 |
-| **SHYX Remesh With Endpoint** | Vascular 第 4 步；CGAL ≥ 6；与 Adaptive Remesher 同模块。**Anchor boundary size** 且 Protect 关时列出每个开口的边界点和各自的 Scale，不再共用一个 Boundary size scale |
+| **SHYX Remesh With Endpoint** | Vascular 第 4 步；CGAL ≥ 6；与 Adaptive Remesher 同模块。**Anchor boundary size** 且 Protect 关时按 cell **EndpointIndex** 列出每个开口和各自的 Scale（第一列是开口编号），不再共用一个 Boundary size scale |
 | **SHYX Convex Hull** | 纯 VTK 凸包 |
 | **SHYX Resample Lines** | LineMerge / Fuse / Sample 三步独立开关（默认都开）；LineMerge 二叉树两两合并，把落在已有线上（容差 1e-4×包围盒最长边）的点并上去；Fuse 容差 1e-6×最长边；Sample Distance 默认 0.01×最长边；度≠2 为特征点；短于间距的分支只留两端；结束后写点数组 Degree |
 | **SHYX Selection Extrude** | 选区连通块挤出（共享帽顶点） |

@@ -43,6 +43,7 @@
 #include <stdexcept>
 #include <string>
 #include <limits>
+#include <map>
 #include <memory>
 #include <optional>
 #include <queue>
@@ -800,6 +801,246 @@ void CollectBoundaryLoops(
         });
 }
 
+constexpr int OpeningScaleStride = 5;
+
+int PositiveEndpointId(vtkDataArray* arr, vtkIdType tuple)
+{
+    if (!arr || tuple < 0 || tuple >= arr->GetNumberOfTuples())
+    {
+        return 0;
+    }
+    const double value = arr->GetComponent(tuple, 0);
+    if (!std::isfinite(value))
+    {
+        return 0;
+    }
+    const int id = static_cast<int>(std::lround(value));
+    return id > 0 ? id : 0;
+}
+
+/**
+ * One row per positive cell EndpointIndex. The seam is every edge with that id on exactly
+ * one side (the ring between the cap and the wall). Extra open boundaries that are not a
+ * tagged opening are not listed.
+ */
+bool CollectEndpointOpenings(vtkPolyData* input, const char* arrayName,
+    std::vector<vtkSHYXRemeshWithEndpoint::OpeningLoop>& loops)
+{
+    loops.clear();
+    if (!input || !input->GetPoints())
+    {
+        return false;
+    }
+    int assoc = vtkDataObject::FIELD_ASSOCIATION_NONE;
+    if (!ResolveThresholdArray(input, arrayName, assoc))
+    {
+        return false;
+    }
+    vtkDataArray* arr = (assoc == vtkDataObject::FIELD_ASSOCIATION_CELLS)
+        ? input->GetCellData()->GetArray(arrayName)
+        : input->GetPointData()->GetArray(arrayName);
+    if (!arr)
+    {
+        return false;
+    }
+
+    input->BuildCells();
+    const bool cellAssoc = assoc == vtkDataObject::FIELD_ASSOCIATION_CELLS;
+    const vtkIdType nCells = input->GetNumberOfCells();
+    auto cellEndpoint = [&](vtkIdType cid) -> int {
+        if (cellAssoc)
+        {
+            return PositiveEndpointId(arr, cid);
+        }
+        vtkIdType npts = 0;
+        const vtkIdType* pts = nullptr;
+        if (!input->GetCellPoints(cid, npts, pts) || !pts)
+        {
+            return 0;
+        }
+        int best = 0;
+        for (vtkIdType i = 0; i < npts; ++i)
+        {
+            best = (std::max)(best, PositiveEndpointId(arr, pts[i]));
+        }
+        return best;
+    };
+
+    struct EdgeSides
+    {
+        int Count = 0;
+        int Id0 = 0;
+        int Id1 = 0;
+        vtkIdType A = 0;
+        vtkIdType B = 0;
+    };
+    std::unordered_map<EdgeKey, EdgeSides, EdgeKeyHash> edges;
+    std::map<int, std::vector<vtkIdType>> cellsOfId;
+    for (vtkIdType cid = 0; cid < nCells; ++cid)
+    {
+        const int cellType = input->GetCellType(cid);
+        if (cellType != VTK_TRIANGLE && cellType != VTK_QUAD && cellType != VTK_POLYGON)
+        {
+            continue;
+        }
+        const int id = cellEndpoint(cid);
+        if (id > 0)
+        {
+            cellsOfId[id].push_back(cid);
+        }
+        vtkIdType npts = 0;
+        const vtkIdType* pts = nullptr;
+        if (!input->GetCellPoints(cid, npts, pts) || !pts || npts < 3)
+        {
+            continue;
+        }
+        for (vtkIdType i = 0; i < npts; ++i)
+        {
+            const vtkIdType a = pts[i];
+            const vtkIdType b = pts[(i + 1) % npts];
+            if (a == b)
+            {
+                continue;
+            }
+            EdgeKey key;
+            key.Lo = a < b ? a : b;
+            key.Hi = a < b ? b : a;
+            EdgeSides& side = edges[key];
+            if (side.Count == 0)
+            {
+                side.A = a;
+                side.B = b;
+                side.Id0 = id;
+            }
+            else if (side.Count == 1)
+            {
+                side.Id1 = id;
+            }
+            ++side.Count;
+        }
+    }
+    if (cellsOfId.empty())
+    {
+        return false;
+    }
+
+    struct Acc
+    {
+        std::unordered_set<vtkIdType> Verts;
+        double LenSum = 0.0;
+        int NEdges = 0;
+    };
+    std::map<int, Acc> acc;
+    for (const auto& item : cellsOfId)
+    {
+        acc[item.first];
+    }
+    vtkPoints* points = input->GetPoints();
+    for (const auto& item : edges)
+    {
+        const EdgeSides& side = item.second;
+        auto touches = [&](int id) {
+            const bool on0 = side.Id0 == id;
+            const bool on1 = side.Count > 1 && side.Id1 == id;
+            return (on0 != on1) || (side.Count == 1 && on0);
+        };
+        double pa[3];
+        double pb[3];
+        points->GetPoint(side.A, pa);
+        points->GetPoint(side.B, pb);
+        const double dx = pb[0] - pa[0];
+        const double dy = pb[1] - pa[1];
+        const double dz = pb[2] - pa[2];
+        const double len = std::sqrt(dx * dx + dy * dy + dz * dz);
+        for (const auto& idItem : cellsOfId)
+        {
+            if (!touches(idItem.first))
+            {
+                continue;
+            }
+            Acc& bucket = acc[idItem.first];
+            bucket.Verts.insert(side.A);
+            bucket.Verts.insert(side.B);
+            if (len > 0.0)
+            {
+                bucket.LenSum += len;
+                ++bucket.NEdges;
+            }
+        }
+    }
+
+    for (const auto& item : cellsOfId)
+    {
+        Acc& bucket = acc[item.first];
+        if (!bucket.Verts.empty())
+        {
+            continue;
+        }
+        for (vtkIdType cid : item.second)
+        {
+            vtkIdType npts = 0;
+            const vtkIdType* pts = nullptr;
+            if (!input->GetCellPoints(cid, npts, pts) || !pts)
+            {
+                continue;
+            }
+            for (vtkIdType i = 0; i < npts; ++i)
+            {
+                bucket.Verts.insert(pts[i]);
+            }
+        }
+    }
+
+    loops.reserve(acc.size());
+    for (const auto& item : acc)
+    {
+        const Acc& bucket = item.second;
+        if (bucket.Verts.empty())
+        {
+            continue;
+        }
+        vtkSHYXRemeshWithEndpoint::OpeningLoop loop;
+        loop.EndpointId = item.first;
+        for (vtkIdType id : bucket.Verts)
+        {
+            double p[3];
+            points->GetPoint(id, p);
+            loop.Centroid[0] += p[0];
+            loop.Centroid[1] += p[1];
+            loop.Centroid[2] += p[2];
+        }
+        const double n = static_cast<double>(bucket.Verts.size());
+        loop.Centroid[0] /= n;
+        loop.Centroid[1] /= n;
+        loop.Centroid[2] /= n;
+        loop.PointCount = static_cast<int>(bucket.Verts.size());
+        loop.MeanEdgeLength =
+            bucket.NEdges > 0 ? bucket.LenSum / static_cast<double>(bucket.NEdges) : 0.0;
+        double bestD = std::numeric_limits<double>::infinity();
+        loop.SamplePoint[0] = loop.Centroid[0];
+        loop.SamplePoint[1] = loop.Centroid[1];
+        loop.SamplePoint[2] = loop.Centroid[2];
+        for (vtkIdType id : bucket.Verts)
+        {
+            double p[3];
+            points->GetPoint(id, p);
+            const double dx = p[0] - loop.Centroid[0];
+            const double dy = p[1] - loop.Centroid[1];
+            const double dz = p[2] - loop.Centroid[2];
+            const double d2 = dx * dx + dy * dy + dz * dz;
+            if (d2 < bestD)
+            {
+                bestD = d2;
+                loop.SamplePoint[0] = p[0];
+                loop.SamplePoint[1] = p[1];
+                loop.SamplePoint[2] = p[2];
+            }
+        }
+        loops.push_back(loop);
+    }
+    return !loops.empty();
+}
+
 } // namespace
 
 //------------------------------------------------------------------------------
@@ -975,7 +1216,7 @@ void vtkSHYXRemeshWithEndpoint::SetNumberOfOpeningBoundaryScales(int n)
     {
         n = 0;
     }
-    const std::size_t want = static_cast<std::size_t>(n) * 4;
+    const std::size_t want = static_cast<std::size_t>(n) * static_cast<std::size_t>(OpeningScaleStride);
     if (this->OpeningBoundaryScales.size() == want)
     {
         return;
@@ -985,10 +1226,10 @@ void vtkSHYXRemeshWithEndpoint::SetNumberOfOpeningBoundaryScales(int n)
 }
 
 void vtkSHYXRemeshWithEndpoint::SetOpeningBoundaryScale(
-    int index, double x, double y, double z, double scale)
+    int index, double endpointId, double x, double y, double z, double scale)
 {
-    if (index < 0 || !std::isfinite(x) || !std::isfinite(y) || !std::isfinite(z) ||
-        !std::isfinite(scale))
+    if (index < 0 || !std::isfinite(endpointId) || !std::isfinite(x) || !std::isfinite(y) ||
+        !std::isfinite(z) || !std::isfinite(scale))
     {
         return;
     }
@@ -1008,27 +1249,33 @@ void vtkSHYXRemeshWithEndpoint::SetOpeningBoundaryScale(
     {
         this->SetNumberOfOpeningBoundaryScales(index + 1);
     }
-    double* slot = &this->OpeningBoundaryScales[static_cast<std::size_t>(index) * 4];
-    if (slot[0] == x && slot[1] == y && slot[2] == z && slot[3] == scale)
+    double* slot =
+        &this->OpeningBoundaryScales[static_cast<std::size_t>(index) * static_cast<std::size_t>(OpeningScaleStride)];
+    if (slot[0] == endpointId && slot[1] == x && slot[2] == y && slot[3] == z && slot[4] == scale)
     {
         return;
     }
-    slot[0] = x;
-    slot[1] = y;
-    slot[2] = z;
-    slot[3] = scale;
+    slot[0] = endpointId;
+    slot[1] = x;
+    slot[2] = y;
+    slot[3] = z;
+    slot[4] = scale;
     this->Modified();
 }
 
 int vtkSHYXRemeshWithEndpoint::GetNumberOfOpeningBoundaryScales() const
 {
-    return static_cast<int>(this->OpeningBoundaryScales.size() / 4);
+    return static_cast<int>(this->OpeningBoundaryScales.size() / static_cast<std::size_t>(OpeningScaleStride));
 }
 
 bool vtkSHYXRemeshWithEndpoint::CollectOpeningLoops(
     vtkPolyData* input, std::vector<OpeningLoop>& loops) const
 {
     loops.clear();
+    if (CollectEndpointOpenings(input, this->EndpointIndexArrayName, loops))
+    {
+        return true;
+    }
     vtkSmartPointer<vtkPolyData> patch = ExtractWallPatch(input, this->EndpointIndexArrayName,
         this->EnableEndpointCull, this->EndpointIndexAllScalars, this->LargestConnectedRegionOnly);
     if (!patch)
@@ -1169,8 +1416,10 @@ int vtkSHYXRemeshWithEndpoint::RequestData(
             openingScales.reserve(static_cast<std::size_t>(nScales));
             for (int i = 0; i < nScales; ++i)
             {
-                const double* slot = &this->OpeningBoundaryScales[static_cast<std::size_t>(i) * 4];
-                openingScales.push_back(SizingTy::OpeningScaleSample{ slot[0], slot[1], slot[2], slot[3] });
+                const double* slot = &this->OpeningBoundaryScales[static_cast<std::size_t>(i) *
+                    static_cast<std::size_t>(OpeningScaleStride)];
+                openingScales.push_back(
+                    SizingTy::OpeningScaleSample{ slot[1], slot[2], slot[3], slot[4] });
             }
         }
         sizingStorage.emplace(this->AdaptiveTolerance, std::make_pair(minLen, maxLen),

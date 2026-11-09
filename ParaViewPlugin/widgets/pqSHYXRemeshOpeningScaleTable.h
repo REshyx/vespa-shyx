@@ -13,9 +13,10 @@ class QTimer;
 class vtkEventQtSlotConnect;
 
 /**
- * One row per open boundary of SHYX Remesh With Endpoint when Anchor boundary size is on
- * and Protect constraints is off. Point is a vertex on that loop. Scale multiplies the
- * whole opening's mean border-edge length. Stored as (centroid x, y, z, scale).
+ * One row per positive EndpointIndex when Anchor boundary size is on and Protect
+ * constraints is off. The first column is that cell id, not a row number. Scale
+ * multiplies the whole opening's mean border-edge length.
+ * Stored as (EndpointIndex, centroid x, y, z, scale).
  */
 class pqSHYXRemeshOpeningScaleTable : public pqPropertyWidget
 {
@@ -42,14 +43,15 @@ private:
   struct Row
   {
     double Centroid[3] = { 0.0, 0.0, 0.0 };
-    double Sample[3] = { 0.0, 0.0, 0.0 };
     double MeanEdge = 0.0;
     int PointCount = 0;
+    int EndpointId = 0;
     double Scale = 1.0;
   };
 
   struct SavedScale
   {
+    int EndpointId = 0;
     double X = 0.0;
     double Y = 0.0;
     double Z = 0.0;

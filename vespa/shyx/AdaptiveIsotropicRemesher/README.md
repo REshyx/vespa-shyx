@@ -39,7 +39,7 @@
 
 面板其余项（ICC neighborhood / Mesh rings / ICC ball radius、Expansion ratio、Scale to range、**Sizing field scale**、ICC size histogram、Detect feature edges、Feature mask、Remesh constraints 等）见同目录 `SHYXAdaptiveIsotropicRemesher.xml`。**`SizingFieldScale`**（默认 1）对 clamp / expansion / Scale to range 之后的 ICC 场做整体缩放，不再夹回 Min/Max；`SHYXRemeshWithEndpoint` 同样有这项（只作用于 wall ICC，cap 仍跟墙边长）。注意 **`SHYXRemeshWithEndpoint` 的 sizing 默认与上式不同**：**Adaptive tolerance = 0.02**、**Mesh rings = 2**（`SHYXAdaptiveIsotropicRemesher` 仍为 0.01 / 1），见 `SHYXRemeshWithEndpoint.xml` / `vtkSHYXRemeshWithEndpoint.h`。
 
-**Remesh With Endpoint 的开口尺度**：勾选 **Anchor boundary size** 且 **Protect constraints** 关闭时，**Opening boundary scales** 列出每个开口。**Point** 是该开口边界上的一个顶点，**Scale** 乘这一整圈的平均边界边长（大于 1 变粗，小于 1 变细），不再强制所有开口共用一个倍数。列表为空、或每一行 Scale 相同，仍走原来的统一倍数（**Boundary size scale**）。Anchor 关闭时只显示 **Boundary size scale**，乘的是开口顶点的曲率目标。Anchor 和 Protect 都开时开口冻在输入边长上，两个控件都隐藏。
+**Remesh With Endpoint 的开口尺度**：勾选 **Anchor boundary size** 且 **Protect constraints** 关闭时，**Opening boundary scales** 每个正的 cell **EndpointIndex** 一行（第一列就是这个开口编号，不是行号）。**Scale** 乘这一整圈的平均边界边长（大于 1 变粗，小于 1 变细）。输入上没有 EndpointIndex > 0 时才退回壁面边界环，第一列显示为横线。列表为空、或每一行 Scale 相同，仍走原来的统一倍数（**Boundary size scale**）。Anchor 关闭时只显示 **Boundary size scale**，乘的是开口顶点的曲率目标。Anchor 和 Protect 都开时开口冻在输入边长上，两个控件都隐藏。
 
 **卡死恢复：** `RequestData` 进入 CGAL remesh 之前会覆盖 `%TEMP%/shyx_remesh_pre_apply.pvsm`（非 Windows 为 `$TMPDIR` 或 `/tmp`）。写入的是**这次 Apply 之前**的管线：正在跑 CGAL 的当前滤镜（以及它的下游）不会写进 `.pvsm`，所以载入恢复文件不会再触发这次 remesh。ParaView **File → Recovery** 可直接下拉列出 temp 文件夹里的 `.pvsm` 并一键载入（`Before remesh - shyx_remesh_pre_apply.pvsm`）；也可用 File → Load State 手动找回 Apply 前的管线。`Enable remesh` 关（或 Remesh With Endpoint 的 wall/cap remesh 都关）时只算 ICC sizing 预览，不写该文件、不跑 CGAL。
 
