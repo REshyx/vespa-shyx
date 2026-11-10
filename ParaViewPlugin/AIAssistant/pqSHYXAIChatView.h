@@ -33,8 +33,8 @@ public:
     QString text;
   };
 
-  /// Last completed Dialog bubbles, oldest first. Empty / in-progress stream skipped.
-  QList<TranscriptTurn> lastTurns(int maxCount) const;
+  /// Completed Dialog bubbles, oldest first. Empty / in-progress stream skipped.
+  QList<TranscriptTurn> completedTurns() const;
 
   struct Attachment
   {

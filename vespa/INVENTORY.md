@@ -129,7 +129,7 @@ Vascular 顺序（[`VESPAVascularCategory.xml`](../ParaViewPlugin/smxml/VESPAVas
 | 界面标签 | 类 | 目录 | XML | 图标 | README | 后端 |
 |----------|----|------|-----|------|--------|------|
 | SHYX Camera Adjust | `vtkSHYXCameraAdjust` | CameraAdjust | SHYXCameraAdjust.xml（`sources`，非 `filters`） | （无） | [有](shyx/CameraAdjust/README.md) | VTK（source，无输入）；预设存在节点属性里，Cameras 表 Add / Update / Delete / Apply |
-| SHYX AI Assistant | `pqSHYXAIAssistantPanel` | AIAssistant | —（View dock，`ParaViewPlugin/AIAssistant/`） | — | [有](shyx/AIAssistant/README.md) | 客户端 Qt（OpenAI 兼容 HTTP）。无 SM XML / 无 VTK 模块；不要 `SHYXAIAssistant()` |
+| SHYX AI Assistant | `pqSHYXAIAssistantPanel` | AIAssistant | —（View dock，`ParaViewPlugin/AIAssistant/`） | — | [有](shyx/AIAssistant/README.md) | 客户端 Qt（OpenAI 兼容 HTTP）。Memory 为 `%APPDATA%/SHYX/AIAssistant/memory` 下的 Agent.md 与 skills，不进注册表、不进 state。无 SM XML / 无 VTK 模块；不要 `SHYXAIAssistant()` |
 
 ---
 
@@ -155,6 +155,7 @@ Vascular 顺序（[`VESPAVascularCategory.xml`](../ParaViewPlugin/smxml/VESPAVas
 | Grow Selection With Similar | `ParaViewPlugin/selection/GrowSelectionWithSimilar/` | `SHYX_Grow_Selection_With_Similar.svg` |
 | Proximity Gap Selection | `ParaViewPlugin/selection/ProximityGapSelection/` | `SHYX_Proximity_Gap_Selection.svg` |
 | Select Block（3D 视图 block 右键） | `ParaViewPlugin/selection/SelectBlock/` | ParaView `pqSelectBlock.svg` |
+| Pick Center（3D 视图右键：用右键按下的位置设旋转中心，不再等左键） | `ParaViewPlugin/selection/PickCenter/` | ParaView `pqPickCenter.svg` |
 | Select Similar（选择右键，By Normal 一次 Grow 完） | `ParaViewPlugin/selection/SelectSimilar/` | 复用 Grow 图标 |
 | Fill Interior（选择右键，填充被选区围住的未选面） | `ParaViewPlugin/selection/SelectSimilar/` + Grow controller | （无独立图标） |
 | Select Connected（选择右键，选中当前连通点/线/面/体） | `ParaViewPlugin/selection/SelectSimilar/` + Grow controller | （无独立图标） |

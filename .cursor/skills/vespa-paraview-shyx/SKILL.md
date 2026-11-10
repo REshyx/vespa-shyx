@@ -28,6 +28,7 @@ description: >-
   - **RenderView 标题栏选择工具**：`ParaViewPlugin/selection/SphereSelection/`、`PolygonSelection/`（左键加点、右键撤销、双击闭合；按钮右键可勾选 Select through，默认只选可见表面 cell）、`GrowSelectionWithSimilar/`、`ProximityGapSelection/`，纯客户端 Qt，**没有** SM proxy。
   - **RenderView block 右键**：`ParaViewPlugin/selection/SelectBlock/`（`pqContextMenuInterface`），在复合数据块菜单里加 **Select Block**，先清当前选择再选中该 block 的全部 cell；同样无 SM proxy。
   - **RenderView 选择右键**：`ParaViewPlugin/selection/SelectSimilar/`，有点或 cell 选择时加 **Select Connected**（当前选区所在连通区域：点沿网格、线共顶点、面共边、体共面）、**Delete Selected Cells**、有 cell 选择时还有 **Invert Selection**（反选）、**Select Similar** 子菜单（现有 **By Normal**）和 **Fill Interior**。By Normal 一次扩到没有相似邻面为止，复用 `GrowSelectionWithSimilar` 的二面角阈值，不是标题栏那种一环一环点。Fill Interior 把被当前选区完全围住的未选面补进选择（开放网格上仍连到开口的区域不填）。**Delete** 键（`ParaViewPlugin/selection/DeleteSelectionShortcut/`）在 RenderView 有焦点时新建 `SHYXDeleteSelectedCellsFilter` 并 Apply，与右键 Delete Selected Cells 相同；只拦截无修饰键的 Delete。
+  - **RenderView 右键 Pick Center**：`ParaViewPlugin/selection/PickCenter/`（`pqContextMenuInterface`）。**Pick Center** 用打开菜单的那次右键按下位置做一次与工具栏相同的表面拾取，并设为旋转中心。不会进入「再左键点一次」的拾取模式。
   - **3D widget 表示**：支架/圆柱（`SHYX*WidgetRepresentation.xml`，与对应滤镜同目录），不是 Display 下拉项。
   - **View 停靠窗**：SHYX AI Assistant（`ParaViewPlugin/AIAssistant/pqSHYXAI*`），不是 pipeline filter。
   - **状态栏提示**：`ParaViewPlugin/widgets/pqSHYXStatusNotifier*`，状态栏窗口左侧。客户端短讯用 `pqSHYXStatusNotifier::info`（绿）/ `warning`（黄）/ `error`（红），不要 `vtkOutputWindow` / Output Messages。不要 `insertPermanentWidget`（会贴在进度条上）。
@@ -80,7 +81,7 @@ description: >-
    - 类名 `vtkSHYX*`；基类与项目内同类算子一致（`vtkImageAlgorithm` / `vtkPolyDataAlgorithm` / `vtkCGALPolyDataAlgorithm` 等）。
    - `Set*` / `Get*` 与 XML 里 `command="Set..."` 一致；多输出端口在 XML 中声明 `<OutputPort ... index="N"/>`。
 5. **Server-manager XML** `vespa/shyx/<YourName>/SHYX<YourName>.xml`：`<SourceProxy class="vtkSHYX<YourName>" label="...">`，`Input` / 属性与 Hints 与现有一致风格。布局上按功能切 `<PropertyGroup>` 分节、把整组次要项压到 `panel_visibility="advanced"`、条件性子项用 `GenericDecorator`（`enabled_state` 或 `visibility`，按 §8.6.3 的取舍）。多算法 single-proxy 走 §8.6.5 模板。
-6. **注册 XML**：在该模块 `CMakeLists.txt` 写 `vespa_plugin_xml(SHYX<YourName>.xml)`。模块被根 CMake 排除（CGAL / VMTK / Snappy / 非 ParaView 的 Representation）时 XML 不会注册。**不要**改 `ParaViewPlugin/CMakeLists.txt` 的 `SERVER_MANAGER_XML`，也**不要**写入 `smxml/VESPAFilters.xml`。新的 `pq*` / dock / 无 proxy 工具才改 `ParaViewPlugin/cmake/PropertyWidgets.cmake` 或 `ClientInterfaces.cmake`。
+6. **注册 XML**：在该模块 `CMakeLists.txt` 写 `vespa_plugin_xml(SHYX<YourName>.xml)`。模块被根 CMake 排除（CGAL / VMTK / Snappy / 非 ParaView 的 Representation）时 XML 不会注册。**不要**改 `ParaViewPlugin/CMakeLists.txt` 的 `SERVER_MANAGER_XML`，也**不要**写入 `smxml/VESPAFilters.xml`。新的 `pq*` / dock / 无 proxy 工具才改 `ParaViewPlugin/cmake/PropertyWidgets.cmake` 或 `ClientInterfaces.cmake`。新建子目录时还要把该目录加进 `ParaViewPlugin/CMakeLists.txt` 的 `target_include_directories(VESPAPlugin ...)`，否则生成的 `VESPAPluginPlugin.cxx` 找不到头文件。
 7. **若需图标**：`VESPAIcons.qrc` 增加资源并在 XML `ShowInMenu` 里引用 `:/...` 路径（对照已有条目）。
 8. **若根 CMake 有条件排除**：如果新目录名命中 `list(FILTER ... EXCLUDE` 的规则，或依赖可选组件（VMTK/CGAL 6），在根 `CMakeLists.txt` 的注释与逻辑中保持一致，并在 README 里说明开启方式。
 9. **AI Assistant（必做，见 §9）**：UI 进插件 ≠ 助手能列出或查出参数。普通 filter 一般能被 `describe_proxy` 扫到；**Display 表示、无 proxy 的客户端工具、以及需要用法备注的 filter 必须在 `pqSHYXAIAgentTools.cxx` 里补上**，并改 `kSystemPrompt`。漏了助手就只看得到 Filters。
@@ -356,7 +357,8 @@ description: >-
 - 目录：空查询 `lookup_shyx_docs` + `list_filters`。
 - Filter 参数：`describe_proxy('SHYXMeshChecker')` → Python `Name(Input=..., registrationName='...')`。
 - Display 参数：`describe_proxy('Pulse Glyphs')` → `GetDisplayProperties().Representation = 'Pulse Glyphs'`，属性用 **exposed 名**（`disp.PG_Animate`）。**不要** `PulseGlyphRepresentation()`。
-- 无 proxy 工具：`describe_proxy('sphere')` / `describe_proxy('polygon')` / `describe_proxy('grow')` / `describe_proxy('proximity gap')` / `describe_proxy('select block')` / `describe_proxy('select similar')` / `describe_proxy('fill interior')` / `describe_proxy('select connected')` / `describe_proxy('invert')`；用完 `inspect_selection`。RenderView 按 Delete 键删除选区会真正创建 `SHYXDeleteSelectedCellsFilter` 并 Apply，查快捷键用 `describe_proxy('delete key')`，查滤镜参数用 `describe_proxy('SHYXDeleteSelectedCellsFilter')`。
+- 无 proxy 工具：`describe_proxy('sphere')` / `describe_proxy('polygon')` / `describe_proxy('grow')` / `describe_proxy('proximity gap')` / `describe_proxy('select block')` / `describe_proxy('select similar')` / `describe_proxy('fill interior')` / `describe_proxy('select connected')` / `describe_proxy('invert')` / `describe_proxy('pick center')`；用完 `inspect_selection`。RenderView 按 Delete 键删除选区会真正创建 `SHYXDeleteSelectedCellsFilter` 并 Apply，查快捷键用 `describe_proxy('delete key')`，查滤镜参数用 `describe_proxy('SHYXDeleteSelectedCellsFilter')`。
+- 截图：`capture_screenshot(camera={focal_point:[x,y,z], position:[x,y,z], view_angle:度}, targets=[源名或 {name, position}], label=true)`。相机写在这次调用里；省略 `camera` 保持当前视角。`label` 默认把 `targets` 的名字画到 JPEG 上，不隐藏其它对象。
 
 ### 9.3 检查（加完功能后）
 

@@ -3,6 +3,7 @@
 #include "pqSHYXAIAgentTools.h"
 #include "pqSHYXAIChatView.h"
 #include "pqSHYXAIImageAnnotator.h"
+#include "pqSHYXAIMemory.h"
 #include "pqSHYXAIOutputLog.h"
 #include "pqSHYXPythonSyntaxHighlighter.h"
 
@@ -51,7 +52,6 @@
 #include <QRegularExpression>
 #include <QSettings>
 #include <QSizePolicy>
-#include <QSlider>
 #include <QStringList>
 #include <QStyle>
 #include <QTextCursor>
@@ -66,11 +66,32 @@
 
 namespace
 {
-constexpr int kHistoryMaxMessages = 10;
-constexpr int kHistoryDefaultMessages = 6;
-constexpr int kHistoryKeepChars = 2000;
 constexpr int kJpegMaxEdge = 1280;
-constexpr int kMaxAgentRounds = 20;
+
+/** Agent tool rounds for the Effort combo. One round is one model reply that calls tools. */
+int maxAgentRoundsForEffort(const QString& effort)
+{
+  if (effort == QLatin1String("max"))
+  {
+    return 40;
+  }
+  if (effort == QLatin1String("high"))
+  {
+    return 30;
+  }
+  if (effort == QLatin1String("medium"))
+  {
+    return 20;
+  }
+  return 10;
+}
+constexpr int kContextTokenBudget = 128000;
+constexpr int kHighWaterTokens = (kContextTokenBudget * 70) / 100;
+constexpr int kLowWaterTokens = (kContextTokenBudget * 50) / 100;
+constexpr int kTailUserTurns = 2;
+constexpr int kToolStubChars = 400;
+constexpr int kSummarySourceChars = 14000;
+constexpr auto kSummaryMarker = "[Earlier conversation summary]";
 constexpr auto kSettingsGroup = "VESPA/SHYXAIAssistant";
 constexpr auto kDefaultCode =
   "# ParaView Python. Use Run script to execute.\nfrom paraview.simple import *\n";
@@ -117,11 +138,14 @@ Rules:
 - inspect_pipeline with no name lists the tree (active source is marked). Pass a name (and port for extra outputs) for arrays, nested properties such as ClipType, and PDC/multiblock blocks. Use this before ExtractBlock / PDC tools.
 - Use list_filters / describe_proxy / lookup_shyx_docs before creating SHYX or VESPA filters. lookup_shyx_docs knows the Vascular pipeline order. list_filters and lookup_shyx_docs take several keywords (spaces or commas); all keywords must match.
 - SHYX Interactive Stream Tracer is one filter with SeedShape 0 Line / 1 Sphere / 2 Rectangle (center + camera-facing normal + one corner handle for width/height). The 3D widget snaps line endpoints, sphere center, and rectangle origin to the Input surface; the snap mode is Screen ray (front-most surface hit under the cursor, then its nearest vertex) by default, or Nearest vertex (3D). Sphere interaction: left-drag the ball to move it; the radius is set in the panel. The sphere shows no handle, no radius line and no R= label. Port 0 is streamlines, port 1 is seed geometry.
-- SHYX is not only Filters → SHYX. It also has Display representations (Pulse Glyphs, Animated Streamline, Point Label, Hologram, Graph), RenderView title-bar selection tools (Sphere cell selection, Polygon cell selection, Grow selection with similar normals, Proximity gap selection), and RenderView context-menu actions (Select Block; Select Connected for connected points/lines/faces/volumes; Delete Selected Cells, also the Delete key in a RenderView, which creates SHYXDeleteSelectedCellsFilter and Applies; Invert Selection; Select Similar → By Normal; Fill Interior). Hold the ` key (the · key on a Chinese layout) over a 3D view for ~200 ms to open a radial quick-filter wheel under the cursor (empty until the user checks filters through its "+" sector); no mouse movement is needed. Its trailing "+" sector opens a checklist (sections SHYX and ParaView / VESPA built-in) listing every filter that takes an Input — including ParaView built-ins such as Contour, Clip, Extract Surface and SHYX Delete Selected Cells; the checked set persists in QSettings and the "+" sector is always kept. Left-click a sector to run it, or just move over a sector and release the key (no click needed); releasing over the center hole or outside the ring, Esc, or a click outside cancels. Ctrl is not involved, so Ctrl+click still means subtract-from-selection. Polygon cell selection is click-to-add vertices (left add, right undo, double-click close). Right-click the title-bar button to toggle Select through. It is not ParaView's rectangle rubber band and not the freehand lasso. File → Recovery is a client-side File-menu submenu that lists *.pvsm in the OS temp folder (e.g. shyx_checkpoint.pvsm, kept up to date automatically); it has no Python constructor. SHYXCameraAdjust is a source (not a filter) that stores named camera presets in the node itself, so each pipeline branch can keep its own camera instead of one global view camera; its Cameras table does Add (capture the active RenderView), Update selected, Delete selected, and Apply to view. For "what does SHYX have" / available features, call lookup_shyx_docs with an empty query and list_filters with an empty query. Do not answer from filters alone.
-- Representations are not pipeline filters: GetDisplayProperties().Representation = 'Pulse Glyphs' (never PulseGlyphRepresentation()). Title-bar selection tools, Select Block, Select Connected, Invert Selection, Select Similar, and Fill Interior have no Python constructor; after the user uses them, call inspect_selection. Delete Selected Cells / the Delete-key shortcut does create SHYXDeleteSelectedCellsFilter. Every sector of the ` quick-filter wheel is a filter the user checked in its "+" checklist (e.g. SHYX Delete Selected Cells for the Delete behaviour, Extract Surface / DataSetSurfaceFilter for surface extraction); it is created on the active object with Input connected and Applied.
-- For SHYX Display or title-bar tool parameters, call describe_proxy with the display type (Pulse Glyphs, Animated Streamline, Point Label, Hologram, Graph) or sphere / polygon / grow / proximity gap / select block / select similar / fill interior / select connected / invert / recovery / delete shortcut / quick filter wheel / camera adjust. Use exposed names (disp.PG_Animate, disp.AS_TimeScale, disp.PL_PointLabelArray, disp.HG_Style, disp.GR_ShowVertex). inspect_view reports current PG_/AS_/PL_/HG_/GR_ values, LUT, camera, and time.
+- SHYX is not only Filters → SHYX. It also has Display representations (Pulse Glyphs, Animated Streamline, Point Label, Hologram, Graph), RenderView title-bar selection tools (Sphere cell selection, Polygon cell selection, Grow selection with similar normals, Proximity gap selection), and RenderView context-menu actions (Select Block; Pick Center, which sets the center of rotation at that right-click and does not wait for a second left-click; Select Connected for connected points/lines/faces/volumes; Delete Selected Cells, also the Delete key in a RenderView, which creates SHYXDeleteSelectedCellsFilter and Applies; Invert Selection; Select Similar → By Normal; Fill Interior). Hold the ` key (the · key on a Chinese layout) over a 3D view for ~200 ms to open a radial quick-filter wheel under the cursor (empty until the user checks filters through its "+" sector); no mouse movement is needed. Its trailing "+" sector opens a checklist (sections SHYX and ParaView / VESPA built-in) listing every filter that takes an Input — including ParaView built-ins such as Contour, Clip, Extract Surface and SHYX Delete Selected Cells; the checked set persists in QSettings and the "+" sector is always kept. Left-click a sector to run it, or just move over a sector and release the key (no click needed); releasing over the center hole or outside the ring, Esc, or a click outside cancels. Ctrl is not involved, so Ctrl+click still means subtract-from-selection. Polygon cell selection is click-to-add vertices (left add, right undo, double-click close). Right-click the title-bar button to toggle Select through. It is not ParaView's rectangle rubber band and not the freehand lasso. File → Recovery is a client-side File-menu submenu that lists *.pvsm in the OS temp folder (e.g. shyx_checkpoint.pvsm, kept up to date automatically); it has no Python constructor. SHYXCameraAdjust is a source (not a filter) that stores named camera presets in the node itself, so each pipeline branch can keep its own camera instead of one global view camera; its Cameras table does Add (capture the active RenderView), Update selected, Delete selected, and Apply to view. For "what does SHYX have" / available features, call lookup_shyx_docs with an empty query and list_filters with an empty query. Do not answer from filters alone.
+- Representations are not pipeline filters: GetDisplayProperties().Representation = 'Pulse Glyphs' (never PulseGlyphRepresentation()). Title-bar selection tools, Select Block, Pick Center, Select Connected, Invert Selection, Select Similar, and Fill Interior have no Python constructor; after the user uses them, call inspect_selection. Delete Selected Cells / the Delete-key shortcut does create SHYXDeleteSelectedCellsFilter. Every sector of the ` quick-filter wheel is a filter the user checked in its "+" checklist (e.g. SHYX Delete Selected Cells for the Delete behaviour, Extract Surface / DataSetSurfaceFilter for surface extraction); it is created on the active object with Input connected and Applied.
+- For SHYX Display or title-bar tool parameters, call describe_proxy with the display type (Pulse Glyphs, Animated Streamline, Point Label, Hologram, Graph) or sphere / polygon / grow / proximity gap / select block / select similar / fill interior / select connected / invert / pick center / recovery / delete shortcut / quick filter wheel / camera adjust. Use exposed names (disp.PG_Animate, disp.AS_TimeScale, disp.PL_PointLabelArray, disp.HG_Style, disp.GR_ShowVertex). inspect_view reports current PG_/AS_/PL_/HG_/GR_ values, LUT, camera, and time.
 - Use inspect_selection before selection-based SHYX filters.
 - If the user attached a screenshot (brush marks are clicks), call pick_world_point once with all marks as points=[{x,y}, ...] and that JPEG's image_width/image_height (origin=top_left).
+- To aim a screenshot, pass the camera on capture_screenshot: camera={focal_point:[x,y,z], position:[x,y,z], view_angle:degrees}. Omit camera to keep the current view. targets is a list of pipeline names or {name, position:[x,y,z]}; label=true (default) draws those names on the JPEG and does not hide other objects.
+- Long-term memory is on disk (Memory button): Agent.md is included with every request; each skill is listed by name and description only. When tools are available, call read_skill(name) before following a saved workflow. Call save_skill only when the user asks to remember a workflow. One skill is one complete workflow (their array names, skipped steps, parameters that worked). Do not copy lookup_shyx_docs into a skill; still call describe_proxy / lookup_shyx_docs for filter parameters. save_skill never overwrites an existing name. Call update_skill only when the user asks to change an existing workflow: read_skill first, then pass the full revised body. update_skill does not create or rename a skill. Omit description to keep the catalog line, or omit body to change only that line. Call write_agent_memory only when the user asks to remember a preference that applies to every task; pass the full replacement text and keep it short. Do not put a pipeline procedure in Agent.md.
+- A user message that starts with [Earlier conversation summary] is compressed prior context, not a new question.
 - Reply in the same language the user uses.)SYS";
 
 QPlainTextEdit* makeEditor(QWidget* parent, bool mono, int minHeight)
@@ -214,6 +238,447 @@ QString truncateTail(const QString& text, int maxChars)
   return text.right(maxChars);
 }
 
+int textTokens(const QString& text)
+{
+  if (text.isEmpty())
+  {
+    return 0;
+  }
+  return qMax(1, (text.size() + 3) / 4);
+}
+
+int jsonTokens(const QJsonValue& value)
+{
+  if (value.isString())
+  {
+    return textTokens(value.toString());
+  }
+  if (value.isArray())
+  {
+    int total = 0;
+    const QJsonArray arr = value.toArray();
+    for (const QJsonValue& item : arr)
+    {
+      total += jsonTokens(item);
+    }
+    return total;
+  }
+  if (!value.isObject())
+  {
+    return 0;
+  }
+  const QJsonObject obj = value.toObject();
+  if (obj.value(QLatin1String("type")).toString() == QLatin1String("image_url"))
+  {
+    const QJsonValue image = obj.value(QLatin1String("image_url"));
+    const QString url = image.isObject() ? image.toObject().value(QLatin1String("url")).toString()
+                                         : image.toString();
+    return textTokens(url);
+  }
+  return textTokens(QString::fromUtf8(QJsonDocument(obj).toJson(QJsonDocument::Compact)));
+}
+
+QString contentToText(const QJsonValue& content)
+{
+  if (content.isString())
+  {
+    return content.toString();
+  }
+  if (content.isObject())
+  {
+    return content.toObject().value(QLatin1String("text")).toString();
+  }
+  if (!content.isArray())
+  {
+    return {};
+  }
+  QString out;
+  const QJsonArray parts = content.toArray();
+  for (const QJsonValue& part : parts)
+  {
+    if (part.isString())
+    {
+      out += part.toString();
+      continue;
+    }
+    if (!part.isObject())
+    {
+      continue;
+    }
+    const QJsonObject obj = part.toObject();
+    if (obj.value(QLatin1String("type")).toString() == QLatin1String("image_url"))
+    {
+      out += QStringLiteral("\n(screenshot)\n");
+    }
+    else
+    {
+      out += obj.value(QLatin1String("text")).toString();
+    }
+  }
+  return out;
+}
+
+bool contentHasImage(const QJsonValue& content)
+{
+  if (!content.isArray())
+  {
+    return false;
+  }
+  const QJsonArray parts = content.toArray();
+  for (const QJsonValue& part : parts)
+  {
+    if (part.isObject() &&
+      part.toObject().value(QLatin1String("type")).toString() == QLatin1String("image_url"))
+    {
+      return true;
+    }
+  }
+  return false;
+}
+
+QJsonValue withoutImages(const QJsonValue& content, bool* changed)
+{
+  if (!content.isArray())
+  {
+    return content;
+  }
+  QJsonArray kept;
+  bool dropped = false;
+  bool hasText = false;
+  const QJsonArray parts = content.toArray();
+  for (const QJsonValue& part : parts)
+  {
+    if (part.isObject() &&
+      part.toObject().value(QLatin1String("type")).toString() == QLatin1String("image_url"))
+    {
+      dropped = true;
+      continue;
+    }
+    kept.append(part);
+    hasText = true;
+  }
+  if (!dropped)
+  {
+    return content;
+  }
+  if (changed)
+  {
+    *changed = true;
+  }
+  if (!hasText)
+  {
+    kept.append(QJsonObject{ { QStringLiteral("type"), QStringLiteral("text") },
+      { QStringLiteral("text"), QStringLiteral("(screenshot omitted)") } });
+  }
+  return kept;
+}
+
+int messageTokens(const QJsonObject& msg)
+{
+  int total = 4 + jsonTokens(msg.value(QLatin1String("content")));
+  total += jsonTokens(msg.value(QLatin1String("tool_calls")));
+  total += textTokens(msg.value(QLatin1String("reasoning_content")).toString());
+  return total;
+}
+
+int messagesTokens(const QJsonArray& messages)
+{
+  int total = 0;
+  for (const QJsonValue& value : messages)
+  {
+    total += messageTokens(value.toObject());
+  }
+  return total;
+}
+
+bool isSummaryMessage(const QJsonObject& msg)
+{
+  return msg.value(QLatin1String("role")).toString() == QLatin1String("user") &&
+    contentToText(msg.value(QLatin1String("content"))).startsWith(QLatin1String(kSummaryMarker));
+}
+
+int suffixStart(const QJsonArray& messages)
+{
+  const int n = messages.size();
+  int question = -1;
+  for (int i = 1; i < n; ++i)
+  {
+    const QJsonObject msg = messages.at(i).toObject();
+    if (msg.value(QLatin1String("role")).toString() != QLatin1String("user") || isSummaryMessage(msg))
+    {
+      continue;
+    }
+    if (contentToText(msg.value(QLatin1String("content"))).contains(QStringLiteral("## User question")))
+    {
+      question = i;
+    }
+  }
+  if (question < 0)
+  {
+    for (int i = n - 1; i >= 1; --i)
+    {
+      const QJsonObject msg = messages.at(i).toObject();
+      if (msg.value(QLatin1String("role")).toString() == QLatin1String("user") && !isSummaryMessage(msg))
+      {
+        question = i;
+        break;
+      }
+    }
+  }
+  if (question < 0)
+  {
+    return n;
+  }
+  int start = question;
+  int extraUsers = 0;
+  for (int i = question - 1; i >= 1; --i)
+  {
+    const QJsonObject msg = messages.at(i).toObject();
+    if (isSummaryMessage(msg))
+    {
+      break;
+    }
+    start = i;
+    if (msg.value(QLatin1String("role")).toString() == QLatin1String("user"))
+    {
+      ++extraUsers;
+      if (extraUsers >= kTailUserTurns)
+      {
+        break;
+      }
+    }
+  }
+  while (start > 1 &&
+    messages.at(start).toObject().value(QLatin1String("role")).toString() == QLatin1String("tool"))
+  {
+    --start;
+  }
+  return start;
+}
+
+int countFoldableTurns(const QJsonArray& messages, int prefixEnd)
+{
+  int count = 0;
+  const int end = qMin(prefixEnd, messages.size());
+  for (int i = 1; i < end; ++i)
+  {
+    const QJsonObject msg = messages.at(i).toObject();
+    if (isSummaryMessage(msg))
+    {
+      continue;
+    }
+    const QString role = msg.value(QLatin1String("role")).toString();
+    if ((role == QLatin1String("user") || role == QLatin1String("assistant")) &&
+      msg.value(QLatin1String("tool_calls")).toArray().isEmpty())
+    {
+      ++count;
+    }
+  }
+  return count;
+}
+
+bool shrinkMessages(QJsonArray& messages)
+{
+  int lastToolGroup = -1;
+  for (int i = messages.size() - 1; i >= 0; --i)
+  {
+    const QJsonObject msg = messages.at(i).toObject();
+    if (msg.value(QLatin1String("role")).toString() == QLatin1String("assistant") &&
+      !msg.value(QLatin1String("tool_calls")).toArray().isEmpty())
+    {
+      lastToolGroup = i;
+      break;
+    }
+  }
+  int lastImage = -1;
+  for (int i = messages.size() - 1; i >= 0; --i)
+  {
+    if (contentHasImage(messages.at(i).toObject().value(QLatin1String("content"))))
+    {
+      lastImage = i;
+      break;
+    }
+  }
+  bool changed = false;
+  for (int i = 1; i < messages.size(); ++i)
+  {
+    QJsonObject msg = messages.at(i).toObject();
+    const QString role = msg.value(QLatin1String("role")).toString();
+    if (role == QLatin1String("tool") && (lastToolGroup < 0 || i < lastToolGroup))
+    {
+      const QString text = contentToText(msg.value(QLatin1String("content")));
+      if (text.size() > kToolStubChars)
+      {
+        msg.insert(QStringLiteral("content"),
+          QStringLiteral("[earlier tool result omitted, %1 characters]").arg(text.size()));
+        messages.replace(i, msg);
+        changed = true;
+      }
+    }
+    else if (role == QLatin1String("assistant") && i != lastToolGroup &&
+      !msg.value(QLatin1String("tool_calls")).toArray().isEmpty())
+    {
+      QJsonArray calls = msg.value(QLatin1String("tool_calls")).toArray();
+      bool callChanged = false;
+      for (int c = 0; c < calls.size(); ++c)
+      {
+        QJsonObject call = calls.at(c).toObject();
+        QJsonObject fn = call.value(QLatin1String("function")).toObject();
+        const QString args = fn.value(QLatin1String("arguments")).toString();
+        if (args.size() > 800)
+        {
+          fn.insert(QStringLiteral("arguments"), args.left(800) + QStringLiteral("..."));
+          call.insert(QStringLiteral("function"), fn);
+          calls.replace(c, call);
+          callChanged = true;
+        }
+      }
+      if (callChanged)
+      {
+        msg.insert(QStringLiteral("tool_calls"), calls);
+        messages.replace(i, msg);
+        changed = true;
+      }
+    }
+    if (i != lastImage && contentHasImage(msg.value(QLatin1String("content"))))
+    {
+      bool imagesChanged = false;
+      msg.insert(QStringLiteral("content"), withoutImages(msg.value(QLatin1String("content")), &imagesChanged));
+      if (imagesChanged)
+      {
+        messages.replace(i, msg);
+        changed = true;
+      }
+    }
+  }
+  return changed;
+}
+
+bool halveMessage(QJsonObject& msg)
+{
+  if (contentHasImage(msg.value(QLatin1String("content"))))
+  {
+    bool changed = false;
+    msg.insert(QStringLiteral("content"), withoutImages(msg.value(QLatin1String("content")), &changed));
+    return changed;
+  }
+  const QString content = contentToText(msg.value(QLatin1String("content")));
+  const QString reasoning = msg.value(QLatin1String("reasoning_content")).toString();
+  if (content.size() >= reasoning.size() && content.size() > 200)
+  {
+    msg.insert(QStringLiteral("content"), truncateTail(content, qMax(200, content.size() / 2)));
+    return true;
+  }
+  if (reasoning.size() > 200)
+  {
+    msg.insert(QStringLiteral("reasoning_content"), truncateTail(reasoning, qMax(200, reasoning.size() / 2)));
+    return true;
+  }
+  QJsonArray calls = msg.value(QLatin1String("tool_calls")).toArray();
+  for (int c = 0; c < calls.size(); ++c)
+  {
+    QJsonObject call = calls.at(c).toObject();
+    QJsonObject fn = call.value(QLatin1String("function")).toObject();
+    const QString args = fn.value(QLatin1String("arguments")).toString();
+    if (args.size() > 200)
+    {
+      fn.insert(QStringLiteral("arguments"), truncateTail(args, qMax(200, args.size() / 2)));
+      call.insert(QStringLiteral("function"), fn);
+      calls.replace(c, call);
+      msg.insert(QStringLiteral("tool_calls"), calls);
+      return true;
+    }
+  }
+  return false;
+}
+
+void truncateDownTo(QJsonArray& messages, int targetTokens)
+{
+  for (int guard = 0; guard < 16 && messagesTokens(messages) > targetTokens; ++guard)
+  {
+    int pick = -1;
+    for (int i = 1; i < messages.size(); ++i)
+    {
+      if (messageTokens(messages.at(i).toObject()) > 800)
+      {
+        pick = i;
+        break;
+      }
+    }
+    if (pick < 0)
+    {
+      int worst = 0;
+      for (int i = 1; i < messages.size(); ++i)
+      {
+        const int tokens = messageTokens(messages.at(i).toObject());
+        if (tokens > worst)
+        {
+          worst = tokens;
+          pick = i;
+        }
+      }
+    }
+    if (pick < 0)
+    {
+      return;
+    }
+    QJsonObject msg = messages.at(pick).toObject();
+    if (!halveMessage(msg))
+    {
+      return;
+    }
+    messages.replace(pick, msg);
+  }
+}
+
+QString serializePrefix(const QJsonArray& messages, int prefixEnd)
+{
+  QString out;
+  const int end = qMin(prefixEnd, messages.size());
+  for (int i = 1; i < end; ++i)
+  {
+    const QJsonObject msg = messages.at(i).toObject();
+    const QString role = msg.value(QLatin1String("role")).toString();
+    QString text = contentToText(msg.value(QLatin1String("content"))).trimmed();
+    if (text.size() > 2000)
+    {
+      text = truncateTail(text, 2000);
+    }
+    if (text.isEmpty() && msg.value(QLatin1String("tool_calls")).toArray().isEmpty())
+    {
+      continue;
+    }
+    out += role + QStringLiteral(":\n") + text + QStringLiteral("\n\n");
+  }
+  if (out.size() > kSummarySourceChars)
+  {
+    out = truncateTail(out, kSummarySourceChars);
+  }
+  return out;
+}
+
+bool isContextOverflow(const QString& err)
+{
+  const QString lower = err.toLower();
+  return lower.contains(QLatin1String("context_length")) ||
+    lower.contains(QLatin1String("context length")) ||
+    lower.contains(QLatin1String("maximum context")) ||
+    lower.contains(QLatin1String("context window")) ||
+    lower.contains(QLatin1String("too many tokens")) ||
+    lower.contains(QLatin1String("token limit")) ||
+    lower.contains(QLatin1String("input is too long")) ||
+    lower.contains(QLatin1String("prompt is too long")) ||
+    lower.contains(QLatin1String("reduce the length")) ||
+    err.contains(QStringLiteral("上下文")) || err.contains(QStringLiteral("请求过长")) ||
+    err.contains(QStringLiteral("超出长度"));
+}
+
+QString summaryMessageText(const QString& body)
+{
+  return QStringLiteral("%1\nThis is compressed prior context, not a new question.\n%2")
+    .arg(QLatin1String(kSummaryMarker), body.trimmed());
+}
+
 QString elideArg(const QString& text, int maxChars)
 {
   const QString s = text.simplified();
@@ -287,6 +752,49 @@ QString formatToolCallLabel(const QString& name, const QJsonObject& args)
       return name + QStringLiteral(" (capture)");
     }
     return name;
+  }
+  if (name == QLatin1String("capture_screenshot"))
+  {
+    QStringList bits;
+    const QJsonValue cam = args.value(QLatin1String("camera"));
+    if (cam.isObject() && !cam.toObject().isEmpty())
+    {
+      bits << QStringLiteral("camera");
+    }
+    const QJsonValue targets = args.value(QLatin1String("targets"));
+    int n = 0;
+    if (targets.isArray())
+    {
+      n = targets.toArray().size();
+    }
+    else if (targets.isString() || targets.isObject())
+    {
+      n = 1;
+    }
+    if (n > 0)
+    {
+      bits << QStringLiteral("%1 targets").arg(n);
+    }
+    const QJsonValue label = args.value(QLatin1String("label"));
+    bool labelOn = true;
+    if (label.isBool())
+    {
+      labelOn = label.toBool();
+    }
+    else if (label.isString())
+    {
+      const QString s = label.toString().trimmed().toLower();
+      labelOn = !(s == QLatin1String("false") || s == QLatin1String("0") || s == QLatin1String("off"));
+    }
+    if (args.contains(QLatin1String("label")) && !labelOn)
+    {
+      bits << QStringLiteral("label=false");
+    }
+    if (bits.isEmpty())
+    {
+      return name;
+    }
+    return QStringLiteral("%1 (%2)").arg(name, bits.join(QStringLiteral(", ")));
   }
 
   QStringList parts;
@@ -887,12 +1395,20 @@ void pqSHYXAIAssistantPanel::constructor()
     this->ModelCombo->lineEdit()->setPlaceholderText(QStringLiteral("gpt-4o-mini"));
   }
   sendRow->addWidget(this->ModelCombo, 1);
-  this->ThinkingCheck = new QCheckBox(tr("Thinking"), root);
-  this->ThinkingCheck->setChecked(false);
-  this->ThinkingCheck->setToolTip(
-    tr("Send enable_thinking. Off by default. On: the API may reason before answering. "
-       "Tool-call progress is always shown."));
-  sendRow->addWidget(this->ThinkingCheck, 0, Qt::AlignVCenter);
+  sendRow->addWidget(new QLabel(tr("Effort"), root), 0, Qt::AlignVCenter);
+  this->ReasoningCombo = new QComboBox(root);
+  this->ReasoningCombo->addItem(tr("Low"), QStringLiteral("low"));
+  this->ReasoningCombo->addItem(tr("Medium"), QStringLiteral("medium"));
+  this->ReasoningCombo->addItem(tr("High"), QStringLiteral("high"));
+  this->ReasoningCombo->addItem(tr("Max"), QStringLiteral("max"));
+  this->ReasoningCombo->setCurrentIndex(this->ReasoningCombo->findData(QStringLiteral("medium")));
+  this->ReasoningCombo->setToolTip(tr(
+    "Reasoning effort. Thinking stays on: every request sends enable_thinking and "
+    "reasoning_effort (low, medium, high, or max). Medium is the default. "
+    "Agent tool rounds follow the level chosen at Send: low 10, medium 20, high 30, max 40. "
+    "Not every model accepts every level."));
+  this->ReasoningCombo->setSizeAdjustPolicy(QComboBox::AdjustToContents);
+  sendRow->addWidget(this->ReasoningCombo, 0, Qt::AlignVCenter);
   this->RefreshModelsButton = makeIconToolButton(root,
     QStringLiteral(":/pqWidgets/Icons/pqReloadFile.svg"),
     tr("Fetch the model list from the API"));
@@ -934,37 +1450,16 @@ void pqSHYXAIAssistantPanel::constructor()
   dialogHeaderLay->setAlignment(Qt::AlignVCenter);
   auto* dialogLabel = new QLabel(tr("Dialog"), dialogHeader);
   dialogHeaderLay->addWidget(dialogLabel, 0, Qt::AlignVCenter);
-  dialogHeaderLay->addSpacing(8);
-  auto* historyLabel = new QLabel(tr("History"), dialogHeader);
-  historyLabel->setToolTip(tr(
-    "Previous Dialog messages sent as context. 0 = no memory; 10 = last 10 bubbles."));
-  dialogHeaderLay->addWidget(historyLabel, 0, Qt::AlignVCenter);
-  this->HistorySlider = new QSlider(Qt::Horizontal, dialogHeader);
-  this->HistorySlider->setRange(0, kHistoryMaxMessages);
-  this->HistorySlider->setValue(kHistoryDefaultMessages);
-  this->HistorySlider->setSingleStep(1);
-  this->HistorySlider->setPageStep(1);
-  this->HistorySlider->setMinimumWidth(100);
-  this->HistorySlider->setMaximumWidth(140);
-  {
-    int sliderH = this->HistorySlider->style()->pixelMetric(
-      QStyle::PM_SliderThickness, nullptr, this->HistorySlider);
-    sliderH = qMax(sliderH, dialogLabel->sizeHint().height());
-    this->HistorySlider->setFixedHeight(sliderH);
-  }
-  this->HistorySlider->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Fixed);
-  this->HistorySlider->setToolTip(historyLabel->toolTip());
-  this->HistoryCountLabel = new QLabel(QString::number(kHistoryDefaultMessages), dialogHeader);
-  this->HistoryCountLabel->setMinimumWidth(16);
-  this->HistoryCountLabel->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
-  this->HistoryCountLabel->setToolTip(historyLabel->toolTip());
-  dialogHeaderLay->addWidget(this->HistorySlider, 0, Qt::AlignVCenter);
-  dialogHeaderLay->addWidget(this->HistoryCountLabel, 0, Qt::AlignVCenter);
   dialogHeaderLay->addStretch(1);
+  auto* memoryBtn = new QPushButton(tr("Memory"), dialogHeader);
+  memoryBtn->setToolTip(tr(
+    "Agent.md and skill files in %APPDATA%\\SHYX\\AIAssistant\\memory. Reset does not delete them."));
+  dialogHeaderLay->addWidget(memoryBtn, 0, Qt::AlignVCenter);
+  connect(memoryBtn, &QPushButton::clicked, this, [this]() { pqSHYXAIMemory::openEditor(this); });
   auto* dialogResetBtn = new QPushButton(tr("Reset"), dialogHeader);
   dialogResetBtn->setToolTip(tr(
     "Stop any in-flight request and clear question, screenshots, dialog, agent state, "
-    "and the code box. API URL / model / key and History are kept."));
+    "and the code box. API URL / model / effort / key and Memory files are kept."));
   auto* dialogPopBtn = new QPushButton(dialogHeader);
   dialogPopBtn->setIcon(this->style()->standardIcon(QStyle::SP_TitleBarMaxButton));
   dialogPopBtn->setToolTip(tr("Open Dialog in a separate window"));
@@ -1033,12 +1528,6 @@ void pqSHYXAIAssistantPanel::constructor()
   layout->addWidget(apiFooter, 0);
 
   pqSHYXCurlRequest::globalInit();
-  connect(this->HistorySlider, &QSlider::valueChanged, this, [this](int v) {
-    if (this->HistoryCountLabel)
-    {
-      this->HistoryCountLabel->setText(QString::number(v));
-    }
-  });
   this->loadClientSettings();
   if (this->CodeEdit->toPlainText().trimmed().isEmpty())
   {
@@ -1061,8 +1550,8 @@ void pqSHYXAIAssistantPanel::constructor()
   }
   connect(this->ModelCombo, &QComboBox::textActivated, this,
     [this](const QString&) { this->saveClientSettings(); });
-  connect(this->ThinkingCheck, &QCheckBox::toggled, this,
-    [this](bool) { this->saveClientSettings(); });
+  connect(this->ReasoningCombo, &QComboBox::currentTextChanged, this,
+    [this](const QString&) { this->saveClientSettings(); });
 }
 
 pqSHYXAIAssistantPanel::~pqSHYXAIAssistantPanel()
@@ -1074,6 +1563,7 @@ pqSHYXAIAssistantPanel::~pqSHYXAIAssistantPanel()
     this->ModelsReply->abort();
     this->ModelsReply.clear();
   }
+  this->abortSummaryReply();
   this->dropActiveReply();
 }
 
@@ -1130,8 +1620,14 @@ void pqSHYXAIAssistantPanel::resetAllSessionState()
     this->ModelsReply.clear();
   }
 
+  this->abortSummaryReply();
   this->resetStreamState();
   this->AgentMessages = QJsonArray();
+  this->PendingMessages = QJsonArray();
+  this->ContextSummary.clear();
+  this->SummaryCoversTurns = 0;
+  this->SummaryUsedThisSend = false;
+  this->ContextRetryUsed = false;
   this->AgentFollowupJpegs.clear();
   this->AgentRound = 0;
   this->AgentOmitTools = false;
@@ -1208,6 +1704,7 @@ void pqSHYXAIAssistantPanel::finishStoppedUi()
 void pqSHYXAIAssistantPanel::stopChatRequest()
 {
   this->UserStopped = true;
+  this->abortSummaryReply();
   this->dropActiveReply();
   this->finishStoppedUi();
 }
@@ -1268,9 +1765,20 @@ void pqSHYXAIAssistantPanel::loadClientSettings()
       this->ModelCombo->setCurrentIndex(0);
     }
   }
-  if (this->ThinkingCheck)
+  if (this->ReasoningCombo)
   {
-    this->ThinkingCheck->setChecked(settings.value(QStringLiteral("enableThinking"), false).toBool());
+    QString effort = settings.value(QStringLiteral("reasoningEffort")).toString().trimmed().toLower();
+    if (!settings.contains(QStringLiteral("reasoningEffort")) &&
+      settings.value(QStringLiteral("enableThinking"), false).toBool())
+    {
+      effort = QStringLiteral("high");
+    }
+    int idx = this->ReasoningCombo->findData(effort);
+    if (idx < 0)
+    {
+      idx = this->ReasoningCombo->findData(QStringLiteral("medium"));
+    }
+    this->ReasoningCombo->setCurrentIndex(idx >= 0 ? idx : 0);
   }
   settings.remove(QStringLiteral("historyCount"));
 }
@@ -1300,9 +1808,10 @@ void pqSHYXAIAssistantPanel::saveClientSettings() const
     }
     settings.setValue(QStringLiteral("modelList"), models);
   }
-  if (this->ThinkingCheck)
+  if (this->ReasoningCombo)
   {
-    settings.setValue(QStringLiteral("enableThinking"), this->ThinkingCheck->isChecked());
+    settings.setValue(QStringLiteral("reasoningEffort"), this->reasoningEffort());
+    settings.setValue(QStringLiteral("enableThinking"), true);
   }
   settings.remove(QStringLiteral("historyCount"));
 }
@@ -1312,9 +1821,26 @@ QString pqSHYXAIAssistantPanel::currentModel() const
   return this->ModelCombo ? this->ModelCombo->currentText().trimmed() : QString();
 }
 
+QString pqSHYXAIAssistantPanel::reasoningEffort() const
+{
+  const QString effort = this->ReasoningCombo ? this->ReasoningCombo->currentData().toString() : QString();
+  if (effort == QLatin1String("low") || effort == QLatin1String("medium") ||
+    effort == QLatin1String("high") || effort == QLatin1String("max"))
+  {
+    return effort;
+  }
+  return QStringLiteral("medium");
+}
+
 bool pqSHYXAIAssistantPanel::thinkingEnabled() const
 {
-  return this->ThinkingCheck && this->ThinkingCheck->isChecked();
+  return true;
+}
+
+void pqSHYXAIAssistantPanel::applyReasoningFields(QJsonObject& root) const
+{
+  root.insert(QStringLiteral("enable_thinking"), true);
+  root.insert(QStringLiteral("reasoning_effort"), this->reasoningEffort());
 }
 
 void pqSHYXAIAssistantPanel::ensureModelItem(const QString& name, bool makeCurrent)
@@ -1413,26 +1939,19 @@ void pqSHYXAIAssistantPanel::applyModelsReply(pqSHYXCurlRequest* reply)
     return;
   }
   const QString keep = this->currentModel();
-  QStringList extra;
   if (this->ModelCombo)
   {
-    for (int i = 0; i < this->ModelCombo->count(); ++i)
-    {
-      extra.append(this->ModelCombo->itemText(i).trimmed());
-    }
     this->ModelCombo->clear();
   }
   for (const QString& id : ids)
   {
     this->ensureModelItem(id, false);
   }
-  for (const QString& id : extra)
+  if (this->ModelCombo && this->ModelCombo->count() > 0)
   {
-    this->ensureModelItem(id, false);
-  }
-  if (!keep.isEmpty())
-  {
-    this->ensureModelItem(keep, true);
+    const int keepIdx =
+      keep.isEmpty() ? -1 : this->ModelCombo->findText(keep, Qt::MatchExactly);
+    this->ModelCombo->setCurrentIndex(keepIdx >= 0 ? keepIdx : 0);
   }
   this->saveClientSettings();
   this->setStatus(tr("Loaded %1 model(s).").arg(ids.size()));
@@ -1610,23 +2129,32 @@ QByteArray pqSHYXAIAssistantPanel::buildRequestJson(
             "If the run failed, fix and run again.\n\n") +
       sys;
   }
+  sys += pqSHYXAIMemory::promptSection();
   QJsonArray messages;
   messages.append(QJsonObject{ { QStringLiteral("role"), QStringLiteral("system") },
     { QStringLiteral("content"), sys } });
 
-  const int historyN = this->HistorySlider ? this->HistorySlider->value() : 0;
-  if (this->ChatView && historyN > 0)
+  if (!this->ContextSummary.trimmed().isEmpty())
   {
-    for (const pqSHYXAIChatView::TranscriptTurn& turn : this->ChatView->lastTurns(historyN))
+    messages.append(QJsonObject{ { QStringLiteral("role"), QStringLiteral("user") },
+      { QStringLiteral("content"), summaryMessageText(this->ContextSummary) } });
+  }
+  if (this->ChatView)
+  {
+    const QList<pqSHYXAIChatView::TranscriptTurn> turns = this->ChatView->completedTurns();
+    const int begin = this->ContextSummary.trimmed().isEmpty()
+      ? 0
+      : qBound(0, this->SummaryCoversTurns, turns.size());
+    for (int i = begin; i < turns.size(); ++i)
     {
-      const QString text = truncateTail(turn.text, kHistoryKeepChars).trimmed();
+      const QString text = turns.at(i).text.trimmed();
       if (text.isEmpty())
       {
         continue;
       }
       messages.append(QJsonObject{
         { QStringLiteral("role"),
-          turn.user ? QStringLiteral("user") : QStringLiteral("assistant") },
+          turns.at(i).user ? QStringLiteral("user") : QStringLiteral("assistant") },
         { QStringLiteral("content"), text } });
     }
   }
@@ -1664,7 +2192,7 @@ QByteArray pqSHYXAIAssistantPanel::buildRequestJson(
   root.insert(QStringLiteral("messages"), messages);
   root.insert(QStringLiteral("temperature"), 0.2);
   root.insert(QStringLiteral("stream"), true);
-  root.insert(QStringLiteral("enable_thinking"), this->thinkingEnabled());
+  this->applyReasoningFields(root);
   if (this->AgentModeCheck && this->AgentModeCheck->isChecked())
   {
     root.insert(QStringLiteral("tools"),
@@ -1680,7 +2208,7 @@ QByteArray pqSHYXAIAssistantPanel::buildAgentRequestJson() const
   root.insert(QStringLiteral("messages"), this->AgentMessages);
   root.insert(QStringLiteral("temperature"), 0.2);
   root.insert(QStringLiteral("stream"), true);
-  root.insert(QStringLiteral("enable_thinking"), this->thinkingEnabled());
+  this->applyReasoningFields(root);
   if (!this->AgentOmitTools)
   {
     root.insert(QStringLiteral("tools"),
@@ -1714,6 +2242,211 @@ void pqSHYXAIAssistantPanel::postJson(const QByteArray& payload)
   connect(reply, &pqSHYXCurlRequest::readyRead, this, &pqSHYXAIAssistantPanel::onStreamReadyRead);
   connect(reply, &pqSHYXCurlRequest::finished, this, &pqSHYXAIAssistantPanel::onChatFinished);
   reply->start();
+}
+
+void pqSHYXAIAssistantPanel::noteCompressed()
+{
+  this->setStatus(tr("Compressed earlier conversation."));
+}
+
+void pqSHYXAIAssistantPanel::abortSummaryReply()
+{
+  if (!this->SummaryReply)
+  {
+    return;
+  }
+  QObject::disconnect(this->SummaryReply, nullptr, this, nullptr);
+  this->SummaryReply->abort();
+  this->SummaryReply->deleteLater();
+  this->SummaryReply.clear();
+}
+
+void pqSHYXAIAssistantPanel::dispatchMessages(const QJsonArray& incoming)
+{
+  if (this->UserStopped)
+  {
+    return;
+  }
+  QJsonArray messages = incoming;
+  int tokens = messagesTokens(messages);
+  bool shrunk = false;
+  if (tokens > kHighWaterTokens)
+  {
+    shrunk = shrinkMessages(messages);
+    tokens = messagesTokens(messages);
+  }
+  const int prefixEnd = suffixStart(messages);
+  const int folded = countFoldableTurns(messages, prefixEnd);
+  if (tokens > kHighWaterTokens && folded > 0 && !this->SummaryUsedThisSend)
+  {
+    this->setStatus(tr("Compressing earlier conversation..."));
+    this->beginSummary(messages, prefixEnd, folded);
+    return;
+  }
+  if (tokens > kHighWaterTokens)
+  {
+    truncateDownTo(messages, kLowWaterTokens);
+    this->noteCompressed();
+  }
+  else if (shrunk)
+  {
+    this->noteCompressed();
+  }
+  this->AgentMessages = messages;
+  this->postJson(this->buildAgentRequestJson());
+}
+
+void pqSHYXAIAssistantPanel::beginSummary(
+  const QJsonArray& messages, int prefixEnd, int foldedTurns)
+{
+  this->abortSummaryReply();
+  this->SummaryUsedThisSend = true;
+  this->PendingMessages = messages;
+  this->PendingPrefixEnd = prefixEnd;
+  this->PendingFoldedTurns = foldedTurns;
+
+  const QString source = serializePrefix(messages, prefixEnd);
+  QJsonArray prompt;
+  prompt.append(QJsonObject{ { QStringLiteral("role"), QStringLiteral("system") },
+    { QStringLiteral("content"),
+      QStringLiteral(
+        "You compress prior chat for another assistant that will continue the task. "
+        "Keep the user goal, decisions, pipeline object names, parameters that worked, "
+        "errors, and unfinished work. Drop raw tool dumps, screenshots, and system rules. "
+        "If a previous summary is included, merge it in; do not drop its facts. "
+        "Write plain prose, at most 800 words, in the user's language.") } });
+  prompt.append(QJsonObject{ { QStringLiteral("role"), QStringLiteral("user") },
+    { QStringLiteral("content"), source.isEmpty() ? QStringLiteral("(empty)") : source } });
+  QJsonObject root;
+  root.insert(QStringLiteral("model"), this->currentModel());
+  root.insert(QStringLiteral("messages"), prompt);
+  root.insert(QStringLiteral("temperature"), 0.2);
+  root.insert(QStringLiteral("stream"), false);
+
+  const QString endpoint = this->EndpointEdit ? this->EndpointEdit->text().trimmed() : QString();
+  auto* reply = new pqSHYXCurlRequest(this);
+  reply->setUrl(::completionsUrl(endpoint));
+  reply->setMethod(pqSHYXCurlRequest::Method::Post);
+  reply->setBody(QJsonDocument(root).toJson(QJsonDocument::Compact));
+  reply->addHeader(QByteArray("Content-Type: application/json"));
+  reply->addHeader(QByteArray("Accept: application/json"));
+  const QString key = this->ApiKeyEdit ? this->ApiKeyEdit->text().trimmed() : QString();
+  if (!key.isEmpty())
+  {
+    reply->addHeader(QByteArray("Authorization: Bearer ") + key.toUtf8());
+  }
+  reply->setTimeoutMs(60000);
+  this->SummaryReply = reply;
+  connect(reply, &pqSHYXCurlRequest::finished, this, &pqSHYXAIAssistantPanel::onSummaryFinished);
+  reply->start();
+}
+
+void pqSHYXAIAssistantPanel::onSummaryFinished()
+{
+  auto* reply = qobject_cast<pqSHYXCurlRequest*>(this->sender());
+  if (!reply)
+  {
+    return;
+  }
+  reply->deleteLater();
+  if (this->SummaryReply == reply)
+  {
+    this->SummaryReply.clear();
+  }
+  if (this->UserStopped || reply->canceled())
+  {
+    return;
+  }
+
+  QString summary;
+  const QJsonDocument doc = QJsonDocument::fromJson(reply->body());
+  if (reply->succeeded() && doc.isObject() && !doc.object().contains(QLatin1String("error")))
+  {
+    const QJsonArray choices = doc.object().value(QLatin1String("choices")).toArray();
+    if (!choices.isEmpty())
+    {
+      QList<QImage> images;
+      parseAssistantContent(
+        choices.at(0).toObject().value(QLatin1String("message")).toObject().value(QLatin1String("content")),
+        summary, images);
+      summary = summary.trimmed();
+    }
+  }
+  if (summary.isEmpty())
+  {
+    summary = truncateTail(serializePrefix(this->PendingMessages, this->PendingPrefixEnd), 4000);
+  }
+  if (summary.isEmpty())
+  {
+    summary = QStringLiteral("Earlier turns were omitted to fit the context window.");
+  }
+
+  QJsonArray next;
+  if (!this->PendingMessages.isEmpty())
+  {
+    next.append(this->PendingMessages.at(0));
+  }
+  next.append(QJsonObject{ { QStringLiteral("role"), QStringLiteral("user") },
+    { QStringLiteral("content"), summaryMessageText(summary) } });
+  for (int i = this->PendingPrefixEnd; i < this->PendingMessages.size(); ++i)
+  {
+    next.append(this->PendingMessages.at(i));
+  }
+  if (messagesTokens(next) > kHighWaterTokens)
+  {
+    truncateDownTo(next, kLowWaterTokens);
+  }
+  this->ContextSummary = summary;
+  this->SummaryCoversTurns =
+    qMin(this->HistoryTurnsAtSend, this->SummaryCoversTurns + this->PendingFoldedTurns);
+  this->PendingMessages = QJsonArray();
+  this->noteCompressed();
+  this->AgentMessages = next;
+  this->postJson(this->buildAgentRequestJson());
+}
+
+bool pqSHYXAIAssistantPanel::retryIfContextOverflow(const QString& err)
+{
+  if (this->ContextRetryUsed || this->UserStopped || this->AgentMessages.isEmpty() ||
+    !isContextOverflow(err))
+  {
+    return false;
+  }
+  if (!this->StreamContent.isEmpty() || !this->StreamToolCalls.isEmpty())
+  {
+    return false;
+  }
+  this->ContextRetryUsed = true;
+  QJsonArray messages = this->AgentMessages;
+  const int before = messagesTokens(messages);
+  shrinkMessages(messages);
+  truncateDownTo(messages, kLowWaterTokens);
+  const int prefixEnd = suffixStart(messages);
+  const int folded = countFoldableTurns(messages, prefixEnd);
+  if (folded > 0 && !this->SummaryUsedThisSend)
+  {
+    this->setStatus(tr("Compressing earlier conversation..."));
+    this->beginSummary(messages, prefixEnd, folded);
+    return true;
+  }
+  if (messagesTokens(messages) >= before)
+  {
+    this->ContextRetryUsed = false;
+    return false;
+  }
+  this->noteCompressed();
+  this->AgentMessages = messages;
+  this->postJson(this->buildAgentRequestJson());
+  return true;
+}
+
+void pqSHYXAIAssistantPanel::failOrCompress(const QString& err)
+{
+  if (this->retryIfContextOverflow(err))
+  {
+    return;
+  }
+  this->failRequest(err);
 }
 
 void pqSHYXAIAssistantPanel::sendChatRequest()
@@ -1754,8 +2487,12 @@ void pqSHYXAIAssistantPanel::sendChatRequest()
   this->AgentMessages = QJsonArray();
   this->AgentFollowupJpegs.clear();
   this->AgentRound = 0;
+  this->AgentMaxRounds = maxAgentRoundsForEffort(this->reasoningEffort());
   this->AgentOmitTools = false;
   this->UserStopped = false;
+  this->SummaryUsedThisSend = false;
+  this->ContextRetryUsed = false;
+  this->HistoryTurnsAtSend = this->ChatView ? this->ChatView->completedTurns().size() : 0;
 
   this->setSendBusy(true);
   if (jpegs.isEmpty())
@@ -1788,7 +2525,22 @@ void pqSHYXAIAssistantPanel::sendChatRequest()
   this->ChatView->appendUser(question, atts);
   this->ChatView->beginAssistantStream();
 
-  this->postJson(payload);
+  QJsonArray messages;
+  if (sent.isObject())
+  {
+    messages = sent.object().value(QLatin1String("messages")).toArray();
+  }
+  if (messages.isEmpty())
+  {
+    this->failRequest(tr("Could not build the request."));
+    return;
+  }
+  if (this->QuestionEdit)
+  {
+    this->QuestionEdit->clear();
+  }
+  this->clearQuestionImages();
+  this->dispatchMessages(messages);
 }
 
 void pqSHYXAIAssistantPanel::resetStreamState()
@@ -2043,7 +2795,7 @@ void pqSHYXAIAssistantPanel::completeStreamReply()
   }
   if (!this->StreamError.isEmpty())
   {
-    this->failRequest(this->StreamError);
+    this->failOrCompress(this->StreamError);
     return;
   }
   const QJsonObject message = this->assembledAssistantMessage();
@@ -2065,7 +2817,7 @@ void pqSHYXAIAssistantPanel::completeStreamReply()
   this->applyAssistantReply(images);
   if (wrappedUpWithoutText)
   {
-    this->setStatus(tr("Agent finished after %1 tool rounds.").arg(kMaxAgentRounds));
+    this->setStatus(tr("Agent finished after %1 tool rounds.").arg(this->AgentMaxRounds));
   }
 }
 
@@ -2155,7 +2907,7 @@ void pqSHYXAIAssistantPanel::onChatFinished()
     {
       err = this->StreamError + QStringLiteral(" — ") + err;
     }
-    this->failRequest(err);
+    this->failOrCompress(err);
     return;
   }
 
@@ -2170,7 +2922,7 @@ void pqSHYXAIAssistantPanel::onChatFinished()
     const QJsonObject obj = doc.object();
     if (obj.contains(QLatin1String("error")))
     {
-      this->failRequest(jsonErrorMessage(obj, tr("AI request failed.")));
+      this->failOrCompress(jsonErrorMessage(obj, tr("AI request failed.")));
       return;
     }
     const QJsonArray choices = obj.value(QLatin1String("choices")).toArray();
@@ -2233,8 +2985,6 @@ void pqSHYXAIAssistantPanel::applyAssistantReply(const QList<QImage>& images)
   this->AgentMessages = QJsonArray();
   this->AgentRound = 0;
   this->AgentOmitTools = false;
-  this->QuestionEdit->clear();
-  this->clearQuestionImages();
   this->setStatus(tr("AI replied in the dialog. Click Run script only if you want to execute the current code."));
 }
 
@@ -2281,25 +3031,46 @@ QString pqSHYXAIAssistantPanel::runAgentTool(const QString& name, const QJsonObj
     {
       return QStringLiteral("Unknown tool: capture_screenshot");
     }
-    const QImage img = this->captureActiveViewImage();
+    const QString cameraNote = pqSHYXAIAgentTools::applyScreenshotCamera(args);
+    if (cameraNote.startsWith(QLatin1String("Error:")))
+    {
+      return cameraNote;
+    }
+    QImage img = this->captureActiveViewImage();
     if (img.isNull())
     {
-      return QStringLiteral("Could not capture the active view.");
+      QString out = QStringLiteral("Could not capture the active view.");
+      if (!cameraNote.isEmpty())
+      {
+        out += QLatin1Char('\n');
+        out += cameraNote;
+      }
+      return out;
     }
+    const QString targetNote = pqSHYXAIAgentTools::annotateScreenshotTargets(img, args);
     const QByteArray jpeg = jpegFromImage(img);
     if (jpeg.isEmpty())
     {
       return QStringLiteral("Could not encode screenshot JPEG.");
     }
     this->AgentFollowupJpegs.append(jpeg);
-    return QStringLiteral(
-             "Captured %1x%2 JPEG; image attached as image_url on this turn. "
-             "For pick_world_point pass ALL marks in one call: "
-             "points=[{x,y}, ...] with image_width=%3 image_height=%4 (origin=top_left).")
-      .arg(img.width())
-      .arg(img.height())
-      .arg(img.width())
-      .arg(img.height());
+    QString out = QStringLiteral(
+                    "Captured %1x%2 JPEG; image attached as image_url on this turn. "
+                    "For pick_world_point pass ALL marks in one call: "
+                    "points=[{x,y}, ...] with image_width=%1 image_height=%2 (origin=top_left).")
+                    .arg(img.width())
+                    .arg(img.height());
+    if (!cameraNote.isEmpty())
+    {
+      out += QLatin1Char('\n');
+      out += cameraNote;
+    }
+    if (!targetNote.isEmpty())
+    {
+      out += QLatin1Char('\n');
+      out += targetNote;
+    }
+    return out;
   }
   return pqSHYXAIAgentTools::run(name, args);
 }
@@ -2456,7 +3227,7 @@ bool pqSHYXAIAssistantPanel::continueAgentIfNeeded(const QJsonObject& message)
   this->AgentFollowupJpegs.clear();
 
   ++this->AgentRound;
-  if (this->AgentRound >= kMaxAgentRounds)
+  if (this->AgentRound >= this->AgentMaxRounds)
   {
     this->AgentOmitTools = true;
     this->AgentMessages.append(QJsonObject{
@@ -2465,16 +3236,16 @@ bool pqSHYXAIAssistantPanel::continueAgentIfNeeded(const QJsonObject& message)
         QStringLiteral("Maximum tool rounds reached. Do not call any tools. "
                        "Write the final answer to the user now.") } });
     this->setStatus(
-      tr("Agent: writing final reply after %1 tool rounds.").arg(kMaxAgentRounds));
+      tr("Agent: writing final reply after %1 tool rounds.").arg(this->AgentMaxRounds));
   }
   else
   {
     this->setStatus(tr("Agent: %1 (round %2/%3)")
                       .arg(names.join(QStringLiteral(", ")))
                       .arg(this->AgentRound)
-                      .arg(kMaxAgentRounds));
+                      .arg(this->AgentMaxRounds));
   }
-  this->postJson(this->buildAgentRequestJson());
+  this->dispatchMessages(this->AgentMessages);
   return true;
 }
 

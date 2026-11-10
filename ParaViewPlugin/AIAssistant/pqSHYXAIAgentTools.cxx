@@ -1,5 +1,6 @@
 #include "pqSHYXAIAgentTools.h"
 
+#include "pqSHYXAIMemory.h"
 #include "pqSHYXAIOutputLog.h"
 #include "pqSHYXGrowSelectionWithSimilarController.h"
 #include "pqSHYXProximityGapSelectionController.h"
@@ -34,13 +35,23 @@
 #include "vtkSMProxyListDomain.h"
 #include "vtkSMProxyManager.h"
 #include "vtkSMProxyProperty.h"
+#include "vtkCamera.h"
+#include "vtkMath.h"
+#include "vtkRenderer.h"
 #include "vtkSMRenderViewProxy.h"
 #include "vtkSMRepresentationProxy.h"
 #include "vtkSMSessionProxyManager.h"
 #include "vtkSMSourceProxy.h"
 #include "vtkSmartPointer.h"
 
+#include <QColor>
 #include <QDir>
+#include <QFont>
+#include <QFontMetrics>
+#include <QImage>
+#include <QPainter>
+#include <QPen>
+#include <QRect>
 #include <QJsonArray>
 #include <QJsonObject>
 #include <QJsonValue>
@@ -1478,6 +1489,7 @@ QString listFilters(const QString& queryRaw)
       "Polygon cell selection (click vertices, not the freehand lasso); "
       "Grow selection with similar normals; Proximity gap selection. "
       "Block context menu: Select Block. "
+      "Right-click Pick Center sets the center of rotation at that click (no second left-click). "
       "Selection context menu: Select Connected (connected points/lines/faces/volumes); "
       "Delete Selected Cells (also the Delete key in a RenderView: creates SHYXDeleteSelectedCellsFilter and Applies); "
       "Invert Selection; "
@@ -1680,6 +1692,29 @@ QString describeClientTool(const QString& query)
     return {};
   }
   const QString ql = q.toLower();
+  const bool memory = ql == QLatin1String("memory") || ql == QLatin1String("agent.md") ||
+    ql == QLatin1String("agent memory") || ql.contains(QLatin1String("long-term memory")) ||
+    ql.contains(QLatin1String("long term memory")) || ql.contains(QLatin1String("shyx memory")) ||
+    ql.contains(QLatin1String("read_skill")) || ql.contains(QLatin1String("save_skill")) ||
+    ql.contains(QLatin1String("update_skill")) || ql.contains(QLatin1String("write_agent_memory"));
+  if (memory)
+  {
+    return QStringLiteral(
+             "SHYX AI Assistant Memory (View dock; not a pipeline filter)\n"
+             "Files on disk, not the registry and not .pvsm state files.\n"
+             "Folder: %1\n"
+             "Agent.md: short preferences included in every request. About 4000 characters are sent.\n"
+             "skills/<name>/SKILL.md: one workflow per file. The request lists name and description only. "
+             "Call read_skill(name) for the body.\n"
+             "save_skill writes a new file and does not overwrite an existing name.\n"
+             "update_skill overwrites an existing skill. Call read_skill first and pass the full "
+             "revised body. It does not create or rename a file. Omit description to keep the catalog "
+             "line, or omit body to change only that line.\n"
+             "write_agent_memory replaces Agent.md. Use it for a preference that applies to every task, "
+             "not for a pipeline procedure.\n"
+             "The Memory button edits these files. Reset does not delete them.\n")
+      .arg(QDir::toNativeSeparators(pqSHYXAIMemory::rootDirectory()));
+  }
   const bool proximityGap = ql.contains(QLatin1String("proximity")) ||
     ql.contains(QLatin1String("near-disconnected")) ||
     ql.contains(QLatin1String("near disconnected")) ||
@@ -1943,6 +1978,25 @@ QString describeClientTool(const QString& query)
       "  Works with or without an existing cell selection; then use Extract Selection / "
       "SHYX selection filters\n");
   }
+  const bool pickCenter = ql.contains(QLatin1String("pick center")) ||
+    ql.contains(QLatin1String("pickcenter")) || ql.contains(QLatin1String("pick-center")) ||
+    ql.contains(QLatin1String("shyxpickcenter")) ||
+    ql.contains(QLatin1String("center of rotation")) ||
+    ql.contains(QStringLiteral("旋转中心"));
+  if (pickCenter && !sphere && !grow && !selectBlock)
+  {
+    return QStringLiteral(
+      "SHYX Pick Center (RenderView context menu; not a Server Manager proxy)\n"
+      "No Python constructor and no SM properties.\n"
+      "Interaction:\n"
+      "  Right-click in the 3D view → Pick Center\n"
+      "  Sets the view center of rotation (the axes-toolbar Pick Center) to the surface "
+      "point under that right-click\n"
+      "  Uses the right-button press that opened the menu. It does not arm a second left-click\n"
+      "  Same pick as the toolbar: ConvertDisplayToPointOnSurface, then CenterOfRotation\n"
+      "  An empty-background click uses the camera focal depth, same as the toolbar\n"
+      "  The toolbar button still waits for a later left-click; this menu item does not\n");
+  }
   return {};
 }
 
@@ -1960,7 +2014,7 @@ QString describeProxy(const QString& query)
   {
     return QStringLiteral("No proxy definition matching '%1'. Try list_filters or describe_proxy('sphere') / "
                           "describe_proxy('polygon') / describe_proxy('proximity gap') / describe_proxy('Pulse Glyphs') / "
-                          "describe_proxy('recovery').")
+                          "describe_proxy('pick center') / describe_proxy('recovery').")
       .arg(query.trimmed());
   }
   QString out;
@@ -2688,6 +2742,11 @@ const ShyxExtra kShyxExtra[] = {
     "Select Block clears the current selection then selects all cells in that block (BLOCK_SELECTORS). "
     "Call describe_proxy('select block'). "
     "After use, call inspect_selection." },
+  { "SHYXPickCenter",
+    "Not a filter and not a proxy. RenderView right-click → Pick Center sets the view center of "
+    "rotation to the surface under that right-click (same pick as the axes-toolbar Pick Center). "
+    "It does not wait for a second left-click. "
+    "Call describe_proxy('pick center')." },
   { "SHYXRecovery",
     "Not a filter and not a proxy. File → Recovery lists *.pvsm files in the OS temp folder "
     "(newest first) and loads one with a click; shyx_checkpoint.pvsm is kept up to date "
@@ -2767,6 +2826,9 @@ QString lookupShyxDocs(const QString& queryRaw)
       "After the user uses them, call inspect_selection.\n"
       "   Also: right-click a composite block → Select Block "
       "(clear current selection, then select all cells in that part).\n"
+      "   Also: right-click in the 3D view → Pick Center "
+      "(center of rotation at that right-click; no second left-click). "
+      "describe_proxy('pick center').\n"
       "   Also: right-click an active point or cell selection → Select Connected "
       "(connected region of that entity: points/lines/faces/volumes; not the whole mesh); "
       "Delete Selected Cells (the Delete key in the RenderView does the same: create "
@@ -2787,14 +2849,16 @@ QString lookupShyxDocs(const QString& queryRaw)
       "pending change runs, after a source/filter/reader is created, after an Apply finishes, and "
       "after a state load). "
       "describe_proxy('recovery').\n"
-      "6) View → SHYX AI Assistant: this dock, not a pipeline filter.\n"
+      "6) View → SHYX AI Assistant: this dock, not a pipeline filter. "
+      "Memory stores Agent.md and skill files under %APPDATA%/SHYX/AIAssistant/memory "
+      "(not the registry). describe_proxy('memory').\n"
       "Pass a name/topic (remesh, clip, representation, selection, sphere, glyph, ...) to filter notes.\n"
       "For parameter names/defaults: describe_proxy('Pulse Glyphs'), describe_proxy('Animated Streamline'), "
       "describe_proxy('Point Label'), describe_proxy('Hologram'), describe_proxy('sphere'), "
       "describe_proxy('polygon'), describe_proxy('grow'), "
       "describe_proxy('proximity gap'), describe_proxy('select block'), describe_proxy('select similar'), "
       "describe_proxy('fill interior'), describe_proxy('select connected'), "
-      "describe_proxy('invert'), describe_proxy('recovery'), "
+      "describe_proxy('invert'), describe_proxy('pick center'), describe_proxy('recovery'), "
       "describe_proxy('quick filter wheel'), describe_proxy('camera adjust').\n");
   }
 
@@ -2872,7 +2936,7 @@ QString lookupShyxDocs(const QString& queryRaw)
     }
   }
   out += QStringLiteral("For property names/enums/defaults call describe_proxy with the XML/python name "
-                        "or display type (Pulse Glyphs, sphere, grow, select block, select similar, fill interior, select connected, invert, recovery, camera adjust).\n");
+                        "or display type (Pulse Glyphs, sphere, grow, select block, select similar, fill interior, select connected, invert, pick center, recovery, camera adjust).\n");
   if (!query.isEmpty())
   {
     const QString client = describeClientTool(query);
@@ -3175,6 +3239,550 @@ QString inspectView()
   out += timeInfo();
   return out;
 }
+
+bool jsonNumberValue(const QJsonValue& v, double& out)
+{
+  if (v.isDouble())
+  {
+    out = v.toDouble();
+    return std::isfinite(out);
+  }
+  if (v.isString())
+  {
+    bool ok = false;
+    out = v.toString().trimmed().toDouble(&ok);
+    return ok && std::isfinite(out);
+  }
+  return false;
+}
+
+bool readVec3(const QJsonValue& v, double out[3])
+{
+  if (v.isArray())
+  {
+    const QJsonArray a = v.toArray();
+    if (a.size() < 3)
+    {
+      return false;
+    }
+    for (int i = 0; i < 3; ++i)
+    {
+      if (!jsonNumberValue(a.at(i), out[i]))
+      {
+        return false;
+      }
+    }
+    return true;
+  }
+  if (v.isObject())
+  {
+    const QJsonObject o = v.toObject();
+    return jsonNumberValue(o.value(QStringLiteral("x")), out[0]) &&
+      jsonNumberValue(o.value(QStringLiteral("y")), out[1]) &&
+      jsonNumberValue(o.value(QStringLiteral("z")), out[2]);
+  }
+  if (v.isString())
+  {
+    QString s = v.toString();
+    s.replace(QLatin1Char(','), QLatin1Char(' '));
+    const QStringList parts = s.split(QLatin1Char(' '), Qt::SkipEmptyParts);
+    if (parts.size() < 3)
+    {
+      return false;
+    }
+    for (int i = 0; i < 3; ++i)
+    {
+      bool ok = false;
+      out[i] = parts.at(i).toDouble(&ok);
+      if (!ok || !std::isfinite(out[i]))
+      {
+        return false;
+      }
+    }
+    return true;
+  }
+  return false;
+}
+
+bool readProp3(vtkSMProxy* proxy, const char* name, double out[3])
+{
+  vtkSMProperty* prop = proxy ? proxy->GetProperty(name) : nullptr;
+  if (!prop)
+  {
+    return false;
+  }
+  vtkSMPropertyHelper h(prop);
+  if (h.GetNumberOfElements() < 3)
+  {
+    return false;
+  }
+  for (int i = 0; i < 3; ++i)
+  {
+    out[i] = h.GetAsDouble(static_cast<unsigned int>(i));
+  }
+  return true;
+}
+
+bool setProp3(vtkSMProxy* proxy, const char* name, const double v[3])
+{
+  vtkSMProperty* prop = proxy ? proxy->GetProperty(name) : nullptr;
+  if (!prop)
+  {
+    return false;
+  }
+  vtkSMPropertyHelper(prop).Set(v, 3);
+  return true;
+}
+
+QString fmt3(const double v[3])
+{
+  return QStringLiteral("[%1, %2, %3]")
+    .arg(v[0], 0, 'g', 6)
+    .arg(v[1], 0, 'g', 6)
+    .arg(v[2], 0, 'g', 6);
+}
+
+bool jsonBoolValue(const QJsonObject& args, const char* key, bool def)
+{
+  if (!args.contains(QLatin1String(key)))
+  {
+    return def;
+  }
+  const QJsonValue v = args.value(QLatin1String(key));
+  if (v.isBool())
+  {
+    return v.toBool();
+  }
+  if (v.isDouble())
+  {
+    return v.toInt() != 0;
+  }
+  if (v.isString())
+  {
+    const QString s = v.toString().trimmed().toLower();
+    if (s == QLatin1String("false") || s == QLatin1String("0") || s == QLatin1String("no") ||
+      s == QLatin1String("off"))
+    {
+      return false;
+    }
+    if (s == QLatin1String("true") || s == QLatin1String("1") || s == QLatin1String("yes") ||
+      s == QLatin1String("on"))
+    {
+      return true;
+    }
+  }
+  return def;
+}
+
+bool boundsCenter(vtkPVDataInformation* di, double center[3])
+{
+  if (!di)
+  {
+    return false;
+  }
+  double b[6] = { 0, 0, 0, 0, 0, 0 };
+  di->GetBounds(b);
+  if (!(b[0] <= b[1] && b[2] <= b[3] && b[4] <= b[5]))
+  {
+    return false;
+  }
+  if (!std::isfinite(b[0]) || std::abs(b[0]) > 1e299)
+  {
+    return false;
+  }
+  center[0] = 0.5 * (b[0] + b[1]);
+  center[1] = 0.5 * (b[2] + b[3]);
+  center[2] = 0.5 * (b[4] + b[5]);
+  return std::isfinite(center[0]) && std::isfinite(center[1]) && std::isfinite(center[2]);
+}
+
+QString applyScreenshotCameraImpl(const QJsonObject& args)
+{
+  if (!args.contains(QStringLiteral("camera")) || args.value(QStringLiteral("camera")).isNull())
+  {
+    return {};
+  }
+  if (!args.value(QStringLiteral("camera")).isObject())
+  {
+    return QStringLiteral(
+      "Error: camera must be {focal_point:[x,y,z], position:[x,y,z], view_angle:degrees}.");
+  }
+  const QJsonObject cam = args.value(QStringLiteral("camera")).toObject();
+  if (cam.isEmpty())
+  {
+    return {};
+  }
+
+  const bool hasFocal = cam.contains(QStringLiteral("focal_point"));
+  const bool hasPos = cam.contains(QStringLiteral("position"));
+  const bool hasAngle = cam.contains(QStringLiteral("view_angle"));
+  if (!hasFocal && !hasPos && !hasAngle)
+  {
+    return QStringLiteral("Error: camera needs focal_point, position, and/or view_angle.");
+  }
+
+  pqView* view = pqActiveObjects::instance().activeView();
+  vtkSMProxy* proxy = view ? view->getProxy() : nullptr;
+  if (!proxy || !proxy->GetProperty("CameraPosition") || !proxy->GetProperty("CameraFocalPoint"))
+  {
+    return QStringLiteral("Error: no active RenderView camera.");
+  }
+
+  double focal[3] = { 0, 0, 0 };
+  double pos[3] = { 0, 0, 0 };
+  if (hasFocal || hasPos)
+  {
+    if (!readProp3(proxy, "CameraFocalPoint", focal) || !readProp3(proxy, "CameraPosition", pos))
+    {
+      return QStringLiteral("Error: the active view did not report a camera.");
+    }
+    if (hasFocal && !readVec3(cam.value(QStringLiteral("focal_point")), focal))
+    {
+      return QStringLiteral("Error: camera.focal_point must be [x, y, z].");
+    }
+    if (hasPos && !readVec3(cam.value(QStringLiteral("position")), pos))
+    {
+      return QStringLiteral("Error: camera.position must be [x, y, z].");
+    }
+    const double dx = focal[0] - pos[0];
+    const double dy = focal[1] - pos[1];
+    const double dz = focal[2] - pos[2];
+    if ((dx * dx + dy * dy + dz * dz) < 1e-24)
+    {
+      return QStringLiteral("Error: camera.position and camera.focal_point are the same point.");
+    }
+  }
+
+  double angle = 30.0;
+  if (hasAngle)
+  {
+    if (!jsonNumberValue(cam.value(QStringLiteral("view_angle")), angle) || angle <= 0.0 ||
+      angle >= 180.0)
+    {
+      return QStringLiteral(
+        "Error: camera.view_angle must be degrees, greater than 0 and less than 180.");
+    }
+    if (!proxy->GetProperty("CameraViewAngle"))
+    {
+      return QStringLiteral("Error: this view has no CameraViewAngle.");
+    }
+  }
+
+  bool adjustedUp = false;
+  double up[3] = { 0, 1, 0 };
+  if ((hasFocal || hasPos) && readProp3(proxy, "CameraViewUp", up))
+  {
+    double dir[3] = { focal[0] - pos[0], focal[1] - pos[1], focal[2] - pos[2] };
+    if (vtkMath::Normalize(dir) > 0.0)
+    {
+      double upn[3] = { up[0], up[1], up[2] };
+      if (vtkMath::Normalize(upn) > 0.0 && std::fabs(vtkMath::Dot(dir, upn)) > 0.99)
+      {
+        double alt[3] = { 0.0, 0.0, 1.0 };
+        if (std::fabs(dir[2]) > 0.9)
+        {
+          alt[1] = 1.0;
+          alt[2] = 0.0;
+        }
+        const double d = vtkMath::Dot(alt, dir);
+        up[0] = alt[0] - d * dir[0];
+        up[1] = alt[1] - d * dir[1];
+        up[2] = alt[2] - d * dir[2];
+        vtkMath::Normalize(up);
+        adjustedUp = true;
+      }
+    }
+  }
+
+  if (hasFocal)
+  {
+    setProp3(proxy, "CameraFocalPoint", focal);
+  }
+  if (hasPos)
+  {
+    setProp3(proxy, "CameraPosition", pos);
+  }
+  if (adjustedUp)
+  {
+    setProp3(proxy, "CameraViewUp", up);
+  }
+  bool clearedParallel = false;
+  if (hasAngle)
+  {
+    vtkSMPropertyHelper(proxy->GetProperty("CameraViewAngle")).Set(angle);
+    if (vtkSMProperty* par = proxy->GetProperty("CameraParallelProjection"))
+    {
+      vtkSMPropertyHelper h(par);
+      if (h.GetNumberOfElements() > 0 && h.GetAsInt() != 0)
+      {
+        h.Set(0);
+        clearedParallel = true;
+      }
+    }
+  }
+
+  proxy->UpdateVTKObjects();
+  view->render();
+
+  QString note = QStringLiteral("Camera");
+  if (hasFocal)
+  {
+    note += QStringLiteral(" focal_point=%1").arg(fmt3(focal));
+  }
+  if (hasPos)
+  {
+    note += QStringLiteral(" position=%1").arg(fmt3(pos));
+  }
+  if (hasAngle)
+  {
+    note += QStringLiteral(" view_angle=%1").arg(angle, 0, 'g', 6);
+  }
+  if (adjustedUp)
+  {
+    note += QStringLiteral(" (view-up adjusted; it was parallel to the view direction)");
+  }
+  if (clearedParallel)
+  {
+    note += QStringLiteral(" (parallel projection turned off so view_angle applies)");
+  }
+  return note;
+}
+
+struct ScreenshotMark
+{
+  QString text;
+  double x = 0;
+  double y = 0;
+};
+
+QString annotateScreenshotTargetsImpl(QImage& image, const QJsonObject& args)
+{
+  if (!args.contains(QStringLiteral("targets")) || args.value(QStringLiteral("targets")).isNull())
+  {
+    return {};
+  }
+  QJsonArray items;
+  const QJsonValue raw = args.value(QStringLiteral("targets"));
+  if (raw.isArray())
+  {
+    items = raw.toArray();
+  }
+  else if (raw.isString() || raw.isObject())
+  {
+    items.append(raw);
+  }
+  else
+  {
+    return QStringLiteral("Targets: expected a list of names or {name, position}.");
+  }
+  if (items.isEmpty())
+  {
+    return {};
+  }
+
+  const bool drawLabels = jsonBoolValue(args, "label", true);
+  constexpr int kMaxTargets = 24;
+  const int n = std::min(static_cast<int>(items.size()), kMaxTargets);
+
+  pqView* view = pqActiveObjects::instance().activeView();
+  auto* rvp = view ? vtkSMRenderViewProxy::SafeDownCast(view->getProxy()) : nullptr;
+  vtkRenderer* ren = rvp ? rvp->GetRenderer() : nullptr;
+  vtkCamera* camera = ren ? ren->GetActiveCamera() : nullptr;
+  const QSize viewSize = view ? view->getSize() : QSize();
+  if (!ren || !camera || viewSize.width() < 1 || viewSize.height() < 1 || image.isNull())
+  {
+    return QStringLiteral("Targets: could not project onto the view.");
+  }
+
+  const int* renSize = ren->GetSize();
+  const double vw = viewSize.width();
+  const double vh = viewSize.height();
+  const double scaleX =
+    (renSize && renSize[0] > 0 && renSize[0] != viewSize.width()) ? vw / renSize[0] : 1.0;
+  const double scaleY =
+    (renSize && renSize[1] > 0 && renSize[1] != viewSize.height()) ? vh / renSize[1] : 1.0;
+
+  double camPos[3] = { 0, 0, 0 };
+  double camFp[3] = { 0, 0, 0 };
+  camera->GetPosition(camPos);
+  camera->GetFocalPoint(camFp);
+  const double forward[3] = { camFp[0] - camPos[0], camFp[1] - camPos[1], camFp[2] - camPos[2] };
+
+  QStringList lines;
+  QList<ScreenshotMark> marks;
+  for (int i = 0; i < n; ++i)
+  {
+    const QJsonValue item = items.at(i);
+    QString text;
+    bool hasPoint = false;
+    double world[3] = { 0, 0, 0 };
+    if (item.isString())
+    {
+      text = item.toString().trimmed();
+    }
+    else if (item.isObject())
+    {
+      const QJsonObject o = item.toObject();
+      text = o.value(QStringLiteral("name")).toString().trimmed();
+      if (text.isEmpty())
+      {
+        text = o.value(QStringLiteral("label")).toString().trimmed();
+      }
+      if (o.contains(QStringLiteral("position")))
+      {
+        if (!readVec3(o.value(QStringLiteral("position")), world))
+        {
+          lines << QStringLiteral("- %1: position must be [x, y, z]")
+                     .arg(text.isEmpty() ? QStringLiteral("(no name)") : text);
+          continue;
+        }
+        hasPoint = true;
+      }
+    }
+    else
+    {
+      lines << QStringLiteral("- target %1: expected a name or {name, position}").arg(i + 1);
+      continue;
+    }
+    if (text.isEmpty())
+    {
+      lines << QStringLiteral("- target %1: missing name").arg(i + 1);
+      continue;
+    }
+    if (!hasPoint)
+    {
+      pqPipelineSource* src = findSourceByName(text);
+      if (!src)
+      {
+        lines << QStringLiteral("- %1: source not found").arg(text);
+        continue;
+      }
+      pqOutputPort* op = src->getOutputPort(0);
+      if (!boundsCenter(op ? op->getDataInformation() : nullptr, world))
+      {
+        lines << QStringLiteral("- %1: no data bounds").arg(src->getSMName());
+        continue;
+      }
+      text = src->getSMName();
+    }
+
+    const double toPt[3] = { world[0] - camPos[0], world[1] - camPos[1], world[2] - camPos[2] };
+    if (vtkMath::Dot(forward, toPt) <= 1e-8)
+    {
+      lines << QStringLiteral("- %1 world=%2 behind the camera").arg(text, fmt3(world));
+      continue;
+    }
+    ren->SetWorldPoint(world[0], world[1], world[2], 1.0);
+    ren->WorldToDisplay();
+    const double* disp = ren->GetDisplayPoint();
+    const double dx = disp[0] * scaleX;
+    const double dy = disp[1] * scaleY;
+    const double jpegX = dx * static_cast<double>(image.width()) / vw;
+    const double jpegY = (vh - 1.0 - dy) * static_cast<double>(image.height()) / vh;
+    const bool inside =
+      jpegX >= 0.0 && jpegY >= 0.0 && jpegX < image.width() && jpegY < image.height();
+    QString where = inside ? (drawLabels ? QStringLiteral(" labeled") : QStringLiteral(" label=off"))
+                           : QStringLiteral(" outside the image");
+    lines << QStringLiteral("- %1 world=%2 pixel=(%3, %4)%5")
+               .arg(text, fmt3(world))
+               .arg(static_cast<int>(std::lround(jpegX)))
+               .arg(static_cast<int>(std::lround(jpegY)))
+               .arg(where);
+    if (drawLabels && inside)
+    {
+      ScreenshotMark mark;
+      mark.text = text;
+      mark.x = jpegX;
+      mark.y = jpegY;
+      marks.append(mark);
+    }
+  }
+  if (items.size() > n)
+  {
+    lines << QStringLiteral("- %1 more targets skipped").arg(items.size() - n);
+  }
+
+  if (!marks.isEmpty())
+  {
+    QImage painted = image.convertToFormat(QImage::Format_RGB32);
+    QPainter painter(&painted);
+    painter.setRenderHint(QPainter::Antialiasing, true);
+    QFont font = painter.font();
+    font.setPixelSize(14);
+    painter.setFont(font);
+    const QFontMetrics fm(font);
+    QList<QRect> placed;
+    for (const ScreenshotMark& mark : marks)
+    {
+      const QString shown =
+        mark.text.size() > 48 ? mark.text.left(47) + QStringLiteral("...") : mark.text;
+      const int textW = fm.horizontalAdvance(shown);
+      const int textH = fm.height();
+      QRect box(static_cast<int>(std::lround(mark.x)) + 8,
+        static_cast<int>(std::lround(mark.y)) - textH - 10, textW + 8, textH + 4);
+      if (box.right() >= painted.width() - 1)
+      {
+        box.moveRight(painted.width() - 2);
+      }
+      if (box.left() < 2)
+      {
+        box.moveLeft(2);
+      }
+      if (box.top() < 2)
+      {
+        box.moveTop(static_cast<int>(std::lround(mark.y)) + 8);
+      }
+      if (box.bottom() >= painted.height() - 1)
+      {
+        box.moveBottom(painted.height() - 2);
+      }
+      for (int nudge = 0; nudge < 6; ++nudge)
+      {
+        bool hit = false;
+        for (const QRect& prev : placed)
+        {
+          if (prev.intersects(box))
+          {
+            hit = true;
+            break;
+          }
+        }
+        if (!hit)
+        {
+          break;
+        }
+        box.translate(0, box.height() + 2);
+        if (box.bottom() >= painted.height() - 1)
+        {
+          box.moveTop(2);
+        }
+      }
+      placed.append(box);
+      painter.setPen(QPen(Qt::black, 2));
+      painter.setBrush(QColor(255, 213, 74));
+      painter.drawEllipse(QPointF(mark.x, mark.y), 4.0, 4.0);
+      painter.setPen(Qt::NoPen);
+      painter.setBrush(QColor(0, 0, 0, 180));
+      painter.drawRoundedRect(box, 3, 3);
+      painter.setPen(Qt::white);
+      painter.drawText(box.adjusted(4, 0, -4, 0), Qt::AlignVCenter | Qt::AlignLeft, shown);
+    }
+    painter.end();
+    image = painted;
+  }
+
+  return QStringLiteral("Targets (JPEG pixels, origin=top_left):\n%1").arg(lines.join(QLatin1Char('\n')));
+}
+}
+
+QString pqSHYXAIAgentTools::applyScreenshotCamera(const QJsonObject& args)
+{
+  return applyScreenshotCameraImpl(args);
+}
+
+QString pqSHYXAIAgentTools::annotateScreenshotTargets(QImage& image, const QJsonObject& args)
+{
+  return annotateScreenshotTargetsImpl(image, args);
 }
 
 QJsonArray pqSHYXAIAgentTools::schema(bool allowCaptureScreenshot)
@@ -3203,9 +3811,54 @@ QJsonArray pqSHYXAIAgentTools::schema(bool allowCaptureScreenshot)
     "script, a missing array, or unexpected filter output. Do not call it on every turn."));
   if (allowCaptureScreenshot)
   {
+    QJsonObject vec3Items{ { QStringLiteral("type"), QStringLiteral("number") } };
+    auto vec3Arg = [&vec3Items](const char* desc) {
+      return QJsonObject{ { QStringLiteral("type"), QStringLiteral("array") },
+        { QStringLiteral("description"), QString::fromUtf8(desc) },
+        { QStringLiteral("items"), vec3Items }, { QStringLiteral("minItems"), 3 },
+        { QStringLiteral("maxItems"), 3 } };
+    };
+    QJsonObject camProps{ { QStringLiteral("focal_point"),
+                            vec3Arg("[x, y, z] CameraFocalPoint, the look-at point.") },
+      { QStringLiteral("position"), vec3Arg("[x, y, z] CameraPosition.") },
+      { QStringLiteral("view_angle"),
+        numArg("CameraViewAngle in degrees, greater than 0 and less than 180. "
+               "If the view is in parallel projection, it is switched to perspective so this "
+               "angle changes the framing.") } };
+    QJsonObject targetProps{ { QStringLiteral("name"),
+                               strArg("Label text. Without position, a pipeline source name; the "
+                                      "label sits at that source's bounds center.") },
+      { QStringLiteral("position"),
+        vec3Arg("Optional world point [x, y, z]. The name is then only the label text.") } };
+    QJsonObject props{ { QStringLiteral("camera"),
+                         QJsonObject{ { QStringLiteral("type"), QStringLiteral("object") },
+                           { QStringLiteral("description"),
+                             QStringLiteral(
+                               "Camera applied on the active RenderView before the JPEG. "
+                               "Omit to keep the current camera. Set only the fields to change.") },
+                           { QStringLiteral("properties"), camProps } } },
+      { QStringLiteral("targets"),
+        QJsonObject{ { QStringLiteral("type"), QStringLiteral("array") },
+          { QStringLiteral("description"),
+            QStringLiteral(
+              "Marks on the JPEG. Each item is a pipeline source name, or "
+              "{name, position:[x,y,z]}. label=true draws the names. This does not hide other objects.") },
+          { QStringLiteral("items"),
+            QJsonObject{ { QStringLiteral("anyOf"),
+              QJsonArray{ QJsonObject{ { QStringLiteral("type"), QStringLiteral("string") } },
+                QJsonObject{ { QStringLiteral("type"), QStringLiteral("object") },
+                  { QStringLiteral("properties"), targetProps } } } } } } } },
+      { QStringLiteral("label"),
+        boolArg("Draw target names on the JPEG. Default true. false still returns each target's "
+                "JPEG pixel.") } };
     tools.append(fn("capture_screenshot",
-      "Capture the current RenderView as a JPEG. The image is attached on the next turn. "
-      "The result includes JPEG width/height for pick_world_point."));
+      "Capture the active RenderView as a JPEG. The image is attached on this turn. "
+      "Pass the camera in this call: camera={focal_point:[x,y,z], position:[x,y,z], view_angle:degrees}. "
+      "Omit camera to keep the current view. Any subset of the three fields is applied. "
+      "targets lists pipeline source names, or {name, position:[x,y,z]}. "
+      "label=true (default) draws each target name on the JPEG and does not hide other objects. "
+      "The result includes JPEG width/height for pick_world_point.",
+      props));
   }
   tools.append(fn("pick_world_point",
     "Convert 2D screenshot clicks (brush marks) to 3D world points. Call this when the user "
@@ -3276,6 +3929,7 @@ QJsonArray pqSHYXAIAgentTools::schema(bool allowCaptureScreenshot)
     "(returns exposed Python names PG_*/AS_*/PL_*/HG_*). "
     "For title-bar tools pass 'sphere', 'polygon', 'grow', or 'proximity gap' (no SM proxy). "
     "For the block context-menu action pass 'select block'. "
+    "For the right-click Pick Center (center of rotation at that click, no second left-click) pass 'pick center'. "
     "For Select Similar / By Normal pass 'select similar'. "
     "For Fill Interior pass 'fill interior'. "
     "For Select Connected (connected points/lines/faces/volumes) pass 'select connected'. "
@@ -3283,8 +3937,9 @@ QJsonArray pqSHYXAIAgentTools::schema(bool allowCaptureScreenshot)
     "For the File → Recovery submenu (temp-folder .pvsm list, including the automatic "
     "shyx_checkpoint.pvsm) pass 'recovery' or 'checkpoint'. "
     "For the RenderView Delete-key shortcut that creates and applies SHYX Delete Selected Cells, pass 'delete shortcut' or 'delete key'. "
-    "For the quick-filter wheel (radial menu in the RenderView, opened by holding ` / ·; its trailing \"+\" sector opens a checklist of every SHYX and ParaView / VESPA built-in filter with an Input, and the checked set persists), pass 'quick filter wheel'.",
-    QJsonObject{ { QStringLiteral("name"), strArg("XML name, display type (Pulse Glyphs), sphere/polygon/grow/proximity gap, select block, select similar, fill interior, select connected, invert, recovery/checkpoint, delete shortcut, or quick filter wheel.") } },
+    "For the quick-filter wheel (radial menu in the RenderView, opened by holding ` / ·; its trailing \"+\" sector opens a checklist of every SHYX and ParaView / VESPA built-in filter with an Input, and the checked set persists), pass 'quick filter wheel'. "
+    "For the assistant Memory button (Agent.md and skill files) pass 'memory'.",
+    QJsonObject{ { QStringLiteral("name"), strArg("XML name, display type (Pulse Glyphs), sphere/polygon/grow/proximity gap, select block, select similar, fill interior, select connected, invert, pick center, recovery/checkpoint, delete shortcut, quick filter wheel, or memory.") } },
     QJsonArray{ QStringLiteral("name") }));
   tools.append(fn("lookup_shyx_docs",
     "SHYX/VESPA usage notes: capability catalog (filters + Display representations + "
@@ -3293,6 +3948,49 @@ QJsonArray pqSHYXAIAgentTools::schema(bool allowCaptureScreenshot)
     "notes (spaces or commas). Then call describe_proxy for property names.",
     QJsonObject{ { QStringLiteral("query"),
       strArg("Empty for catalog, or keywords: vascular remesh, representation, selection, ...") } }));
+  tools.append(fn("read_skill",
+    "Read one saved skill (frontmatter plus body). Call this before following a workflow in the "
+    "skill catalog. Pass the catalog id.",
+    QJsonObject{ { QStringLiteral("name"),
+      strArg("Skill id from the catalog, e.g. vascular-cfd-mesh.") } },
+    QJsonArray{ QStringLiteral("name") }));
+  QJsonObject saveSkillProps;
+  saveSkillProps.insert(QStringLiteral("name"),
+    strArg("Short skill name, e.g. vascular-cfd-mesh. A name that already exists is saved as a new file."));
+  saveSkillProps.insert(QStringLiteral("description"),
+    strArg("One line: when to read this skill. This is the only skill text shown in the catalog."));
+  saveSkillProps.insert(QStringLiteral("body"),
+    strArg("Markdown workflow. This user's array names, skipped steps, and parameters that worked. "
+           "Do not paste lookup_shyx_docs."));
+  tools.append(fn("save_skill",
+    "Save a new skill file. Call only when the user asks to remember a workflow. Never overwrites: "
+    "a name that already exists is saved under a new name. To change an existing skill, call "
+    "update_skill. One skill is one workflow. Filter "
+    "parameters stay in describe_proxy / lookup_shyx_docs.",
+    saveSkillProps,
+    QJsonArray{ QStringLiteral("name"), QStringLiteral("description"), QStringLiteral("body") }));
+  QJsonObject updateSkillProps;
+  updateSkillProps.insert(QStringLiteral("name"),
+    strArg("Existing skill id from the catalog, e.g. vascular-cfd-mesh. Does not create or rename."));
+  updateSkillProps.insert(QStringLiteral("description"),
+    strArg("Replacement catalog line. Omit to keep the current description."));
+  updateSkillProps.insert(QStringLiteral("body"),
+    strArg("Full revised markdown workflow, not a patch. Call read_skill first. "
+           "Omit to change only the description. Do not paste lookup_shyx_docs."));
+  tools.append(fn("update_skill",
+    "Overwrite an existing skill. Call only when the user asks to change a saved workflow. "
+    "Read it with read_skill first, then pass the full revised body. Does not create a file and "
+    "does not rename it. Omit description to keep the catalog line, or omit body to change only "
+    "that line. Filter parameters stay in describe_proxy / lookup_shyx_docs.",
+    updateSkillProps,
+    QJsonArray{ QStringLiteral("name") }));
+  tools.append(fn("write_agent_memory",
+    "Replace Agent.md, the short notes included in every request. Call only when the user asks to "
+    "remember a preference that applies to every task. Pass the full new text, including notes to "
+    "keep. Max 4000 characters. Do not store a pipeline procedure here; use save_skill.",
+    QJsonObject{ { QStringLiteral("text"),
+      strArg("Full replacement text for Agent.md. Max 4000 characters.") } },
+    QJsonArray{ QStringLiteral("text") }));
   return tools;
 }
 
@@ -3362,6 +4060,24 @@ QString pqSHYXAIAgentTools::run(const QString& name, const QJsonObject& args)
   if (name == QLatin1String("lookup_shyx_docs"))
   {
     return lookupShyxDocs(args.value(QStringLiteral("query")).toString());
+  }
+  if (name == QLatin1String("read_skill"))
+  {
+    return pqSHYXAIMemory::readSkill(args.value(QStringLiteral("name")).toString());
+  }
+  if (name == QLatin1String("save_skill"))
+  {
+    return pqSHYXAIMemory::saveSkill(args.value(QStringLiteral("name")).toString(),
+      args.value(QStringLiteral("description")).toString(), args.value(QStringLiteral("body")).toString());
+  }
+  if (name == QLatin1String("update_skill"))
+  {
+    return pqSHYXAIMemory::updateSkill(args.value(QStringLiteral("name")).toString(),
+      args.value(QStringLiteral("description")).toString(), args.value(QStringLiteral("body")).toString());
+  }
+  if (name == QLatin1String("write_agent_memory"))
+  {
+    return pqSHYXAIMemory::writeAgentMemory(args.value(QStringLiteral("text")).toString());
   }
   if (name == QLatin1String("pick_world_point"))
   {

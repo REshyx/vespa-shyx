@@ -270,16 +270,13 @@ QString pqSHYXAIChatView::plainText() const
   return out;
 }
 
-QList<pqSHYXAIChatView::TranscriptTurn> pqSHYXAIChatView::lastTurns(int maxCount) const
+QList<pqSHYXAIChatView::TranscriptTurn> pqSHYXAIChatView::completedTurns() const
 {
   QList<TranscriptTurn> out;
-  if (maxCount <= 0)
+  const int n = this->Messages.size();
+  for (int i = 0; i < n; ++i)
   {
-    return out;
-  }
-  for (int i = this->Messages.size() - 1; i >= 0 && out.size() < maxCount; --i)
-  {
-    if (this->Streaming && i == this->Messages.size() - 1)
+    if (this->Streaming && i == n - 1)
     {
       continue;
     }
@@ -291,7 +288,7 @@ QList<pqSHYXAIChatView::TranscriptTurn> pqSHYXAIChatView::lastTurns(int maxCount
     TranscriptTurn turn;
     turn.user = this->Messages[i].user;
     turn.text = text;
-    out.prepend(turn);
+    out.append(turn);
   }
   return out;
 }

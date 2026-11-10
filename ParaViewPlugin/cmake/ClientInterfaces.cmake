@@ -207,7 +207,12 @@ list(APPEND vespa_plugin_qt_auto_sources
 list(APPEND vespa_plugin_qt_auto_interfaces pqSHYXSelectSimilarContextMenu)
 list(APPEND vespa_plugin_qt_auto_sources
   selection/SelectSimilar/pqSHYXSelectSimilarContextMenu.cxx
-  selection/SelectSimilar/pqSHYXSelectSimilarContextMenu.h
+  selection/SelectSimilar/pqSHYXSelectSimilarContextMenu.h)
+
+list(APPEND vespa_plugin_qt_auto_interfaces pqSHYXPickCenterContextMenu)
+list(APPEND vespa_plugin_qt_auto_sources
+  selection/PickCenter/pqSHYXPickCenterContextMenu.cxx
+  selection/PickCenter/pqSHYXPickCenterContextMenu.h
   widgets/pqSHYXStatusNotifier.cxx
   widgets/pqSHYXStatusNotifier.h)
 
@@ -227,6 +232,8 @@ list(APPEND shyx_ai_assistant_sources
   AIAssistant/pqSHYXAIImageAnnotator.h
   AIAssistant/pqSHYXAIAgentTools.cxx
   AIAssistant/pqSHYXAIAgentTools.h
+  AIAssistant/pqSHYXAIMemory.cxx
+  AIAssistant/pqSHYXAIMemory.h
   AIAssistant/pqSHYXPythonSyntaxHighlighter.cxx
   AIAssistant/pqSHYXPythonSyntaxHighlighter.h
   AIAssistant/pqSHYXAIOutputLog.cxx
