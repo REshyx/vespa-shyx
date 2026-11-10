@@ -1856,9 +1856,7 @@ QString describeClientTool(const QString& query)
     ql.contains(QLatin1String("delete key")) || ql.contains(QLatin1String("del key")) ||
     ql.contains(QLatin1String("delete-key"));
   const bool recovery = ql.contains(QLatin1String("recovery")) ||
-    ql.contains(QLatin1String("shyxrecovery")) || ql.contains(QLatin1String("checkpoint")) ||
-    ql.contains(QLatin1String("pre-apply")) || ql.contains(QLatin1String("pre apply")) ||
-    ql.contains(QLatin1String("remesh state"));
+    ql.contains(QLatin1String("shyxrecovery")) || ql.contains(QLatin1String("checkpoint"));
   if (recovery)
   {
     return QStringLiteral(
@@ -1875,11 +1873,6 @@ QString describeClientTool(const QString& query)
       "write replaces it atomically, and each successful write posts a short 'checkpoint saved' "
       "notice on the SHYX status chip (left of the status bar). Uncheck 'Auto-save checkpoint' "
       "at the top of the Recovery menu to stop the updates.\n"
-      "shyx_remesh_pre_apply.pvsm is written by SHYXAdaptiveIsotropicRemesher and "
-      "SHYXRemeshWithEndpoint right before CGAL remesh. Shown as 'Before remesh - "
-      "shyx_remesh_pre_apply.pvsm'. It contains the pipeline as it was before that Apply; the "
-      "filter being applied (and anything downstream of it) is left out, so loading it does not "
-      "rerun the remesh.\n"
       "Menu actions: click a file to load that state; Auto-save checkpoint toggle; Open Temp "
       "Folder...; Refresh.\n"
       "Loading re-executes the visible pipeline. A checkpoint stores the last applied values, not "
@@ -2699,9 +2692,7 @@ const ShyxExtra kShyxExtra[] = {
     "Not a filter and not a proxy. File → Recovery lists *.pvsm files in the OS temp folder "
     "(newest first) and loads one with a click; shyx_checkpoint.pvsm is kept up to date "
     "automatically (before an Apply cycle's pending change is applied, after a source/filter/"
-    "reader is created, after an Apply finishes, and after a state load) and "
-    "shyx_remesh_pre_apply.pvsm is the state "
-    "written before an adaptive remesh, without the remesh filter being applied. "
+    "reader is created, after an Apply finishes, and after a state load). "
     "Call describe_proxy('recovery')." },
   { "SHYXQuickFilterWheel",
     "Not a filter and not a proxy. Hold the backtick key (` on a US layout, · on a Chinese "
@@ -2794,7 +2785,7 @@ QString lookupShyxDocs(const QString& queryRaw)
       "5) File → Recovery (client Qt; not a pipeline filter): submenu listing *.pvsm in the OS "
       "temp folder, e.g. shyx_checkpoint.pvsm (rewritten automatically before an Apply cycle's "
       "pending change runs, after a source/filter/reader is created, after an Apply finishes, and "
-      "after a state load) or shyx_remesh_pre_apply.pvsm written before a remesh. "
+      "after a state load). "
       "describe_proxy('recovery').\n"
       "6) View → SHYX AI Assistant: this dock, not a pipeline filter.\n"
       "Pass a name/topic (remesh, clip, representation, selection, sphere, glyph, ...) to filter notes.\n"
@@ -3290,7 +3281,7 @@ QJsonArray pqSHYXAIAgentTools::schema(bool allowCaptureScreenshot)
     "For Select Connected (connected points/lines/faces/volumes) pass 'select connected'. "
     "For Invert Selection pass 'invert'. "
     "For the File → Recovery submenu (temp-folder .pvsm list, including the automatic "
-    "shyx_checkpoint.pvsm and the pre-remesh state) pass 'recovery' or 'checkpoint'. "
+    "shyx_checkpoint.pvsm) pass 'recovery' or 'checkpoint'. "
     "For the RenderView Delete-key shortcut that creates and applies SHYX Delete Selected Cells, pass 'delete shortcut' or 'delete key'. "
     "For the quick-filter wheel (radial menu in the RenderView, opened by holding ` / ·; its trailing \"+\" sector opens a checklist of every SHYX and ParaView / VESPA built-in filter with an Input, and the checked set persists), pass 'quick filter wheel'.",
     QJsonObject{ { QStringLiteral("name"), strArg("XML name, display type (Pulse Glyphs), sphere/polygon/grow/proximity gap, select block, select similar, fill interior, select connected, invert, recovery/checkpoint, delete shortcut, or quick filter wheel.") } },

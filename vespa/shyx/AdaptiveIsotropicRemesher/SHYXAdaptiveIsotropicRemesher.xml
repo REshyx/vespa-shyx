@@ -396,8 +396,7 @@
         <BooleanDomain name="bool"/>
         <Documentation>
           When OFF, the filter only computes the ICC sizing preview (diagnostics sizing block + histogram) and
-          passes the input geometry through: no CGAL remesh, and no
-          %TEMP%/shyx_remesh_pre_apply.pvsm is written.
+          passes the input geometry through: no CGAL remesh.
         </Documentation>
       </IntVectorProperty>
 

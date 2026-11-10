@@ -26,7 +26,6 @@
 namespace
 {
 constexpr auto kRecoveryMenuObjectName = "menuSHYXRecovery";
-constexpr auto kRemeshRecoveryFileName = "shyx_remesh_pre_apply.pvsm";
 
 QMainWindow* findMainWindow()
 {
@@ -135,8 +134,7 @@ void pqSHYXRecoveryAutoStart::installMenu()
   auto* recovery = new QMenu(tr("&Recovery"), fileMenu);
   recovery->setObjectName(QString::fromLatin1(kRecoveryMenuObjectName));
   recovery->setToolTip(
-    tr("Reload a .pvsm saved in the temp folder, e.g. the automatic checkpoint or the "
-       "state written before a remesh."));
+    tr("Reload a .pvsm saved in the temp folder, e.g. the automatic checkpoint."));
 
   // Keep it next to Load/Save State: after Save State, before whatever follows.
   QAction* anchor = fileMenu->findChild<QAction*>(QStringLiteral("actionFileSaveServerState"));
@@ -219,10 +217,6 @@ void pqSHYXRecoveryAutoStart::refreshMenu()
       if (info.fileName() == pqSHYXCheckpointAutoStart::checkpointFileName())
       {
         label = tr("Latest checkpoint - %1").arg(info.fileName());
-      }
-      else if (info.fileName() == QLatin1String(kRemeshRecoveryFileName))
-      {
-        label = tr("Before remesh - %1").arg(info.fileName());
       }
       label += QStringLiteral("  (%1)").arg(info.lastModified().toString(timeFormat));
 

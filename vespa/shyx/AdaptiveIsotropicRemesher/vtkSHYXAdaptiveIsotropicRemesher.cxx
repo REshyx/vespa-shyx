@@ -1,5 +1,4 @@
 #include "vtkSHYXAdaptiveIsotropicRemesher.h"
-#include "vtkSHYXRemeshProgressState.h"
 
 #include "vtkCGALHelper.h"
 
@@ -339,11 +338,6 @@ int vtkSHYXAdaptiveIsotropicRemesher::RequestData(
     return 0;
   }
   diagnostics->Initialize();
-
-  if (this->EnableRemesh)
-  {
-    vtkSHYXSaveRemeshProgressState(this);
-  }
 
   this->ClearUncappedSizeHistogram();
 

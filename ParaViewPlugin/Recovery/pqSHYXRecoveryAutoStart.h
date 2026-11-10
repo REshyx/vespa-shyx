@@ -9,14 +9,9 @@ class QMenu;
 
 /**
  * Adds File -> Recovery, a submenu listing *.pvsm files in the OS temp folder
- * (newest first). Recovery states written before destructive operations, such as
- * %TEMP%/shyx_checkpoint.pvsm (kept up to date by pqSHYXCheckpointAutoStart) or
- * %TEMP%/shyx_remesh_pre_apply.pvsm from the adaptive remesher, can be reloaded
- * with one click instead of going through File -> Load State.
- *
- * The remesh recovery file contains the pipeline as it was before that Apply:
- * the filter that was about to run CGAL is not in the state, so loading the
- * recovery file cannot restart the remesh.
+ * (newest first). %TEMP%/shyx_checkpoint.pvsm (kept up to date by
+ * pqSHYXCheckpointAutoStart) can be reloaded with one click instead of going
+ * through File -> Load State.
  *
  * Client-side only: no Server Manager proxy, no VTK module.
  */
