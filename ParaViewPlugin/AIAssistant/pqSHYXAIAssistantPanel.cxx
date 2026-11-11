@@ -1424,7 +1424,7 @@ void pqSHYXAIAssistantPanel::constructor()
     "When off, use Screenshot on the question box to attach images yourself."));
   this->AgentModeCheck = new QCheckBox(
     tr("Agent mode (look up context, run script, and fix errors)"), root);
-  this->RenderViewCheck->setChecked(false);
+  this->RenderViewCheck->setChecked(true);
   this->AgentModeCheck->setChecked(true);
   layout->addWidget(this->RenderViewCheck);
   layout->addWidget(this->AgentModeCheck);
@@ -1650,7 +1650,7 @@ void pqSHYXAIAssistantPanel::resetAllSessionState()
   }
   if (this->RenderViewCheck)
   {
-    this->RenderViewCheck->setChecked(false);
+    this->RenderViewCheck->setChecked(true);
   }
   if (this->AgentModeCheck)
   {

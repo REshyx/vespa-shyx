@@ -68,13 +68,13 @@
                          name="TangentDepth"
                          label="Tangent Depth"
                          number_of_elements="1"
-                         default_values="1">
+                         default_values="1"
+                         panel_visibility="never">
         <IntRangeDomain name="range" min="1" max="10" />
         <Documentation>
-          Number of skeleton edges to walk inward from each leaf node
-          when estimating the local tangent direction for the cutting plane.
-          Larger values produce a smoother, more averaged tangent;
-          smaller values follow the skeleton more locally. Default is 1.
+          Fallback tangent depth in [1, 10] for an endpoint that has no pair in
+          EndpointTangentDepths. The Properties panel edits depth per row in
+          Endpoints to Clip. Default is 1. Kept so existing state files still apply.
         </Documentation>
       </IntVectorProperty>
 
@@ -151,8 +151,33 @@
           the endpoints from the centerline input. **Min Branch Length**
           controls which endpoints are checked by default (short branches unchecked).
           Checkbox state is stored on this property so File / Save State (.pvsm) restores it.
+          Tangent Depth for each row is EndpointTangentDepths, not this property.
         </Documentation>
       </StringVectorProperty>
+
+      <IntVectorProperty command="SetEndpointTangentDepth"
+                         name="EndpointTangentDepths"
+                         label="Endpoint Tangent Depths"
+                         number_of_elements="0"
+                         number_of_elements_per_command="2"
+                         repeat_command="1"
+                         set_number_command="SetNumberOfEndpointTangentDepths"
+                         use_index="1"
+                         animateable="0"
+                         panel_visibility="never">
+        <Documentation>
+          Per-endpoint tangent depth as (endpoint id, depth) pairs. The id is the
+          1-based index in Endpoints to Clip (Endpoint 00001 is 1). Depth is an
+          integer in [1, 10]: skeleton edges walked inward from that leaf when
+          estimating the cut normal. An id with no pair uses TangentDepth.
+        </Documentation>
+      </IntVectorProperty>
+
+      <PropertyGroup label="Endpoints to Clip"
+                     panel_widget="shyx_endclipper_endpoints">
+        <Property name="EndpointStatus"/>
+        <Property name="EndpointTangentDepths"/>
+      </PropertyGroup>
 
       <IntVectorProperty
          name="UseUpdateAttributes"

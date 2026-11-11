@@ -88,6 +88,13 @@ vespa_plugin_group_widget(
     widgets/pqSHYXOBBInteractiveBoxWidget.h)
 
 vespa_plugin_group_widget(
+  TYPE "shyx_endclipper_endpoints"
+  CLASS_NAME pqSHYXEndClipperEndpointTable
+  FILES
+    widgets/pqSHYXEndClipperEndpointTable.cxx
+    widgets/pqSHYXEndClipperEndpointTable.h)
+
+vespa_plugin_group_widget(
   TYPE "shyx_endclipper_plane_handles"
   CLASS_NAME pqSHYXEndClipperPlaneHandlesWidget
   FILES

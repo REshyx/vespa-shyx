@@ -2358,7 +2358,11 @@ const ShyxExtra kShyxExtra[] = {
     "instead of hiding it." },
   { "SHYXVesselEndClipper",
     "Vascular step 2. Port0 clipped mesh, port1 clip planes (Point Label). "
-    "Apply keeps the parent mesh visible (no input hiding)." },
+    "Apply keeps the parent mesh visible (no input hiding). "
+    "Endpoints to Clip is one row per leaf, with its own Tangent Depth (1-10). "
+    "EndpointTangentDepths is packed (endpoint id, depth); Endpoint 00001 is id 1. "
+    "An id with no pair uses TangentDepth (default 1, hidden; old state files still set it). "
+    "A packed interactive cut plane still overrides that endpoint's tangent." },
   { "SHYXVmtkOpeningCenterlines",
     "Threshold cell array (default EndpointIndex > 0) -> openings, port1 seeds (Point Label). "
     "CalculateCenterline + CenterlineMethod: 0 Voronoi vtkvmtkPolyDataCenterlines on the closed "

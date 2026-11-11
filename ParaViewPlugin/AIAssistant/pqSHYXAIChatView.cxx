@@ -22,6 +22,9 @@
 
 namespace
 {
+// A few pixels of layout slack still counts as "at the bottom".
+constexpr int kBottomSlackPx = 12;
+
 QString htmlFromPlain(const QString& text)
 {
   return text.toHtmlEscaped().replace(QLatin1Char('\n'), QStringLiteral("<br/>"));
@@ -252,6 +255,19 @@ pqSHYXAIChatView::pqSHYXAIChatView(QWidget* parent)
 
   this->Scroll->setWidget(this->Inner);
   layout->addWidget(this->Scroll);
+
+  if (QScrollBar* bar = this->Scroll->verticalScrollBar())
+  {
+    // User steps, wheels, and keys emit actionTriggered. Dragging emits sliderMoved.
+    // setValue() does neither, so programmatic follow does not clear FollowBottom.
+    QObject::connect(bar, &QScrollBar::actionTriggered, this, [this](int) { this->noteUserScroll(); });
+    QObject::connect(bar, &QScrollBar::sliderMoved, this, [this](int) { this->noteUserScroll(); });
+    QObject::connect(bar, &QScrollBar::sliderReleased, this, [this]() {
+      this->noteUserScroll();
+      this->scrollToBottom();
+    });
+    QObject::connect(bar, &QScrollBar::rangeChanged, this, [this](int, int) { this->scrollToBottom(); });
+  }
 }
 
 QString pqSHYXAIChatView::plainText() const
@@ -304,6 +320,7 @@ void pqSHYXAIChatView::setPlainText(const QString& text)
 
 void pqSHYXAIChatView::appendUser(const QString& text, const QList<Attachment>& attachments)
 {
+  this->FollowBottom = true;
   Message msg;
   msg.user = true;
   msg.text = text;
@@ -835,6 +852,7 @@ void pqSHYXAIChatView::clear()
   this->StreamThinkingLayout.clear();
   this->StreamBubbleFrame.clear();
   this->StreamBubbleLayout.clear();
+  this->FollowBottom = true;
   this->clearBubbles();
   this->Messages.clear();
   this->updateEmptyState();
@@ -861,6 +879,7 @@ void pqSHYXAIChatView::appendMessage(const Message& msg, bool emitChanged)
 
 void pqSHYXAIChatView::rebuildFromTranscript(const QString& text)
 {
+  this->FollowBottom = true;
   this->clearBubbles();
   this->Messages.clear();
 
@@ -1131,13 +1150,33 @@ void pqSHYXAIChatView::updateBubbleWidths()
   }
 }
 
+void pqSHYXAIChatView::noteUserScroll()
+{
+  QScrollBar* bar = this->Scroll ? this->Scroll->verticalScrollBar() : nullptr;
+  if (!bar)
+  {
+    return;
+  }
+  this->FollowBottom = bar->sliderPosition() >= bar->maximum() - kBottomSlackPx;
+}
+
 void pqSHYXAIChatView::scrollToBottom()
 {
+  if (!this->FollowBottom)
+  {
+    return;
+  }
   QTimer::singleShot(0, this, [this]() {
-    if (this->Scroll && this->Scroll->verticalScrollBar())
+    if (!this->FollowBottom || !this->Scroll)
     {
-      this->Scroll->verticalScrollBar()->setValue(this->Scroll->verticalScrollBar()->maximum());
+      return;
     }
+    QScrollBar* bar = this->Scroll->verticalScrollBar();
+    if (!bar || bar->isSliderDown() || bar->value() >= bar->maximum())
+    {
+      return;
+    }
+    bar->setValue(bar->maximum());
   });
 }
 

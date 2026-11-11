@@ -31,6 +31,7 @@
 #include "vtkSMSourceProxy.h"
 #include "vtkSMStringVectorProperty.h"
 
+#include <QAbstractItemView>
 #include <QCheckBox>
 #include <QItemSelectionModel>
 #include <QLabel>
@@ -472,7 +473,7 @@ void pqSHYXEndClipperPlaneHandlesWidget::disconnectEndpointListSelection()
         QObject::disconnect(c);
     }
     this->EndpointListConnections.clear();
-    this->EndpointArrayListWidget = nullptr;
+    this->EndpointListView = nullptr;
 }
 
 //-----------------------------------------------------------------------------
@@ -510,33 +511,46 @@ void pqSHYXEndClipperPlaneHandlesWidget::tryConnectEndpointListSelection()
         return;
     }
 
-    QList<pqArraySelectionWidget*> lists = panel->findChildren<pqArraySelectionWidget*>(
-        QStringLiteral("ArraySelectionWidget"), Qt::FindChildrenRecursively);
-
-    pqArraySelectionWidget*          best    = nullptr;
-    const int                        nPlanes = static_cast<int>(this->PlaneWidgets.size());
-    for (pqArraySelectionWidget* list : lists)
+    QAbstractItemView* best = nullptr;
+    const QList<QAbstractItemView*> tables = panel->findChildren<QAbstractItemView*>(
+        QStringLiteral("SHYXEndClipperEndpointTable"), Qt::FindChildrenRecursively);
+    for (QAbstractItemView* view : tables)
     {
-        if (!list || !list->model())
+        if (view && view->model() && view->selectionModel())
         {
-            continue;
-        }
-        if (nPlanes > 0 && list->model()->rowCount() == nPlanes)
-        {
-            best = list;
+            best = view;
             break;
         }
     }
-    if (!best && !lists.isEmpty())
+
+    if (!best)
     {
-        best = lists.first();
+        QList<pqArraySelectionWidget*> lists = panel->findChildren<pqArraySelectionWidget*>(
+            QStringLiteral("ArraySelectionWidget"), Qt::FindChildrenRecursively);
+        const int nPlanes = static_cast<int>(this->PlaneWidgets.size());
+        for (pqArraySelectionWidget* list : lists)
+        {
+            if (!list || !list->model())
+            {
+                continue;
+            }
+            if (nPlanes > 0 && list->model()->rowCount() == nPlanes)
+            {
+                best = list;
+                break;
+            }
+        }
+        if (!best && !lists.isEmpty())
+        {
+            best = lists.first();
+        }
     }
     if (!best)
     {
         return;
     }
 
-    this->EndpointArrayListWidget = best;
+    this->EndpointListView = best;
     if (QItemSelectionModel* sm = best->selectionModel())
     {
         this->EndpointListConnections.push_back(QObject::connect(sm,

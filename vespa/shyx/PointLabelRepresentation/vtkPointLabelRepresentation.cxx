@@ -29,11 +29,14 @@
 #include "vtkPVRenderView.h"
 #include "vtkPVView.h"
 #include "vtkRenderer.h"
+#include "vtkShader.h"
 #include "vtkTextProperty.h"
 #include "vtk_glad.h"
 
 #include <cstring>
+#include <map>
 #include <set>
+#include <string>
 
 #include "vtkNew.h"
 #include "vtkSmartPointer.h"
@@ -215,6 +218,126 @@ vtkSmartPointer<vtkPolyData> ExtractVertexOnlyPoints(vtkDataSet* ds)
 
   return out;
 }
+
+/**
+ * vtkFastLabeledDataMapper rasterizes each glyph into an atlas and draws a tight quad.
+ * The atlas keeps a 5 px transparent pad (PADSZ) that the stock shader does not show.
+ * This mapper spends 1 px of that pad on a white halo: the quad grows by 1 px and the
+ * fragment shader composites white behind the glyph coverage. Counters in digits stay
+ * open because the halo is only one pixel.
+ */
+class vtkPointLabelMapper : public vtkFastLabeledDataMapper
+{
+public:
+  static vtkPointLabelMapper* New()
+  {
+    auto* self = new vtkPointLabelMapper;
+    self->InitializeObjectBase();
+    return self;
+  }
+  vtkTypeMacro(vtkPointLabelMapper, vtkFastLabeledDataMapper);
+
+protected:
+  vtkPointLabelMapper() = default;
+  ~vtkPointLabelMapper() override = default;
+
+  void BuildShaders(
+    std::map<vtkShader::Type, vtkShader*> shaders, vtkRenderer* ren, vtkActor* act) override;
+
+private:
+  vtkPointLabelMapper(const vtkPointLabelMapper&) = delete;
+  void operator=(const vtkPointLabelMapper&) = delete;
+};
+
+bool ReplaceAll(std::string& text, const std::string& from, const std::string& to)
+{
+  bool any = false;
+  std::string::size_type pos = 0;
+  while ((pos = text.find(from, pos)) != std::string::npos)
+  {
+    text.replace(pos, from.size(), to);
+    pos += to.size();
+    any = true;
+  }
+  return any;
+}
+
+void vtkPointLabelMapper::BuildShaders(
+  std::map<vtkShader::Type, vtkShader*> shaders, vtkRenderer* ren, vtkActor* act)
+{
+  this->Superclass::BuildShaders(shaders, ren, act);
+
+  auto geomIt = shaders.find(vtkShader::Geometry);
+  auto fragIt = shaders.find(vtkShader::Fragment);
+  if (geomIt == shaders.end() || fragIt == shaders.end() || !geomIt->second || !fragIt->second)
+  {
+    return;
+  }
+
+  // Stock shader insets by PADSZ (5). Inset 4 instead so 1 px of pad is drawn.
+  std::string geom = geomIt->second->GetSource();
+  // Horizontal anchor does not use glyph width, so growing the quad shifts the ink
+  // right by the halo width. Pull the quad left by that same pixel.
+  const bool geomOk =
+    ReplaceAll(geom, "glyphExt[1] - glyphExt[0] + 1 -2*5", "glyphExt[1] - glyphExt[0] + 1 -2*4") &&
+    ReplaceAll(geom, "glyphExt[3] - glyphExt[2] + 1 -2*5", "glyphExt[3] - glyphExt[2] + 1 -2*4") &&
+    ReplaceAll(geom, "(glyphExt[0] +5)", "(glyphExt[0] +4)") &&
+    ReplaceAll(geom, "(glyphExt[2] +5)", "(glyphExt[2] +4)") &&
+    ReplaceAll(geom, "(glyphExt[1] + 1 -5)", "(glyphExt[1] + 1 -4)") &&
+    ReplaceAll(geom, "(glyphExt[3] + 1 -5)", "(glyphExt[3] + 1 -4)") &&
+    ReplaceAll(geom, "anchor.xy = floor(anchor.xy);\n",
+      "anchor.xy = floor(anchor.xy);\n  anchor.x -= 1.0;\n");
+  if (!geomOk)
+  {
+    static bool warned = false;
+    if (!warned)
+    {
+      warned = true;
+      vtkWarningMacro("Point label outline shader did not match vtkFastLabeledDataMapper; "
+                      "labels will render without a white outline.");
+    }
+    return;
+  }
+
+  std::string frag = fragIt->second->GetSource();
+  const std::string sample = "gl_FragData[0] = texture(atlasTex, UV2);";
+  const std::string::size_type samplePos = frag.find(sample);
+  // Selection shaders omit the atlas sample. Leave those programs unchanged.
+  if (samplePos == std::string::npos)
+  {
+    return;
+  }
+  if (frag.find("uniform ivec2 atlasDims;") == std::string::npos)
+  {
+    const std::string sampler = "uniform sampler2D atlasTex;";
+    const std::string::size_type samplerPos = frag.find(sampler);
+    if (samplerPos == std::string::npos)
+    {
+      return;
+    }
+    frag.insert(samplerPos + sampler.size(), "\nuniform ivec2 atlasDims;");
+  }
+
+  const char* halo = R"(vec2 texel = 1.0 / vec2(atlasDims);
+ vec4 fill = texture(atlasTex, UV2);
+ float halo = fill.a;
+ for (int oy = -1; oy <= 1; ++oy)
+ {
+   for (int ox = -1; ox <= 1; ++ox)
+   {
+     halo = max(halo, texture(atlasTex, UV2 + vec2(float(ox), float(oy)) * texel).a);
+   }
+ }
+ if (halo < 0.02)
+ {
+   discard;
+ }
+ gl_FragData[0] = vec4(mix(vec3(1.0), fill.rgb, fill.a), halo);)";
+  frag.replace(samplePos, sample.size(), halo);
+
+  geomIt->second->SetSource(geom);
+  fragIt->second->SetSource(frag);
+}
 } // namespace
 
 vtkStandardNewMacro(vtkPointLabelRepresentation);
@@ -360,7 +483,7 @@ vtkPointLabelRepresentation::vtkPointLabelRepresentation()
   this->PointMask->SetRandomModeType(vtkMaskPoints::RANDOM_SAMPLING);
   this->PointMask->GenerateVerticesOn();
 
-  this->LabelMapper = vtkFastLabeledDataMapper::New();
+  this->LabelMapper = vtkPointLabelMapper::New();
   this->LabelMapper->SetInputConnection(this->PointMask->GetOutputPort());
   this->LabelMapper->SetLabelModeToLabelFieldData();
   this->LabelMapper->SetTextAnchor(vtkFastLabeledDataMapper::Center);
@@ -381,9 +504,10 @@ vtkPointLabelRepresentation::vtkPointLabelRepresentation()
   }
 
   this->LabelProperty = vtkTextProperty::New();
-  this->LabelProperty->SetFontSize(14);
+  // One step up from the previous 14 pt. Bold plus the white halo in vtkPointLabelMapper.
+  this->LabelProperty->SetFontSize(16);
   this->LabelProperty->SetColor(this->LabelColor);
-  this->LabelProperty->SetBold(0);
+  this->LabelProperty->BoldOn();
   this->LabelProperty->SetItalic(0);
   this->LabelMapper->SetLabelTextProperty(this->LabelProperty);
 

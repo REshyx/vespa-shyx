@@ -54,6 +54,19 @@ int EndpointIdFromSelectionName(const char* name)
     }
     return id;
 }
+
+int ClampTangentDepth(int depth)
+{
+    if (depth < 1)
+    {
+        return 1;
+    }
+    if (depth > 10)
+    {
+        return 10;
+    }
+    return depth;
+}
 }
 
 //------------------------------------------------------------------------------
@@ -88,6 +101,21 @@ void vtkCGALVesselEndClipper::PrintSelf(ostream& os, vtkIndent indent)
     os << indent << "ClipOffset: " << this->ClipOffset << std::endl;
     os << indent << "MinBranchLength: " << this->MinBranchLength << std::endl;
     os << indent << "TangentDepth: " << this->TangentDepth << std::endl;
+    os << indent << "EndpointTangentDepths:";
+    const int nDepths = this->GetNumberOfEndpointTangentDepths();
+    if (nDepths == 0)
+    {
+        os << " (none)" << std::endl;
+    }
+    else
+    {
+        os << std::endl;
+        for (int i = 0; i < nDepths; ++i)
+        {
+            os << indent << "  Endpoint " << this->EndpointTangentDepthPacked[static_cast<size_t>(2 * i)]
+               << " -> " << this->EndpointTangentDepthPacked[static_cast<size_t>(2 * i + 1)] << std::endl;
+        }
+    }
     os << indent << "CapEndpoints: " << this->CapEndpoints << std::endl;
     os << indent << "FairingContinuity: " << this->FairingContinuity << std::endl;
     os << indent << "UseInteractiveCutPlanes: " << (this->UseInteractiveCutPlanes ? 1 : 0) << std::endl;
@@ -167,7 +195,8 @@ void vtkCGALVesselEndClipper::LogUpdateReasonAtRequestData(
         if (filterMTime > this->LastLoggedFilterParamsMTime)
         {
             appendReason("filter parameter MTime increased (ClipOffset/MinBranchLength/TangentDepth/"
-                        "CapEndpoints/FairingContinuity/InteractiveCut/UpdateAttributes)");
+                        "EndpointTangentDepths/CapEndpoints/FairingContinuity/InteractiveCut/"
+                        "UpdateAttributes)");
         }
         if (epSelMTimeEffective > this->LastLoggedEndpointSelectionMTime)
         {
@@ -243,6 +272,66 @@ void vtkCGALVesselEndClipper::SetUseInteractiveCutPlanes(bool flag)
 void vtkCGALVesselEndClipper::SetCenterlineConnection(vtkAlgorithmOutput* algOutput)
 {
     this->SetInputConnection(1, algOutput);
+}
+
+//------------------------------------------------------------------------------
+void vtkCGALVesselEndClipper::SetNumberOfEndpointTangentDepths(int n)
+{
+    if (n < 0)
+    {
+        n = 0;
+    }
+    const std::size_t want = static_cast<std::size_t>(n) * 2;
+    if (this->EndpointTangentDepthPacked.size() == want)
+    {
+        return;
+    }
+    this->EndpointTangentDepthPacked.resize(want, 0);
+    this->Modified();
+}
+
+//------------------------------------------------------------------------------
+void vtkCGALVesselEndClipper::SetEndpointTangentDepth(int index, int endpointId, int depth)
+{
+    if (index < 0 || endpointId < 1)
+    {
+        return;
+    }
+    depth = ClampTangentDepth(depth);
+    if (index >= this->GetNumberOfEndpointTangentDepths())
+    {
+        this->SetNumberOfEndpointTangentDepths(index + 1);
+    }
+    const std::size_t base = static_cast<std::size_t>(index) * 2;
+    if (this->EndpointTangentDepthPacked[base] == endpointId &&
+        this->EndpointTangentDepthPacked[base + 1] == depth)
+    {
+        return;
+    }
+    this->EndpointTangentDepthPacked[base]     = endpointId;
+    this->EndpointTangentDepthPacked[base + 1] = depth;
+    this->Modified();
+}
+
+//------------------------------------------------------------------------------
+int vtkCGALVesselEndClipper::GetNumberOfEndpointTangentDepths() const
+{
+    return static_cast<int>(this->EndpointTangentDepthPacked.size() / 2);
+}
+
+//------------------------------------------------------------------------------
+int vtkCGALVesselEndClipper::TangentDepthForEndpoint(int endpointId) const
+{
+    const int n = this->GetNumberOfEndpointTangentDepths();
+    for (int i = n - 1; i >= 0; --i)
+    {
+        if (this->EndpointTangentDepthPacked[static_cast<std::size_t>(2 * i)] == endpointId)
+        {
+            return ClampTangentDepth(
+                this->EndpointTangentDepthPacked[static_cast<std::size_t>(2 * i + 1)]);
+        }
+    }
+    return ClampTangentDepth(this->TangentDepth);
 }
 
 //------------------------------------------------------------------------------
@@ -567,12 +656,16 @@ int vtkCGALVesselEndClipper::RequestData(
     };
     std::vector<ClipInfo> clips;
 
-    const int tangentDepth = this->TangentDepth;
+    int nextEndpointId = 1;
 
     for (vtkIdType i = 0; i < nPts; ++i)
     {
         if (adjacency[i].size() != 1)
             continue;
+
+        // Id matches "Endpoint NNNNN" assigned below, including when a degenerate
+        // leaf is skipped and does not consume an id.
+        const int tangentDepth = this->TangentDepthForEndpoint(nextEndpointId);
 
         double leafPt[3];
         centerline->GetPoint(i, leafPt);
@@ -624,6 +717,7 @@ int vtkCGALVesselEndClipper::RequestData(
         ci.branchLength = ComputeBranchLengthFromLeaf(i, centerline, adjacency);
 
         clips.push_back(ci);
+        ++nextEndpointId;
     }
 
     // Fixed 5-digit zero padding so UI string sort matches numeric order.
@@ -878,7 +972,7 @@ int vtkCGALVesselEndClipper::RequestData(
         vtkIdType    tipPts   = tipOnPositive ? nClosestPos : nClosestNeg;
 
         // Informational warning for large tips (but still proceed)
-        if (tipPts > currentMesh->GetNumberOfPoints() / 3)
+        if (tipPts > currentMesh->GetNumberOfPoints() / 5)
         {
             vtkWarningMacro("Tip at endpoint " << (i + 1) << " is large ("
                 << tipPts << " / " << currentMesh->GetNumberOfPoints()

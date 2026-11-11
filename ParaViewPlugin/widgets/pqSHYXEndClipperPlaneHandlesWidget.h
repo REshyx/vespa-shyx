@@ -3,6 +3,7 @@
 
 #include "pqPropertyGroupWidget.h"
 
+#include <QAbstractItemView>
 #include <QMetaObject>
 #include <QModelIndex>
 #include <QPointer>
@@ -15,7 +16,6 @@
 
 class QCheckBox;
 class QLabel;
-class pqArraySelectionWidget;
 class pqPipelineSource;
 class pqRenderView;
 class pqView;
@@ -88,7 +88,7 @@ private:
     std::vector<unsigned long> PlaneInteractionTags;
     QVector<QMetaObject::Connection> EndpointListConnections;
     std::vector<QMetaObject::Connection> ViewVisibilityConnections;
-    QPointer<pqArraySelectionWidget> EndpointArrayListWidget;
+    QPointer<QAbstractItemView> EndpointListView;
     int                              ActiveRowEndpointIndex = -1;
     /// Render view that currently hosts HiddenRepresentations for PlaneWidgets (not always == view()).
     QPointer<pqRenderView> LastPlaneHostRenderView;

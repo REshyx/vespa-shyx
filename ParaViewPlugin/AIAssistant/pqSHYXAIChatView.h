@@ -103,6 +103,7 @@ private:
   void removeLastMessage();
   void updateEmptyState();
   void updateBubbleWidths();
+  void noteUserScroll();
   void scrollToBottom();
   int bubbleMaxWidth() const;
 
@@ -132,6 +133,7 @@ private:
   int StreamRoundBodyStart = 0;
   bool StreamRoundHasTools = false;
   bool Streaming = false;
+  bool FollowBottom = true;
 };
 
 #endif

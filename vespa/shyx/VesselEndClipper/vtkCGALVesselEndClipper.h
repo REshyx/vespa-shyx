@@ -14,6 +14,9 @@
  * MinBranchLength can leave short centerline branches (leaf to nearest junction)
  * unchecked by default when endpoints are first discovered.
  *
+ * Tangent depth is per endpoint: EndpointTangentDepths stores (endpoint id, depth)
+ * pairs. An id with no pair uses TangentDepth (the previous single value, default 1).
+ *
  * Output polydata (port 0) carries cell-data array \c EndpointIndex when
  * CapEndpoints is on: each triangle introduced by CGAL hole filling at
  * endpoint \e k (1-based: first leaf is 1, second is 2, ...) is tagged with
@@ -31,6 +34,8 @@
 #include "vtkSHYXVesselEndClipperModule.h" // For export macro
 #include <vtkDataArraySelection.h>
 #include <vtkSmartPointer.h>
+
+#include <vector>
 
 class VTKSHYXVESSELENDCLIPPER_EXPORT vtkCGALVesselEndClipper : public vtkCGALPolyDataAlgorithm
 {
@@ -77,9 +82,21 @@ public:
      * plane.  Larger values produce a smoother, more averaged
      * tangent; smaller values follow the skeleton more locally.
      * Default is 1.  Range [1, 10].
+     * Used for an endpoint that has no entry in EndpointTangentDepths.
      */
     vtkGetMacro(TangentDepth, int);
     vtkSetClampMacro(TangentDepth, int, 1, 10);
+    ///@}
+
+    ///@{
+    /**
+     * Per-endpoint tangent depth, one (endpointId, depth) pair per tuple.
+     * endpointId is the 1-based index shown as "Endpoint NNNNN" (first leaf is 1).
+     * Depth is clamped to [1, 10]. Missing ids use TangentDepth.
+     */
+    void SetNumberOfEndpointTangentDepths(int n);
+    void SetEndpointTangentDepth(int index, int endpointId, int depth);
+    int GetNumberOfEndpointTangentDepths() const;
     ///@}
 
     ///@{
@@ -167,12 +184,17 @@ protected:
     /** Updates OutputMessage without calling Modified() (avoids update loops). */
     void SetOutputMessageNoModified(const char* msg);
 
+    /** Depth in [1, 10] for a 1-based endpoint id, or TangentDepth when unset. */
+    int TangentDepthForEndpoint(int endpointId) const;
+
     void LogUpdateReasonAtRequestData(
         vtkPolyData* vesselMesh, vtkPolyData* centerline, vtkPolyData* existingOutput);
 
     double ClipOffset       = 0.0;
     double MinBranchLength  = 0.0;
     int    TangentDepth = 1;
+    /** Packed (endpointId, depth) pairs. Empty means every endpoint uses TangentDepth. */
+    std::vector<int> EndpointTangentDepthPacked;
     bool   CapEndpoints = true;
     int    FairingContinuity = 0;
 
